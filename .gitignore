@@ -1,0 +1,32 @@
+# Python environments and generated files
+.venv*/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Local configuration
+.env
+.env.*
+!.env.example
+.idea/
+.vscode/
+Thumbs.db
+Desktop.ini
+*.log
+~$*
+.~lock.*
+
+# Local assets, experiment records and generated deliverables
+/data/
+/output/
+/docs/report-archive/
+/docs/*.pptx
