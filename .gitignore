@@ -30,3 +30,5 @@ Desktop.ini
 /output/
 /docs/report-archive/
 /docs/*.pptx
+!/docs/발표자료.pptx
+!/docs/기획서.pptx
