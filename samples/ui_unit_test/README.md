@@ -6,6 +6,8 @@
 
 `tests/ui_test.py`는 Runner import·상속 없이 직접 실행하는 메뉴·전투 HUD 미리보기다. 자체 창·루프는 `ferrial_drive/ui/standalone.py`가 관리한다. 게임·세이브·AI 생성 에셋 없이 공개 폰트와 기본 도형을 사용한다.
 
+현재 설정에 필요한 폰트는 [이용 조건과 함께 저장소에 포함](../../data/fonts/README.md)한다. Cafe24 2종·학교안심 운동장의 별도 다운로드나 시스템 글꼴 설치는 필요 없다. Python·Pico2D 실행 환경은 준비해야 한다.
+
 기존 실행기를 닫고 `tests/Unit Test Runner.lnk`로 다시 연 뒤, 같은 폴더의 **`ui_test.py`를 열린 Runner GUI 창에 드롭**한다. UI 테스트는 별도 창으로 열린다. 이후 공유 UI 모듈·설정 변경은 같은 파일을 Runner에 재드롭해 새로 실행한다. [공통 실행기 안내](../../Tools/unit_test_runner/README.md)를 따른다.
 
 ## 포함 파일

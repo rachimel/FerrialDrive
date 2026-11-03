@@ -1,9 +1,9 @@
-Copyright 2026 The Kkakdugi Drafting Project Authors (https://github.com/dynamic-potato/kkakdugi-drafting), with Reserved Font Names "Kkakdugi Drafting" and "깍두기 도면체".
+Copyright © KERIS. All rights reserved.
+
+Source: https://copyright.keris.or.kr/wft/fntDwnldView?fntGrpId=GFT202312110000000000016
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
-This license is copied below, and is also available with a FAQ at:
-https://openfontlicense.org
-
+License text: https://openfontlicense.org/documents/OFL.txt
 
 -----------------------------------------------------------
 SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007

@@ -35,7 +35,18 @@ Desktop.ini
 /data/fonts/*
 !/data/fonts/README.md
 !/data/fonts/s_core_dream/
-!/data/fonts/kkakdugi_drafting/
+!/data/fonts/Cafe24Ohsquare-v2.0/
+/data/fonts/Cafe24Ohsquare-v2.0/*
+!/data/fonts/Cafe24Ohsquare-v2.0/Cafe24Ohsquare-v2.0.otf
+!/data/fonts/Cafe24Ohsquare-v2.0/LICENSE.txt
+!/data/fonts/Cafe24OhsquareAir-v2.0/
+/data/fonts/Cafe24OhsquareAir-v2.0/*
+!/data/fonts/Cafe24OhsquareAir-v2.0/Cafe24OhsquareAir-v2.0.otf
+!/data/fonts/Cafe24OhsquareAir-v2.0/LICENSE.txt
+!/data/fonts/학교안심 운동장/
+/data/fonts/학교안심 운동장/*
+!/data/fonts/학교안심 운동장/HakgyoansimUndongjangOTFL.otf
+!/data/fonts/학교안심 운동장/LICENSE.txt
 /output/
 # 툴의 로컬 저장 프로젝트·레이아웃·영역 작업
 /Tools/*/workspace/

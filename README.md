@@ -48,7 +48,7 @@ JRPG식 3/4 Top-Down 화면과 사전 렌더링한 2D 에셋을 사용한다.
 
 실제 UI 테스트는 `tests/ui_test.py`다. `tests/Unit Test Runner.lnk`로 실행기를 열고 **열린 GUI 창에 `ui_test.py`를 드롭**한다. [확인할 조작과 기대 결과](samples/ui_unit_test/README.md)를 따른다. `python tests/ui_test.py`는 Runner 없이 자체 창·실행 루프로 직접 실행한다. GUI 드롭은 별도 테스트 프로세스를 시작하며 재드롭으로 모듈 변경을 새로 읽는다. 테스트 창 종료와 Runner 종료는 구분한다.
 
-UI 실행에는 Python 3.11·`requirements-ui.txt`의 Pico2D와 [역할별 폰트](data/fonts/README.md)가 필요하다. Cafe24 Ohsquare Air·일반형·학교안심 운동장 OTF는 현재 로컬 보관이므로 새로 복제한 환경에서는 해당 파일을 명시한 경로에 준비해야 한다.
+UI 실행에는 Python 3.11·`requirements-ui.txt`의 Pico2D가 필요하다. 현재 사용하는 [역할별 폰트와 이용 조건](data/fonts/README.md)은 저장소에 포함하므로 복제 후 별도 폰트 다운로드·시스템 설치 없이 프로젝트 파일을 직접 읽는다.
 
 공통 실행기는 Pico2D가 설치된 Python으로 실행한다. 파일 인자 없이 실행하면 대기 GUI가 열린다. 그 창에 `samples/unit_test_runner/basic_flow.py`를 드롭해 두 화면 샘플을 실행한다. 이 샘플은 위 UI 메뉴·전투 HUD와 별개다.
 
