@@ -9,6 +9,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from ferrial_drive.diagnostics import TimingRecorder
 from ferrial_drive.ui.components import ButtonInput, InputResult, Rect
 from ferrial_drive.ui.config import UiConfig
 from ferrial_drive.ui.counter import CounterVisibility, RollingCounter
@@ -77,8 +78,10 @@ class SampleHud:
 
 
 class UiTest:
-    def __init__(self):
+    def __init__(self, *, profile_path=None):
         self.running = True
+        self.profile_path = Path(profile_path) if profile_path is not None else None
+        self.timings = TimingRecorder(enabled=self.profile_path is not None, session="ui_unit_test")
         self.config = UiConfig(CONFIG_PATH)
         self.sample = SampleHud(SAMPLE_PATH)
         animation = self.config.data["animation"]
@@ -112,6 +115,19 @@ class UiTest:
         self.renderer = None
         self.view = None
         self.pico = None
+        if self.timings.enabled:
+            self._profile_methods(self, "ui", ("enter", "handle_event", "update", "draw"))
+            for name, owner in (("transition", self.transition), ("damage", self.damage_numbers),
+                                ("hit_counter", self.combo_counter), ("damage_counter", self.damage_counter),
+                                ("counter_visibility", self.counter_visibility),
+                                ("player_health", self.player_health_trail),
+                                ("target_health", self.target_health_trail)):
+                self._profile_methods(owner, name, ("update",))
+
+    def _profile_methods(self, owner, prefix, names):
+        for name in names:
+            method = self.timings.wrap(getattr(owner, name), name=f"{prefix}.{name}")
+            setattr(owner, name, method)
 
     def enter(self):
         import pico2d.pico2d as pico
@@ -119,6 +135,9 @@ class UiTest:
         self.pico = pico
         self.renderer = PicoRenderer(self.config.font_paths, self.config.font_sizes)
         self.view = UiView(self.config, self.renderer)
+        if self.timings.enabled:
+            self._profile_methods(self.view, "view", ("menu", "combat", "pause", "radar", "number_counter"))
+            self._profile_methods(self.renderer, "renderer", ("ring", "text", "_measure", "_text_texture"))
 
     def target_health_ratio(self):
         target = self.sample.state.target
@@ -308,21 +327,37 @@ class UiTest:
             self.view.pause(self.pause.opacity, self.inputs)
 
     def exit(self):
-        if self.renderer is not None:
-            self.renderer.close()
-            self.renderer = None
-        self.view = None
+        try:
+            if self.renderer is not None:
+                self.renderer.close()
+                self.renderer = None
+            self.view = None
+        finally:
+            if self.profile_path is not None:
+                active_error = sys.exc_info()[1]
+                try:
+                    self.timings.write_json(self.profile_path)
+                except Exception as report_error:
+                    if active_error is None:
+                        raise
+                    active_error.add_note(f"성능 로그 저장 실패: {report_error}")
 
 
-def create_test():
-    return UiTest()
+def create_test(*, profile_path=None):
+    return UiTest(profile_path=profile_path)
 
 
 if __name__ == "__main__":
     import argparse
+    from datetime import datetime, timezone
     from ferrial_drive.ui.standalone import run_preview
 
     parser = argparse.ArgumentParser(description="메뉴·전투 HUD 독립 미리보기")
     parser.add_argument("--frames", type=int, default=None)
+    profile_name = datetime.now(timezone.utc).strftime("ui-%Y%m%d-%H%M%S-%fZ.json")
+    parser.add_argument("--profile", nargs="?", type=Path,
+                        const=PROJECT_ROOT / "output/performance" / profile_name,
+                        help="선택적 성능 계측 JSON 경로. 경로를 생략하면 output/performance에 저장")
     arguments = parser.parse_args()
-    run_preview(create_test(), **WINDOW, frame_limit=arguments.frames)
+    program = create_test(profile_path=arguments.profile)
+    run_preview(program, **WINDOW, frame_limit=arguments.frames, timings=program.timings)

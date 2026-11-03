@@ -11,6 +11,7 @@ JRPG식 3/4 Top-Down 화면과 사전 렌더링한 2D 에셋을 사용한다.
 - [UI 작업 정리](docs/unit-tests/ui_checkpoint.md): 완료 범위·모듈 책임·미완료·다음 작업·검증 상태
 - [UI Unit Test 명세](docs/unit-tests/ui_unit_test.md): 현재 우선 검증할 두 장면·입력·HUD·애니메이션
 - [독립 Unit Test 실행기](Tools/unit_test_runner/README.md): 공통 실행 규약과 테스트 `.py` 실행 방법
+- [선택적 성능 계측](docs/tool-usage/performance_timing.md): 게임·테스트 공통 시간/호출 수 수집·반복 측정·JSON 로그
 - [문서 목록](docs/README.md): 제작 도구와 데이터 준비 문서
 - [이미지 제작 파이프라인](docs/ai-asset-pipeline/image_pipeline.md): JANIMA 레퍼런스 생성 → GPT 디테일 보정
 - [상세 기획서 PPT](docs/presentation/기획서.pptx): 기존 29쪽 초안. 이후 결정은 PRE-PRD를 따른다.
@@ -33,6 +34,7 @@ JRPG식 3/4 Top-Down 화면과 사전 렌더링한 2D 에셋을 사용한다.
 | --- | --- |
 | `docs/` | 기획과 제작 도구 사용 문서 |
 | `ferrial_drive/` | 재사용 UI·애니메이션 모듈 초안 |
+| `ferrial_drive/diagnostics/` | 화면·게임에 의존하지 않는 선택적 성능 계측 |
 | `samples/ui_unit_test/` | UI 표현 설정과 현재 확인 방법 |
 | `data/fonts/` | 지정 공개 폰트와 저작권·이용 조건 |
 | `tests/` | 실행기 바로가기와 직접 조작용 샘플 |

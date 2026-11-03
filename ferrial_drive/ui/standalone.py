@@ -27,7 +27,7 @@ def _events(pico):
             yield event
 
 
-def run_preview(program, *, width, height, title, frames_per_second=60, frame_limit=None):
+def run_preview(program, *, width, height, title, frames_per_second=60, frame_limit=None, timings=None):
     if not all(isinstance(value, int) and value > 0 for value in (width, height)):
         raise ValueError("창 크기는 양수인 정수 픽셀이어야 한다.")
     if not isfinite(frames_per_second) or frames_per_second <= 0:
@@ -49,6 +49,10 @@ def run_preview(program, *, width, height, title, frames_per_second=60, frame_li
         pico.SDL_SetWindowTitle(pico.window, title.encode("utf-8"))
         try:
             program.enter()
+            present, frame_wait = pico.update_canvas, sleep
+            if timings is not None and timings.enabled:
+                present = timings.wrap(present, name="loop.present")
+                frame_wait = timings.wrap(frame_wait, name="loop.frame_wait")
             previous_seconds = perf_counter()
             frames = 0
             while program.running:
@@ -68,13 +72,13 @@ def run_preview(program, *, width, height, title, frames_per_second=60, frame_li
                 if not program.running:
                     break
                 program.draw()
-                pico.update_canvas()
+                present()
                 frames += 1
                 if frame_limit is not None and frames >= frame_limit:
                     break
                 remaining = 1 / frames_per_second - (perf_counter() - frame_start)
                 if remaining > 0:
-                    sleep(remaining)
+                    frame_wait(remaining)
         finally:
             program.exit()
     finally:

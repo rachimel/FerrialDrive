@@ -36,6 +36,8 @@ Python 3.11과 `requirements-ui.txt`의 Pico2D 1.5.1 환경을 사용한다. GUI
 python tests/ui_test.py
 ```
 
+선택적으로 `python tests/ui_test.py --profile`을 실행하면 함수·구간별 경과 시간과 호출 횟수를 정상 종료 시 `output/performance/ui-...Z.json`에 저장한다. `--profile 경로`로 파일을 지정할 수 있다. 기본 실행·Runner 드롭에는 계측을 추가하지 않는다. [계측 대상·반복 측정·로그 해석](../../docs/tool-usage/performance_timing.md)을 따른다. 이번 계측 연결은 실행 확인 전이다.
+
 직접 실행·GUI 실행 모두 메뉴의 테스트 종료 또는 UI 창 X로 해당 테스트만 닫는다. GUI 실행에서는 Runner 창이 남으며, Runner X를 누르면 소유한 UI 테스트도 종료한다. UI 테스트 창에 파일을 드롭하지 않고 Runner 창에 드롭한다. 샘플 원본은 실행 중 저장·수정하지 않는다.
 
 ## 조작과 기대 결과
