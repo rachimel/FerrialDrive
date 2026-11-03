@@ -11,9 +11,10 @@ from pathlib import Path
 import json
 import struct
 import argparse
+import os
 
-ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / 'output/portrait_editor/exported'
+from asset_paths import ROOT, RIG_DIR, EXPORT_DIR
+OUT = EXPORT_DIR / 'exported'
 
 def packed(fmt, values):
     return struct.pack('<' + fmt * len(values), *values)
@@ -98,7 +99,9 @@ def export(source, output_dir=OUT):
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser()
-    parser.add_argument('--source',type=Path,default=ROOT/'output/capability_test/live2d_refined/blender-keyforms.json')
+    parser.add_argument('--source',type=Path,default=RIG_DIR/'blender-keyforms.json')
     parser.add_argument('--output',type=Path,default=OUT)
     args=parser.parse_args()
-    export(json.loads(args.source.read_text(encoding='utf-8')),args.output)
+    source=json.loads(args.source.read_text(encoding='utf-8'))
+    source['textures']=[os.path.relpath(args.source.resolve().parent/p,args.output.resolve()).replace('\\','/') for p in source['textures']]
+    export(source,args.output)

@@ -34,6 +34,6 @@ Desktop.ini
 /docs/report-archive/
 # 이전 로컬 전용 보고서는 legacy로 옮긴 뒤에도 제외
 /legacy/lora/local-only/
-/docs/*.pptx
-!/docs/발표자료.pptx
-!/docs/기획서.pptx
+/docs/**/*.pptx
+!/docs/presentation/발표자료.pptx
+!/docs/presentation/기획서.pptx

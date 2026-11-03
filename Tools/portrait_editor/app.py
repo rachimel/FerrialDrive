@@ -17,6 +17,7 @@ import numpy as np
 import pygame
 import live2d
 from OpenGL.GL import *
+from asset_paths import WORKSPACE_DIR, EXPORT_DIR
 
 from core import (DEFAULT_PROJECT,FIXED_DT,TRACKS,WORK,
                   Playback,Project,add_pose,atomic_json,clamp,compile_model,
@@ -154,6 +155,7 @@ class Canvas:
 class Editor:
     def __init__(self,args):
         self.args=args;WORK.mkdir(parents=True,exist_ok=True)
+        WORKSPACE_DIR.mkdir(parents=True,exist_ok=True);EXPORT_DIR.mkdir(parents=True,exist_ok=True)
         self.qa=WORK/'qa';self.qa.mkdir(exist_ok=True)
         if args.verify:self.project=Project(path=self.qa/'verified.project.json')
         elif args.project:self.project=Project.load(args.project)
@@ -166,7 +168,7 @@ class Editor:
         self.native_window=Window.from_display_module()
         pygame.display.set_caption('표정 스튜디오 — Layout 02')
         live2d.init_internal(str(prepare_filters(WORK,'sharp')));live2d.glInit()
-        self.layout_settings=DEFAULT_LAYOUT.copy();self.layout_path=WORK/('qa/verified-layout.json' if args.verify else 'layout.json')
+        self.layout_settings=DEFAULT_LAYOUT.copy();self.layout_path=self.qa/'verified-layout.json' if args.verify else WORKSPACE_DIR/'layout.json'
         if self.layout_path.exists() and not args.verify:
             try:
                 saved=json.loads(self.layout_path.read_text());self.layout_settings.update({k:float(v) for k,v in saved.items() if k in DEFAULT_LAYOUT and np.isfinite(float(v))})
@@ -260,7 +262,7 @@ class Editor:
         try:
             if kind=='open':return filedialog.askopenfilename(parent=root,title='표정 프로젝트 열기',initialdir=str(self.project.path.parent),filetypes=[('표정 프로젝트','*.project.json'),('JSON','*.json')])
             if kind=='save':return filedialog.asksaveasfilename(parent=root,title='표정 프로젝트 저장',initialdir=str(self.project.path.parent),initialfile=self.project.path.name,defaultextension='.project.json',filetypes=[('표정 프로젝트','*.project.json')])
-            return filedialog.askdirectory(parent=root,title='Live2D 출력 폴더 선택',initialdir=str(WORK))
+            return filedialog.askdirectory(parent=root,title='Live2D 출력 폴더 선택',initialdir=str(EXPORT_DIR))
         finally:root.destroy();self.dirty_ui=True
     def guarded(self,action):
         if self.project.dirty:self.modal=action;self.dirty_ui=True
@@ -348,7 +350,7 @@ class Editor:
         elif name=='ai_regions':
             if self.edit_field is not None:self.commit_field()
             self.menu=None;self.drag=None;pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_ARROW)
-            self.regions=RegionWorkspace(WORK,lambda:setattr(self,'regions',None));self.dirty_ui=True
+            self.regions=RegionWorkspace(WORKSPACE_DIR,lambda:setattr(self,'regions',None));self.dirty_ui=True
         elif name=='save':self.save()
         elif name=='save_as':
             path=self.dialog('save')

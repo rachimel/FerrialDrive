@@ -19,12 +19,12 @@ import uuid
 
 import numpy as np
 
-ROOT=Path(__file__).resolve().parents[2]
+from asset_paths import ROOT, RIG_DIR, WORKSPACE_DIR, OUTPUT_DIR
 from export_moc3 import export as export_moc3
 
-DEFAULT_SOURCE=ROOT/'output/capability_test/live2d_refined/blender-keyforms.json'
-WORK=ROOT/'output/portrait_editor'
-DEFAULT_PROJECT=WORK/'portrait.project.json'
+DEFAULT_SOURCE=RIG_DIR/'blender-keyforms.json'
+WORK=OUTPUT_DIR
+DEFAULT_PROJECT=WORKSPACE_DIR/'portrait.project.json'
 FIXED_DT=1/60
 PRESETS={
     'Linear':((1/3,1/3),(2/3,2/3)),

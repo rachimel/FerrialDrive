@@ -17,6 +17,6 @@
 
 ## 확인과 반영
 
-- 공식 Flutter 문서에서 성질과 구현 형태를 확인하고 [UI Unit Test 명세](../ui_unit_test.md)에 링크와 검토 용도를 추가했다.
+- 공식 Flutter 문서에서 성질과 구현 형태를 확인하고 [UI Unit Test 명세](../unit-tests/ui_unit_test.md)에 링크와 검토 용도를 추가했다.
 - 범위 초과가 있는 탄성 곡선과 투명도 등의 속성 제한, 일부 곡선의 `ThreePointCubic` 구성을 구분해 기록했다.
 - 이번 변경은 후보 정리다. Flutter 도입이나 Python 보간 모듈의 구현·시각 검증 완료를 의미하지 않는다.

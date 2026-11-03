@@ -10,6 +10,7 @@ Ferrial Drive 프로젝트 대화에서 나온 결정과 작업 흐름을 요약
 - [2026-11-03 UI Unit Test 범위 확정](2026-11-03-ui-unit-test-scope.md): 두 장면·입력·HUD·애니메이션과 `.py` 진입점
 - [2026-11-03 UI 보간 후보 추가](2026-11-03-ui-easing-candidates.md): Flutter 곡선 5종의 성질과 검토 용도
 - [2026-11-03 현행 문서 정리](2026-11-03-document-maintenance.md): 레거시 안내 제거, 공통 이미지 체크리스트 재사용과 중복 명세 축소
+- [2026-11-03 보존 데이터 이동](2026-11-03-output-data-migration.md): output 원본 분리, 참조 수정과 제거 후보 조사
 
 ## 작성 기준
 

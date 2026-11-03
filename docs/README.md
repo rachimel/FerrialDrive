@@ -3,18 +3,20 @@
 ## 기획
 
 - [사전 PRD v0.1](Ferrial_Drive_PRE_PRD_v0.1.md)
-- [UI Unit Test 명세](ui_unit_test.md): 메뉴·전투 HUD의 독립 검증 범위와 미정 사항
-- [상세 기획서 PPT](기획서.pptx): 기존 29쪽 초안. 이후 결정은 PRE-PRD와 개별 명세를 따른다.
+- [UI Unit Test 명세](unit-tests/ui_unit_test.md): 메뉴·전투 HUD의 독립 검증 범위와 미정 사항
+- [상세 기획서 PPT](presentation/기획서.pptx): 기존 29쪽 초안. 이후 결정은 PRE-PRD와 개별 명세를 따른다.
 
 ## 발표
 
-- [발표자료 PPT](발표자료.pptx): 기존 10쪽 공개본. AI 콘셉트 이미지는 제외
+- [발표자료 PPT](presentation/발표자료.pptx): 기존 10쪽 공개본. AI 콘셉트 이미지는 제외
 
 ## 현재 도구
 
-- [표정 스튜디오 및 AI 영역 지정](portrait_editor.md)
-- [Blender 원본 생성](blender_pipeline.md)
-- [툴 시연용 테스트 데이터 기준](tool_demo_data.md): 게임과 독립된 최소 샘플과 시연 완료 조건
+- [표정 스튜디오 및 AI 영역 지정](tool-usage/portrait_editor.md)
+- [Blender 원본 생성](ai-asset-pipeline/blender_pipeline.md)
+- [툴 시연용 테스트 데이터 기준](tool-usage/tool_demo_data.md): 게임과 독립된 최소 샘플과 시연 완료 조건
+- [저장 경로 안내](tool-usage/storage_layout.md): 보존 데이터와 재생성 가능한 출력 구분
+- [제거 후보 목록](tool-usage/cleanup_candidates.md): 용량·중복 조사 결과, 사용자 판단 전 삭제 보류
 
 ## 개발 기록
 
@@ -25,9 +27,9 @@
 현재 흐름은 **JANIMA로 레퍼런스 이미지 생성 → GPT로 디테일 보정**이다.
 AI 생성 이미지·모델과 가공 에셋은 로컬에 보관한다.
 
-- [이미지 제작 파이프라인](image_pipeline.md): 현행 제작 흐름과 이전 LoRA 자료의 경계
-- [이미지 보정 체크리스트](image_correction_checklist.md): 손·발·겹침·비율·조명 확인에 재사용하는 품질 기준
-- [로제 프롬프트 기록](rose_art_prompts.md): 현재 기준 레퍼런스와 생성·편집 이력
+- [이미지 제작 파이프라인](ai-asset-pipeline/image_pipeline.md): 현행 제작 흐름과 이전 LoRA 자료의 경계
+- [이미지 보정 체크리스트](ai-asset-pipeline/image_correction_checklist.md): 손·발·겹침·비율·조명 확인에 재사용하는 품질 기준
+- [로제 프롬프트 기록](ai-asset-pipeline/rose_art_prompts.md): 현재 기준 레퍼런스와 생성·편집 이력
 
 ## 이전 자료
 

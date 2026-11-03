@@ -17,7 +17,7 @@
 | `docs/report-archive/anima-style-lab-audit-2026-10-27.md` | `legacy/lora/local-only/anima-style-lab-audit-2026-10-27.md` |
 
 - 두 기록의 내용은 그대로 보존한다. 점검 보고서는 이동 후에도 Git에서 제외한다.
-- [현행 파이프라인](../image_pipeline.md)과 [이전 자료 안내](../../legacy/README.md)를 추가하고 작업 지침·문서 목록·PRE-PRD에서 연결한다.
+- [현행 파이프라인](../ai-asset-pipeline/image_pipeline.md)과 [이전 자료 안내](../../legacy/README.md)를 추가하고 작업 지침·문서 목록·PRE-PRD에서 연결한다.
 - 체크리스트가 참조하는 과거 평가 문서는 현재 저장소에서 찾지 못했다. 임의로 복원하지 않았다.
 
 ## 검증 범위

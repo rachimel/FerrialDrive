@@ -10,20 +10,25 @@ import shutil
 import bpy
 import numpy as np
 
-ROOT=Path(r'C:\Z_Workspace\01_Projects\01_ActivePython\Iso2D')
-OUT=ROOT/'output/capability_test/live2d_refined'
+ROOT=Path(__file__).resolve().parents[2]
+INPUTS=ROOT/'data/portrait_editor/inputs'
+OUT=ROOT/'data/portrait_editor/rig'
+PREVIEWS=ROOT/'output/blender_pipeline/previews'
+for input_name in ('character-cutout-generated.png','smile-generated.png','closed-smile-generated.png','character-clean-face-generated.png'):
+    if not (INPUTS/input_name).is_file():raise FileNotFoundError(f'원본 이미지를 찾을 수 없어: {INPUTS/input_name}')
+PREVIEWS.mkdir(parents=True,exist_ok=True)
 OUT.mkdir(parents=True,exist_ok=True);(OUT/'textures').mkdir(exist_ok=True)
 if bpy.context.object and bpy.context.object.mode!='OBJECT':bpy.ops.object.mode_set(mode='OBJECT')
 for obj in list(bpy.context.scene.objects):bpy.data.objects.remove(obj,do_unlink=True)
 for mat in list(bpy.data.materials):
     if mat.users==0:bpy.data.materials.remove(mat)
-neutral=bpy.data.images.load(str(ROOT/'output/capability_test/character-cutout-generated.png'),check_existing=False)
-smile=bpy.data.images.load(str(ROOT/'output/capability_test/live2d_v2/smile-generated.png'),check_existing=False)
-closed=bpy.data.images.load(str(OUT/'inputs/closed-smile-generated.png'),check_existing=False)
+neutral=bpy.data.images.load(str(INPUTS/'character-cutout-generated.png'),check_existing=False)
+smile=bpy.data.images.load(str(INPUTS/'smile-generated.png'),check_existing=False)
+closed=bpy.data.images.load(str(INPUTS/'closed-smile-generated.png'),check_existing=False)
 W,H=neutral.size
 assert tuple(smile.size)==(W,H)
 assert tuple(closed.size)==(W,H)
-shutil.copyfile(ROOT/'output/capability_test/character-clean-face-generated.png',OUT/'textures/body.png')
+shutil.copyfile(INPUTS/'character-clean-face-generated.png',OUT/'textures/body.png')
 body=bpy.data.images.load(str(OUT/'textures/body.png'),check_existing=False)
 arrays={n:np.array(im.pixels[:],dtype=np.float32).reshape(H,W,4) for n,im in [('neutral',neutral),('smile',smile),('closed',closed),('clean',body)]}
 images=[body];textures=['textures/body.png'];records=[];KEYS=np.linspace(0,1,33).tolist()
@@ -255,7 +260,7 @@ cam.location=((540-W/2)/200,(H/2-230)/200,10);cam_data.type='ORTHO';cam_data.ort
 scene.render.engine='CYCLES';scene.cycles.samples=12;scene.view_settings.view_transform='Standard';scene.world.color=(0,0,0)
 scene.render.resolution_x=900;scene.render.resolution_y=900;scene.render.resolution_percentage=100;scene.render.film_transparent=True;scene.render.image_settings.file_format='PNG'
 for frame,label in [(1,'neutral'),(61,'closed-smile'),(91,'mid-open'),(121,'smile')]:
-    scene.frame_set(frame);scene.render.filepath=str(OUT/f'blender-face-{label}.png');bpy.ops.render.render(write_still=True)
+    scene.frame_set(frame);scene.render.filepath=str(PREVIEWS/f'blender-face-{label}.png');bpy.ops.render.render(write_still=True)
 scene.frame_set(1)
 for image in images:image.pack()
 bpy.context.view_layer.objects.active=rig

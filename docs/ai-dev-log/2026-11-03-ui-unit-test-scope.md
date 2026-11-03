@@ -21,5 +21,5 @@
 
 ## 작업 상태
 
-- [UI Unit Test 명세](../ui_unit_test.md)를 추가하고 PRE-PRD·작업 지침·문서 목록에 연결했다.
+- [UI Unit Test 명세](../unit-tests/ui_unit_test.md)를 추가하고 PRE-PRD·작업 지침·문서 목록에 연결했다.
 - 이번 변경은 명세 정리다. 실행 프로그램·샘플 데이터·게임 연결의 구현과 시연은 아직 수행하지 않았다.

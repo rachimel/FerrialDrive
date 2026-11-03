@@ -1,6 +1,6 @@
 # LoRA 데이터셋 검토 체크리스트
 
-> 과거 LoRA 데이터셋 기록이다. 아래 학습 범위·앱 상태·시작 절차는 현행 제작 지침이 아니다. 공통 품질 기준은 [이미지 보정 체크리스트](../../docs/image_correction_checklist.md), 현재 제작 흐름은 [이미지 파이프라인](../../docs/image_pipeline.md)을 따른다.
+> 과거 LoRA 데이터셋 기록이다. 아래 학습 범위·앱 상태·시작 절차는 현행 제작 지침이 아니다. 공통 품질 기준은 [이미지 보정 체크리스트](../../docs/ai-asset-pipeline/image_correction_checklist.md), 현재 제작 흐름은 [이미지 파이프라인](../../docs/ai-asset-pipeline/image_pipeline.md)을 따른다.
 
 기록일: 2026-10-27  
 프로젝트: Ferrial Drive  

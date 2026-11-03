@@ -14,11 +14,11 @@
 
 - [로제 프롬프트 기록](rose_art_prompts.md)과 [출처·해시 목록](rose_art_prompts_manifest.json)을 현행 레퍼런스 기록으로 사용한다.
 - AI 이미지·모델과 가공 에셋은 로컬 `data/`·`output/`에 보관하고 공개 Git에 추가하지 않는다.
-- 레퍼런스 이미지는 게임용 스프라이트나 Live2D 리깅 완료 결과가 아니다. [Blender 제작 경로](blender_pipeline.md)와 [표정 스튜디오](portrait_editor.md)의 후속 제작·검증은 별도로 진행한다.
+- 레퍼런스 이미지는 게임용 스프라이트나 Live2D 리깅 완료 결과가 아니다. [Blender 제작 경로](blender_pipeline.md)와 [표정 스튜디오](../tool-usage/portrait_editor.md)의 후속 제작·검증은 별도로 진행한다.
 
 ## 이전 LoRA 자료
 
 - 별도 LoRA 학습과 학습용 데이터셋 선별은 현재 필수 제작 과정에서 제외한다.
 - 기존 체크리스트의 손·발·겹침·비율·조명 기준은 현행 이미지 보정에도 재사용한다. 학습 세트·시각 범위·내보내기 절차와 구분한다.
-- 이전 자료는 [legacy 안내](../legacy/README.md)에 따라 `legacy/lora/`에 보관한다. 과거 절차를 현행 작업 지침으로 다시 적용하지 않는다.
+- 이전 자료는 [legacy 안내](../../legacy/README.md)에 따라 `legacy/lora/`에 보관한다. 과거 절차를 현행 작업 지침으로 다시 적용하지 않는다.
 - 외부 `Anima-Style-Lab` 앱과 현재 JANIMA 워크플로우는 계속 사용할 수 있으므로 이번 자료 정리 대상으로 옮기지 않는다. 기존 생성 설정·모델 목록도 변경하지 않는다.

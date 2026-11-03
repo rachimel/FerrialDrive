@@ -19,13 +19,13 @@
 
 현재 Blender 원본 생성 경로는 `Tools/blender_pipeline/`에 있다. 예전
 `Tools/capability_test`의 데모·진단·이전 생성기와 옛 실행 스크립트는 제거했다.
-`output/capability_test/`는 저장된 모델·이미지 원본을 참조하는 데이터 경로이므로 유지한다.
+현재 원본·생성 입력·저장 작업은 `data/portrait_editor/`에 보관한다. `output/`은 재생성 가능한 캐시·검증 결과에만 사용한다.
 
 ## Layout 02
 
 - 로고와 상단 개별 작업 버튼을 제거하고 **파일 / 편집 / 보기** 메뉴로 정리했다. 곡선 복사·붙여넣기, 기준점 추가·삭제, 초기화는 **곡선 영역 우클릭 메뉴**에서 실행한다. 우클릭한 기준점이 삭제 대상으로 선택되고, 빈 곳의 [기준점 추가]는 우클릭한 가로 위치를 사용한다. 상단 편집 메뉴에는 곡선 전용 작업을 넣지 않는다.
 - 공통 여백 16px, 간격 8px, 입력/버튼 높이 32~34px, 행 높이 28px를 기준으로 정렬했다.
-- 좌우 패널 경계와 미리보기·곡선 사이 경계를 드래그할 수 있다. 배치는 `output/portrait_editor/layout.json`과 저장한 프로젝트의 작업 화면 상태에 보존된다. [보기 → 패널 배치 초기화]로 되돌릴 수 있다.
+- 좌우 패널 경계와 미리보기·곡선 사이 경계를 드래그할 수 있다. 배치는 `data/portrait_editor/workspace/layout.json`과 저장한 프로젝트의 작업 화면 상태에 보존된다. [보기 → 패널 배치 초기화]로 되돌릴 수 있다.
 - 작은 창에서는 재생 버튼과 자세 버튼을 두 줄로 나눈다. 파츠와 속성 패널은 필요한 경우 휠로 스크롤한다.
 - 속성에 **편집 대상(전체 시간 / 연결 트랙)**과 **선택 파츠**를 따로 표시한다. 표정 기준 자세는 **키포즈**, 시간에 따른 재생 단위는 **애니메이션**으로 표기한다. 현재 실행 모델은 애니메이션 하나와 연결 트랙 세 개를 지원하며, 임의 그룹/클립 생성과 파츠별 독립 시간은 후속 기능이다.
 - 시간 곡선은 X축과 제어점 X를 **초**, 형태 곡선은 **선택 구간의 파라미터 값**으로 표시한다. 재생 막대의 키 표시도 시간 곡선을 역산한 실제 도달 시각을 사용한다.
@@ -82,14 +82,14 @@ AI 자동 전송·추출·복원과 추출된 파츠의 Blender 자동 연결은
 
 ## 프로젝트와 출력
 
-- Ctrl+S 또는 [저장]: 기본 `output/portrait_editor/portrait.project.json`에 저장. 곡선, 표정 키, 파츠 표시 상태와 작업 화면 상태를 포함한다.
+- Ctrl+S 또는 [저장]: 기본 `data/portrait_editor/workspace/portrait.project.json`에 저장. 곡선, 표정 키, 파츠 표시 상태와 작업 화면 상태를 포함한다.
 - [파일 → 다른 이름으로 저장]: 별도 프로젝트 파일에 저장.
 - [파일 → 열기], Ctrl+O 또는 프로젝트 JSON 파일 드롭: 프로젝트 복원.
 - Ctrl+Z / Ctrl+Y 또는 Ctrl+Shift+Z: 되돌리기/다시 적용. 한 번의 핸들 드래그를 한 작업으로 기록한다.
 - [파일 → .moc3 내보내기], Ctrl+E: 선택한 폴더에 모델 설정, MOC3, 모든 텍스처를 함께 출력. 미적용 형태 변경이 있으면 최신 빌드를 기다린다.
 - [파일 → 화면 저장], Ctrl+Shift+P: `output/portrait_editor/captures/`에 현재 편집 화면 저장.
 
-리깅 원본은 `output/capability_test/live2d_refined/blender-keyforms.json`과 기존 텍스처다. 에디터는 원본과 `.blend`를 덮어쓰지 않는다. 생성되는 실행용 모델은 `output/portrait_editor/.runtime/`에 둔다. 프로젝트는 편집 데이터이고, MOC3는 파생 출력이다.
+리깅 원본은 `data/portrait_editor/rig/blender-keyforms.json`과 같은 폴더 아래 `textures/`다. 레이아웃은 `data/portrait_editor/workspace/layout.json`, 내보내기 기본 폴더는 `data/portrait_editor/exports/`다. 에디터는 리깅 원본과 `.blend`를 덮어쓰지 않는다. 생성되는 실행용 모델은 `output/portrait_editor/.runtime/`에 둔다. 프로젝트는 편집 데이터이고, MOC3는 파생 출력이다.
 
 현재 모델 지원 범위는 `ParamSmile` 한 축과 왼눈·오른눈·입 세 트랙이다. ComfyUI/Anima 워크플로우 연결과 임의 Blender 리그 가져오기는 이 에디터 버전에 구현되어 있지 않다.
 

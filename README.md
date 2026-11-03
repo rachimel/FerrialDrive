@@ -8,11 +8,11 @@ JRPG식 3/4 Top-Down 화면과 사전 렌더링한 2D 에셋을 사용한다.
 현재는 **메뉴·전투 HUD·장면 전환을 확인할 독립 UI Unit Test**를 준비하는 단계다. 기획 문서와 기존 제작 도구가 있으며, UI Unit Test와 게임 전투 프로토타입의 실행 코드는 아직 없다.
 
 - [사전 PRD](docs/Ferrial_Drive_PRE_PRD_v0.1.md): 게임 방향, 현재 결정한 규칙, 미정 사항
-- [UI Unit Test 명세](docs/ui_unit_test.md): 현재 우선 검증할 두 장면·입력·HUD·애니메이션
+- [UI Unit Test 명세](docs/unit-tests/ui_unit_test.md): 현재 우선 검증할 두 장면·입력·HUD·애니메이션
 - [문서 목록](docs/README.md): 제작 도구와 데이터 준비 문서
-- [이미지 제작 파이프라인](docs/image_pipeline.md): JANIMA 레퍼런스 생성 → GPT 디테일 보정
-- [상세 기획서 PPT](docs/기획서.pptx): 기존 29쪽 초안. 이후 결정은 PRE-PRD를 따른다.
-- [발표자료 PPT](docs/발표자료.pptx): AI 콘셉트 이미지를 제외한 기존 10쪽 공개본
+- [이미지 제작 파이프라인](docs/ai-asset-pipeline/image_pipeline.md): JANIMA 레퍼런스 생성 → GPT 디테일 보정
+- [상세 기획서 PPT](docs/presentation/기획서.pptx): 기존 29쪽 초안. 이후 결정은 PRE-PRD를 따른다.
+- [발표자료 PPT](docs/presentation/발표자료.pptx): AI 콘셉트 이미지를 제외한 기존 10쪽 공개본
 
 ## UI 검증 이후 전투 프로토타입 목표
 
@@ -43,13 +43,13 @@ UI Unit Test는 별도 `.py` 진입점으로 실행할 예정이다. 소스 구�
 현재 실행 파일은 로컬 `.venv-capability-test` 환경을 사용한다.
 
 **저장소를 복제하는 것만으로 제작 도구를 바로 실행할 수는 없다.**
-표정 스튜디오와 Blender 생성기는 로컬 `output/capability_test/`의 이미지·모델·키폼 데이터를 참조한다.
+표정 스튜디오와 Blender 생성기는 로컬 `data/portrait_editor/`의 원본·텍스처·생성 입력을 참조한다. 저장 프로젝트와 레이아웃도 같은 폴더 아래 `workspace/`에 보관한다. `output/`에는 재생성 가능한 출력·캐시·검증 결과만 둔다.
 스프라이트 시트 도구의 테스트 데이터도 별도로 준비해야 한다.
 
-툴마다 게임과 독립된 최소 시연 데이터를 제공하는 것을 요구사항으로 정했다. 현재는 샘플·시연 연결이 미구현이며, [툴 시연용 테스트 데이터 기준](docs/tool_demo_data.md)을 따른다.
+툴마다 게임과 독립된 최소 시연 데이터를 제공하는 것을 요구사항으로 정했다. 현재는 샘플·시연 연결이 미구현이며, [툴 시연용 테스트 데이터 기준](docs/tool-usage/tool_demo_data.md)을 따른다.
 
-- [표정 스튜디오](docs/portrait_editor.md)
-- [Blender 원본 생성](docs/blender_pipeline.md)
+- [표정 스튜디오](docs/tool-usage/portrait_editor.md)
+- [Blender 원본 생성](docs/ai-asset-pipeline/blender_pipeline.md)
 
 ## Git 관리 범위
 

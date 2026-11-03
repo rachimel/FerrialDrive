@@ -15,6 +15,6 @@ Blender의 테스트용 인스턴스에서 `--factory-startup --python Tools/ble
 ```
 
 생성기는 연결된 장면을 비우므로 편집 중인 사용자 장면과 분리된 인스턴스를 사용한다.
-원본 이미지와 기존 프로젝트의 참조를 유지하기 위해 산출물 위치는
-`output/capability_test/live2d_refined/`로 유지한다. MCP 호출 기록은
-`output/blender_pipeline/`에 저장한다. 과거 데모·성능 진단·이전 리그 생성기는 삭제했다.
+생성 입력은 `data/portrait_editor/inputs/`, 리깅 원본·텍스처·Blender 파일은 `data/portrait_editor/rig/`에 보관한다. 원본 위치는 현재 프로젝트 기준으로 계산하며, MCP 실행에서도 스크립트의 `__file__`을 명시한다.
+
+미리보기 이미지는 `output/blender_pipeline/previews/`, 호출 기록은 `output/blender_pipeline/`에 저장한다. 과거 데모·성능 진단·이전 리그 생성기는 삭제했다.

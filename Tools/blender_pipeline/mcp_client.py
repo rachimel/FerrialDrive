@@ -32,7 +32,8 @@ async def main():
             code = args.code
             if args.script:
                 script = args.script.resolve()
-                code = 'exec(compile(' + repr(script.read_text(encoding='utf-8')) + ', ' + repr(str(script)) + ", 'exec'))"
+                code = ('exec(compile(' + repr(script.read_text(encoding='utf-8')) + ', ' + repr(str(script))
+                        + ", 'exec'), dict(globals(), __file__=" + repr(str(script)) + ", __name__='__main__'))")
             tool = 'execute_blender_code' if code else 'get_scene_info'
             arguments = {'code':code} if code else {}
             result = await session.call_tool(tool, arguments, read_timeout_seconds=datetime.timedelta(seconds=600))
