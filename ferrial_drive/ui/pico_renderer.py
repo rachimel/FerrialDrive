@@ -2,7 +2,7 @@
 
 from collections import OrderedDict
 from ctypes import byref, c_int
-from math import cos, sin, tau
+from math import ceil, cos, floor, sin, tau
 from pathlib import Path
 
 from .components import Rect
@@ -52,6 +52,29 @@ class PicoRenderer:
             first, second = tau * index / segments, tau * (index + 1) / segments
             self.line(x + cos(first) * radius, y + sin(first) * radius,
                       x + cos(second) * radius, y + sin(second) * radius, color, opacity)
+
+    def filled_triangle(self, first, second, third, color: str, opacity: float = 1):
+        """픽셀 중심을 기준으로 내부를 한 번씩 채워 전환 중 알파 중첩을 막는다."""
+        if opacity <= 0:
+            return
+        pico = self.pico
+        vertices = (first, second, third)
+        edges = tuple(zip(vertices, vertices[1:] + vertices[:1]))
+        top = max(0, ceil(min(point[1] for point in vertices) - 0.5))
+        bottom = min(pico.get_canvas_height() - 1, floor(max(point[1] for point in vertices) - 0.5))
+        pico.SDL_SetRenderDrawColor(pico.renderer, *self.rgba(color, opacity))
+        for pixel_y in range(top, bottom + 1):
+            scan_y = pixel_y + 0.5
+            intersections = []
+            for (x1, y1), (x2, y2) in edges:
+                if min(y1, y2) <= scan_y < max(y1, y2):
+                    intersections.append(x1 + (scan_y - y1) * (x2 - x1) / (y2 - y1))
+            if len(intersections) < 2:
+                continue
+            left = max(0, ceil(min(intersections) - 0.5))
+            right = min(pico.get_canvas_width() - 1, floor(max(intersections) - 0.5))
+            if left <= right:
+                pico.SDL_RenderDrawLine(pico.renderer, left, pixel_y, right, pixel_y)
 
     def _measure(self, text: str, role: str) -> tuple[int, int]:
         width, height = c_int(), c_int()

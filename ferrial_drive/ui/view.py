@@ -96,10 +96,8 @@ class UiView:
             base_x, base_y = tip_x - direction_x * length, tip_y - direction_y * length
             side_x, side_y = -direction_y * half_width, direction_x * half_width
             color = c.colors["enemy"]
-            r.line(base_x + side_x, base_y + side_y, tip_x, tip_y, color, opacity)
-            r.line(base_x - side_x, base_y - side_y, tip_x, tip_y, color, opacity)
-            r.line(tip_x - direction_x * length * 1.5, tip_y - direction_y * length * 1.5,
-                   tip_x, tip_y, color, opacity)
+            r.filled_triangle((tip_x, tip_y), (base_x + side_x, base_y + side_y),
+                              (base_x - side_x, base_y - side_y), color, opacity)
 
     def placeholder(self, anchor, label, color, opacity, offset_x):
         r, c = self.renderer, self.config.colors
