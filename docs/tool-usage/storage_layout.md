@@ -8,7 +8,7 @@
 | --- | --- |
 | `data/portrait_editor/rig/` | 리깅 JSON·텍스처·Blender 파일·원본 모델 |
 | `data/portrait_editor/inputs/` | Blender 생성 입력 이미지와 생성 기록 |
-| `data/portrait_editor/workspace/` | 저장 프로젝트·레이아웃·영역 편집 작업의 기본 위치 |
+| `Tools/portrait_editor/workspace/` | 저장 프로젝트·레이아웃·영역 편집 작업의 기본 위치 |
 | `data/portrait_editor/exports/` | 내보내기 기본 폴더와 기존 보관본 |
 | `data/migrations/2026-11-03-output-assets/` | 이동 목록·해시·프로젝트 원본 백업 |
 | `output/portrait_editor/` | 실행용 모델 캐시·캡처·로그·검증 결과 |
@@ -16,7 +16,7 @@
 
 경로는 실행 위치 대신 프로젝트·모듈 위치를 기준으로 해석한다. 실행용 모델 캐시는 리깅 원본과 저장 프로젝트에서 다시 만든다. 작업 저장과 내보내기는 목적이 다르므로, 내보낸 모델만 남기고 편집 프로젝트를 지우지 않는다.
 
-AI 생성 이미지·모델과 가공 에셋을 포함한 `data/`, `output/`은 Git에서 제외한다. 공개 시연용 최소 샘플은 별도 요구사항이며 이번 이동으로 제공된 것은 아니다.
+AI 생성 이미지·모델과 가공 에셋을 포함한 `data/`, `output/`, `Tools/*/workspace/`는 Git에서 제외한다. 작업 폴더는 툴 실행 시 생성한다. 공개 시연용 최소 샘플은 별도 요구사항이며 이번 이동으로 제공된 것은 아니다.
 
 ## 2026-11-03 이동
 
@@ -26,4 +26,8 @@ AI 생성 이미지·모델과 가공 에셋을 포함한 `data/`, `output/`은 
 - 기존 자동 검사 14개와 기본 원본을 사용하는 CLI 모델 내보내기를 확인했다. 실제 창 조작과 Blender 재생성은 이번에 실행하지 않았다.
 - 다른 작업 폴더에서 저장 프로젝트를 불러왔고 리깅·모델 3개의 텍스처 참조가 모두 존재했다. 문서 23개의 내부 파일 링크에 누락이 없고, 공개 PPT 두 개의 내용도 이동 전과 같았다.
 
-과거 `output/capability_test/`와 발표 작업본은 현행 도구의 필수 입력과 분리했다. 과거 작업을 보존할지는 [제거 후보 목록](cleanup_candidates.md)에서 사용자가 판단한다. 따라서 아직 `output/` 전체를 지우지는 않는다.
+이후 사용자가 output 삭제를 알렸다. [제거 후보 목록](cleanup_candidates.md)은 삭제 전 조사 기록이며 현재 파일 목록으로 보지 않는다. 툴 실행·자동 검사로 output 캐시가 다시 생길 수 있다.
+
+## 툴 내부 작업 폴더로 변경
+
+저장 프로젝트와 레이아웃을 `data/portrait_editor/workspace/`에서 `Tools/portrait_editor/workspace/`로 옮겼다. 프로젝트의 리깅 참조만 새 상대 경로로 바꾸고 다른 편집 값은 유지했다. 이동 기록과 수정 전 백업은 `data/migrations/2026-11-03-tool-workspace/`에 보관한다. 원본과 내보내기 위치는 위 표를 따른다.
