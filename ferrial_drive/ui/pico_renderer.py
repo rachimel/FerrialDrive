@@ -2,7 +2,7 @@
 
 from collections import OrderedDict
 from ctypes import byref, c_int
-from math import ceil, cos, floor, sin, tau
+from math import ceil, cos, floor, sin, sqrt, tau
 from pathlib import Path
 
 from .components import Rect
@@ -53,6 +53,24 @@ class PicoRenderer:
             self.line(x + cos(first) * radius, y + sin(first) * radius,
                       x + cos(second) * radius, y + sin(second) * radius, color, opacity)
 
+    def ring(self, x, y, radius, thickness, color, opacity=1):
+        """동심원 띠를 한 번씩 채워 두꺼운 링의 알파 중첩을 막는다."""
+        outer = radius + thickness / 2
+        inner = max(0.0, radius - thickness / 2)
+        for pixel_y in range(ceil(y - outer - 0.5), floor(y + outer - 0.5) + 1):
+            dy = pixel_y + 0.5 - y
+            outer_span = sqrt(max(0.0, outer * outer - dy * dy))
+            left, right = ceil(x - outer_span - 0.5), floor(x + outer_span - 0.5)
+            spans = [(left, right)]
+            if abs(dy) < inner:
+                inner_span = sqrt(inner * inner - dy * dy)
+                left_end = floor(x - inner_span - 0.5)
+                right_start = max(left_end + 1, ceil(x + inner_span - 0.5))
+                spans = [(left, left_end), (right_start, right)]
+            for start, end in spans:
+                if start <= end:
+                    self.line(start, pixel_y, end, pixel_y, color, opacity)
+
     def filled_triangle(self, first, second, third, color: str, opacity: float = 1):
         """픽셀 중심을 기준으로 내부를 한 번씩 채워 전환 중 알파 중첩을 막는다."""
         if opacity <= 0:
@@ -90,8 +108,9 @@ class PicoRenderer:
         return self.pico.TTF_FontAscent(self.fonts[role].font)
 
     def text(self, text: str, x: float, y: float, role: str, color: str,
-             opacity: float = 1, max_width: float | None = None, align: str = "left"):
-        if opacity <= 0 or not text:
+             opacity: float = 1, max_width: float | None = None, align: str = "left",
+             scale_x: float = 1, scale_y: float = 1, clip_rect: Rect | None = None):
+        if opacity <= 0 or not text or scale_x <= 0 or scale_y <= 0:
             return
         if max_width is not None and self._measure(text, role)[0] > max_width:
             while text and self._measure(text + "…", role)[0] > max_width:
@@ -99,6 +118,36 @@ class PicoRenderer:
             if not text:
                 return
             text += "…"
+        texture, width, height = self._text_texture(text, role, color)
+        pico = self.pico
+        draw_width, draw_height = round(width * scale_x), round(height * scale_y)
+        if draw_width <= 0 or draw_height <= 0:
+            return
+        if align == "right":
+            x -= draw_width
+        elif align == "center":
+            x -= draw_width / 2
+        destination = pico.SDL_Rect(round(x), round(y), draw_width, draw_height)
+        source = None
+        if clip_rect is not None:
+            left = max(destination.x, ceil(clip_rect.x))
+            top = max(destination.y, ceil(clip_rect.y))
+            right = min(destination.x + draw_width, floor(clip_rect.x + clip_rect.width))
+            bottom = min(destination.y + draw_height, floor(clip_rect.y + clip_rect.height))
+            if right <= left or bottom <= top:
+                return
+            source_left = max(0, floor((left - destination.x) * width / draw_width))
+            source_top = max(0, floor((top - destination.y) * height / draw_height))
+            source_right = min(width, ceil((right - destination.x) * width / draw_width))
+            source_bottom = min(height, ceil((bottom - destination.y) * height / draw_height))
+            source = pico.SDL_Rect(source_left, source_top, source_right - source_left,
+                                   source_bottom - source_top)
+            destination = pico.SDL_Rect(left, top, right - left, bottom - top)
+        pico.SDL_SetTextureAlphaMod(texture, self.rgba(color, opacity)[3])
+        pico.SDL_RenderCopy(pico.renderer, texture, byref(source) if source is not None else None,
+                            byref(destination))
+
+    def _text_texture(self, text: str, role: str, color: str):
         key = (text, role, color)
         pico = self.pico
         if key not in self.textures:
@@ -117,14 +166,7 @@ class PicoRenderer:
                 _, (old_texture, _, _) = self.textures.popitem(last=False)
                 pico.SDL_DestroyTexture(old_texture)
         self.textures.move_to_end(key)
-        texture, width, height = self.textures[key]
-        if align == "right":
-            x -= width
-        elif align == "center":
-            x -= width / 2
-        destination = pico.SDL_Rect(round(x), round(y), width, height)
-        pico.SDL_SetTextureAlphaMod(texture, self.rgba(color, opacity)[3])
-        pico.SDL_RenderCopy(pico.renderer, texture, None, byref(destination))
+        return self.textures[key]
 
     def save_frame(self, path: Path, width: int, height: int):
         """자동 실행 확인용 PNG. 프레젠트하기 전의 현재 화면을 저장한다."""

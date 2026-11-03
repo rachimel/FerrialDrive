@@ -1,13 +1,33 @@
 """UI와 렌더러에 의존하지 않는 초 단위 수치 애니메이션."""
 
 from dataclasses import dataclass
-from math import isfinite
+from math import isfinite, sin, tau
 from typing import Callable
 
 
 def smooth_step(progress: float) -> float:
     progress = max(0.0, min(1.0, progress))
     return progress * progress * (3.0 - 2.0 * progress)
+
+
+def ease_in_quad(progress: float) -> float:
+    progress = max(0.0, min(1.0, progress))
+    return progress * progress
+
+
+def elastic_in_out(progress: float, period: float = 0.4) -> float:
+    """입력 시간은 제한하되 출력의 탄성 범위 초과는 유지한다."""
+    if not isfinite(period) or period <= 0:
+        raise ValueError("탄성 주기는 양수인 유한한 값이어야 한다.")
+    if progress <= 0:
+        return 0.0
+    if progress >= 1:
+        return 1.0
+    phase = 2 * progress - 1
+    wave = sin((phase - period / 4) * tau / period)
+    if phase < 0:
+        return -0.5 * 2 ** (10 * phase) * wave
+    return 0.5 * 2 ** (-10 * phase) * wave + 1
 
 
 @dataclass

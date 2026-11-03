@@ -1,12 +1,15 @@
 {
+    "player_name": "플레이어",
     "player_health": {"current": 860, "maximum": 1200},
+    "attack_direction_x": 1,
     "target": {"name": "훈련 표적 A", "health": {"current": 540, "maximum": 800}},
     "combo_count": 0,
     "total_damage_dealt": 0,
     "radar_contacts": [
-        {"x": 0.58, "y": 0.09, "kind": "enemy"},
-        {"x": -0.48, "y": 0.55, "kind": "enemy"},
-        {"x": 1.3, "y": 0.3, "kind": "enemy"},
-        {"x": -0.28, "y": -0.48, "kind": "ally"}
+        {"x": 0.232, "y": 0.036, "screen_x": 756, "screen_y": 342, "kind": "enemy"},
+        {"x": -0.48, "y": 0.55, "screen_x": 400, "screen_y": 85, "kind": "enemy"},
+        {"x": 0.6, "y": -0.8, "screen_x": 940, "screen_y": 760, "kind": "enemy"},
+        {"x": 1.3, "y": 0.3, "screen_x": 1290, "screen_y": 210, "kind": "enemy"},
+        {"x": -0.28, "y": -0.48, "screen_x": 500, "screen_y": 600, "kind": "ally"}
     ]
 }

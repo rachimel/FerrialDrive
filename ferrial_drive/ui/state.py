@@ -28,15 +28,19 @@ class TargetInfo:
 
 @dataclass(frozen=True)
 class RadarContact:
-    """플레이어 기준 상대 좌표. 감지 거리 설정과 같은 단위를 사용한다."""
+    """감지용 상대 좌표와 카메라 투영 후 화면 픽셀 좌표를 함께 전달한다."""
 
     x: float
     y: float
+    screen_x: float
+    screen_y: float
     kind: str = "enemy"
 
     def __post_init__(self):
         if not isfinite(self.x) or not isfinite(self.y):
             raise ValueError("레이더 좌표는 유한한 값이어야 한다.")
+        if not isfinite(self.screen_x) or not isfinite(self.screen_y):
+            raise ValueError("레이더 대상의 화면 좌표는 유한한 픽셀 값이어야 한다.")
         if self.kind not in ("enemy", "ally"):
             raise ValueError("레이더 종류는 enemy 또는 ally여야 한다.")
 
@@ -48,7 +52,10 @@ class HudState:
     combo_count: int
     total_damage_dealt: int
     radar_contacts: tuple[RadarContact, ...]
+    attack_direction_x: int = 1
 
     def __post_init__(self):
         if self.combo_count < 0 or self.total_damage_dealt < 0:
             raise ValueError("콤보와 누적 피해는 음수일 수 없다.")
+        if self.attack_direction_x not in (-1, 1):
+            raise ValueError("공격 좌우 방향은 왼쪽 -1 또는 오른쪽 1이어야 한다.")
