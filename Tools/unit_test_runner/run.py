@@ -7,9 +7,8 @@ import sys
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from unit_test_runner import run
 from unit_test_runner.gui import run_gui
-from unit_test_runner.loader import load_test
+from unit_test_runner.processes import run_file
 
 
 def main(argv=None):
@@ -21,10 +20,10 @@ def main(argv=None):
         parser.error("--frames는 양수여야 한다.")
     if args.test_file is None:
         run_gui(frame_limit=args.frames)
+        return 0
     else:
-        program, window = load_test(args.test_file)
-        run(program, window, frame_limit=args.frames)
+        return run_file(args.test_file, frame_limit=args.frames)
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

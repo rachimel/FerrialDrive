@@ -12,8 +12,9 @@ from unit_test_runner.run import main as run_main
 
 def main(argv=None) -> int:
     try:
-        run_main(argv)
-        return 0
+        exit_code = run_main(argv)
+        if not exit_code:
+            return 0
     except SystemExit as error:
         exit_code = 0 if error.code is None else error.code if isinstance(error.code, int) else 1
     except Exception:
