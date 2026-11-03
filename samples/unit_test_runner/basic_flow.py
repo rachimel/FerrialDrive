@@ -55,7 +55,7 @@ class FlowDemo(TestProgram):
         self.font.draw(80, 650, "공통 실행기 / 독립 흐름 테스트", accent)
         self.font.draw(440, 500, "시작 화면" if self.page == 0 else "두 번째 화면", (228, 238, 235))
         self.font.draw(440, 450, f"화면 경과 시간: {self.elapsed_seconds:.1f}초", (154, 172, 178))
-        self.font.draw(440, 405, "이 화면의 문구와 입력은 테스트 .py가 관리해.", (154, 172, 178))
+        self.font.draw(440, 405, "화면 전환 테스트", (154, 172, 178))
         labels = ("다음 화면" if self.page == 0 else "이전 화면", "종료")
         for index, (left, bottom, right, top) in enumerate(self.buttons):
             color = accent if self.hovered == index else (73, 101, 111)
