@@ -6,6 +6,7 @@ Ferrial Drive 프로젝트 대화에서 나온 결정과 작업 흐름을 요약
 
 ## 기록
 
+- [2026-11-03 스틸 블루 UI 배색](2026-11-03-steel-blue-ui-colors.md): 레이블·패널 강조 스틸 블루·HUD 버튼 Bezel·메뉴 버튼 스틸 블루
 - [2026-11-03 패널 방사형 그라데이션](2026-11-03-radial-panel-gradient.md): 반사 띠·결 제거·아래 중심의 넓은 광택·숫자 아래 간격 3px
 - [2026-11-03 카운터 레이블 크기 정정](2026-11-03-counter-label-size-correction.md): HIT 숫자 76px 복원·후속 조정 HIT/DAMAGE 레이블 18px·추가 자간 5px
 - [2026-11-03 금속 패널·카운터 배치](2026-11-03-metallic-panels-counter-labels.md): 정적 금속 질감 재사용·레이블 하단 배치·숫자 확대 오해는 후속 정정

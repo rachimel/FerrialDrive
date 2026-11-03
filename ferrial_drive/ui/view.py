@@ -10,6 +10,7 @@ class UiView:
     def __init__(self, config, renderer):
         self.config = config
         self.renderer = renderer
+        self.ui_accent = config.colors.get("ui_accent", config.colors["accent"])
 
     def background(self):
         r, c = self.renderer, self.config.colors
@@ -34,7 +35,7 @@ class UiView:
         else:
             r.rect(rect, color, opacity * fill)
         r.rect(rect, c["panel_border"], opacity * style["border_opacity"], filled=False)
-        r.line(rect.x, rect.y, rect.x + min(72, rect.width), rect.y, c["accent"], opacity)
+        r.line(rect.x, rect.y, rect.x + min(72, rect.width), rect.y, self.ui_accent, opacity)
 
     def label(self, key, x, y, role="body", color="text", opacity=1,
               offset_x=0, **kwargs):
@@ -44,31 +45,37 @@ class UiView:
     def buttons(self, scene, input_state, opacity, offset_x, buttons=None):
         r, c = self.renderer, self.config.colors
         body_role = "hud_body" if scene == "combat" else "body"
+        palette = "hud_button" if scene == "combat" else "menu_button"
+        normal_fill = c.get(palette, c["panel"])
+        hover_fill = c.get(f"{palette}_hover", c["panel_hover"])
+        pressed_fill = c.get(f"{palette}_pressed", c["panel_pressed"])
+        text_color = c.get(f"{palette}_text", c["text"])
+        marker_color = self.ui_accent if scene == "combat" else text_color
         for index, button in enumerate(self.config.buttons[scene] if buttons is None else buttons):
             rect = button.rect.translated(offset_x)
             button_opacity = opacity if button.enabled else opacity * 0.45
             hovered = button.enabled and input_state.hovered_id == button.button_id
             pressed = input_state.pressed_id == button.button_id and hovered
-            fill = c["panel_pressed"] if pressed else c["panel_hover"] if hovered else c["panel"]
+            fill = pressed_fill if pressed else hover_fill if hovered else normal_fill
             r.rect(rect, fill, button_opacity)
-            r.rect(rect, c["accent"] if hovered else c["line"], button_opacity, filled=False)
-            r.rect(Rect(rect.x, rect.y, 3, rect.height), c["accent"],
+            r.rect(rect, marker_color if hovered else c["line"], button_opacity, filled=False)
+            r.rect(Rect(rect.x, rect.y, 3, rect.height), marker_color,
                    button_opacity if hovered else button_opacity * 0.45)
             if scene == "menu":
                 index_y = rect.y + (rect.height - self.config.font_sizes["button_index"]) / 2 - 2
                 r.text(f"{index + 1:02}", rect.x + 18, index_y,
-                       "button_index", c["muted"], button_opacity)
+                       "button_index", text_color, button_opacity)
             r.text(button.label, rect.x + (54 if scene == "menu" else 16),
                    rect.y + (rect.height - self.config.font_sizes[body_role]) / 2 - 2,
-                   body_role, c["text"], button_opacity,
+                   body_role, text_color, button_opacity,
                    max_width=rect.width - (80 if scene == "menu" else 32))
 
     def menu(self, opacity, offset_x, input_state):
         c, r = self.config, self.renderer
         x, y = c.layout["menu_title"]
         self.label("menu_title_first", x, y, "title", opacity=opacity, offset_x=offset_x)
-        self.label("menu_title_second", x, y + 72, "title", "accent", opacity, offset_x)
-        r.line(x + offset_x, y + 168, x + 104 + offset_x, y + 168, c.colors["accent"], opacity)
+        r.text(c.labels["menu_title_second"], x + offset_x, y + 72, "title", self.ui_accent, opacity)
+        r.line(x + offset_x, y + 168, x + 104 + offset_x, y + 168, self.ui_accent, opacity)
         self.label("menu_subtitle", x, y + 198, "body", "muted", opacity, offset_x)
         self.panel(c.layout["menu_panel"], opacity, offset_x)
         self.label("menu_heading", *c.layout["menu_heading"], "heading",
