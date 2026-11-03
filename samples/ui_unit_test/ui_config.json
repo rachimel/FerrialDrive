@@ -42,6 +42,7 @@
     "colors": {
         "background": "#091217",
         "panel": "#101F27",
+        "panel_surface": "#39444A",
         "panel_hover": "#1B3941",
         "panel_pressed": "#294C50",
         "line": "#2D4B55",

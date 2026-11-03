@@ -25,7 +25,7 @@ class UiView:
         style = self.config.data["panel_style"]
         rect = Rect(*rect).translated(offset_x)
         fill = style["fill_opacity"] if fill_opacity is None else fill_opacity
-        r.rect(rect, c["panel"], opacity * fill)
+        r.rect(rect, c.get("panel_surface", c["panel"]), opacity * fill)
         r.rect(rect, c["panel_border"], opacity * style["border_opacity"], filled=False)
         r.line(rect.x, rect.y, rect.x + min(72, rect.width), rect.y, c["accent"], opacity)
 
