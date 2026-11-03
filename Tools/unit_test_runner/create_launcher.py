@@ -1,4 +1,4 @@
-"""현재 Python 환경에 연결된 드롭 실행용 Windows 바로가기를 생성한다."""
+"""현재 Python 환경으로 실행기 GUI를 여는 Windows 바로가기를 생성한다."""
 
 import importlib.util
 import os

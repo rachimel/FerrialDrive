@@ -2,12 +2,12 @@
     "window": {"width": 1280, "height": 720, "initial_scene": "menu"},
     "animation": {"duration_seconds": 0.32, "slide_pixels": 36},
     "fonts": {
-        "title": {"path": "../../assets/fonts/s_core_dream/SCDream2.otf", "size": 62},
-        "heading": {"path": "../../assets/fonts/s_core_dream/SCDream3.otf", "size": 25},
-        "body": {"path": "../../assets/fonts/s_core_dream/SCDream4.otf", "size": 18},
-        "small": {"path": "../../assets/fonts/s_core_dream/SCDream3.otf", "size": 14},
-        "hud": {"path": "../../assets/fonts/kkakdugi_drafting/KkakdugiDrafting-Regular.ttf", "size": 19},
-        "number": {"path": "../../assets/fonts/kkakdugi_drafting/KkakdugiDrafting-Regular.ttf", "size": 48}
+        "title": {"path": "../../data/fonts/s_core_dream/SCDream2.otf", "size": 62},
+        "heading": {"path": "../../data/fonts/s_core_dream/SCDream3.otf", "size": 25},
+        "body": {"path": "../../data/fonts/s_core_dream/SCDream4.otf", "size": 18},
+        "small": {"path": "../../data/fonts/s_core_dream/SCDream3.otf", "size": 14},
+        "hud": {"path": "../../data/fonts/kkakdugi_drafting/KkakdugiDrafting-Regular.ttf", "size": 19},
+        "number": {"path": "../../data/fonts/kkakdugi_drafting/KkakdugiDrafting-Regular.ttf", "size": 48}
     },
     "colors": {
         "background": "#091217",

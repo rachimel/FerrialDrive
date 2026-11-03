@@ -76,11 +76,10 @@ class LauncherTests(unittest.TestCase):
         self.assertIn("테스트 .py 파일이 필요하다", result.stderr)
         self.assertIn("종료: Enter", result.stdout)
 
-    def test_no_file_shows_usage_and_waits(self):
-        result = self.invoke()
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("usage:", result.stderr)
-        self.assertIn("종료: Enter", result.stdout)
+    def test_no_file_starts_drop_gui(self):
+        result = self.invoke("--frames", "1")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("종료: Enter", result.stdout)
 
     def test_multiple_files_are_rejected_before_loading(self):
         first = self.fixture("multiple first.py")

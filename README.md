@@ -33,7 +33,7 @@ JRPG식 3/4 Top-Down 화면과 사전 렌더링한 2D 에셋을 사용한다.
 | `docs/` | 기획과 제작 도구 사용 문서 |
 | `ferrial_drive/` | 재사용 UI·애니메이션 모듈 초안 |
 | `samples/ui_unit_test/` | UI 표현 설정과 현재 확인 방법 |
-| `assets/fonts/` | 지정 폰트와 저작권·이용 조건 |
+| `data/fonts/` | 지정 공개 폰트와 저작권·이용 조건 |
 | `tests/` | 시간 진행·버튼 판정 자동 검사 |
 | `Tools/unit_test_runner/` | 게임과 독립된 공통 테스트 실행 도구 |
 | `samples/unit_test_runner/` | 공통 실행기의 두 화면·흐름 전환 샘플 |
@@ -44,13 +44,13 @@ JRPG식 3/4 Top-Down 화면과 사전 렌더링한 2D 에셋을 사용한다.
 
 UI Unit Test는 별도 `.py` 진입점으로 실행할 예정이다. 소스 구조와 실행 명령은 구현 후 추가한다.
 
-공통 실행기와 게임 없는 두 화면 샘플은 먼저 실행할 수 있다. Zed 터미널에서 Pico2D가 설치된 Python으로 실행한다. 이 샘플은 위 UI 메뉴·전투 HUD와 별개다.
+공통 실행기는 Pico2D가 설치된 Python으로 실행한다. 파일 인자 없이 실행하면 대기 GUI가 열린다. 그 창에 `samples/unit_test_runner/basic_flow.py`를 드롭해 두 화면 샘플을 실행한다. 이 샘플은 위 UI 메뉴·전투 HUD와 별개다.
 
 ```text
-python Tools/unit_test_runner/run.py samples/unit_test_runner/basic_flow.py
+python Tools/unit_test_runner/run.py
 ```
 
-Windows 아이콘 드롭 실행은 `Tools/unit_test_runner/create_launcher.py`로 바로가기를 생성한 뒤 사용한다. 테스트 `.py` 하나를 `Tools/unit_test_runner/workspace/Unit Test Runner.lnk`에 드롭한다. [실행기 안내](Tools/unit_test_runner/README.md)에 환경 설정과 오류 확인 방법을 정리했다.
+바로가기는 `Tools/unit_test_runner/create_launcher.py`로 생성한다. `Tools/unit_test_runner/workspace/Unit Test Runner.lnk`를 열면 같은 GUI가 실행된다. 테스트 파일은 **열린 GUI 창에 드롭**한다. 파일 경로를 인자로 주는 직접 실행도 지원한다. [실행기 안내](Tools/unit_test_runner/README.md)에 사용법을 정리했다.
 
 ## 제작 도구 실행 조건
 
@@ -71,7 +71,7 @@ Windows 아이콘 드롭 실행은 `Tools/unit_test_runner/create_launcher.py`�
 기획 문서와 도구 소스를 관리한다. 다음 항목은 로컬에 보관하며 업로드에서 제외한다.
 
 - Python 가상환경과 캐시
-- `data/`의 기존 테스트 이미지와 애니메이션 데이터
+- `data/`의 기존 테스트 이미지와 애니메이션 데이터. 공개 폰트·이용 조건의 지정 경로만 예외로 포함
 - `output/`의 생성 이미지·모델·검증 결과와 발표자료 작업본
 - `docs/report-archive/`의 과거 실험 기록
 - `docs/`의 발표자료 작업 원본. 공개용 `발표자료.pptx`와 `기획서.pptx`는 관리 대상

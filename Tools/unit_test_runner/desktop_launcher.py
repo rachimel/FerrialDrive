@@ -1,4 +1,4 @@
-"""바로가기에서 받은 파일 인자를 기존 CLI에 전달하고 실패 내용을 유지한다."""
+"""파일 없이 GUI를 열거나 받은 파일 인자를 CLI에 전달하고 실패 내용을 유지한다."""
 
 from pathlib import Path
 import sys

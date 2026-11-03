@@ -19,6 +19,7 @@ dist/
 !.env.example
 .idea/
 .vscode/
+*.lnk
 Thumbs.db
 Desktop.ini
 *.log
@@ -29,7 +30,12 @@ Desktop.ini
 # 히로인 AI 레퍼런스는 폴더 위치가 바뀌어도 제외
 **/heroine_references/
 **/rose_references/
-/data/
+/data/*
+!/data/fonts/
+/data/fonts/*
+!/data/fonts/README.md
+!/data/fonts/s_core_dream/
+!/data/fonts/kkakdugi_drafting/
 /output/
 # 툴의 로컬 저장 프로젝트·레이아웃·영역 작업
 /Tools/*/workspace/

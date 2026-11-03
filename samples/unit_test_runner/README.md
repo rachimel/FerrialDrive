@@ -13,15 +13,15 @@
 프로젝트 루트에서 실행한다.
 
 ```text
-python Tools/unit_test_runner/run.py samples/unit_test_runner/basic_flow.py
+python Tools/unit_test_runner/run.py
 ```
 
-Windows 바로가기를 생성한 환경에서는 `basic_flow.py`를 `Tools/unit_test_runner/workspace/Unit Test Runner.lnk` 아이콘에 드롭해 같은 샘플을 실행할 수 있다. 생성 방법은 [실행기 안내](../../Tools/unit_test_runner/README.md#아이콘에-드래그-앤-드롭)를 따른다.
+열린 Python GUI 창에 `basic_flow.py`를 드롭한다. 바로가기를 생성한 환경에서는 `Tools/unit_test_runner/workspace/Unit Test Runner.lnk`를 더블클릭해 같은 GUI를 열 수 있다. [실행기 안내](../../Tools/unit_test_runner/README.md)를 따른다. 기존 인자 직접 실행은 `python Tools/unit_test_runner/run.py samples/unit_test_runner/basic_flow.py`로 유지한다.
 
 1. 1280×720 창에 녹색 강조의 **시작 화면**과 경과 시간이 나온다.
 2. **다음 화면**을 좌클릭하면 주황색 강조의 **두 번째 화면**으로 교체된다. 화면별 경과 시간은 새로 시작한다.
 3. **이전 화면**을 누르거나 **Esc**를 누르면 다른 화면으로 교체된다. 창은 다시 만들지 않는다.
-4. **종료** 버튼이나 창 **X**로 실행을 마친다.
+4. **종료** 버튼은 GUI 모드에서 대기 화면으로 돌아가고, 직접 실행에서는 실행을 마친다. 창 **X**는 실행기를 종료한다.
 5. 버튼 안에서 누르고 밖에서 놓으면 전환하지 않는다.
 
 이 입력 규칙은 샘플이 구현하며 실행기에 고정하지 않는다. 샘플 원본은 실행 중 변경하지 않고 저장 결과도 만들지 않는다. 실행기·샘플을 절대 경로로 지정하면 다른 작업 폴더에서도 실행할 수 있다.
@@ -31,3 +31,5 @@ Windows 바로가기를 생성한 환경에서는 `basic_flow.py`를 `Tools/unit
 2026-11-03 기준으로 흐름 전환·수명 주기·오류 정리 자동 검사, SDL dummy 경로의 제한 프레임 실행을 확인했다. 도구·샘플만 복사한 격리 폴더에서도 실행했다. 실제 창의 클릭·Esc 조작과 사용자 사용감 확인은 별도로 기록한다.
 
 이후 아이콘 드롭 실행을 추가했다. 자동 검사 총 28개 통과와 실제 파일 탐색기에서 드롭한 샘플의 시작 화면 표시를 확인했다. 직접 버튼·Esc 조작과 사용감 확인은 사용자가 진행한다.
+
+최신 수정에서 드롭 대상을 **실행된 GUI 창**으로 바로잡았다. 이 변경 후 자동 검사와 GUI 조작은 실행하지 않았다. 앞의 28개 통과와 아이콘 드롭 확인을 현재 GUI 드롭의 검증 결과로 사용하지 않는다.
