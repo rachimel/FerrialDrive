@@ -6,4 +6,4 @@
 
 `basic_flow.py`는 바로 확인하기 위해 `samples/unit_test_runner/basic_flow.py`를 복사한 샘플이다. 독립 실행 규약은 [공통 실행기 안내](../Tools/unit_test_runner/README.md)를 따른다.
 
-`test_*.py`는 자동 검사 코드다. GUI에 드롭하는 샘플은 `basic_flow.py`다. 바로가기는 현재 로컬 Python에 연결되며 Git에서 제외한다.
+자동 검사 코드는 `automated/`에 분리했다. GUI에 드롭하는 샘플은 이 폴더의 `basic_flow.py`다. 바로가기는 현재 로컬 Python에 연결되며 Git에서 제외한다.

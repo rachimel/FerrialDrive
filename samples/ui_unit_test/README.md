@@ -17,7 +17,7 @@
 Python 3.11과 `requirements-ui.txt`의 Pico2D 1.5.1 환경을 사용한다. 프로젝트 루트에서 핵심 자동 검사는 다음처럼 실행한다.
 
 ```text
-python -m unittest discover -s tests -v
+python -m unittest discover -s tests/automated -v
 ```
 
 이 검사는 시간 진행·버튼 판정 계약을 확인한다. 실제 UI 창의 조작 검증을 대신하지 않는다. 현재 샘플에는 게임 에셋·세이브·개인 절대 경로가 필요 없다. 샘플 원본을 수정하거나 저장하는 시연 기능은 추가하지 않았다.

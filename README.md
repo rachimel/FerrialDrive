@@ -34,7 +34,8 @@ JRPG식 3/4 Top-Down 화면과 사전 렌더링한 2D 에셋을 사용한다.
 | `ferrial_drive/` | 재사용 UI·애니메이션 모듈 초안 |
 | `samples/ui_unit_test/` | UI 표현 설정과 현재 확인 방법 |
 | `data/fonts/` | 지정 공개 폰트와 저작권·이용 조건 |
-| `tests/` | 시간 진행·버튼 판정 자동 검사 |
+| `tests/` | 실행기 바로가기와 직접 조작용 샘플 |
+| `tests/automated/` | 실행기·시간 진행·버튼 판정 자동 검사 |
 | `Tools/unit_test_runner/` | 게임과 독립된 공통 테스트 실행 도구 |
 | `samples/unit_test_runner/` | 공통 실행기의 두 화면·흐름 전환 샘플 |
 | `Tools/portrait_editor/` | 표정 스튜디오와 영역 지정 도구 |
