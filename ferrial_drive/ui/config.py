@@ -24,10 +24,15 @@ class UiConfig:
         if not isinstance(metal.get("enabled", False), bool):
             raise ValueError("패널 금속 효과 사용 여부는 불리언이어야 한다.")
         if metal.get("enabled", False):
-            for key in ("contrast", "grain_strength"):
-                value = metal[key]
-                if not isfinite(value) or not 0 <= value <= 1:
-                    raise ValueError("패널 금속 효과의 명암·결 강도는 0~1이어야 한다.")
+            contrast = metal["contrast"]
+            if not isfinite(contrast) or not 0 <= contrast <= 1:
+                raise ValueError("패널 방사형 그라데이션의 명암 강도는 0~1이어야 한다.")
+            center = metal.get("highlight_center", (0.5, 1.15))
+            radius = metal.get("highlight_radius", (1.25, 1.3))
+            if len(center) != 2 or not all(isfinite(value) for value in center):
+                raise ValueError("패널 광택 중심은 유한한 2차원 정규화 좌표여야 한다.")
+            if len(radius) != 2 or not all(isfinite(value) and value > 0 for value in radius):
+                raise ValueError("패널 광택 반경은 양수인 유한한 2차원 비율이어야 한다.")
         tracking = self.layout["counter_stack"].get("label_letter_spacing_pixels", 0)
         if not isfinite(tracking) or tracking < 0:
             raise ValueError("카운터 레이블 자간은 0 이상의 유한한 픽셀 값이어야 한다.")

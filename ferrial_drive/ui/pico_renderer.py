@@ -76,11 +76,14 @@ class PicoRenderer:
         pico.SDL_RenderDrawLine(pico.renderer, round(x1), round(y1), round(x2), round(y2))
 
     def metallic_rect(self, rect: Rect, color: str, opacity: float = 1, *,
-                      contrast: float = 0.22, grain_strength: float = 0.012):
-        """정적인 반사 띠·브러시 결을 저장해 패널마다 한 번의 복사로 그린다."""
+                      contrast: float = 0.28, highlight_center=(0.5, 1.15),
+                      highlight_radius=(1.25, 1.3)):
+        """넓은 방사형 광택을 저장해 패널마다 한 번의 복사로 그린다."""
         if opacity <= 0 or rect.width <= 0 or rect.height <= 0:
             return
-        key = (color, contrast, grain_strength)
+        center_x, center_y = highlight_center
+        radius_x, radius_y = highlight_radius
+        key = (color, contrast, center_x, center_y, radius_x, radius_y)
         pico = self.pico
         if key not in self.panel_textures:
             width, height = 128, 256
@@ -93,18 +96,16 @@ class PicoRenderer:
                     raise RuntimeError("금속 패널 surface 잠금 실패")
                 try:
                     base = _rgb(color)
+                    horizontal = tuple(((x / (width - 1) - center_x) / radius_x) ** 2
+                                       for x in range(width))
                     for y in range(height):
-                        v = y / (height - 1)
-                        # 결은 행마다 고정하며 난수·시간 상태를 사용하지 않는다.
-                        grain = (((y * 73 + 19) % 101) / 50 - 1) * grain_strength
+                        vertical = ((y / (height - 1) - center_y) / radius_y) ** 2
                         row = bytearray()
-                        for x in range(width):
-                            t = v + 0.32 * (x / (width - 1) - 0.5)
-                            light = (0.12 * (1 - v) + 0.70 * exp(-((t - 0.22) / 0.10) ** 2)
-                                     - 0.45 * exp(-((t - 0.55) / 0.16) ** 2)
-                                     + 0.45 * exp(-((t - 0.88) / 0.12) ** 2))
-                            shift = 255 * (contrast * light + grain)
-                            row.extend(max(0, min(255, round(channel + shift))) for channel in base)
+                        for distance_x in horizontal:
+                            # 아래쪽 중심에서 부드럽게 어두워지는 넓은 광택을 만든다.
+                            light = exp(-2 * (distance_x + vertical))
+                            shade = 1 + contrast * (2 * light - 1)
+                            row.extend(max(0, min(255, round(channel * shade))) for channel in base)
                             row.append(255)
                         memmove(surface.contents.pixels + y * surface.contents.pitch,
                                 bytes(row), width * 4)

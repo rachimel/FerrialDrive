@@ -29,7 +29,8 @@ class UiView:
         metal = style.get("metallic", {})
         if metal.get("enabled", False):
             r.metallic_rect(rect, color, opacity * fill, contrast=metal["contrast"],
-                            grain_strength=metal["grain_strength"])
+                            highlight_center=metal.get("highlight_center", (0.5, 1.15)),
+                            highlight_radius=metal.get("highlight_radius", (1.25, 1.3)))
         else:
             r.rect(rect, color, opacity * fill)
         r.rect(rect, c["panel_border"], opacity * style["border_opacity"], filled=False)
