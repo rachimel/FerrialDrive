@@ -4,6 +4,7 @@ Ferrial Drive 프로젝트 대화에서 나온 결정과 작업 흐름을 요약
 
 ## 기록
 
+- [2026-11-03 공통 테스트 실행기](2026-11-03-common-test-runner.md): 게임과 독립된 실행 규약·도구와 두 화면 샘플 구현
 - [2026-11-03 UI Unit Test 구현 시작](2026-11-03-ui-unit-test-implementation.md): 공통 애니메이션·버튼·메뉴 렌더링과 확인 대기 항목
 - [2026-11-03 프로젝트 대화 요약](2026-11-03-project-summary.md): 툴 선행 개발부터 전투 기획, 저장소 구성, UI Unit Test 범위 확정까지
 - [2026-11-03 이미지 파이프라인 정리](2026-11-03-image-pipeline-legacy.md): JANIMA·GPT 흐름 명시와 이전 LoRA 자료 이동

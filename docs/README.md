@@ -12,6 +12,7 @@
 
 ## 현재 도구
 
+- [독립 Unit Test 실행기](../Tools/unit_test_runner/README.md): 게임 없는 테스트 `.py` 실행과 화면 흐름 전환
 - [표정 스튜디오 및 AI 영역 지정](tool-usage/portrait_editor.md)
 - [Blender 원본 생성](ai-asset-pipeline/blender_pipeline.md)
 - [툴 시연용 테스트 데이터 기준](tool-usage/tool_demo_data.md): 게임과 독립된 최소 샘플과 시연 완료 조건

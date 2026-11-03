@@ -9,6 +9,7 @@ JRPG식 3/4 Top-Down 화면과 사전 렌더링한 2D 에셋을 사용한다.
 
 - [사전 PRD](docs/Ferrial_Drive_PRE_PRD_v0.1.md): 게임 방향, 현재 결정한 규칙, 미정 사항
 - [UI Unit Test 명세](docs/unit-tests/ui_unit_test.md): 현재 우선 검증할 두 장면·입력·HUD·애니메이션
+- [독립 Unit Test 실행기](Tools/unit_test_runner/README.md): 공통 실행 규약과 테스트 `.py` 실행 방법
 - [문서 목록](docs/README.md): 제작 도구와 데이터 준비 문서
 - [이미지 제작 파이프라인](docs/ai-asset-pipeline/image_pipeline.md): JANIMA 레퍼런스 생성 → GPT 디테일 보정
 - [상세 기획서 PPT](docs/presentation/기획서.pptx): 기존 29쪽 초안. 이후 결정은 PRE-PRD를 따른다.
@@ -34,12 +35,20 @@ JRPG식 3/4 Top-Down 화면과 사전 렌더링한 2D 에셋을 사용한다.
 | `samples/ui_unit_test/` | UI 표현 설정과 현재 확인 방법 |
 | `assets/fonts/` | 지정 폰트와 저작권·이용 조건 |
 | `tests/` | 시간 진행·버튼 판정 자동 검사 |
+| `Tools/unit_test_runner/` | 게임과 독립된 공통 테스트 실행 도구 |
+| `samples/unit_test_runner/` | 공통 실행기의 두 화면·흐름 전환 샘플 |
 | `Tools/portrait_editor/` | 표정 스튜디오와 영역 지정 도구 |
 | `Tools/blender_pipeline/` | Blender 기반 원본 생성 도구 |
 | `Tools/SSheetCutil.py` | 기존 스프라이트 시트 편집 도구 |
 | `run_portrait_editor.cmd` | 로컬 표정 스튜디오 실행 파일 |
 
 UI Unit Test는 별도 `.py` 진입점으로 실행할 예정이다. 소스 구조와 실행 명령은 구현 후 추가한다.
+
+공통 실행기와 게임 없는 두 화면 샘플은 먼저 실행할 수 있다. Zed 터미널에서 Pico2D가 설치된 Python으로 실행한다. 이 샘플은 위 UI 메뉴·전투 HUD와 별개다.
+
+```text
+python Tools/unit_test_runner/run.py samples/unit_test_runner/basic_flow.py
+```
 
 ## 제작 도구 실행 조건
 
@@ -50,7 +59,7 @@ UI Unit Test는 별도 `.py` 진입점으로 실행할 예정이다. 소스 구�
 표정 스튜디오와 Blender 생성기는 로컬 `data/portrait_editor/`의 원본·텍스처·생성 입력을 참조한다. 저장 프로젝트·레이아웃·영역 작업의 기본 위치는 툴 내부 `Tools/portrait_editor/workspace/`다. `output/`에는 재생성 가능한 출력·캐시·검증 결과만 둔다.
 스프라이트 시트 도구의 테스트 데이터도 별도로 준비해야 한다.
 
-툴마다 게임과 독립된 최소 시연 데이터를 제공하는 것을 요구사항으로 정했다. 현재는 샘플·시연 연결이 미구현이며, [툴 시연용 테스트 데이터 기준](docs/tool-usage/tool_demo_data.md)을 따른다.
+툴마다 게임과 독립된 최소 시연 데이터를 제공하는 것을 요구사항으로 정했다. 공통 테스트 실행기는 두 화면 샘플을 제공한다. 기존 제작 도구의 샘플·시연 연결은 미구현이며, [툴 시연용 테스트 데이터 기준](docs/tool-usage/tool_demo_data.md)을 따른다.
 
 - [표정 스튜디오](docs/tool-usage/portrait_editor.md)
 - [Blender 원본 생성](docs/ai-asset-pipeline/blender_pipeline.md)
