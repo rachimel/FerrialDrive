@@ -113,9 +113,9 @@ class UiView:
         self.label("combat_heading", *c.layout["combat_heading"], "heading",
                    opacity=opacity, offset_x=offset_x)
         self.label("sample_notice", *c.layout["combat_notice"], "small", "muted", opacity, offset_x)
-        self.placeholder(c.layout["player_anchor"], c.labels["player_name"], "accent", opacity, offset_x)
+        self.placeholder(c.actor_anchor("player"), c.labels["player_name"], "accent", opacity, 0)
         if state.target is not None:
-            self.placeholder(c.layout["target_anchor"], state.target.name, "enemy", opacity, offset_x)
+            self.placeholder(c.actor_anchor("target"), state.target.name, "enemy", opacity, offset_x)
         x, y = c.layout["crosshair_center"]
         x += offset_x
         radius = c.layout["crosshair_radius"]
@@ -155,5 +155,6 @@ class UiView:
         self.radar(state.radar_contacts, opacity, offset_x)
         self.buttons("combat", input_state, opacity, offset_x, buttons)
         for visual in damage_visuals:
-            r.text(str(visual.amount), visual.x + offset_x, visual.y, "damage_number",
+            damage_offset_x = 0 if visual.owner == "player" else offset_x
+            r.text(str(visual.amount), visual.x + damage_offset_x, visual.y, "damage_number",
                    c.colors["damage_number"], opacity * visual.opacity, align="center")

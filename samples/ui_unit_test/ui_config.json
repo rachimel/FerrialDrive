@@ -77,7 +77,6 @@
         "radar_radius": 78,
         "crosshair_center": [640, 360],
         "crosshair_radius": 28,
-        "player_anchor": [480, 402],
         "target_anchor": [756, 342],
         "popup_offset_y": -88
     },

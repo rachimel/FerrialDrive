@@ -30,6 +30,11 @@ class UiConfig:
         }
         self._validate_buttons()
 
+    def actor_anchor(self, owner: str) -> tuple[float, float]:
+        if owner == "player":
+            return self.window["width"] / 2, self.window["height"] / 2
+        return tuple(self.layout[f"{owner}_anchor"])
+
     def _validate_buttons(self):
         """초기 초안은 판정 영역을 겹치지 않게 유지한다."""
         for buttons in self.buttons.values():

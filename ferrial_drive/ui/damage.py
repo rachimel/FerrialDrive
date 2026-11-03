@@ -12,6 +12,7 @@ class DamageVisual:
     x: float
     y: float
     opacity: float
+    owner: str = ""
 
 
 @dataclass
@@ -54,4 +55,4 @@ class DamageNumbers:
     def visuals(self) -> tuple[DamageVisual, ...]:
         return tuple(DamageVisual(popup.amount, popup.x,
                                   popup.y - self.rise_pixels * popup.animation.value,
-                                  1 - popup.animation.value) for popup in self.popups)
+                                  1 - popup.animation.value, owner=popup.owner) for popup in self.popups)

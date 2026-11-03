@@ -155,7 +155,7 @@ class UiTest(TestProgram):
                 raise ValueError("샘플 피해량은 0 이상의 정수여야 한다.")
             owner = "target" if action == "damage_target" else "player"
             applied = self.sample.damage_target(amount) if owner == "target" else self.sample.damage_player(amount)
-            x, y = self.config.layout[f"{owner}_anchor"]
+            x, y = self.config.actor_anchor(owner)
             self.damage_numbers.add(owner, applied, x, y + self.config.layout["popup_offset_y"])
         else:
             raise ValueError(f"UI 동작 없음: {action}")
