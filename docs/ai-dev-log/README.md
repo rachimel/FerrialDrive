@@ -6,6 +6,7 @@ Ferrial Drive 프로젝트 대화에서 나온 결정과 작업 흐름을 요약
 
 ## 기록
 
+- [2026-11-03 메인 컬러 Bezel](2026-11-03-main-color-cool-blue-gray.md): Pantone 20-0011 TPM Bezel 참조색 확정·게임용 HEX/RGB/세부 팔레트 미정
 - [2026-11-03 선택적 성능 계측](2026-11-03-optional-performance-timing.md): 게임/테스트 공통 시간·호출 수·반복 측정·JSON 로그·UI 선택 연결
 - [2026-11-03 UI 승인·최종 코드 정리](2026-11-03-ui-approved-final-cleanup.md): 승인된 표현 유지·글자/링 캐시·반복 상태 생성과 색 설정 감소·실측 전
 - [2026-11-03 UI 작업 정리·커밋](2026-11-03-ui-work-checkpoint.md): 현재 상태 요약·완료/미정/미검증 구분·실행기/UI/문서 분리 기록
