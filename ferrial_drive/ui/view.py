@@ -1,6 +1,6 @@
 """표현 설정을 사용하는 UI 그리기. 게임 상태 갱신이나 입력 처리는 하지 않는다."""
 
-from math import hypot
+from math import hypot, isfinite
 
 from .components import Rect
 
@@ -76,26 +76,30 @@ class UiView:
             r.rect(Rect(rect.x, rect.y, rect.width * ratio, rect.height), c[color], opacity)
         r.rect(rect, c["line"], opacity, filled=False)
 
-    def radar(self, contacts, opacity, offset_x):
+    def radar(self, contacts, opacity):
         r, c = self.renderer, self.config
-        self.panel(c.layout["radar_panel"], opacity, offset_x)
-        self.label("radar", *c.layout["radar_heading"], "small", "muted", opacity, offset_x)
-        x, y = c.layout["radar_center"]
-        x += offset_x
-        radius = c.layout["radar_radius"]
-        for fraction in (0.5, 1.0):
-            r.circle(x, y, radius * fraction, c.colors["line"], opacity)
-        r.line(x - radius, y, x + radius, y, c.colors["line"], opacity)
-        r.line(x, y - radius, x, y + radius, c.colors["line"], opacity)
-        r.text("N", x, y - radius - 16, "small", c.colors["muted"], opacity, align="center")
+        settings = c.data["radar"]
+        x, y = c.actor_anchor("player")
+        radius = settings["radius_pixels"]
+        distance_limit = settings["range_units"]
+        length = settings["arrow_length_pixels"]
+        half_width = settings["arrow_half_width_pixels"]
+        if not all(isfinite(value) and value > 0 for value in (radius, distance_limit, length, half_width)):
+            raise ValueError("레이더 반경·감지 거리·화살표 크기는 양수여야 한다.")
+        r.circle(x, y, radius, c.colors["accent"], opacity * settings["ring_opacity"])
         for contact in contacts:
-            if hypot(contact.x, contact.y) > 1:
+            distance = hypot(contact.x, contact.y)
+            if contact.kind != "enemy" or distance == 0 or distance > distance_limit:
                 continue
-            color = c.colors["enemy" if contact.kind == "enemy" else "accent"]
-            r.rect(Rect(x + contact.x * radius - 3, y - contact.y * radius - 3, 6, 6),
-                   color, opacity)
-        r.line(x - 5, y + 5, x, y - 5, c.colors["text"], opacity)
-        r.line(x, y - 5, x + 5, y + 5, c.colors["text"], opacity)
+            direction_x, direction_y = contact.x / distance, -contact.y / distance
+            tip_x, tip_y = x + direction_x * radius, y + direction_y * radius
+            base_x, base_y = tip_x - direction_x * length, tip_y - direction_y * length
+            side_x, side_y = -direction_y * half_width, direction_x * half_width
+            color = c.colors["enemy"]
+            r.line(base_x + side_x, base_y + side_y, tip_x, tip_y, color, opacity)
+            r.line(base_x - side_x, base_y - side_y, tip_x, tip_y, color, opacity)
+            r.line(tip_x - direction_x * length * 1.5, tip_y - direction_y * length * 1.5,
+                   tip_x, tip_y, color, opacity)
 
     def placeholder(self, anchor, label, color, opacity, offset_x):
         r, c = self.renderer, self.config.colors
@@ -116,8 +120,7 @@ class UiView:
         self.placeholder(c.actor_anchor("player"), c.labels["player_name"], "accent", opacity, 0)
         if state.target is not None:
             self.placeholder(c.actor_anchor("target"), state.target.name, "enemy", opacity, offset_x)
-        x, y = c.layout["crosshair_center"]
-        x += offset_x
+        x, y = c.actor_anchor("player")
         radius = c.layout["crosshair_radius"]
         r.circle(x, y, radius, c.colors["accent"], opacity * 0.8)
         r.line(x - 18, y, x + 18, y, c.colors["accent"], opacity)
@@ -152,7 +155,7 @@ class UiView:
         x, y = c.layout["damage_value"]
         r.text(f"{state.total_damage_dealt:,}", x + offset_x, y,
                "damage_total", c.colors["warning"], opacity, max_width=312)
-        self.radar(state.radar_contacts, opacity, offset_x)
+        self.radar(state.radar_contacts, opacity)
         self.buttons("combat", input_state, opacity, offset_x, buttons)
         for visual in damage_visuals:
             damage_offset_x = 0 if visual.owner == "player" else offset_x

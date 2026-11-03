@@ -28,6 +28,8 @@ class TargetInfo:
 
 @dataclass(frozen=True)
 class RadarContact:
+    """플레이어 기준 상대 좌표. 감지 거리 설정과 같은 단위를 사용한다."""
+
     x: float
     y: float
     kind: str = "enemy"

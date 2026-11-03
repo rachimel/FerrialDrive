@@ -16,6 +16,9 @@
         "damage_number": {"path": "../../data/fonts/s_core_dream/SCDream6.otf", "size": 32}
     },
     "panel_style": {"fill_opacity": 0.45, "border_opacity": 1.0},
+    "radar": {"radius_pixels": 110, "range_units": 1.0,
+              "arrow_length_pixels": 16, "arrow_half_width_pixels": 8,
+              "ring_opacity": 0.28},
     "colors": {
         "background": "#091217",
         "panel": "#101F27",
@@ -45,7 +48,6 @@
         "no_target": "타겟 없음",
         "combo": "COMBO",
         "damage": "누적 가한 피해",
-        "radar": "RADAR",
         "sample_status": "샘플 상태",
         "player_name": "플레이어",
         "sample_notice": "샘플 상태 조작"
@@ -71,11 +73,6 @@
         "combo_label_gap": 12,
         "damage_heading": [908, 472],
         "damage_value": [908, 500],
-        "radar_panel": [1008, 94, 236, 236],
-        "radar_heading": [1032, 110],
-        "radar_center": [1126, 218],
-        "radar_radius": 78,
-        "crosshair_center": [640, 360],
         "crosshair_radius": 28,
         "target_anchor": [756, 342],
         "popup_offset_y": -88
