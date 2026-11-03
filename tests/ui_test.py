@@ -137,7 +137,8 @@ class UiTest:
         self.view = UiView(self.config, self.renderer)
         if self.timings.enabled:
             self._profile_methods(self.view, "view", ("menu", "combat", "pause", "radar", "number_counter"))
-            self._profile_methods(self.renderer, "renderer", ("ring", "text", "_measure", "_text_texture"))
+            self._profile_methods(self.renderer, "renderer",
+                                  ("ring", "text", "_measure", "_text_texture", "metallic_rect"))
 
     def target_health_ratio(self):
         target = self.sample.state.target

@@ -25,7 +25,13 @@ class UiView:
         style = self.config.data["panel_style"]
         rect = Rect(*rect).translated(offset_x)
         fill = style["fill_opacity"] if fill_opacity is None else fill_opacity
-        r.rect(rect, c.get("panel_surface", c["panel"]), opacity * fill)
+        color = c.get("panel_surface", c["panel"])
+        metal = style.get("metallic", {})
+        if metal.get("enabled", False):
+            r.metallic_rect(rect, color, opacity * fill, contrast=metal["contrast"],
+                            grain_strength=metal["grain_strength"])
+        else:
+            r.rect(rect, color, opacity * fill)
         r.rect(rect, c["panel_border"], opacity * style["border_opacity"], filled=False)
         r.line(rect.x, rect.y, rect.x + min(72, rect.width), rect.y, c["accent"], opacity)
 
@@ -157,17 +163,20 @@ class UiView:
         digit_width = max(r.text_size(str(digit), number_role)[0] for digit in range(10))
         comma_width = r.text_size(",", number_role)[0]
         widths = [comma_width if char == "," else digit_width for char in current]
-        label_width, label_height = r.text_size(c.labels[label_key], label_role)
+        label = c.labels[label_key]
+        label_widths = [r.text_size(char, label_role)[0] for char in label]
+        label_height = r.text_size(label, label_role)[1]
+        tracking = c.layout["counter_stack"].get("label_letter_spacing_pixels", 0)
+        label_width = sum(label_widths) + tracking * max(0, len(label) - 1)
         gap = c.layout[f"{label_key}_label_gap"]
-        available_width = max(1, c.layout[f"{label_key}_max_width"] - label_width - gap)
+        available_width = max(1, c.layout[f"{label_key}_max_width"])
         scale = min(1.0, available_width / sum(widths))
         number_width = sum(widths) * scale
         height = r.text_size("0", number_role)[1] * scale
-        label_offset_y = r.text_ascent(number_role) * scale - r.text_ascent(label_role)
-        row_height = max(height, label_offset_y + label_height)
+        row_height = height + gap + label_height
         stack = c.layout["counter_stack"]
         right = c.window["width"] - stack["right_margin_pixels"] + offset_x
-        x = right - number_width - gap - label_width
+        x = right - number_width
         y = anchor_y - row_height if align_bottom else anchor_y
         viewport = Rect(x, y, number_width, height)
         samples = settings["blur_samples"]
@@ -214,9 +223,10 @@ class UiView:
                                   direction_x * distance, direction_y * distance)
                 draw_pair(old, new, center_x, opacity * (1 - smear_strength))
             x += width * scale
-        label_y = y + label_offset_y
-        r.text(c.labels[label_key], viewport.x + number_width + gap, label_y,
-               label_role, c.colors["muted"], opacity)
+        label_x, label_y = right - label_width, y + height + gap
+        for char, width in zip(label, label_widths):
+            r.text(char, label_x, label_y, label_role, c.colors["muted"], opacity)
+            label_x += width + tracking
         return row_height
 
     def damage_number(self, visual, opacity, offset_x):

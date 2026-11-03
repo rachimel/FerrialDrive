@@ -20,6 +20,17 @@ class UiConfig:
             for role, entry in self.data["fonts"].items()
         }
         self.font_sizes = {role: entry["size"] for role, entry in self.data["fonts"].items()}
+        metal = self.data["panel_style"].get("metallic", {})
+        if not isinstance(metal.get("enabled", False), bool):
+            raise ValueError("패널 금속 효과 사용 여부는 불리언이어야 한다.")
+        if metal.get("enabled", False):
+            for key in ("contrast", "grain_strength"):
+                value = metal[key]
+                if not isfinite(value) or not 0 <= value <= 1:
+                    raise ValueError("패널 금속 효과의 명암·결 강도는 0~1이어야 한다.")
+        tracking = self.layout["counter_stack"].get("label_letter_spacing_pixels", 0)
+        if not isfinite(tracking) or tracking < 0:
+            raise ValueError("카운터 레이블 자간은 0 이상의 유한한 픽셀 값이어야 한다.")
         for key in ("crosshair_thickness_pixels", "crosshair_cross_thickness_pixels"):
             thickness = self.layout[key]
             if not isfinite(thickness) or not 0 < thickness < 36:

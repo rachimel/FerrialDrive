@@ -1,9 +1,9 @@
 """Pico2D가 연 SDL 렌더러에 그리는 어댑터. 라이브러리 원본은 수정하지 않는다."""
 
 from collections import OrderedDict
-from ctypes import byref, c_int
+from ctypes import byref, c_int, memmove
 from functools import lru_cache
-from math import ceil, cos, floor, sin, sqrt, tau
+from math import ceil, cos, exp, floor, sin, sqrt, tau
 from pathlib import Path
 
 from .components import Rect
@@ -43,6 +43,7 @@ class PicoRenderer:
         self.pico = pico
         self.fonts = {}
         self.textures = OrderedDict()
+        self.panel_textures = OrderedDict()
         self.measurements = OrderedDict()
         self.ascents = {}
         try:
@@ -73,6 +74,57 @@ class PicoRenderer:
         pico = self.pico
         pico.SDL_SetRenderDrawColor(pico.renderer, *self.rgba(color, opacity))
         pico.SDL_RenderDrawLine(pico.renderer, round(x1), round(y1), round(x2), round(y2))
+
+    def metallic_rect(self, rect: Rect, color: str, opacity: float = 1, *,
+                      contrast: float = 0.22, grain_strength: float = 0.012):
+        """정적인 반사 띠·브러시 결을 저장해 패널마다 한 번의 복사로 그린다."""
+        if opacity <= 0 or rect.width <= 0 or rect.height <= 0:
+            return
+        key = (color, contrast, grain_strength)
+        pico = self.pico
+        if key not in self.panel_textures:
+            width, height = 128, 256
+            surface = pico.SDL_CreateRGBSurfaceWithFormat(
+                0, width, height, 32, pico.SDL_PIXELFORMAT_RGBA32)
+            if not surface:
+                raise RuntimeError("금속 패널 surface 생성 실패")
+            try:
+                if pico.SDL_LockSurface(surface) != 0:
+                    raise RuntimeError("금속 패널 surface 잠금 실패")
+                try:
+                    base = _rgb(color)
+                    for y in range(height):
+                        v = y / (height - 1)
+                        # 결은 행마다 고정하며 난수·시간 상태를 사용하지 않는다.
+                        grain = (((y * 73 + 19) % 101) / 50 - 1) * grain_strength
+                        row = bytearray()
+                        for x in range(width):
+                            t = v + 0.32 * (x / (width - 1) - 0.5)
+                            light = (0.12 * (1 - v) + 0.70 * exp(-((t - 0.22) / 0.10) ** 2)
+                                     - 0.45 * exp(-((t - 0.55) / 0.16) ** 2)
+                                     + 0.45 * exp(-((t - 0.88) / 0.12) ** 2))
+                            shift = 255 * (contrast * light + grain)
+                            row.extend(max(0, min(255, round(channel + shift))) for channel in base)
+                            row.append(255)
+                        memmove(surface.contents.pixels + y * surface.contents.pitch,
+                                bytes(row), width * 4)
+                finally:
+                    pico.SDL_UnlockSurface(surface)
+                texture = pico.SDL_CreateTextureFromSurface(pico.renderer, surface)
+            finally:
+                pico.SDL_FreeSurface(surface)
+            if not texture:
+                raise RuntimeError("금속 패널 텍스처 생성 실패")
+            pico.SDL_SetTextureBlendMode(texture, pico.SDL_BLENDMODE_BLEND)
+            self.panel_textures[key] = texture
+            if len(self.panel_textures) > 8:
+                _, old_texture = self.panel_textures.popitem(last=False)
+                pico.SDL_DestroyTexture(old_texture)
+        self.panel_textures.move_to_end(key)
+        texture = self.panel_textures[key]
+        pico.SDL_SetTextureAlphaMod(texture, self.rgba(color, opacity)[3])
+        destination = pico.SDL_Rect(round(rect.x), round(rect.y), round(rect.width), round(rect.height))
+        pico.SDL_RenderCopy(pico.renderer, texture, None, byref(destination))
 
     def circle(self, x: float, y: float, radius: float, color: str, opacity: float = 1):
         segments = max(24, round(radius * 2))
@@ -218,6 +270,9 @@ class PicoRenderer:
             pico.SDL_FreeSurface(surface)
 
     def close(self):
+        for texture in self.panel_textures.values():
+            self.pico.SDL_DestroyTexture(texture)
+        self.panel_textures.clear()
         for texture, _, _ in self.textures.values():
             self.pico.SDL_DestroyTexture(texture)
         self.textures.clear()
