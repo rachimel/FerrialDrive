@@ -2,8 +2,45 @@
 
 Ferrial Drive 프로젝트 대화에서 나온 결정과 작업 흐름을 요약한다.
 
+현재 상태는 [UI 작업 정리](../unit-tests/ui_checkpoint.md)와 [UI 명세](../unit-tests/ui_unit_test.md)를 먼저 확인한다. 아래 기록은 변경 이력이며 이전 폰트·수치·표시 동작을 현재 기준으로 적용하지 않는다.
+
 ## 기록
 
+- [2026-11-03 UI 작업 정리·커밋](2026-11-03-ui-work-checkpoint.md): 현재 상태 요약·완료/미정/미검증 구분·실행기/UI/문서 분리 기록
+- [2026-11-03 크로스헤어 상시 갱신](2026-11-03-crosshair-always-update.md): 일시정지·전환 중에도 유효한 포인터 위치 반영
+- [2026-11-03 일시정지 제목·설정 버튼](2026-11-03-pause-ohsquare-settings-buttons.md): Ohsquare 일반형 제목·타이틀/일시정지 설정 버튼·설정 기능은 미정
+- [2026-11-03 HUD 테스트 버튼 하단 배치](2026-11-03-hud-test-buttons-bottom.md): 테스트 버튼 4개·아래 여백 16px
+- [2026-11-03 타이틀 초기화 제거·일시정지 알파](2026-11-03-title-reset-remove-pause-opacity.md): 타이틀 버튼 2개·일시정지 패널 채움 알파 0.85
+- [2026-11-03 적 이름 축소·세로 정렬](2026-11-03-target-name-small-center.md): 적 이름 Regular 18px·TARGET과 세로 중심 정렬
+- [2026-11-03 전투 HUD 시안 마감](2026-11-03-combat-hud-wrap-up.md): TARGET 14px·적 이름 Regular·사용자 마감 결정·메뉴 후속 작업
+- [2026-11-03 레이더 내부 화살표 숨김·HUD 범위](2026-11-03-radar-inner-hide-hud-scope.md): 화면 반경 200px 내부·경계 제외·타겟팅은 고정 샘플 단계
+- [2026-11-03 피해 숫자 역순 퇴장·레이더 200px](2026-11-03-damage-tv-off-radar-200.md): 세로→가로 접힘·자체 알파 유지·레이더 반지름 확대
+- [2026-11-03 레이더 150px·십자 2px](2026-11-03-radar-150-crosshair-2.md): 레이더 반지름 정수 조정·원과 십자 두께 분리
+- [2026-11-03 카운터 페이드 완료 초기화](2026-11-03-counter-reset-on-fade.md): 완전히 숨긴 뒤 HIT·DAMAGE 0으로 재시작·페이드 중 재적중은 누적
+- [2026-11-03 일시정지·HUD 반응 조정](2026-11-03-pause-and-hud-response.md): 테스트 기체 표시 분리·Esc 일시정지·카운터 0.20초·레이더 20% 확대·크로스헤어 3px
+- [2026-11-03 타겟 표시기 축소](2026-11-03-target-panel-smaller.md): 372×58px·중앙 정렬·여백과 바 폭 조정
+- [2026-11-03 HP 감소 구간 효과](2026-11-03-health-loss-trail.md): 진한 빨강 구간·t² 가속·연속 피격 시 현재 위치에서 재시작
+- [2026-11-03 피해 TV 등장 가속](2026-11-03-damage-tv-faster.md): 가로 0.05초·세로 0.06초·등장 총 0.11초
+- [2026-11-03 피해 숫자 TV 등장·HIT 폰트](2026-11-03-damage-tv-on-hit-font.md): 1px 가로 펼침→세로 펼침·학교안심 운동장 HIT
+- [2026-11-03 메뉴 Ohsquare·피해 폰트](2026-11-03-menu-ohsquare-damage-font.md): 메뉴 비교 시안·학교안심 운동장 피해 숫자·HIT 에스코어 드림 유지
+- [2026-11-03 전체 폰트·오류 표시](2026-11-03-all-s-core-and-error-summary.md): 에스코어 드림 통일·누락 Cafe24 참조 해소·오류 원인 우선 표시
+- [2026-11-03 Runner·UI 독립 실행](2026-11-03-independent-test-processes.md): 자체 UI 루프·별도 프로세스·새로 불러오기·기존 샘플 호환
+- [2026-11-03 크로스헤어·실행기 경계](2026-11-03-crosshair-pointer-runner-boundary.md): 마우스 추적·흰색 크로스헤어·Runner 의존과 실행 격리 점검
+- [2026-11-03 피해 숫자 무작위 배치](2026-11-03-damage-random-scatter.md): 피격 기체 주변 생성·위쪽 이동 제거·위치 고정 페이드
+- [2026-11-03 제목·적 이름 Medium](2026-11-03-title-target-medium.md): 전투 제목 한 단계 굵게·적 이름 한 단계 가늘게·TARGET 유지
+- [2026-11-03 카운터 세로 이동 분리](2026-11-03-counter-vertical-easing.md): 이동 보간·페이드/블러 분리·약한 elasticInOut 혼합 시안
+- [2026-11-03 적중 시 카운터 표시](2026-11-03-counters-on-target-hit.md): 유효 적중만 HIT/DAMAGE 출현·표시 수명 분리·2초+0.3초 시안
+- [2026-11-03 플레이어 옆 HP·레이더](2026-11-03-player-side-hp-radar.md): 공격 반대편 HP 바·제목 Regular·레이더 확대·HIT 명칭·출현 조건 확인 대기
+- [2026-11-03 타겟 상단·Bold·6px 바](2026-11-03-target-top-bold.md): 상단 24px 여백·TARGET/적 이름 Bold·HP 바 두께 조정
+- [2026-11-03 타겟 패널 압축](2026-11-03-target-compact-header.md): TARGET·이름 양쪽 정렬·HP 숫자 숨김·4px HP 바
+- [2026-11-03 HUD 텍스트 폰트 복원](2026-11-03-hud-text-s-core-restore.md): HUD 에스코어 드림·메뉴 Cafe24 PRO·학교안심 운동장 숫자 유지
+- [2026-11-03 카운터들 여백 중앙 배치](2026-11-03-counters-center-gap.md): 사용자 명칭·여백 중심을 화면 높이 절반에 고정
+- [2026-11-03 콤보·데미지 오른쪽 정렬](2026-11-03-counter-right-stack.md): 공통 오른쪽 끝·콤보 아래 데미지·8px 행 간격
+- [2026-11-03 콤보 카운터 효과](2026-11-03-combo-counter-effect.md): 공통 숫자 표시·독립 콤보 상태·동일한 방향성 블러
+- [2026-11-03 카운터 방향성 스미어](2026-11-03-counter-directional-smear.md): 변경 숫자만 밀기·위쪽 방향으로 쓸리는 블러
+- [2026-11-03 카운터 밀기·페이드](2026-11-03-counter-push-fade.md): 모든 숫자 자리의 위쪽 밀기·이전 숫자 알파 감소·블러 강화
+- [2026-11-03 DAMAGE 회전 카운터](2026-11-03-damage-rolling-counter.md): 숫자 옆 DAMAGE 배치·자리별 회전·셔터 잔상과 표시 상태 분리
+- [2026-11-03 UI 폰트·배치·거리 표현](2026-11-03-ui-font-layout-distance.md): 학교안심 운동장·Cafe24 PRO 시안, HUD 배치와 적 거리별 삼각형 크기·알파 감소
 - [2026-11-03 레이더 채운 삼각형](2026-11-03-filled-radar-indicator.md): 방향 화살표를 채워진 이등변삼각형으로 변경
 - [2026-11-03 전투 HUD 제목](2026-11-03-combat-title-layout.md): 좌상단 배치와 전용 크기 설정
 - [2026-11-03 적 방향 레이더](2026-11-03-player-direction-radar.md): 플레이어 주변 링과 범위 내 적 방향 화살표

@@ -5,9 +5,10 @@ JRPG식 3/4 Top-Down 화면과 사전 렌더링한 2D 에셋을 사용한다.
 
 ## 현재 상태
 
-현재는 **메뉴·전투 HUD·장면 전환을 확인할 독립 UI Unit Test**를 구현했다. `tests/ui_test.py`에 HP·콤보·누적 가한 피해·기체별 이번 피해 숫자·레이더·크로스헤어와 샘플 조작을 연결했다. 이번 변경의 실행·조작은 사용자 확인 전이며, 게임 전투 프로토타입은 미구현이다.
+**전투 HUD 시안은 사용자 결정으로 마감했고, 타이틀·일시정지 UI를 조정 중**이다. `tests/ui_test.py`는 게임과 Runner 없이 직접 실행할 수 있는 UI 테스트이며, HP·HIT/DAMAGE·기체별 피해 숫자·레이더·크로스헤어를 가짜 상태로 확인한다. 타이틀·일시정지의 설정 버튼은 비활성 상태이며 설정 기능·실제 타겟 선택·적중 판정·게임 전투 프로토타입은 미구현이다. 최근 변경의 자동 검사·실행·화면 확인은 수행하지 않았다.
 
 - [사전 PRD](docs/Ferrial_Drive_PRE_PRD_v0.1.md): 게임 방향, 현재 결정한 규칙, 미정 사항
+- [UI 작업 정리](docs/unit-tests/ui_checkpoint.md): 완료 범위·모듈 책임·미완료·다음 작업·검증 상태
 - [UI Unit Test 명세](docs/unit-tests/ui_unit_test.md): 현재 우선 검증할 두 장면·입력·HUD·애니메이션
 - [독립 Unit Test 실행기](Tools/unit_test_runner/README.md): 공통 실행 규약과 테스트 `.py` 실행 방법
 - [문서 목록](docs/README.md): 제작 도구와 데이터 준비 문서
@@ -43,7 +44,9 @@ JRPG식 3/4 Top-Down 화면과 사전 렌더링한 2D 에셋을 사용한다.
 | `Tools/SSheetCutil.py` | 기존 스프라이트 시트 편집 도구 |
 | `run_portrait_editor.cmd` | 로컬 표정 스튜디오 실행 파일 |
 
-실제 UI 테스트는 `tests/ui_test.py`다. `tests/Unit Test Runner.lnk`로 실행기를 열고 **열린 GUI 창에 `ui_test.py`를 드롭**한다. [확인할 조작과 기대 결과](samples/ui_unit_test/README.md)를 따른다. `python tests/ui_test.py` 직접 실행도 지원한다.
+실제 UI 테스트는 `tests/ui_test.py`다. `tests/Unit Test Runner.lnk`로 실행기를 열고 **열린 GUI 창에 `ui_test.py`를 드롭**한다. [확인할 조작과 기대 결과](samples/ui_unit_test/README.md)를 따른다. `python tests/ui_test.py`는 Runner 없이 자체 창·실행 루프로 직접 실행한다. GUI 드롭은 별도 테스트 프로세스를 시작하며 재드롭으로 모듈 변경을 새로 읽는다. 테스트 창 종료와 Runner 종료는 구분한다.
+
+UI 실행에는 Python 3.11·`requirements-ui.txt`의 Pico2D와 [역할별 폰트](data/fonts/README.md)가 필요하다. Cafe24 Ohsquare Air·일반형·학교안심 운동장 OTF는 현재 로컬 보관이므로 새로 복제한 환경에서는 해당 파일을 명시한 경로에 준비해야 한다.
 
 공통 실행기는 Pico2D가 설치된 Python으로 실행한다. 파일 인자 없이 실행하면 대기 GUI가 열린다. 그 창에 `samples/unit_test_runner/basic_flow.py`를 드롭해 두 화면 샘플을 실행한다. 이 샘플은 위 UI 메뉴·전투 HUD와 별개다.
 

@@ -4,6 +4,7 @@
 
 - [사전 PRD v0.1](Ferrial_Drive_PRE_PRD_v0.1.md)
 - [UI Unit Test 명세](unit-tests/ui_unit_test.md): 메뉴·전투 HUD의 독립 검증 범위와 미정 사항
+- [UI 작업 정리](unit-tests/ui_checkpoint.md): 전투 HUD 시안 마감·메뉴 진행 상태·다음 작업·검증 경계
 - [상세 기획서 PPT](presentation/기획서.pptx): 기존 29쪽 초안. 이후 결정은 PRE-PRD와 개별 명세를 따른다.
 
 ## 발표
@@ -12,7 +13,7 @@
 
 ## 현재 도구
 
-- [독립 Unit Test 실행기](../Tools/unit_test_runner/README.md): 게임 없는 테스트 `.py` 실행과 화면 흐름 전환
+- [독립 Unit Test 실행기](../Tools/unit_test_runner/README.md): `.py` 선택·별도 프로세스 실행·종료·오류 표시
 - [표정 스튜디오 및 AI 영역 지정](tool-usage/portrait_editor.md)
 - [Blender 원본 생성](ai-asset-pipeline/blender_pipeline.md)
 - [툴 시연용 테스트 데이터 기준](tool-usage/tool_demo_data.md): 게임과 독립된 최소 샘플과 시연 완료 조건
