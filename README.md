@@ -50,6 +50,8 @@ UI Unit Test는 별도 `.py` 진입점으로 실행할 예정이다. 소스 구�
 python Tools/unit_test_runner/run.py samples/unit_test_runner/basic_flow.py
 ```
 
+Windows 아이콘 드롭 실행은 `Tools/unit_test_runner/create_launcher.py`로 바로가기를 생성한 뒤 사용한다. 테스트 `.py` 하나를 `Tools/unit_test_runner/workspace/Unit Test Runner.lnk`에 드롭한다. [실행기 안내](Tools/unit_test_runner/README.md)에 환경 설정과 오류 확인 방법을 정리했다.
+
 ## 제작 도구 실행 조건
 
 도구별 의존성은 각 폴더의 `requirements.txt`에 있다.

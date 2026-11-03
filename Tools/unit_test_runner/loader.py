@@ -10,7 +10,7 @@ from .interface import TestProgram, WindowSpec
 def load_test(path: Path) -> tuple[TestProgram, WindowSpec]:
     path = path.resolve()
     if not path.is_file() or path.suffix != ".py":
-        raise ValueError("실행할 테스트 .py 파일을 지정해.")
+        raise ValueError("실행할 테스트 .py 파일이 필요하다.")
     name = "_unit_test_program"
     spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:

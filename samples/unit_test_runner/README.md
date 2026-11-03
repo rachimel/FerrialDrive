@@ -16,6 +16,8 @@
 python Tools/unit_test_runner/run.py samples/unit_test_runner/basic_flow.py
 ```
 
+Windows 바로가기를 생성한 환경에서는 `basic_flow.py`를 `Tools/unit_test_runner/workspace/Unit Test Runner.lnk` 아이콘에 드롭해 같은 샘플을 실행할 수 있다. 생성 방법은 [실행기 안내](../../Tools/unit_test_runner/README.md#아이콘에-드래그-앤-드롭)를 따른다.
+
 1. 1280×720 창에 녹색 강조의 **시작 화면**과 경과 시간이 나온다.
 2. **다음 화면**을 좌클릭하면 주황색 강조의 **두 번째 화면**으로 교체된다. 화면별 경과 시간은 새로 시작한다.
 3. **이전 화면**을 누르거나 **Esc**를 누르면 다른 화면으로 교체된다. 창은 다시 만들지 않는다.
@@ -27,3 +29,5 @@ python Tools/unit_test_runner/run.py samples/unit_test_runner/basic_flow.py
 ## 확인 상태
 
 2026-11-03 기준으로 흐름 전환·수명 주기·오류 정리 자동 검사, SDL dummy 경로의 제한 프레임 실행을 확인했다. 도구·샘플만 복사한 격리 폴더에서도 실행했다. 실제 창의 클릭·Esc 조작과 사용자 사용감 확인은 별도로 기록한다.
+
+이후 아이콘 드롭 실행을 추가했다. 자동 검사 총 28개 통과와 실제 파일 탐색기에서 드롭한 샘플의 시작 화면 표시를 확인했다. 직접 버튼·Esc 조작과 사용감 확인은 사용자가 진행한다.

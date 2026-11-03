@@ -26,6 +26,22 @@ python -m pip install -r Tools/unit_test_runner/requirements.txt
 
 자동 실행 확인에는 `--frames 5`처럼 최대 프레임 수를 지정한다. 기본 실행은 테스트의 종료 요청이나 창 닫기까지 유지된다.
 
+## 아이콘에 드래그 앤 드롭
+
+Pico2D가 설치된 Python 환경에서 한 번 실행해 Windows 바로가기를 생성한다.
+
+```powershell
+python Tools/unit_test_runner/create_launcher.py
+```
+
+생성 위치는 `Tools/unit_test_runner/workspace/Unit Test Runner.lnk`다. 파일 탐색기에서 테스트 `.py` **하나**를 이 아이콘에 드롭하면 실행한다. 아이콘을 통해 받은 경로도 기존 인자 실행과 같은 `run.py`·`load_test()`를 거친다. 테스트별 UI·입력·샘플 상태를 실행기에 추가하지 않는다.
+
+바로가기는 생성에 사용한 Python 실행 파일을 기억한다. 현재 작업 폴더나 `.py` 기본 연결 프로그램에 의존하지 않는다. 한글·공백·특수문자가 있는 경로도 인자로 전달한다. 다른 PC나 폴더로 도구·Python 환경을 옮기면 그 환경에서 바로가기를 다시 생성한다.
+
+파일 없이 아이콘을 실행하면 사용법을 표시한다. 여러 파일이나 잘못된 파일을 전달하거나 테스트에서 오류가 발생하면 내용을 표시한 뒤 Enter를 기다린다. 정상 종료·도움말 요청에는 기다리지 않는다.
+
+개인 Python 경로가 들어가는 `.lnk`는 로컬 `workspace/`에만 생성하며 Git 관리에서 제외한다. 바로가기 생성에는 Windows 기본 `WScript.Shell`을 사용한다. [Microsoft 공식 생성 방식](https://learn.microsoft.com/en-us/troubleshoot/windows-client/admin-development/create-desktop-shortcut-with-wsh)을 따른다.
+
 ## 테스트 .py의 규약
 
 | 요소 | 역할 |
