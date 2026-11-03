@@ -13,9 +13,14 @@ class PicoRenderer:
         import pico2d.pico2d as pico
 
         self.pico = pico
-        self.fonts = {role: pico.load_font(str(font_paths[role]), size)
-                      for role, size in font_sizes.items()}
+        self.fonts = {}
         self.textures = OrderedDict()
+        try:
+            for role, size in font_sizes.items():
+                self.fonts[role] = pico.load_font(str(font_paths[role]), size)
+        except BaseException:
+            self.close()
+            raise
         pico.SDL_SetRenderDrawBlendMode(pico.renderer, pico.SDL_BLENDMODE_BLEND)
 
     @staticmethod

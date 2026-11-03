@@ -44,4 +44,4 @@ class UiConfig:
                     padding = first.hit_padding + second.hit_padding
                     if (a.x < b.x + b.width + padding and b.x < a.x + a.width + padding
                             and a.y < b.y + b.height + padding and b.y < a.y + a.height + padding):
-                        raise ValueError("버튼 판정 영역이 겹친다. 배치 또는 판정 여유 폭을 조정해.")
+                        raise ValueError("버튼 판정 영역 겹침: 배치 또는 판정 여유 폭 조정 필요")

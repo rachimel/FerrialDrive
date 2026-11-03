@@ -1,0 +1,11 @@
+{
+    "player_health": {"current": 860, "maximum": 1200},
+    "target": {"name": "훈련 표적 A", "health": {"current": 540, "maximum": 800}},
+    "combo_count": 0,
+    "total_damage_dealt": 0,
+    "radar_contacts": [
+        {"x": 0.42, "y": 0.34, "kind": "enemy"},
+        {"x": -0.48, "y": 0.55, "kind": "enemy"},
+        {"x": -0.28, "y": -0.48, "kind": "ally"}
+    ]
+}

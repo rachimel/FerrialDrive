@@ -1,13 +1,16 @@
 {
     "window": {"width": 1280, "height": 720, "initial_scene": "menu"},
-    "animation": {"duration_seconds": 0.32, "slide_pixels": 36},
+    "animation": {"duration_seconds": 0.32, "slide_pixels": 36,
+                  "damage_duration_seconds": 1.15, "damage_rise_pixels": 46,
+                  "transition_input_policy": "consume_until_finished"},
     "fonts": {
         "title": {"path": "../../data/fonts/s_core_dream/SCDream2.otf", "size": 62},
         "heading": {"path": "../../data/fonts/s_core_dream/SCDream3.otf", "size": 25},
         "body": {"path": "../../data/fonts/s_core_dream/SCDream4.otf", "size": 18},
         "small": {"path": "../../data/fonts/s_core_dream/SCDream3.otf", "size": 14},
         "hud": {"path": "../../data/fonts/kkakdugi_drafting/KkakdugiDrafting-Regular.ttf", "size": 19},
-        "number": {"path": "../../data/fonts/kkakdugi_drafting/KkakdugiDrafting-Regular.ttf", "size": 48}
+        "number": {"path": "../../data/fonts/kkakdugi_drafting/KkakdugiDrafting-Regular.ttf", "size": 48},
+        "value": {"path": "../../data/fonts/kkakdugi_drafting/KkakdugiDrafting-Regular.ttf", "size": 30}
     },
     "colors": {
         "background": "#091217",
@@ -20,7 +23,8 @@
         "muted": "#849B9D",
         "accent": "#AEDEBE",
         "warning": "#E4B36C",
-        "enemy": "#F18775"
+        "enemy": "#F18775",
+        "damage_number": "#FF625D"
     },
     "labels": {
         "brand": "FERRIAL / DRIVE",
@@ -38,11 +42,13 @@
         "target": "TARGET / HP",
         "no_target": "타겟 없음",
         "combo": "COMBO",
-        "damage": "최근 데미지",
+        "damage": "누적 가한 피해",
         "radar": "RADAR",
         "sample_status": "샘플 상태",
         "combat_hint": "Esc  메뉴 열기    /    아래 버튼으로 표시 상태 변경",
-        "transition": "화면 전환 중"
+        "transition": "화면 전환 중",
+        "player_name": "플레이어",
+        "sample_notice": "샘플 상태 조작"
     },
     "layout": {
         "header": [36, 28, 1208, 42],
@@ -51,12 +57,45 @@
         "menu_heading": [792, 198],
         "menu_description": [792, 239],
         "menu_notice": [792, 537],
-        "footer": [36, 668, 1208, 24]
+        "footer": [36, 668, 1208, 24],
+        "combat_heading": [36, 96],
+        "combat_notice": [36, 137],
+        "target_panel": [424, 94, 432, 112],
+        "target_heading": [448, 108],
+        "target_name": [448, 137],
+        "target_value": [832, 137],
+        "target_gauge": [448, 176, 384, 10],
+        "player_panel": [36, 502, 340, 132],
+        "player_heading": [60, 520],
+        "player_value": [60, 550],
+        "player_gauge": [60, 602, 292, 10],
+        "metrics_panel": [884, 362, 360, 182],
+        "combo_heading": [908, 378],
+        "combo_value": [908, 403],
+        "damage_heading": [908, 460],
+        "damage_value": [908, 486],
+        "radar_panel": [1008, 94, 236, 236],
+        "radar_heading": [1032, 110],
+        "radar_center": [1126, 218],
+        "radar_radius": 78,
+        "crosshair_center": [640, 360],
+        "crosshair_radius": 28,
+        "player_anchor": [480, 402],
+        "target_anchor": [756, 342],
+        "popup_offset_y": -88
     },
+    "sample_actions": {"damage_target": 120, "damage_player": 75},
     "buttons": {
         "menu": [
             {"id": "enter_hud", "action": "show_hud", "label": "전투 HUD 보기", "rect": [792, 302, 384, 58], "hit_padding": 0},
-            {"id": "exit", "action": "quit", "label": "종료", "rect": [792, 454, 384, 58], "hit_padding": 0}
+            {"id": "reset_menu", "action": "reset", "label": "표시 초기화", "rect": [792, 378, 384, 58], "hit_padding": 0},
+            {"id": "exit", "action": "quit", "label": "테스트 종료", "rect": [792, 454, 384, 58], "hit_padding": 0}
+        ],
+        "combat": [
+            {"id": "damage_target", "action": "damage_target", "label": "적 피해 +120", "rect": [408, 580, 190, 48], "hit_padding": 0},
+            {"id": "damage_player", "action": "damage_player", "label": "플레이어 피해 +75", "rect": [610, 580, 214, 48], "hit_padding": 0},
+            {"id": "toggle_target", "action": "toggle_target", "label": "타겟 유무", "rect": [836, 580, 190, 48], "hit_padding": 0},
+            {"id": "reset_hud", "action": "reset", "label": "표시 초기화", "rect": [1038, 580, 206, 48], "hit_padding": 0}
         ]
     }
 }

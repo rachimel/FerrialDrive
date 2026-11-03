@@ -83,5 +83,6 @@ GUI의 드롭 입력은 실행기가 소비한다. Pico2D 원본은 수정하지
 ## 샘플과 확인 범위
 
 - [두 화면 샘플](../../samples/unit_test_runner/README.md): Esc·마우스 버튼 전환, 화면별 경과 시간, 종료.
+- [실제 UI 테스트](../../samples/ui_unit_test/README.md): `tests/ui_test.py`를 드롭해 메뉴·전투 HUD를 확인한다. 실행·조작은 사용자 확인 대기다.
 - 자동 검사는 프로젝트 루트에서 `python -m unittest discover -s tests/automated -v`로 실행한다. 창을 대체하는 검사와 실제 창·조작 확인을 구분한다.
 - 게임 UI의 메뉴·HUD 구현 완료 여부는 [UI Unit Test 명세](../../docs/unit-tests/ui_unit_test.md)를 따른다. 이 도구의 두 화면 샘플과 별개다.

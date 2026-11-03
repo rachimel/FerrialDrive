@@ -26,6 +26,7 @@ class Button:
     label: str
     rect: Rect
     hit_padding: float = 0
+    enabled: bool = True
 
 
 @dataclass(frozen=True)
@@ -51,15 +52,15 @@ class ButtonInput:
         hit = next((button for button in reversed(buttons)
                     if button.rect.translated(offset_x).contains(
                         x, y, button.hit_padding)), None)
-        self.hovered_id = hit.button_id if hit else None
+        self.hovered_id = hit.button_id if hit and hit.enabled else None
         if kind == "move":
             return InputResult(self.pressed_id is not None)
         if kind == "down":
-            self.pressed_id = hit.button_id if hit else None
+            self.pressed_id = hit.button_id if hit and hit.enabled else None
             return InputResult(hit is not None)
         if kind == "up":
             captured = self.pressed_id
             self.pressed_id = None
-            action = hit.action if hit and hit.button_id == captured else None
+            action = hit.action if hit and hit.enabled and hit.button_id == captured else None
             return InputResult(captured is not None or hit is not None, action)
         raise ValueError(f"지원하지 않는 포인터 입력: {kind}")

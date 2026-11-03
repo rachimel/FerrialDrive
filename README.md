@@ -5,7 +5,7 @@ JRPG식 3/4 Top-Down 화면과 사전 렌더링한 2D 에셋을 사용한다.
 
 ## 현재 상태
 
-현재는 **메뉴·전투 HUD·장면 전환을 확인할 독립 UI Unit Test**를 구현하는 단계다. 공통 애니메이션·버튼 입력·메뉴 렌더링 초안이 있으며, HUD·장면 전환·독립 실행 진입점은 아직 연결하지 않았다. 게임 전투 프로토타입은 미구현이다.
+현재는 **메뉴·전투 HUD·장면 전환을 확인할 독립 UI Unit Test**를 구현했다. `tests/ui_test.py`에 HP·콤보·누적 가한 피해·기체별 이번 피해 숫자·레이더·크로스헤어와 샘플 조작을 연결했다. 이번 변경의 실행·조작은 사용자 확인 전이며, 게임 전투 프로토타입은 미구현이다.
 
 - [사전 PRD](docs/Ferrial_Drive_PRE_PRD_v0.1.md): 게임 방향, 현재 결정한 규칙, 미정 사항
 - [UI Unit Test 명세](docs/unit-tests/ui_unit_test.md): 현재 우선 검증할 두 장면·입력·HUD·애니메이션
@@ -43,7 +43,7 @@ JRPG식 3/4 Top-Down 화면과 사전 렌더링한 2D 에셋을 사용한다.
 | `Tools/SSheetCutil.py` | 기존 스프라이트 시트 편집 도구 |
 | `run_portrait_editor.cmd` | 로컬 표정 스튜디오 실행 파일 |
 
-UI Unit Test는 별도 `.py` 진입점으로 실행할 예정이다. 소스 구조와 실행 명령은 구현 후 추가한다.
+실제 UI 테스트는 `tests/ui_test.py`다. `tests/Unit Test Runner.lnk`로 실행기를 열고 **열린 GUI 창에 `ui_test.py`를 드롭**한다. [확인할 조작과 기대 결과](samples/ui_unit_test/README.md)를 따른다. `python tests/ui_test.py` 직접 실행도 지원한다.
 
 공통 실행기는 Pico2D가 설치된 Python으로 실행한다. 파일 인자 없이 실행하면 대기 GUI가 열린다. 그 창에 `samples/unit_test_runner/basic_flow.py`를 드롭해 두 화면 샘플을 실행한다. 이 샘플은 위 UI 메뉴·전투 HUD와 별개다.
 
