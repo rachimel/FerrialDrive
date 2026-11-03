@@ -118,7 +118,7 @@ class UiView:
         min_scale = settings.get("arrow_min_scale", 0.45)
         min_opacity = settings.get("arrow_min_opacity", 0.3)
         thickness = settings["ring_thickness_pixels"]
-        r.ring(x, y, radius, thickness, c.colors["accent"], opacity * settings["ring_opacity"])
+        r.ring(x, y, radius, thickness, self.ui_accent, opacity * settings["ring_opacity"])
         for contact in contacts:
             distance = hypot(contact.x, contact.y)
             if contact.kind != "enemy" or distance == 0 or distance > distance_limit:
@@ -135,7 +135,7 @@ class UiView:
             base_x = tip_x - direction_x * length * scale
             base_y = tip_y - direction_y * length * scale
             side_x, side_y = -direction_y * half_width * scale, direction_x * half_width * scale
-            color = c.colors["enemy"]
+            color = self.ui_accent
             r.filled_triangle((tip_x, tip_y), (base_x + side_x, base_y + side_y),
                               (base_x - side_x, base_y - side_y), color, arrow_opacity)
 

@@ -62,7 +62,7 @@
         "muted": "#91AEBB",
         "ui_accent": "#91AEBB",
         "accent": "#AEDEBE",
-        "crosshair": "#FFFFFF",
+        "crosshair": "#91AEBB",
         "warning": "#E4B36C",
         "enemy": "#F18775",
         "health_loss": "#8F2028",
