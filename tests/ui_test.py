@@ -171,7 +171,6 @@ class UiTest(TestProgram):
 
     def draw(self):
         self.view.background()
-        self.view.header()
         for scene in ("menu", "combat"):
             pose = self.transition.pose(scene)
             if pose.opacity <= 0:
@@ -182,7 +181,6 @@ class UiTest(TestProgram):
                 self.view.combat(self.sample.state, self.damage_numbers.visuals,
                                  pose.opacity, pose.offset_x, self.inputs,
                                  self.current_buttons("combat"))
-        self.view.footer(self.transition.target, self.transition.active)
 
     def exit(self):
         if self.renderer is not None:

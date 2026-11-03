@@ -60,6 +60,12 @@ class PicoRenderer:
             raise RuntimeError("텍스트 크기를 계산할 수 없다.")
         return width.value, height.value
 
+    def text_size(self, text: str, role: str) -> tuple[int, int]:
+        return self._measure(text, role)
+
+    def text_ascent(self, role: str) -> int:
+        return self.pico.TTF_FontAscent(self.fonts[role].font)
+
     def text(self, text: str, x: float, y: float, role: str, color: str,
              opacity: float = 1, max_width: float | None = None, align: str = "left"):
         if opacity <= 0 or not text:

@@ -21,22 +21,16 @@ class UiView:
 
     def panel(self, rect, opacity, offset_x=0):
         r, c = self.renderer, self.config.colors
+        style = self.config.data["panel_style"]
         rect = Rect(*rect).translated(offset_x)
-        r.rect(rect, c["panel"], opacity * 0.94)
-        r.rect(rect, c["line"], opacity, filled=False)
+        r.rect(rect, c["panel"], opacity * style["fill_opacity"])
+        r.rect(rect, c["panel_border"], opacity * style["border_opacity"], filled=False)
         r.line(rect.x, rect.y, rect.x + min(72, rect.width), rect.y, c["accent"], opacity)
 
     def label(self, key, x, y, role="body", color="text", opacity=1,
               offset_x=0, **kwargs):
         self.renderer.text(self.config.labels[key], x + offset_x, y, role,
                            self.config.colors[color], opacity, **kwargs)
-
-    def header(self):
-        c, r = self.config, self.renderer
-        x, y, width, height = c.layout["header"]
-        self.label("brand", x, y, "body")
-        self.label("test_badge", x + width, y + 2, "small", "accent", align="right")
-        r.line(x, y + height, x + width, y + height, c.colors["line"])
 
     def buttons(self, scene, input_state, opacity, offset_x, buttons=None):
         r, c = self.renderer, self.config.colors
@@ -72,13 +66,6 @@ class UiView:
                    opacity, offset_x)
         self.label("menu_notice", *c.layout["menu_notice"], "small", "muted", opacity, offset_x)
         self.buttons("menu", input_state, opacity, offset_x)
-
-    def footer(self, scene, transitioning=False):
-        x, y, width, _ = self.config.layout["footer"]
-        self.label("menu_hint" if scene == "menu" else "combat_hint", x, y,
-                   "small", "muted")
-        if transitioning:
-            self.label("transition", x + width, y, "small", "accent", align="right")
 
     def gauge(self, layout_key, ratio, opacity, offset_x, color="accent"):
         r, c = self.renderer, self.config.colors
@@ -154,16 +141,19 @@ class UiView:
             r.text(f"{health.current:g} / {health.maximum:g}", x + offset_x, y,
                    "hud", c.colors["text"], opacity, max_width=150, align="right")
             self.gauge("target_gauge", health.ratio, opacity, offset_x, "enemy")
-        self.panel(c.layout["metrics_panel"], opacity, offset_x)
-        self.label("combo", *c.layout["combo_heading"], "small", "muted", opacity, offset_x)
         x, y = c.layout["combo_value"]
-        r.text(f"{state.combo_count:02d}", x + offset_x, y, "number", c.colors["accent"], opacity)
+        combo = str(state.combo_count)
+        number_width, _ = r.text_size(combo, "combo_number")
+        label_y = y + r.text_ascent("combo_number") - r.text_ascent("combo_label")
+        r.text(combo, x + offset_x, y, "combo_number", c.colors["accent"], opacity)
+        self.label("combo", x + number_width + c.layout["combo_label_gap"], label_y,
+                   "combo_label", "muted", opacity, offset_x)
         self.label("damage", *c.layout["damage_heading"], "hud", "muted", opacity, offset_x)
         x, y = c.layout["damage_value"]
         r.text(f"{state.total_damage_dealt:,}", x + offset_x, y,
-               "number", c.colors["warning"], opacity, max_width=312)
+               "damage_total", c.colors["warning"], opacity, max_width=312)
         self.radar(state.radar_contacts, opacity, offset_x)
         self.buttons("combat", input_state, opacity, offset_x, buttons)
         for visual in damage_visuals:
-            r.text(str(visual.amount), visual.x + offset_x, visual.y, "value",
+            r.text(str(visual.amount), visual.x + offset_x, visual.y, "damage_number",
                    c.colors["damage_number"], opacity * visual.opacity, align="center")

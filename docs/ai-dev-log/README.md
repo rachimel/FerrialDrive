@@ -4,6 +4,7 @@ Ferrial Drive 프로젝트 대화에서 나온 결정과 작업 흐름을 요약
 
 ## 기록
 
+- [2026-11-03 UI 글꼴·패널 조정](2026-11-03-ui-font-and-panel.md): 에스코어 드림 통일·Bold 피해·가로 콤보·장식 제거
 - [2026-11-03 실제 UI 테스트](2026-11-03-ui-hud-test.md): 메뉴·전투 HUD·분리한 피해 표시·전환 중 입력 소비 구현
 - [2026-11-03 자동 검사 폴더 분리](2026-11-03-automated-tests-folder.md): 자동 검사 4개를 tests/automated로 이동
 - [2026-11-03 tests 바로 확인](2026-11-03-tests-quick-access.md): 실행기 바로가기와 드롭용 샘플을 tests에 배치
