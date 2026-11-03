@@ -6,6 +6,7 @@
     "fonts": {
         "title": {"path": "../../data/fonts/s_core_dream/SCDream2.otf", "size": 62},
         "heading": {"path": "../../data/fonts/s_core_dream/SCDream5.otf", "size": 25},
+        "combat_title": {"path": "../../data/fonts/s_core_dream/SCDream6.otf", "size": 44},
         "body": {"path": "../../data/fonts/s_core_dream/SCDream4.otf", "size": 18},
         "small": {"path": "../../data/fonts/s_core_dream/SCDream4.otf", "size": 14},
         "hud": {"path": "../../data/fonts/s_core_dream/SCDream4.otf", "size": 19},
@@ -58,8 +59,8 @@
         "menu_heading": [792, 198],
         "menu_description": [792, 239],
         "menu_notice": [792, 537],
-        "combat_heading": [36, 96],
-        "combat_notice": [36, 137],
+        "combat_heading": [28, 24],
+        "combat_notice": [30, 88],
         "target_panel": [424, 94, 432, 112],
         "target_heading": [448, 108],
         "target_name": [448, 137],

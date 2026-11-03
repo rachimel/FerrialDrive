@@ -14,6 +14,8 @@
 
 메뉴 좌표의 원점은 왼쪽 위이며 단위는 픽셀이다. 시간은 초다. `buttons`의 `label`은 표시명, `action`은 동작 식별자다. 현재 버튼 판정 영역은 겹치지 않아야 한다. `hit_padding`은 표시 크기와 별개다.
 
+장면 제목의 위치는 `layout.combat_heading`(기본 `[28, 24]`), 크기는 `fonts.combat_title.size`(기본 44)로 조절한다. 전용 Bold 역할을 사용해 메뉴의 `heading` 크기와 독립적이다. 아래 설명 위치는 `layout.combat_notice`에서 조절한다.
+
 ## 직접 실행
 
 Python 3.11과 `requirements-ui.txt`의 Pico2D 1.5.1 환경을 사용한다. GUI에 드롭하거나 프로젝트 루트에서 다음처럼 직접 실행한다.

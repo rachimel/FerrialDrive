@@ -114,7 +114,7 @@ class UiView:
 
     def combat(self, state, damage_visuals, opacity, offset_x, input_state, buttons=None):
         c, r = self.config, self.renderer
-        self.label("combat_heading", *c.layout["combat_heading"], "heading",
+        self.label("combat_heading", *c.layout["combat_heading"], "combat_title",
                    opacity=opacity, offset_x=offset_x)
         self.label("sample_notice", *c.layout["combat_notice"], "small", "muted", opacity, offset_x)
         self.placeholder(c.actor_anchor("player"), c.labels["player_name"], "accent", opacity, 0)
