@@ -5,7 +5,7 @@ JRPG식 3/4 Top-Down 화면과 사전 렌더링한 2D 에셋을 사용한다.
 
 ## 현재 상태
 
-현재는 **메뉴·전투 HUD·장면 전환을 확인할 독립 UI Unit Test**를 준비하는 단계다. 기획 문서와 기존 제작 도구가 있으며, UI Unit Test와 게임 전투 프로토타입의 실행 코드는 아직 없다.
+현재는 **메뉴·전투 HUD·장면 전환을 확인할 독립 UI Unit Test**를 구현하는 단계다. 공통 애니메이션·버튼 입력·메뉴 렌더링 초안이 있으며, HUD·장면 전환·독립 실행 진입점은 아직 연결하지 않았다. 게임 전투 프로토타입은 미구현이다.
 
 - [사전 PRD](docs/Ferrial_Drive_PRE_PRD_v0.1.md): 게임 방향, 현재 결정한 규칙, 미정 사항
 - [UI Unit Test 명세](docs/unit-tests/ui_unit_test.md): 현재 우선 검증할 두 장면·입력·HUD·애니메이션
@@ -30,6 +30,10 @@ JRPG식 3/4 Top-Down 화면과 사전 렌더링한 2D 에셋을 사용한다.
 | 경로 | 내용 |
 | --- | --- |
 | `docs/` | 기획과 제작 도구 사용 문서 |
+| `ferrial_drive/` | 재사용 UI·애니메이션 모듈 초안 |
+| `samples/ui_unit_test/` | UI 표현 설정과 현재 확인 방법 |
+| `assets/fonts/` | 지정 폰트와 저작권·이용 조건 |
+| `tests/` | 시간 진행·버튼 판정 자동 검사 |
 | `Tools/portrait_editor/` | 표정 스튜디오와 영역 지정 도구 |
 | `Tools/blender_pipeline/` | Blender 기반 원본 생성 도구 |
 | `Tools/SSheetCutil.py` | 기존 스프라이트 시트 편집 도구 |

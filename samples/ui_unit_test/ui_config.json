@@ -1,0 +1,62 @@
+{
+    "window": {"width": 1280, "height": 720, "initial_scene": "menu"},
+    "animation": {"duration_seconds": 0.32, "slide_pixels": 36},
+    "fonts": {
+        "title": {"path": "../../assets/fonts/s_core_dream/SCDream2.otf", "size": 62},
+        "heading": {"path": "../../assets/fonts/s_core_dream/SCDream3.otf", "size": 25},
+        "body": {"path": "../../assets/fonts/s_core_dream/SCDream4.otf", "size": 18},
+        "small": {"path": "../../assets/fonts/s_core_dream/SCDream3.otf", "size": 14},
+        "hud": {"path": "../../assets/fonts/kkakdugi_drafting/KkakdugiDrafting-Regular.ttf", "size": 19},
+        "number": {"path": "../../assets/fonts/kkakdugi_drafting/KkakdugiDrafting-Regular.ttf", "size": 48}
+    },
+    "colors": {
+        "background": "#091217",
+        "panel": "#101F27",
+        "panel_hover": "#1B3941",
+        "panel_pressed": "#294C50",
+        "line": "#2D4B55",
+        "grid": "#12242C",
+        "text": "#E2EEE9",
+        "muted": "#849B9D",
+        "accent": "#AEDEBE",
+        "warning": "#E4B36C",
+        "enemy": "#F18775"
+    },
+    "labels": {
+        "brand": "FERRIAL / DRIVE",
+        "test_badge": "UI 테스트",
+        "menu_title_first": "FERRIAL",
+        "menu_title_second": "DRIVE",
+        "menu_subtitle": "메뉴와 전투 정보를 확인하는 독립 테스트",
+        "menu_heading": "테스트 메뉴",
+        "menu_description": "화면을 전환하고 UI 반응을 확인해 봐.",
+        "menu_hint": "Esc  메뉴 ↔ 전투 HUD    /    마우스 좌클릭  선택",
+        "menu_notice": "실제 전투 없이 샘플 상태로 동작해.",
+        "combat_heading": "전투 HUD",
+        "combat_subtitle": "샘플 상태",
+        "player": "PLAYER / HP",
+        "target": "TARGET / HP",
+        "no_target": "타겟 없음",
+        "combo": "COMBO",
+        "damage": "최근 데미지",
+        "radar": "RADAR",
+        "sample_status": "샘플 상태",
+        "combat_hint": "Esc  메뉴 열기    /    아래 버튼으로 표시 상태 변경",
+        "transition": "화면 전환 중"
+    },
+    "layout": {
+        "header": [36, 28, 1208, 42],
+        "menu_title": [76, 206],
+        "menu_panel": [760, 170, 448, 414],
+        "menu_heading": [792, 198],
+        "menu_description": [792, 239],
+        "menu_notice": [792, 537],
+        "footer": [36, 668, 1208, 24]
+    },
+    "buttons": {
+        "menu": [
+            {"id": "enter_hud", "action": "show_hud", "label": "전투 HUD 보기", "rect": [792, 302, 384, 58], "hit_padding": 0},
+            {"id": "exit", "action": "quit", "label": "종료", "rect": [792, 454, 384, 58], "hit_padding": 0}
+        ]
+    }
+}
