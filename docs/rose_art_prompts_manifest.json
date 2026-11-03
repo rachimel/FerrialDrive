@@ -1,0 +1,280 @@
+{
+  "export_date": "2026-11-02",
+  "prompt_source_count": 39,
+  "original_png": "C:\\Z_Workspace\\ComfyUI_windows_portable\\Anima-Style-Lab\\data\\images\\b00a7cf2f7.png",
+  "original_png_sha256": "56973a8472f6f511dddcb5506df836ebaaef99dceba4a65757684fc0e087e7f6",
+  "original_png_recorded_settings": {
+    "model": "anima_baseV10.safetensors",
+    "text_encoder": "qwen_3_06b_base.safetensors",
+    "vae": "qwen_image_vae.safetensors",
+    "seed": 3518765497,
+    "steps": 30,
+    "cfg": 4.2,
+    "sampler_name": "er_sde",
+    "scheduler": "sgm_uniform",
+    "denoise": 1.0,
+    "width": 896,
+    "height": 1152,
+    "batch_size": 1
+  },
+  "prompt_sources": [
+    {
+      "version": 1,
+      "source_filename": "white_hair_uniform_reference_v1_prompts.md",
+      "sha256": "4e9b161042be735e63b50f8ce0f0979825659f6ffa9091255bc91e4e5b5f8305",
+      "bytes": 4311
+    },
+    {
+      "version": 2,
+      "source_filename": "white_hair_uniform_reference_v2_simple_light_prompt.txt",
+      "sha256": "16268327319497ace0af3fc0149bcafd49e1515ff34875d9922b35a2218852dd",
+      "bytes": 1952
+    },
+    {
+      "version": 3,
+      "source_filename": "white_hair_uniform_reference_v3_hair_down_prompt.txt",
+      "sha256": "67811970eea104f66b9e0562cfdc6f9d12a067511ef4515b1e57edfaf6ac6569",
+      "bytes": 1326
+    },
+    {
+      "version": 4,
+      "source_filename": "white_hair_uniform_reference_v4_clean_color_prompt.txt",
+      "sha256": "121c7671e96c2594acab9d9e959b69b14db46354234facbc78e222e2a24a93ae",
+      "bytes": 2111
+    },
+    {
+      "version": 5,
+      "source_filename": "white_hair_uniform_reference_v5_face_neck_prompts.txt",
+      "sha256": "d15109f313d8be080d0a8e1c9fb680b2a5c5ce1d6fb2f936829d5701f1a66cee",
+      "bytes": 2997
+    },
+    {
+      "version": 6,
+      "source_filename": "white_hair_uniform_reference_v6_pale_skin_prompt.txt",
+      "sha256": "6e702f19055c2ff65e12ce8545b7369e4d854d01b86005f1f92dd233c139bf8f",
+      "bytes": 1746
+    },
+    {
+      "version": 7,
+      "source_filename": "white_hair_uniform_reference_v7_full_cleanup_prompt.txt",
+      "sha256": "cd2c25bcc97e36e837d0caeb9f426ce4108c5d940e18a6db32c3ecc2ecb1cc63",
+      "bytes": 3090
+    },
+    {
+      "version": 8,
+      "source_filename": "white_hair_uniform_reference_v8_warm_accents_prompt.txt",
+      "sha256": "dc9a5f6258a5691cb7a2cd98ea324f4d8d03b17f61e54a03e837c7cc1723da9c",
+      "bytes": 1758
+    },
+    {
+      "version": 9,
+      "source_filename": "white_hair_uniform_reference_v9_dark_red_clean_hair_prompt.txt",
+      "sha256": "7fd60e668bf34ab85f3723ed32b8c8fee0a08c1a58e267b30926a55fc41ea3ca",
+      "bytes": 1816
+    },
+    {
+      "version": 10,
+      "source_filename": "white_hair_uniform_reference_v10_soft_charcoal_prompt.txt",
+      "sha256": "061f4429e888493e8d5a30c7985148c4faa368981770d5505c4122d186e96a16",
+      "bytes": 1689
+    },
+    {
+      "version": 11,
+      "source_filename": "white_hair_uniform_reference_v11_matte_hair_prompt.txt",
+      "sha256": "28469f7c2f4528ba150a7f3af74c273dd6ef301f51ad528112040392c2e68aa9",
+      "bytes": 1647
+    },
+    {
+      "version": 12,
+      "source_filename": "white_hair_uniform_reference_v12_hair_line_cleanup_prompt.txt",
+      "sha256": "28d217a8a1d4d862dd289ad3e5016196f0d9f02470aee3e715f6cdc7a1f529e7",
+      "bytes": 1736
+    },
+    {
+      "version": 13,
+      "source_filename": "white_hair_uniform_reference_v13_soft_rose_eyes_prompt.txt",
+      "sha256": "fc0b4230fffdca50d3c8fe1d6e13a8710333e6f298de55289db003d3a847bc07",
+      "bytes": 1785
+    },
+    {
+      "version": 14,
+      "source_filename": "white_hair_uniform_reference_v14_reference_eyes_prompt.txt",
+      "sha256": "219cc36cdb5f21fbbbf1668fe9e9e44fe8b44a95f84a5c11b4c54354e3107573",
+      "bytes": 2014
+    },
+    {
+      "version": 15,
+      "source_filename": "white_hair_uniform_reference_v15_soft_front_gaze_prompt.txt",
+      "sha256": "1c8a1d3a0ac6c17d6b4a6fabc9b6889b414d9cf70657670b164bae00c61928b8",
+      "bytes": 2849
+    },
+    {
+      "version": 16,
+      "source_filename": "white_hair_uniform_reference_v16_eye_position_yaw_prompt.txt",
+      "sha256": "252e30a681e1b59a2ce358732e2249cd761831822ea33d1245cce97e100e17b0",
+      "bytes": 1891
+    },
+    {
+      "version": 17,
+      "source_filename": "white_hair_uniform_reference_v17_eyes_up_cleanup_prompt.txt",
+      "sha256": "5ae7546d5413032623eb8e9781362ced41beaf67543669307903f8bca2676970",
+      "bytes": 2604
+    },
+    {
+      "version": 18,
+      "source_filename": "white_hair_uniform_reference_v18_detail_cleanup_prompts.txt",
+      "sha256": "f09b1db0131c41ea021fa93311a78363daf37bb6843a94a9b589143a36071508",
+      "bytes": 5329
+    },
+    {
+      "version": 19,
+      "source_filename": "white_hair_uniform_reference_v19_thigh_cleanup_prompts.txt",
+      "sha256": "14395d5f162fc67eb46bd8158c3f09f7c68290e6b55fc1f1db1f67c0eb95c45d",
+      "bytes": 4419
+    },
+    {
+      "version": 20,
+      "source_filename": "white_hair_uniform_reference_v20_leg_axis_prompt.txt",
+      "sha256": "01c945a3df3edd2b7a752cfc6eb3934852c04c9808dd1e3c1c15541e11e56d0b",
+      "bytes": 2646
+    },
+    {
+      "version": 21,
+      "source_filename": "white_hair_uniform_reference_v21_natural_leg_volume_prompt.txt",
+      "sha256": "fbfa4f3315a1479790f4c77e5cfd2bce5094a64e98b89324a785a73c8fe5dd37",
+      "bytes": 2360
+    },
+    {
+      "version": 23,
+      "source_filename": "white_hair_uniform_reference_v23_original_style_prompt.txt",
+      "sha256": "8f47db2eeff756a274c2e926b01581c9b3e5863417d37538026bb1a78817ba4c",
+      "bytes": 2636
+    },
+    {
+      "version": 25,
+      "source_filename": "white_hair_uniform_reference_v25_holstered_prompt.txt",
+      "sha256": "74334f0906ccf8e950ed977059ea6b081f1d79881365afa1371de3a9512becf3",
+      "bytes": 1824
+    },
+    {
+      "version": 26,
+      "source_filename": "white_hair_uniform_reference_v26_body_balance_prompt.txt",
+      "sha256": "836e77a3176db244914edc8de2a210a253a3c0fb17f0a889dc2ff37e80694c8d",
+      "bytes": 3302
+    },
+    {
+      "version": 27,
+      "source_filename": "white_hair_uniform_reference_v27_pose_continuity_prompt.txt",
+      "sha256": "5bc0c4bf33edc081fb30aac5e5b01f3bf87f603268eca9abcf481f1a3eb64180",
+      "bytes": 2359
+    },
+    {
+      "version": 28,
+      "source_filename": "white_hair_uniform_reference_v28_face_thigh_holster_prompt.txt",
+      "sha256": "55b5759183a53336c36cb3e2e98bbaa905281a6808e57da9503e3d27d1037681",
+      "bytes": 2479
+    },
+    {
+      "version": 29,
+      "source_filename": "white_hair_uniform_reference_v29_crossed_arms_prompts.txt",
+      "sha256": "44cc110a5dc9dbefdae1bd56826d21313b4f6dd783a3de4b4bc064929ca3ca7a",
+      "bytes": 5255
+    },
+    {
+      "version": 31,
+      "source_filename": "white_hair_uniform_reference_v31_prompt.txt",
+      "sha256": "a69046a0e87eebc71acfeb707350d75fc9edfbb88eeaec0200568e3c53dde19f",
+      "bytes": 1320
+    },
+    {
+      "version": 32,
+      "source_filename": "white_hair_uniform_reference_v32_prompt.txt",
+      "sha256": "6b04c566b5ae01610334d389f49a5d6c77570077b6315bad8b678855dd28557a",
+      "bytes": 673
+    },
+    {
+      "version": 33,
+      "source_filename": "white_hair_uniform_reference_v33_prompt.txt",
+      "sha256": "671da5c91dfc82f65abaa0e4b5bb7dab17b6bd8ae7bc8d5e6e544685a4f8582b",
+      "bytes": 960
+    },
+    {
+      "version": 34,
+      "source_filename": "white_hair_uniform_reference_v34_prompt.txt",
+      "sha256": "15ef1183dd57550f30374c11dc3d3f289e6e2a4e92321aa888efe82e146c83c5",
+      "bytes": 765
+    },
+    {
+      "version": 35,
+      "source_filename": "white_hair_uniform_reference_v35_prompt.txt",
+      "sha256": "20b77542f1fc5656d65ba68837b059aa900c4660aad3740f565ede43e922301c",
+      "bytes": 927
+    },
+    {
+      "version": 36,
+      "source_filename": "white_hair_uniform_reference_v36_prompts.txt",
+      "sha256": "543bd15723b44efc167f98aaf7055cdf3d9ad5c8b9c2282294b0648584510515",
+      "bytes": 2173
+    },
+    {
+      "version": 37,
+      "source_filename": "white_hair_uniform_reference_v37_prompt.txt",
+      "sha256": "0998602cf7c85af85a40b9058a44de1665c08f29327174148fabeeeb315ab7b0",
+      "bytes": 973
+    },
+    {
+      "version": 38,
+      "source_filename": "white_hair_uniform_reference_v38_prompts.txt",
+      "sha256": "2470a798c243fdb5ff78894b175eff8d19946959bdf1266a04b7e0011d06a2dc",
+      "bytes": 3739
+    },
+    {
+      "version": 39,
+      "source_filename": "white_hair_uniform_reference_v39_prompts.txt",
+      "sha256": "7a25bd5c0d616230a208824f90a0bdef90050a4c565f02c967b12a5bfd9aef66",
+      "bytes": 2372
+    },
+    {
+      "version": 40,
+      "source_filename": "white_hair_uniform_reference_v40_prompts.txt",
+      "sha256": "69361e041dee5daa372ba3d706c6a8c2371a0393acd90ecb24e19499c6759a0d",
+      "bytes": 3330
+    },
+    {
+      "version": 41,
+      "source_filename": "white_hair_uniform_reference_v41_prompts.txt",
+      "sha256": "7b8de73cda6f06f55e543d9b356e958e0e4bd5c81d346436de5eda27d664946e",
+      "bytes": 2085
+    },
+    {
+      "version": 42,
+      "source_filename": "white_hair_uniform_reference_v42_prompts.txt",
+      "sha256": "84cdfc42de209b53af88c74ea048e6fcb4f66ba083b9f3abbe36188ba7f87902",
+      "bytes": 5334
+    }
+  ],
+  "assets": [
+    {
+      "source": "C:\\Z_Workspace\\ComfyUI_windows_portable\\Anima-Style-Lab\\output\\character_references\\white_hair_uniform_reference_v41_white_gloves_base_pose.png",
+      "destination_relative": "data/images/rose_references/rose_base_pose_v41.png",
+      "sha256": "bf8da3af6c51e98ead36c86b4ac367bc115e22acb71064400b78ec708f4e6edc",
+      "dimensions": [
+        1106,
+        1422
+      ]
+    },
+    {
+      "source": "C:\\Z_Workspace\\ComfyUI_windows_portable\\Anima-Style-Lab\\output\\character_references\\white_hair_uniform_reference_v42_A_pose_three_views.png",
+      "destination_relative": "data/images/rose_references/rose_A_pose_three_views_v42.png",
+      "sha256": "d01c9375dcc8c2bf6f7741e85fee35d690c0077f5b3de6a4defd040cc5d070b8",
+      "dimensions": [
+        1536,
+        1024
+      ]
+    }
+  ],
+  "document": {
+    "path": "docs/rose_art_prompts.md",
+    "sha256": "81306c3012e66db9a33f203799cbfbbc1fe87bf448dbe1a2c6aeb74933e0d79b"
+  }
+}
