@@ -116,7 +116,7 @@ class UiView:
         length = settings["arrow_length_pixels"]
         half_width = settings["arrow_half_width_pixels"]
         min_scale = settings.get("arrow_min_scale", 0.45)
-        min_opacity = settings.get("arrow_min_opacity", 0.25)
+        min_opacity = settings.get("arrow_min_opacity", 0.3)
         thickness = settings["ring_thickness_pixels"]
         r.ring(x, y, radius, thickness, c.colors["accent"], opacity * settings["ring_opacity"])
         for contact in contacts:

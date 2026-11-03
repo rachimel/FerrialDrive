@@ -94,7 +94,7 @@ class UiConfig:
         min_scale = settings.get("arrow_min_scale", 0.45)
         if not isfinite(min_scale) or not 0 < min_scale <= 1:
             raise ValueError("레이더 삼각형 최소 크기 비율은 0 초과 1 이하여야 한다.")
-        min_opacity = settings.get("arrow_min_opacity", 0.25)
+        min_opacity = settings.get("arrow_min_opacity", 0.3)
         if not isfinite(min_opacity) or not 0 <= min_opacity <= 1:
             raise ValueError("레이더 삼각형 최소 알파는 0~1이어야 한다.")
         thickness = settings["ring_thickness_pixels"]

@@ -38,8 +38,8 @@
     "player_hp_bar": {"width_pixels": 6, "height_pixels": 72, "side_offset_pixels": 56},
     "health_trail": {"duration_seconds": 0.6},
     "radar": {"radius_pixels": 200, "range_units": 1.0, "ring_thickness_pixels": 2,
-              "arrow_length_pixels": 20, "arrow_half_width_pixels": 10,
-              "arrow_min_scale": 0.45, "arrow_min_opacity": 0.25,
+              "arrow_length_pixels": 20, "arrow_half_width_pixels": 15,
+              "arrow_min_scale": 0.45, "arrow_min_opacity": 0.3,
               "ring_opacity": 0.28},
     "colors": {
         "background": "#091217",
