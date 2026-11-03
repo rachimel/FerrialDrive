@@ -1,6 +1,6 @@
 """표현 설정을 사용하는 UI 그리기. 게임 상태 갱신이나 입력 처리는 하지 않는다."""
 
-from math import hypot, isfinite
+from math import hypot
 
 from .components import Rect
 from .counter import CounterVisual
@@ -103,15 +103,7 @@ class UiView:
         half_width = settings["arrow_half_width_pixels"]
         min_scale = settings.get("arrow_min_scale", 0.45)
         min_opacity = settings.get("arrow_min_opacity", 0.25)
-        if not all(isfinite(value) and value > 0 for value in (radius, distance_limit, length, half_width)):
-            raise ValueError("레이더 반경·감지 거리·화살표 크기는 양수여야 한다.")
-        if not isfinite(min_scale) or not 0 < min_scale <= 1:
-            raise ValueError("레이더 삼각형 최소 크기 비율은 0 초과 1 이하여야 한다.")
-        if not isfinite(min_opacity) or not 0 <= min_opacity <= 1:
-            raise ValueError("레이더 삼각형 최소 알파는 0~1이어야 한다.")
         thickness = settings["ring_thickness_pixels"]
-        if not isfinite(thickness) or thickness <= 0:
-            raise ValueError("레이더 링 두께는 양수인 유한한 픽셀 값이어야 한다.")
         r.ring(x, y, radius, thickness, c.colors["accent"], opacity * settings["ring_opacity"])
         for contact in contacts:
             distance = hypot(contact.x, contact.y)
@@ -182,12 +174,14 @@ class UiView:
         shutter = settings["blur_shutter_seconds"]
         effect_progress = visual.progress
         vertical_progress = visual.vertical_progress
+        moving = visual.moving
+        outgoing_opacity = (1 - effect_progress) ** settings["outgoing_fade_power"] if moving else 0.0
         strength = (settings["blur_opacity"] * 4 * effect_progress * (1 - effect_progress)
                     if samples > 0 and shutter > 0 else 0.0)
         direction_x, direction_y = settings["blur_direction"]
         direction_length = hypot(direction_x, direction_y)
         direction_x, direction_y = direction_x / direction_length, direction_y / direction_length
-        motion_pixels = height * max(0.0, visual.progress - visual.progress_before(shutter))
+        motion_pixels = height * max(0.0, effect_progress - visual.progress_before(shutter))
         blur_length = min(settings["blur_length_pixels"] * scale, motion_pixels)
 
         def draw_face(char, center_x, offset_y, alpha, smear_x=0, smear_y=0):
@@ -199,14 +193,13 @@ class UiView:
 
         def draw_pair(old, new, center_x, alpha, smear_x=0, smear_y=0):
             # 한 글자 높이 간격을 유지해 새 숫자가 이전 숫자를 밀어 올린다.
-            outgoing_opacity = (1 - effect_progress) ** settings["outgoing_fade_power"]
             draw_face(old, center_x, -height * vertical_progress,
                       alpha * outgoing_opacity, smear_x, smear_y)
             draw_face(new, center_x, height * (1 - vertical_progress), alpha, smear_x, smear_y)
 
         for old, new, width in zip(previous, current, widths):
             center_x = x + width * scale / 2
-            if old == new or not visual.moving or new == ",":
+            if old == new or not moving or new == ",":
                 r.text(new, center_x, y, number_role, c.colors[color], opacity,
                        align="center", scale_x=scale, scale_y=scale, clip_rect=viewport)
             else:

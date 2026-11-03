@@ -4,7 +4,7 @@
 
 - [사전 PRD v0.1](Ferrial_Drive_PRE_PRD_v0.1.md)
 - [UI Unit Test 명세](unit-tests/ui_unit_test.md): 메뉴·전투 HUD의 독립 검증 범위와 미정 사항
-- [UI 작업 정리](unit-tests/ui_checkpoint.md): 전투 HUD 시안 마감·메뉴 진행 상태·다음 작업·검증 경계
+- [UI 작업 정리](unit-tests/ui_checkpoint.md): UI Unit Test 승인·최종 코드 정리·남은 작업·검증 경계
 - [상세 기획서 PPT](presentation/기획서.pptx): 기존 29쪽 초안. 이후 결정은 PRE-PRD와 개별 명세를 따른다.
 
 ## 발표

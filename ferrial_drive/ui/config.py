@@ -50,6 +50,7 @@ class UiConfig:
             raise ValueError("플레이어 HP 바의 폭·높이는 3px 이상의 유한한 값이어야 한다.")
         if not isfinite(health_bar["side_offset_pixels"]) or health_bar["side_offset_pixels"] <= 0:
             raise ValueError("플레이어 HP 바의 좌우 거리는 양수인 유한한 픽셀 값이어야 한다.")
+        self._validate_radar()
         missing = [f"{role} ({path.name})" for role, path in self.font_paths.items()
                    if not path.is_file()]
         if missing:
@@ -67,6 +68,22 @@ class UiConfig:
         if owner == "player":
             return self.window["width"] / 2, self.window["height"] / 2
         return tuple(self.layout[f"{owner}_anchor"])
+
+    def _validate_radar(self):
+        settings = self.data["radar"]
+        dimension_keys = ("radius_pixels", "range_units", "arrow_length_pixels", "arrow_half_width_pixels")
+        dimensions = (settings[key] for key in dimension_keys)
+        if not all(isfinite(value) and value > 0 for value in dimensions):
+            raise ValueError("레이더 반경·감지 거리·화살표 크기는 양수여야 한다.")
+        min_scale = settings.get("arrow_min_scale", 0.45)
+        if not isfinite(min_scale) or not 0 < min_scale <= 1:
+            raise ValueError("레이더 삼각형 최소 크기 비율은 0 초과 1 이하여야 한다.")
+        min_opacity = settings.get("arrow_min_opacity", 0.25)
+        if not isfinite(min_opacity) or not 0 <= min_opacity <= 1:
+            raise ValueError("레이더 삼각형 최소 알파는 0~1이어야 한다.")
+        thickness = settings["ring_thickness_pixels"]
+        if not isfinite(thickness) or thickness <= 0:
+            raise ValueError("레이더 링 두께는 양수인 유한한 픽셀 값이어야 한다.")
 
     def _validate_buttons(self):
         """초기 초안은 판정 영역을 겹치지 않게 유지한다."""

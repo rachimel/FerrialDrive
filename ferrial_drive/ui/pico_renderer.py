@@ -2,10 +2,38 @@
 
 from collections import OrderedDict
 from ctypes import byref, c_int
+from functools import lru_cache
 from math import ceil, cos, floor, sin, sqrt, tau
 from pathlib import Path
 
 from .components import Rect
+
+
+@lru_cache(maxsize=64)
+def _rgb(color):
+    value = color.removeprefix("#")
+    return tuple(int(value[index:index + 2], 16) for index in (0, 2, 4))
+
+
+@lru_cache(maxsize=32)
+def _ring_spans(radius, thickness, fraction_x, fraction_y):
+    """정수 이동과 무관한 픽셀 범위를 저장하고 소수점 중심은 구분한다."""
+    outer = radius + thickness / 2
+    inner = max(0.0, radius - thickness / 2)
+    rows = []
+    for pixel_y in range(ceil(fraction_y - outer - 0.5), floor(fraction_y + outer - 0.5) + 1):
+        dy = pixel_y + 0.5 - fraction_y
+        outer_span = sqrt(max(0.0, outer * outer - dy * dy))
+        left = ceil(fraction_x - outer_span - 0.5)
+        right = floor(fraction_x + outer_span - 0.5)
+        spans = ((left, right),)
+        if abs(dy) < inner:
+            inner_span = sqrt(inner * inner - dy * dy)
+            left_end = floor(fraction_x - inner_span - 0.5)
+            right_start = max(left_end + 1, ceil(fraction_x + inner_span - 0.5))
+            spans = ((left, left_end), (right_start, right))
+        rows.extend((start, pixel_y, end) for start, end in spans if start <= end)
+    return tuple(rows)
 
 
 class PicoRenderer:
@@ -15,6 +43,8 @@ class PicoRenderer:
         self.pico = pico
         self.fonts = {}
         self.textures = OrderedDict()
+        self.measurements = OrderedDict()
+        self.ascents = {}
         try:
             for role, size in font_sizes.items():
                 self.fonts[role] = pico.load_font(str(font_paths[role]), size)
@@ -25,9 +55,7 @@ class PicoRenderer:
 
     @staticmethod
     def rgba(color: str, opacity: float = 1) -> tuple[int, int, int, int]:
-        value = color.removeprefix("#")
-        return (*(int(value[index:index + 2], 16) for index in (0, 2, 4)),
-                round(max(0.0, min(1.0, opacity)) * 255))
+        return (*_rgb(color), round(max(0.0, min(1.0, opacity)) * 255))
 
     def clear(self, color: str):
         self.pico.SDL_SetRenderDrawColor(self.pico.renderer, *self.rgba(color))
@@ -55,21 +83,15 @@ class PicoRenderer:
 
     def ring(self, x, y, radius, thickness, color, opacity=1):
         """동심원 띠를 한 번씩 채워 두꺼운 링의 알파 중첩을 막는다."""
-        outer = radius + thickness / 2
-        inner = max(0.0, radius - thickness / 2)
-        for pixel_y in range(ceil(y - outer - 0.5), floor(y + outer - 0.5) + 1):
-            dy = pixel_y + 0.5 - y
-            outer_span = sqrt(max(0.0, outer * outer - dy * dy))
-            left, right = ceil(x - outer_span - 0.5), floor(x + outer_span - 0.5)
-            spans = [(left, right)]
-            if abs(dy) < inner:
-                inner_span = sqrt(inner * inner - dy * dy)
-                left_end = floor(x - inner_span - 0.5)
-                right_start = max(left_end + 1, ceil(x + inner_span - 0.5))
-                spans = [(left, left_end), (right_start, right)]
-            for start, end in spans:
-                if start <= end:
-                    self.line(start, pixel_y, end, pixel_y, color, opacity)
+        if opacity <= 0:
+            return
+        base_x, base_y = floor(x), floor(y)
+        spans = _ring_spans(radius, thickness, x - base_x, y - base_y)
+        pico = self.pico
+        pico.SDL_SetRenderDrawColor(pico.renderer, *self.rgba(color, opacity))
+        for start, pixel_y, end in spans:
+            pico.SDL_RenderDrawLine(pico.renderer, base_x + start, base_y + pixel_y,
+                                    base_x + end, base_y + pixel_y)
 
     def filled_triangle(self, first, second, third, color: str, opacity: float = 1):
         """픽셀 중심을 기준으로 내부를 한 번씩 채워 전환 중 알파 중첩을 막는다."""
@@ -95,17 +117,27 @@ class PicoRenderer:
                 pico.SDL_RenderDrawLine(pico.renderer, left, pixel_y, right, pixel_y)
 
     def _measure(self, text: str, role: str) -> tuple[int, int]:
+        key = (text, role)
+        if key in self.measurements:
+            self.measurements.move_to_end(key)
+            return self.measurements[key]
         width, height = c_int(), c_int()
         if self.pico.TTF_SizeUTF8(self.fonts[role].font, text.encode("utf-8"),
                                   byref(width), byref(height)) != 0:
             raise RuntimeError("텍스트 크기를 계산할 수 없다.")
-        return width.value, height.value
+        size = (width.value, height.value)
+        self.measurements[key] = size
+        if len(self.measurements) > 512:
+            self.measurements.popitem(last=False)
+        return size
 
     def text_size(self, text: str, role: str) -> tuple[int, int]:
         return self._measure(text, role)
 
     def text_ascent(self, role: str) -> int:
-        return self.pico.TTF_FontAscent(self.fonts[role].font)
+        if role not in self.ascents:
+            self.ascents[role] = self.pico.TTF_FontAscent(self.fonts[role].font)
+        return self.ascents[role]
 
     def text(self, text: str, x: float, y: float, role: str, color: str,
              opacity: float = 1, max_width: float | None = None, align: str = "left",
@@ -192,3 +224,5 @@ class PicoRenderer:
         for font in self.fonts.values():
             self.pico.TTF_CloseFont(font.font)
         self.fonts.clear()
+        self.measurements.clear()
+        self.ascents.clear()

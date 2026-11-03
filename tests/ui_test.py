@@ -104,6 +104,8 @@ class UiTest:
         self.player_health_trail = HealthTrail(health_duration, self.sample.state.player_health.ratio)
         self.target_health_trail = HealthTrail(health_duration, self.target_health_ratio())
         self.inputs = ButtonInput()
+        self._combat_buttons_key = None
+        self._combat_buttons = ()
         self.last_input = InputResult()
         self.mouse = (-1, -1)
         self.crosshair_position = self.config.actor_anchor("player")
@@ -125,7 +127,8 @@ class UiTest:
     def sync_health_trails(self):
         self.player_health_trail.set_ratio(self.sample.state.player_health.ratio)
         if self.sample.state.target is None:
-            self.target_health_trail.reset(0.0)
+            if self.target_health_trail.target_ratio != 0 or self.target_health_trail.trailing_ratio != 0:
+                self.target_health_trail.reset(0.0)
         else:
             self.target_health_trail.set_ratio(self.target_health_ratio())
 
@@ -134,11 +137,15 @@ class UiTest:
         if scene != "combat":
             return buttons
         state = self.sample.state
-        enabled = {
-            "damage_target": state.target is not None and state.target.health.current > 0,
-            "damage_player": state.player_health.current > 0,
-        }
-        return tuple(replace(button, enabled=enabled.get(button.action, True)) for button in buttons)
+        key = (state.target is not None and state.target.health.current > 0,
+               state.player_health.current > 0)
+        if key != self._combat_buttons_key:
+            enabled = {"damage_target": key[0], "damage_player": key[1]}
+            self._combat_buttons = tuple(
+                replace(button, enabled=button.enabled and enabled[button.action])
+                if button.action in enabled else button for button in buttons)
+            self._combat_buttons_key = key
+        return self._combat_buttons
 
     def change_scene(self, scene):
         self.inputs.reset()
@@ -249,15 +256,17 @@ class UiTest:
         if not self.transition.active:
             scene = self.transition.target
             pose = self.transition.pose(scene)
-            self.inputs.handle("move", *self.mouse, self.current_buttons(scene), pose.offset_x)
+            buttons = self.current_buttons(scene)
+            self.inputs.handle("move", *self.mouse, buttons, pose.offset_x)
             mouse_x, mouse_y = self.mouse
             width, height = self.config.window["width"], self.config.window["height"]
-            over_button = any(button.rect.translated(pose.offset_x).contains(
-                mouse_x, mouse_y, button.hit_padding) for button in self.current_buttons(scene))
+            over_button = any(button.rect.contains(mouse_x - pose.offset_x, mouse_y, button.hit_padding)
+                              for button in buttons)
             if (scene == "combat" and not over_button
                     and 0 <= mouse_x < width and 0 <= mouse_y < height and mouse_x != width / 2):
                 direction = -1 if mouse_x < width / 2 else 1
-                self.sample.state = replace(self.sample.state, attack_direction_x=direction)
+                if direction != self.sample.state.attack_direction_x:
+                    self.sample.state = replace(self.sample.state, attack_direction_x=direction)
 
     def draw_sample_actor(self, anchor, label, color, opacity, offset_x=0):
         """테스트용 기체 도형·이름표는 재사용 HUD에 포함하지 않는다."""
