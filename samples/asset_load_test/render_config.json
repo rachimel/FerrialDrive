@@ -15,7 +15,7 @@
     {"id": "se", "heading_degrees": 315}
   ],
   "camera": {"position": [0, -8, 6], "target": [0, 0, 0.5], "ortho_scale": 4.5},
-  "light": {"position": [-3, -4, 7], "energy": 700, "size": 2.5},
-  "render": {"engine": "CYCLES", "samples": 8, "seed": 17},
+  "light": {"position": [-3, -4, 7], "energy": 700, "size": 0.6},
+  "render": {"engine": "CYCLES", "samples": 64, "shadow_samples": 128, "denoise": true, "seed": 17},
   "note": "파이프라인 확인용 기본 도형·짧은 동작. 게임의 최종 규격이 아니다."
 }

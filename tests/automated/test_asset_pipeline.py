@@ -120,8 +120,25 @@ class AssetPipelineTests(unittest.TestCase):
         data['pipeline_sha256'] = pipeline_signature()
         self.bundle_path.write_text(json.dumps(data))
         self.assertEqual(job.cached_result(), self.bundle_path)
+        source = self.directory / 'source.blend'
+        source.write_bytes(b'first source revision')
+        job.source_blend = source
+        self.assertIsNone(job.cached_result())
+        data['source_sha256'] = job.source_signature()
+        self.bundle_path.write_text(json.dumps(data))
+        self.assertEqual(job.cached_result(), self.bundle_path)
+        source.write_bytes(b'second source revision')
+        self.assertIsNone(job.cached_result())
         pointer.write_text(json.dumps({'bundle': '../outside/bundle.json'}))
         self.assertIsNone(job.cached_result())
+
+    def test_named_animation_is_kept_in_sheet_and_direction_mapping(self):
+        self.data['animation_name'] = 'idle'
+        self.source.write_text(json.dumps(self.data), encoding='utf-8')
+        bundle = SpriteBundle.load(pack_rendered_frames(self.source))
+        self.assertEqual(bundle.directions['e'], 'idle/e')
+        self.assertIn('idle/e', bundle.body.clips)
+        self.assertEqual(bundle.body.clips['idle/e'], bundle.shadow.clips['idle/e'])
 
     def test_failed_blender_does_not_publish_a_new_latest_pointer(self):
         pointer = self.directory / 'latest.json'

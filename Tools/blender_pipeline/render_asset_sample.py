@@ -46,7 +46,7 @@ def build_scene(config):
     scene.cycles.device = 'CPU'
     scene.cycles.samples = config['render']['samples']
     scene.cycles.seed = config['render']['seed']
-    scene.cycles.use_denoising = False
+    scene.cycles.use_denoising = config['render'].get('denoise', False)
     scene.render.resolution_x, scene.render.resolution_y = width, height
     scene.render.resolution_percentage = 100
     scene.render.film_transparent = True
@@ -96,12 +96,31 @@ def main():
     parser.add_argument('--config', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--work-file', type=Path, required=True)
+    parser.add_argument('--source-blend', type=Path, help='ActorRoot·ShadowCatcher·카메라를 가진 저장 장면')
     args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:])
     config_bytes = args.config.read_bytes()
     config = json.loads(config_bytes)
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
-    scene, root, actor, floor = build_scene(config)
+    if args.source_blend:
+        bpy.ops.wm.open_mainfile(filepath=str(args.source_blend.resolve()))
+        scene = bpy.context.scene
+        root, floor = bpy.data.objects.get('ActorRoot'), bpy.data.objects.get('ShadowCatcher')
+        if root is None or floor is None or scene.camera is None:
+            raise ValueError('입력 장면에는 ActorRoot·ShadowCatcher·카메라가 필요하다.')
+        scene.render.engine = 'CYCLES'
+        scene.cycles.device = 'CPU'
+        scene.cycles.samples = config['render']['samples']
+        scene.cycles.seed = config['render']['seed']
+        scene.cycles.use_denoising = config['render'].get('denoise', False)
+        scene.render.resolution_x, scene.render.resolution_y = config['frame_size_pixels']
+        scene.render.resolution_percentage = 100
+        scene.render.film_transparent = True
+        scene.render.image_settings.file_format = 'PNG'
+        scene.render.image_settings.color_mode = 'RGBA'
+        scene.render.image_settings.color_depth = '8'
+    else:
+        scene, root, actor, floor = build_scene(config)
     scene.frame_set(1)
     floor.hide_render = True
     args.work_file.parent.mkdir(parents=True, exist_ok=True)
@@ -123,6 +142,7 @@ def main():
             scene.frame_set(frame)
             paths = {}
             for layer in ('body', 'shadow'):
+                scene.cycles.samples = config['render'].get('shadow_samples', config['render']['samples']) if layer == 'shadow' else config['render']['samples']
                 floor.hide_render = layer == 'body'
                 for obj in actor:
                     # 카메라에서만 숨겨 본체가 그림자를 계속 드리우게 한다.
@@ -137,6 +157,7 @@ def main():
             frames.append(paths)
         rows.append({'id': direction['id'], 'heading_degrees': direction['heading_degrees'], 'frames': frames})
     document = {'version': 1, 'asset_id': config['asset_id'], 'frame_size_pixels': [width, height],
+                'animation_name': config.get('animation_name', 'walk'),
                 'pivot': [point.x * width, point.y * height], 'fps': config['fps'], 'directions': rows,
                 'config': config, 'config_sha256': hashlib.sha256(config_bytes).hexdigest(),
                 'blender_version': bpy.app.version_string}

@@ -30,9 +30,9 @@ DIRECTION_LABELS = {'e': '동', 'ne': '북동', 'n': '북', 'nw': '북서',
 
 
 class AssetLoadTest:
-    def __init__(self, *, config=DEFAULT_CONFIG, blender=None, bundle=None, rebuild=False):
+    def __init__(self, *, config=DEFAULT_CONFIG, blender=None, bundle=None, rebuild=False, scene=None):
         self.running = True
-        self.build = AssetBuild(config, blender=blender)
+        self.build = AssetBuild(config, blender=blender, source_blend=scene)
         self.bundle_path = Path(bundle).resolve() if bundle else None
         self.rebuild = rebuild
         self.renderer = self.sprite = self.playback = None
@@ -207,13 +207,14 @@ def main():
     parser.add_argument('--config', type=Path, default=DEFAULT_CONFIG)
     parser.add_argument('--blender', type=Path)
     parser.add_argument('--bundle', type=Path, help='기존 번들만 불러오며 Blender 없이 재생')
+    parser.add_argument('--scene', type=Path, help='샘플 도형 대신 렌더할 저장 Blender 장면')
     parser.add_argument('--rebuild', action='store_true')
     parser.add_argument('--build-only', action='store_true', help='창 없이 렌더·패킹·메타데이터 검증')
     args = parser.parse_args()
-    if args.bundle and (args.rebuild or args.build_only):
-        parser.error('--bundle은 --rebuild/--build-only와 함께 사용할 수 없다.')
+    if args.bundle and (args.rebuild or args.build_only or args.scene):
+        parser.error('--bundle은 --scene/--rebuild/--build-only와 함께 사용할 수 없다.')
     if args.build_only:
-        job = AssetBuild(args.config, blender=args.blender)
+        job = AssetBuild(args.config, blender=args.blender, source_blend=args.scene)
         try:
             job.start()
             while job.process is not None:
@@ -225,7 +226,8 @@ def main():
         finally:
             job.close()
         return
-    program = create_test(config=args.config, blender=args.blender, bundle=args.bundle, rebuild=args.rebuild)
+    program = create_test(config=args.config, blender=args.blender, bundle=args.bundle, rebuild=args.rebuild,
+                          scene=args.scene)
     run_preview(program, **WINDOW, frame_limit=args.frames)
     if program.error:
         raise SystemExit(1)

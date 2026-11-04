@@ -53,9 +53,10 @@ def find_blender(explicit=None):
 
 
 class AssetBuild:
-    def __init__(self, config_path, *, blender=None, output_root=None):
+    def __init__(self, config_path, *, blender=None, output_root=None, source_blend=None):
         self.config_path = Path(config_path).resolve()
         self.blender = blender
+        self.source_blend = Path(source_blend).resolve() if source_blend else None
         self.output_root = Path(output_root or ROOT / 'output/asset_load_test').resolve()
         self.process = None
         self.log = None
@@ -76,16 +77,21 @@ class AssetBuild:
             bundle = SpriteBundle.load(path)
             metadata = json.loads(path.read_text(encoding='utf-8'))
             if (bundle.config_sha256 == hashlib.sha256(self.config_path.read_bytes()).hexdigest()
-                    and metadata.get('pipeline_sha256') == pipeline_signature()):
+                    and metadata.get('pipeline_sha256') == pipeline_signature()
+                    and metadata.get('source_sha256') == self.source_signature()):
                 return path
         except (OSError, ValueError, KeyError, TypeError):
             pass
         return None
 
+    def source_signature(self):
+        return hashlib.sha256(self.source_blend.read_bytes()).hexdigest() if self.source_blend else None
+
     def start(self):
         if self.process is not None:
             raise RuntimeError('이미 진행 중인 빌드다.')
         executable = find_blender(self.blender)
+        self.source_sha256 = self.source_signature()
         stamp = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%SZ') + '-' + uuid4().hex[:8]
         self.directory = self.output_root / stamp
         self.directory.mkdir(parents=True)
@@ -95,6 +101,8 @@ class AssetBuild:
         command = [str(executable), '--background', '--factory-startup', '--python-exit-code', '1',
                    '--python', str(Path(__file__).with_name('render_asset_sample.py')), '--',
                    '--config', str(config), '--output', str(self.directory), '--work-file', str(work_file)]
+        if self.source_blend:
+            command.extend(('--source-blend', str(self.source_blend)))
         self.error, self.result = None, None
         self.log = (self.directory / 'blender.log').open('wb')
         try:
@@ -123,6 +131,7 @@ class AssetBuild:
             result = pack_rendered_frames(self.directory / 'rendered_frames.json')
             metadata = json.loads(result.read_text(encoding='utf-8'))
             metadata['pipeline_sha256'] = pipeline_signature()
+            metadata['source_sha256'] = self.source_sha256
             result.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding='utf-8')
             SpriteBundle.load(result)
             pointer = self.output_root / 'latest.json'

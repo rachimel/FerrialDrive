@@ -18,6 +18,7 @@ def pack_rendered_frames(source):
         raise ValueError('이 샘플은 같은 프레임 수의 8방향이 필요하다.')
     sheet_width, sheet_height = width * columns, height * len(directions)
     report = []
+    animation_name = data.get('animation_name', 'walk')
     for layer in ('body', 'shadow'):
         sheet = pico.SDL_CreateRGBSurfaceWithFormat(0, sheet_width, sheet_height, 32, pico.SDL_PIXELFORMAT_RGBA32)
         if not sheet:
@@ -61,7 +62,7 @@ def pack_rendered_frames(source):
                         pico.SDL_FreeSurface(surface)
                     frames.append({'rect': [column * width, sheet_height - (row_index + 1) * height, width, height],
                                    'pivot': data['pivot']})
-                animations.append({'name': f'walk/{row["id"]}', 'fps': data['fps'], 'frames': frames})
+                animations.append({'name': f'{animation_name}/{row["id"]}', 'fps': data['fps'], 'frames': frames})
             sheet_path = source.parent / f'{layer}.png'
             if pico.IMG_SavePNG(sheet, str(sheet_path).encode('utf-8')) != 0:
                 raise OSError('PNG 시트 저장 실패')
@@ -72,7 +73,7 @@ def pack_rendered_frames(source):
                    'animations': animations, 'event_bindings': {}}
         (source.parent / f'{layer}.json').write_text(json.dumps(project, ensure_ascii=False, indent=2), encoding='utf-8')
     bundle = {'version': 1, 'asset_id': data['asset_id'], 'body': 'body.json', 'shadow': 'shadow.json',
-              'directions': {row['id']: f'walk/{row["id"]}' for row in directions},
+              'directions': {row['id']: f'{animation_name}/{row["id"]}' for row in directions},
               'config_sha256': data['config_sha256'], 'blender_version': data['blender_version']}
     (source.parent / 'pixel_report.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     result = source.parent / 'bundle.json'

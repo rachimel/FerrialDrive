@@ -10,16 +10,21 @@ Python·Pico2D와 Blender가 필요하다. 현재 검증 환경은 `game2d` Pyth
 - 직접 실행: 프로젝트 루트에서 `python tests/asset_load_test.py`.
 - 최초 실행은 별도 백그라운드 Blender를 시작한다. 편집 중인 Blender 창·장면에는 연결하지 않는다.
 - Windows에서는 Runner의 재드롭·종료로 테스트가 강제 종료될 때도 소유한 Blender 프로세스가 함께 정리되도록 관리한다. 다른 Blender 창은 대상이 아니다.
-- 다음 실행은 설정·렌더/패킹 코드가 같은 마지막 성공 결과를 재사용한다. **R** 또는 `--rebuild`로 새 작업본부터 다시 만든다. `R`은 사용자가 편집한 기존 `.blend`를 수정하는 기능이 아니다.
+- 다음 실행은 설정·렌더/패킹 코드·입력 장면 파일이 같은 마지막 성공 결과를 재사용한다. **R** 또는 `--rebuild`로 별도 작업본부터 다시 렌더한다. `--scene`이 있으면 원본을 다시 읽으며 원본 파일은 덮어쓰지 않는다. 없으면 기본 도형을 재생성한다.
 - Blender 자동 탐색은 `--blender`, `BLENDER_EXECUTABLE`, PATH, Windows 설치 정보·기본 설치 위치 순서다. 설치되지 않았다면 경로 오류를 표시한다. 대체 도형을 런타임에 그려 성공으로 보이지 않는다.
 
 ```powershell
 python tests/asset_load_test.py --blender "설치 폴더/blender.exe" --rebuild
 python tests/asset_load_test.py --build-only
+python tests/asset_load_test.py --scene "입력 장면.blend" --config "렌더 설정.json" --rebuild
 python tests/asset_load_test.py --bundle "output/asset_load_test/<생성된 폴더>/bundle.json"
 ```
 
 `--bundle`은 이미지·메타데이터만 읽으며 Blender가 필요 없다. `--frames 3`은 자동 실행 확인용 프레임 제한이다. 다른 작업 폴더에서 실행할 때도 스크립트·기본 샘플 경로는 스크립트 위치를 기준으로 찾는다.
+
+`--scene` 입력은 `ActorRoot` 아래에 본체 메시를 두고 `ShadowCatcher`와 카메라가 설정된 장면이다. 프레임은 지정한 장면의 애니메이션에서 추출한다. 설정의 `animation_name`으로 `idle` 등의 동작 이름을 지정하며 생략 시 `walk`를 사용한다. 임의 장면의 자동 리깅·카메라 자동 배치는 수행하지 않는다.
+
+후속 그림자 개선: 최초 샘플의 8 samples·큰 광원에서 보인 노이즈를 줄이기 위해 기본값을 본체 64 / 그림자 128 samples·denoise·광원 크기 0.6으로 조정했다. 실제 기체 비교본은 같은 경로에서 본체 128 / 그림자 256을 사용했다.
 
 ## 조작과 기대 결과
 
