@@ -40,6 +40,8 @@ class LauncherTests(unittest.TestCase):
         cls.tool_dir = cls.directory / "툴 공백 & ! ' 100%" / "unit_test_runner"
         shutil.copytree(ROOT / "Tools/unit_test_runner", cls.tool_dir,
                         ignore=shutil.ignore_patterns("workspace", "__pycache__"))
+        shutil.copytree(ROOT / "Tools/theme_reference", cls.tool_dir.parent / "theme_reference",
+                        ignore=shutil.ignore_patterns("__pycache__"))
         cls.launcher = cls.tool_dir / "desktop_launcher.py"
         cls.environment = os.environ.copy()
         cls.environment.update({"PYTHONUTF8": "1", "SDL_VIDEODRIVER": "dummy",
@@ -114,7 +116,7 @@ class LauncherTests(unittest.TestCase):
                                   cwd=self.directory, env=self.environment, capture_output=True,
                                   text=True, encoding="utf-8", timeout=30)
         self.assertEqual(creation.returncode, 0, creation.stderr)
-        shortcut = self.tool_dir / "workspace/Unit Test Runner.lnk"
+        shortcut = self.tool_dir.parents[1] / "Unit Test Runner.lnk"
         self.assertTrue(shortcut.is_file())
         path = self.fixture("바로가기 공백 & 느낌! ' 100%.py")
         environment = self.environment.copy()

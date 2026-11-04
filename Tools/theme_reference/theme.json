@@ -1,0 +1,18 @@
+{
+  "name": "Ferrial Drive · Steel Blue / Bezel",
+  "colors": {
+    "background": "#091217", "panel": "#101F27", "panel_surface": "#39444A",
+    "line": "#2D4B55", "accent": "#91AEBB", "text": "#D8E6ED", "muted": "#B7CDDA",
+    "disabled": "#708894", "selected": "#1B3941", "error": "#F18775", "error_surface": "#2A1C21",
+    "button": "#7E98A5", "button_hover": "#A6C0CC", "button_text": "#17242B",
+    "warning": "#E4B36C", "user_bubble": "#1B3941", "ai_bubble": "#172A35", "input": "#0B1920"
+  },
+  "fonts": {
+    "title": {"path": "Cafe24Ohsquare-v2.0/Cafe24Ohsquare-v2.0.otf", "size": 20},
+    "body": {"path": "s_core_dream/SCDream4.otf", "size": 18},
+    "small": {"path": "s_core_dream/SCDream4.otf", "size": 14}
+  },
+  "spacing": {"outer": 16, "panel_gap": 12, "padding": 12, "line_height": 24, "border": 1},
+  "roles": {"focus": "accent", "selection": "selected", "unknown": "warning", "failure": "error",
+            "plate_outline": false, "card_opposite_corners": ["top_left", "bottom_right"]}
+}

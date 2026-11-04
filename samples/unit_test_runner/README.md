@@ -16,7 +16,7 @@
 python Tools/unit_test_runner/run.py
 ```
 
-열린 Python GUI 창에 `basic_flow.py`를 드롭한다. 바로가기를 생성한 환경에서는 `Tools/unit_test_runner/workspace/Unit Test Runner.lnk`를 더블클릭해 같은 GUI를 열 수 있다. [실행기 안내](../../Tools/unit_test_runner/README.md)를 따른다. 기존 인자 직접 실행은 `python Tools/unit_test_runner/run.py samples/unit_test_runner/basic_flow.py`로 유지한다.
+열린 Python GUI 창에 `basic_flow.py`를 드롭한다. 프로젝트 루트의 `Unit Test Runner.lnk`를 더블클릭해 같은 GUI를 열 수 있다. 시작 폴더는 `tests/`이며 목록의 `basic_flow.py`도 더블클릭해 실행한다. [실행기 안내](../../Tools/unit_test_runner/README.md)를 따른다. 기존 인자 직접 실행은 `python Tools/unit_test_runner/run.py samples/unit_test_runner/basic_flow.py`로 유지한다.
 
 1. 1280×720 창에 녹색 강조의 **시작 화면**과 경과 시간이 나온다.
 2. **다음 화면**을 좌클릭하면 주황색 강조의 **두 번째 화면**으로 교체된다. 화면별 경과 시간은 새로 시작한다.

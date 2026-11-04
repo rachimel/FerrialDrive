@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "Tools"))
 
 from unit_test_runner.events import FilesDropped
+from unit_test_runner.browser import BrowserEntry
 from unit_test_runner.gui import DropSession, DropView, LAUNCHER_WINDOW, run_gui, summarize_failure
 from unit_test_runner.processes import LaunchPlan
 from unit_test_runner.runner import PicoWindow
@@ -63,6 +64,9 @@ class Backend:
     def present(self):
         self.log.append("window.present")
 
+    def raise_window(self):
+        self.log.append("window.raise")
+
     def close(self):
         self.log.append("window.close")
 
@@ -71,7 +75,7 @@ class View:
     def __init__(self, backend):
         self.log = backend.log
 
-    def idle(self, active_path=None):
+    def browser(self, browser, active_path=None):
         self.log.append("view.idle")
 
     def error(self, message):
@@ -83,6 +87,16 @@ class View:
 
 
 class GuiTests(unittest.TestCase):
+    def test_partial_font_load_failure_releases_fonts_already_opened(self):
+        closed = []
+        pico = SimpleNamespace(TTF_CloseFont=closed.append)
+        backend = SimpleNamespace(pico=pico)
+        with patch.object(pico, "load_font", create=True,
+                          side_effect=[SimpleNamespace(font="opened"), RuntimeError("폰트 오류")]):
+            with self.assertRaisesRegex(RuntimeError, "폰트 오류"):
+                DropView(backend)
+        self.assertEqual(closed, ["opened"])
+
     def test_exception_summary_precedes_traceback_location(self):
         detail = ('Traceback (most recent call last):\n'
                   '  File "C:\\workspace\\config.py", line 47, in __init__\n'
@@ -100,6 +114,46 @@ class GuiTests(unittest.TestCase):
         self.assertLessEqual(len(lines), 6)
         self.assertTrue(all(view._text_width(line) <= 160 for line in lines))
         self.assertTrue(lines[-1].endswith("…"))
+
+    def test_browser_renders_disabled_file_reason_without_toolbar_buttons(self):
+        view = DropView.__new__(DropView)
+        view.backend = SimpleNamespace(spec=LAUNCHER_WINDOW)
+        view.pico = SimpleNamespace(renderer=object(), SDL_SetRenderDrawColor=lambda *args: None,
+                                    SDL_RenderClear=lambda *args: None)
+        labels, fills = [], []
+        view._label = lambda *args, **kwargs: labels.append(args)
+        view._fill = lambda *args: fills.append(args)
+        view._text_width = lambda text, role="body": len(text) * 10
+        entry = BrowserEntry(Path("helper.py"), False, reason="진입점 없음",
+                             title="보조 파일", description="테스트 설명을 표시한다.")
+        browser = SimpleNamespace(directory=ROOT / "tests", selected=entry, entries=[entry],
+                                  selected_index=0, offset=0, visible_rows=11)
+        view.browser(browser)
+        self.assertTrue(any(label[0] == "실행 불가" for label in labels))
+        self.assertTrue(any("진입점 없음" in label[0] for label in labels))
+        self.assertTrue(any(label[0] == "보조 파일" for label in labels))
+        self.assertTrue(any(label[0] == "테스트 설명을 표시한다." for label in labels))
+        self.assertFalse(any(label[0] in ("선택 실행", "상위 폴더", "새로고침") for label in labels))
+        self.assertTrue(any(fill[1] == 155 and fill[3] == 1 for fill in fills))
+        regions = {(fill[1], fill[3]) for fill in fills if fill[0] == 16 and fill[2] == 1248}
+        self.assertTrue({(12, 72), (96, 424), (532, 108), (652, 60)} <= regions)
+        self.assertLessEqual(view._text_width(view._fit_text("long filename.py", 80)), 80)
+
+    def test_text_center_is_independent_of_font_size(self):
+        draws = []
+        view = DropView.__new__(DropView)
+        view.backend = SimpleNamespace(spec=LAUNCHER_WINDOW)
+        view.fonts = {role: SimpleNamespace(draw=lambda *args: draws.append(args))
+                      for role in ("title", "body")}
+        view._fit_text = lambda text, width, role: text
+        for role in view.fonts:
+            view._label("정렬", 32, 100, (255, 255, 255), 200, role=role)
+        self.assertEqual([draw[:2] for draw in draws], [(32, 620), (32, 620)])
+
+    def test_initial_directory_is_project_tests(self):
+        with patch("unit_test_runner.gui.FileBrowser") as browser:
+            run_gui(backend=Backend([], [["close"]]), view_factory=View)
+        self.assertEqual(browser.call_args.args[0], ROOT / "tests")
 
     def session(self, log):
         children = {}
@@ -196,10 +250,25 @@ class GuiTests(unittest.TestCase):
             with patch.object(session, "drop"):
                 run_gui(backend=backend, view_factory=View, frame_limit=2)
         self.assertEqual(log.count("window.open"), 1)
+        self.assertEqual(log.count("window.raise"), 1)
         self.assertEqual(log.count("sample.py.close"), 1)
         self.assertEqual(log.count("view.idle"), 2)
         self.assertNotIn("window.resize", log)
         self.assertEqual(log[-2:], ["view.close", "window.close"])
+
+    def test_failed_child_raises_runner_once_and_running_child_does_not(self):
+        log = []
+        session, children = self.session(log)
+        session.drop((Path("broken.py"),))
+        class CompletingBackend(Backend):
+            def present(self):
+                super().present()
+                children["broken.py"].returncode = 1
+
+        with patch("unit_test_runner.gui.DropSession", return_value=session):
+            run_gui(backend=CompletingBackend(log), view_factory=View, frame_limit=3)
+        self.assertEqual(log.count("window.raise"), 1)
+        self.assertLess(log.index("window.present"), log.index("window.raise"))
 
     def test_window_close_does_not_draw_another_frame(self):
         log = []

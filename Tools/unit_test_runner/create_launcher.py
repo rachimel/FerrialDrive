@@ -14,7 +14,7 @@ def create_launcher(destination: Path | None = None) -> Path:
         raise RuntimeError("현재 Python 환경에 Pico2D 설치가 필요하다.")
     tool_dir = Path(__file__).resolve().parent
     destination = (destination if destination is not None
-                   else tool_dir / "workspace" / "Unit Test Runner.lnk").resolve()
+                   else tool_dir.parents[1] / "Unit Test Runner.lnk").resolve()
     if destination.suffix.lower() != ".lnk":
         raise ValueError("바로가기 경로는 .lnk 파일이어야 한다.")
     destination.parent.mkdir(parents=True, exist_ok=True)

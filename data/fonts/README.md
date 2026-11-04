@@ -20,10 +20,12 @@ Cafe24는 [공식 배포처](https://fonts.cafe24.com/)와 배포 패키지의 �
 - `Cafe24Ohsquare-v2.0/Cafe24Ohsquare-v2.0.otf`: 일시정지 제목 전용 26px. Air보다 굵은 일반형이며 Bold라는 별도 굵기 파일을 지정한 것은 아니다. [공식 일반형 패키지](https://img.cafe24.com/csdstatic/freefonts/download/kr/Cafe24Ohsquare-v2.0.zip)를 2026-11-03 받아 원본 OTF를 사용하고 패키지와 바이트 일치를 확인했다. 동봉 안내는 `docs/licenses/License-Ohsquare.pdf`다.
 - `학교안심 운동장/HakgyoansimUndongjangOTFL.otf`: HIT 숫자 76px·이번 피해 숫자 36px·누적 DAMAGE 숫자 60px. 사용자 제공 OTF 원본을 유지한다. 저작권자는 KERIS, 제작사는 디자인210이다.
 - `s_core_dream/SCDream6.otf`(Bold): HUD의 TARGET 14px.
-- `s_core_dream/SCDream5.otf`(Medium): 전투 HUD 제목.
+- `s_core_dream/SCDream5.otf`(Medium): 전투 HUD 제목·로드아웃 번호 14px·잔탄수 48px. 비사용 무기의 잔탄은 0.5배로 축소한다.
 - `s_core_dream/SCDream4.otf`(Regular): 적 이름 18px·HUD 본문·버튼·설명·HIT/DAMAGE 레이블 18px.
 
 `s_core_dream/`에는 SCDream2~6와 `LICENSE.txt`를 보관한다. [공식 배포처](https://s-core.co.kr/company/font/)의 `S-Core_Dream_OTF.zip` 원본 파일이다. 역할별 경로·크기는 `samples/ui_unit_test/ui_config.json`에서 설정한다. 이전 Cafe24 PRO Slim Fit·Max는 현재 UI에서 참조하지 않는다.
+
+Unit Test Runner도 같은 역할을 적용한다. 실행기·소개 제목은 굵기가 더 있는 Cafe24 써라운드 일반형 20px, 목록·파일명·경로·소개·상태·오류는 SCDream4 Regular 18px다. 상단 버튼은 후속 요청으로 제거했다. 설정은 `Tools/unit_test_runner/theme.py`에 두고 프로젝트 폰트 원본을 직접 읽는다. Runner만 복사해 폰트가 없는 환경은 Pico2D 기본 글꼴로 대체한다. game2d의 SDL dummy 화면 추출로 글꼴 배치를 확인했으며 실제 데스크톱 직접 조작은 확인 전이다.
 
 ## 배포 범위와 확인 상태
 

@@ -1,6 +1,7 @@
 """명시한 테스트 .py 하나를 읽는다. 자동 탐색이나 등록 목록은 사용하지 않는다."""
 
 import importlib.util
+from importlib.machinery import SourceFileLoader
 from pathlib import Path
 import sys
 
@@ -9,10 +10,10 @@ from .interface import TestProgram, WindowSpec
 
 def load_test(path: Path) -> tuple[TestProgram, WindowSpec]:
     path = path.resolve()
-    if not path.is_file() or path.suffix != ".py":
+    if not path.is_file() or path.suffix.lower() != ".py":
         raise ValueError("실행할 테스트 .py 파일이 필요하다.")
     name = "_unit_test_program"
-    spec = importlib.util.spec_from_file_location(name, path)
+    spec = importlib.util.spec_from_file_location(name, path, loader=SourceFileLoader(name, str(path)))
     if spec is None or spec.loader is None:
         raise ImportError(f"테스트를 불러올 수 없다: {path}")
     module = importlib.util.module_from_spec(spec)

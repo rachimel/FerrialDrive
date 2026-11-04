@@ -52,10 +52,11 @@ class TestHost:
 
 
 class PicoWindow:
-    def __init__(self, accept_files=False):
+    def __init__(self, accept_files=False, accept_text=False):
         self.pico = None
         self.spec = None
         self.accept_files = accept_files
+        self.accept_text = accept_text
         self._drop_files = []
         self._drop_active = False
 
@@ -76,6 +77,8 @@ class PicoWindow:
             for event_type in (pico.SDL_DROPBEGIN, pico.SDL_DROPFILE, pico.SDL_DROPCOMPLETE):
                 pico.SDL_EventState(event_type, pico.SDL_ENABLE)
             self._set_title()
+            if self.accept_text:
+                pico.SDL_StartTextInput()
         except BaseException:
             self.close()
             raise
@@ -98,14 +101,23 @@ class PicoWindow:
             if raw.type == pico.SDL_QUIT:
                 events.append(event)
             elif raw.type in (pico.SDL_KEYDOWN, pico.SDL_KEYUP):
-                if not raw.key.repeat:
+                if not raw.key.repeat or self.accept_text:
                     event.key = raw.key.keysym.sym
+                    event.mod = raw.key.keysym.mod
+                    event.repeat = bool(raw.key.repeat)
                     events.append(event)
+            elif self.accept_text and raw.type == pico.SDL_TEXTINPUT:
+                event.text = bytes(raw.text.text).split(b"\0", 1)[0].decode("utf-8", errors="replace")
+                events.append(event)
+            elif self.accept_text and raw.type == pico.SDL_TEXTEDITING:
+                event.text = bytes(raw.edit.text).split(b"\0", 1)[0].decode("utf-8", errors="replace")
+                events.append(event)
             elif raw.type == pico.SDL_MOUSEMOTION:
                 event.x, event.y = raw.motion.x, raw.motion.y
                 events.append(event)
             elif raw.type in (pico.SDL_MOUSEBUTTONDOWN, pico.SDL_MOUSEBUTTONUP):
                 event.button = raw.button.button
+                event.clicks = raw.button.clicks
                 event.x, event.y = raw.button.x, raw.button.y
                 events.append(event)
             elif raw.type == pico.SDL_MOUSEWHEEL:
@@ -154,9 +166,14 @@ class PicoWindow:
     def present(self):
         self.pico.update_canvas()
 
+    def raise_window(self):
+        self.pico.SDL_RaiseWindow(self.pico.window)
+
     def close(self):
         if self.pico is not None:
             pico, self.pico = self.pico, None
+            if self.accept_text:
+                pico.SDL_StopTextInput()
             pico.close_canvas()
 
 

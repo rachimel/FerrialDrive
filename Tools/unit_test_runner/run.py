@@ -13,7 +13,7 @@ from unit_test_runner.processes import run_file
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="독립 테스트 .py를 Pico2D 창에서 실행한다.")
-    parser.add_argument("test_file", type=Path, nargs="?", help="테스트 .py 경로. 생략하면 드롭 GUI 실행")
+    parser.add_argument("test_file", type=Path, nargs="?", help="테스트 .py 경로. 생략하면 파일 탐색 GUI 실행")
     parser.add_argument("--frames", type=int, default=None, help="자동 확인용 최대 프레임 수")
     args = parser.parse_args(argv)
     if args.frames is not None and args.frames <= 0:
