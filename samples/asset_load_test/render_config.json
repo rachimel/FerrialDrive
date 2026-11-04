@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "asset_id": "sample_mech",
+  "frame_size_pixels": [160, 160],
+  "frames": [1, 3, 5, 7],
+  "fps": 8,
+  "directions": [
+    {"id": "e", "heading_degrees": 0},
+    {"id": "ne", "heading_degrees": 45},
+    {"id": "n", "heading_degrees": 90},
+    {"id": "nw", "heading_degrees": 135},
+    {"id": "w", "heading_degrees": 180},
+    {"id": "sw", "heading_degrees": 225},
+    {"id": "s", "heading_degrees": 270},
+    {"id": "se", "heading_degrees": 315}
+  ],
+  "camera": {"position": [0, -8, 6], "target": [0, 0, 0.5], "ortho_scale": 4.5},
+  "light": {"position": [-3, -4, 7], "energy": 700, "size": 2.5},
+  "render": {"engine": "CYCLES", "samples": 8, "seed": 17},
+  "note": "파이프라인 확인용 기본 도형·짧은 동작. 게임의 최종 규격이 아니다."
+}

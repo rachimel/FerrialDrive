@@ -1662,7 +1662,13 @@ class App:
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--smoke", type=int, default=0, metavar="FRAMES")
+    parser.add_argument("--pack-prerender", type=Path, metavar="RENDERED_FRAMES_JSON",
+                        help="Blender 프레임을 8방향 시트·SSheetCutil 호환 JSON으로 패킹")
     args = parser.parse_args()
+    if args.pack_prerender:
+        from blender_pipeline.pack_sprites import pack_rendered_frames
+        print(pack_rendered_frames(args.pack_prerender))
+        return
     if args.smoke < 0:
         parser.error("--smoke 값은 0 이상이어야 합니다.")
     p.open_canvas(WIDTH, HEIGHT)

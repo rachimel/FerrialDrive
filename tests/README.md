@@ -8,4 +8,6 @@
 
 `basic_flow.py`는 바로 확인하기 위해 `samples/unit_test_runner/basic_flow.py`를 복사한 샘플이다. 독립 실행 규약은 [공통 실행기 안내](../Tools/unit_test_runner/README.md)를 따른다.
 
-자동 검사 코드는 `automated/`에 분리했다. GUI에 드롭할 파일은 `ui_test.py` 또는 공통 실행기 최소 샘플 `basic_flow.py`다. 바로가기는 현재 로컬 Python에 연결되며 Git에서 제외한다.
+`asset_load_test.py`는 기본 도형의 실제 Blender 8방향 렌더·본체/그림자 시트 생성·Pico2D 로딩을 확인한다. Runner 목록에서 선택하거나 창에 드롭한다. 최초 생성에 Blender가 필요하며 설정이 같은 다음 실행은 성공 결과를 재사용한다. R로 다시 생성하고 Space·방향 카드·본체/그림자 토글로 확인한다. [샘플과 실행 안내](../samples/asset_load_test/README.md)를 따른다.
+
+자동 검사 코드는 `automated/`에 분리했다. GUI에 드롭할 파일은 `ui_test.py`, `asset_load_test.py` 또는 공통 실행기 최소 샘플 `basic_flow.py`다. 바로가기는 현재 로컬 Python에 연결되며 Git에서 제외한다.
