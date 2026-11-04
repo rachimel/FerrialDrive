@@ -121,6 +121,8 @@ class UiTest:
         self.damage_numbers = DamageNumbers(animation["damage_duration_seconds"],
                                             animation["damage_scatter_x_pixels"],
                                             animation["damage_scatter_y_pixels"],
+                                            measure_text=self.damage_text_size,
+                                            **self.config.data["damage_popup"],
                                             width_expand_seconds=animation["damage_width_expand_seconds"],
                                             height_expand_seconds=animation["damage_height_expand_seconds"])
         counter_config = self.config.data["damage_counter"]
@@ -180,6 +182,13 @@ class UiTest:
     def target_health_ratio(self):
         target = self.sample.state.target
         return target.health.ratio if target is not None else 0.0
+
+    def damage_text_size(self, text):
+        if self.renderer is not None:
+            return self.renderer.text_size(text, "damage_number")
+        # 창 없는 상태 검사의 임시 치수다. 실제 실행은 로드한 글꼴로 측정한다.
+        size = self.config.font_sizes["damage_number"]
+        return len(text) * size, size
 
     def sync_health_trails(self):
         self.player_health_trail.set_ratio(self.sample.state.player_health.ratio)
@@ -308,7 +317,8 @@ class UiTest:
             if owner == "target" and applied > 0:
                 self.counter_visibility.show()
             x, y = self.config.actor_anchor(owner)
-            self.damage_numbers.add(owner, applied, x, y)
+            travel = 0 if owner == "player" else self.config.data["animation"]["slide_pixels"]
+            self.damage_numbers.add(owner, applied, x, y, offset_x_range=(0, travel))
         else:
             raise ValueError(f"UI 동작 없음: {action}")
         return None

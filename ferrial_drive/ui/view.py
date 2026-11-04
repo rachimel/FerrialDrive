@@ -256,19 +256,20 @@ class UiView:
         r, c = self.renderer, self.config
         text = str(visual.amount)
         width, height = r.text_size(text, "damage_number")
+        scale = visual.font_scale
         x = visual.x + (0 if visual.owner == "player" else offset_x)
-        center_y = visual.y + height / 2
+        center_y = visual.y + height * scale / 2
         alpha = opacity * visual.opacity
         if visual.height_progress == 0:
             # 가로가 펼쳐지거나 접히는 동안에는 정확히 1px 높이의 선을 유지한다.
-            line_width = max(1, width * visual.width_progress)
+            line_width = max(1, width * scale * visual.width_progress)
             r.rect(Rect(x - line_width / 2, center_y - 0.5, line_width, 1),
                    c.colors["damage_number"], alpha)
             return
-        draw_height = 1 + (height - 1) * visual.height_progress
+        draw_height = 1 + (height * scale - 1) * visual.height_progress
         r.text(text, x, center_y - draw_height / 2, "damage_number",
                c.colors["damage_number"], alpha, align="center",
-               scale_x=visual.width_progress, scale_y=draw_height / height)
+               scale_x=scale * visual.width_progress, scale_y=draw_height / height)
 
     def equipment(self, state, opacity, offset_x, ranged_weight=None, *,
                   swap_visual=None, loadout_visual=None):
