@@ -46,6 +46,27 @@ class RadarContact:
 
 
 @dataclass(frozen=True)
+class WeaponInfo:
+    name: str
+    rounds: int | None = None
+    image_path: str | None = None
+
+    def __post_init__(self):
+        if self.rounds is not None and (type(self.rounds) is not int or self.rounds < 0):
+            raise ValueError("잔탄수는 0 이상의 정수 또는 None이어야 한다.")
+
+
+@dataclass(frozen=True)
+class LoadoutInfo:
+    melee: WeaponInfo
+    ranged: WeaponInfo
+
+    def __post_init__(self):
+        if self.melee.rounds is not None or self.ranged.rounds is None:
+            raise ValueError("근접 무기는 잔탄이 없고 원거리 무기는 잔탄수가 필요하다.")
+
+
+@dataclass(frozen=True)
 class HudState:
     player_health: Health
     target: TargetInfo | None
@@ -53,9 +74,19 @@ class HudState:
     total_damage_dealt: int
     radar_contacts: tuple[RadarContact, ...]
     attack_direction_x: int = 1
+    loadouts: tuple[LoadoutInfo, ...] = ()
+    active_loadout_index: int = 0
+    active_weapon_kind: str = "ranged"
 
     def __post_init__(self):
         if self.combo_count < 0 or self.total_damage_dealt < 0:
             raise ValueError("콤보와 누적 피해는 음수일 수 없다.")
         if self.attack_direction_x not in (-1, 1):
             raise ValueError("공격 좌우 방향은 왼쪽 -1 또는 오른쪽 1이어야 한다.")
+        if len(self.loadouts) > 2:
+            raise ValueError("로드아웃은 최대 2세트다.")
+        if (type(self.active_loadout_index) is not int
+                or not 0 <= self.active_loadout_index < max(1, len(self.loadouts))):
+            raise ValueError("활성 로드아웃 번호가 표시 세트 범위를 벗어났다.")
+        if self.active_weapon_kind not in ("melee", "ranged"):
+            raise ValueError("현재 무기는 melee 또는 ranged여야 한다.")

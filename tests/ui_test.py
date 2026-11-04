@@ -1,4 +1,8 @@
-"""Runner 없이 직접 실행하는 메뉴·전투 HUD 미리보기."""
+"""메뉴·전투 HUD
+
+타이틀부터 전투까지 이어지는 화면 흐름과 정보의 가독성을 확인한다.
+체력·피격·레이더·무장 전환을 샘플 상태로 살펴본다.
+"""
 
 from dataclasses import replace
 import json
@@ -10,16 +14,19 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from ferrial_drive.diagnostics import TimingRecorder
+from ferrial_drive.ui.auto_hide import AutoHidePanel
 from ferrial_drive.ui.components import ButtonInput, InputResult, Rect
 from ferrial_drive.ui.config import UiConfig
 from ferrial_drive.ui.counter import CounterVisibility, RollingCounter
 from ferrial_drive.ui.damage import DamageNumbers
 from ferrial_drive.ui.health import HealthTrail
+from ferrial_drive.ui.loadout_slide import LoadoutSlide
 from ferrial_drive.ui.pause import PauseState
 from ferrial_drive.ui.pico_renderer import PicoRenderer
-from ferrial_drive.ui.state import Health, HudState, RadarContact, TargetInfo
+from ferrial_drive.ui.state import Health, HudState, LoadoutInfo, RadarContact, TargetInfo, WeaponInfo
 from ferrial_drive.ui.transition import SceneTransition
 from ferrial_drive.ui.view import UiView
+from ferrial_drive.ui.weapon_swap import WeaponSwap
 
 
 CONFIG_PATH = PROJECT_ROOT / "samples/ui_unit_test/ui_config.json"
@@ -34,6 +41,7 @@ class SampleHud:
     """버튼으로 바꾸는 가짜 상태. 실제 게임의 피해·콤보 규칙이 아니다."""
 
     def __init__(self, path):
+        self.directory = path.resolve().parent
         self.preset = json.loads(path.read_text(encoding="utf-8"))
         self.reset()
 
@@ -45,7 +53,27 @@ class SampleHud:
         self.state = HudState(Health(**data["player_health"]), self.saved_target,
                               data["combo_count"], data["total_damage_dealt"],
                               tuple(RadarContact(**entry) for entry in data["radar_contacts"]),
-                              data["attack_direction_x"])
+                              data["attack_direction_x"],
+                              tuple(LoadoutInfo(self.weapon_info(entry["melee"]), self.weapon_info(entry["ranged"]))
+                                    for entry in data.get("loadouts", [])),
+                              data.get("active_loadout_index", 0),
+                              data.get("active_weapon_kind", "ranged"))
+
+    def weapon_info(self, entry):
+        weapon = WeaponInfo(**entry)
+        if weapon.image_path is not None:
+            weapon = replace(weapon, image_path=str((self.directory / weapon.image_path).resolve()))
+        return weapon
+
+    def switch_loadout(self):
+        if self.state.loadouts:
+            self.state = replace(self.state, active_loadout_index=(
+                self.state.active_loadout_index + 1) % len(self.state.loadouts))
+
+    def switch_weapon(self):
+        if self.state.loadouts:
+            kind = "melee" if self.state.active_weapon_kind == "ranged" else "ranged"
+            self.state = replace(self.state, active_weapon_kind=kind)
 
     def reset_counters(self):
         self.state = replace(self.state, combo_count=0, total_damage_dealt=0)
@@ -103,10 +131,17 @@ class UiTest:
         self.combo_counter = RollingCounter(counter_config["duration_seconds"],
                                             self.sample.state.combo_count, **counter_motion)
         self.counter_visibility = CounterVisibility(**self.config.data["counter_visibility"])
+        self.weapon_swap = WeaponSwap(self.sample.state.active_weapon_kind,
+                                      self.config.data["weapon_swap"]["duration_seconds"])
+        self.loadout_slide = LoadoutSlide(self.sample.state.active_loadout_index,
+                                         self.config.data["loadout_slide"]["duration_seconds"])
         health_duration = self.config.data["health_trail"]["duration_seconds"]
         self.player_health_trail = HealthTrail(health_duration, self.sample.state.player_health.ratio)
         self.target_health_trail = HealthTrail(health_duration, self.target_health_ratio())
         self.inputs = ButtonInput()
+        debug = self.config.data["debug_toolbar"]
+        self.debug_toolbar = AutoHidePanel(**{key: debug[key] for key in
+                                              ("hide_delay_seconds", "duration_seconds", "slide_pixels")})
         self._combat_buttons_key = None
         self._combat_buttons = ()
         self.last_input = InputResult()
@@ -120,6 +155,8 @@ class UiTest:
             for name, owner in (("transition", self.transition), ("damage", self.damage_numbers),
                                 ("hit_counter", self.combo_counter), ("damage_counter", self.damage_counter),
                                 ("counter_visibility", self.counter_visibility),
+                                ("weapon_swap", self.weapon_swap),
+                                ("loadout_slide", self.loadout_slide),
                                 ("player_health", self.player_health_trail),
                                 ("target_health", self.target_health_trail)):
                 self._profile_methods(owner, name, ("update",))
@@ -169,7 +206,13 @@ class UiTest:
 
     def change_scene(self, scene):
         self.inputs.reset()
+        self.debug_toolbar.hide()
         self.transition.request(scene)
+
+    def input_buttons(self, scene):
+        if scene == "combat" and not self.debug_toolbar.interactive:
+            return ()
+        return self.current_buttons(scene)
 
     def set_paused(self, opened):
         self.inputs.reset()
@@ -178,6 +221,11 @@ class UiTest:
     def handle_event(self, event):
         pico = self.pico
         self.last_input = InputResult()
+        if event.type == getattr(pico, "SDL_WINDOWEVENT", None):
+            if event.window_event in (pico.SDL_WINDOWEVENT_LEAVE, pico.SDL_WINDOWEVENT_FOCUS_LOST):
+                self.mouse = (-1, -1)
+                self.inputs.reset()
+            return None
         pointer = event.type in (pico.SDL_MOUSEMOTION, pico.SDL_MOUSEBUTTONDOWN, pico.SDL_MOUSEBUTTONUP)
         if pointer:
             self.mouse = (event.x, event.y)
@@ -197,17 +245,27 @@ class UiTest:
                     self.set_paused(False)
                 elif self.transition.target == "combat":
                     self.set_paused(True)
-                else:
-                    self.change_scene("combat")
             self.last_input = InputResult(consumed=True)
             return None
+        if (event.type == pico.SDL_KEYDOWN and not getattr(event, "repeat", False)
+                and self.transition.target == "combat" and not self.pause.opened):
+            if event.key in (pico.SDLK_e, pico.SDLK_f):
+                if event.key == pico.SDLK_f:
+                    self.sample.switch_loadout()
+                    self.loadout_slide.request(self.sample.state.active_loadout_index)
+                else:
+                    self.sample.switch_weapon()
+                    self.weapon_swap.request(self.sample.state.active_weapon_kind)
+                self.last_input = InputResult(consumed=True)
+                return None
         if not (event.type == pico.SDL_MOUSEMOTION or left_click):
             return None
         kind = "move" if event.type == pico.SDL_MOUSEMOTION else (
             "down" if event.type == pico.SDL_MOUSEBUTTONDOWN else "up")
         scene = "pause" if self.pause.opened else self.transition.target
         offset_x = 0 if scene == "pause" else self.transition.pose(scene).offset_x
-        result = self.inputs.handle(kind, *self.mouse, self.current_buttons(scene), offset_x)
+        offset_y = self.debug_toolbar.offset_y if scene == "combat" else 0
+        result = self.inputs.handle(kind, *self.mouse, self.input_buttons(scene), offset_x, offset_y)
         self.last_input = InputResult(consumed=True, action=result.action) if scene == "pause" else result
         if self.last_input.action is not None:
             return self.perform(self.last_input.action)
@@ -226,6 +284,8 @@ class UiTest:
             self.change_scene("menu")
         elif action == "reset":
             self.sample.reset()
+            self.weapon_swap.reset(self.sample.state.active_weapon_kind)
+            self.loadout_slide.reset(self.sample.state.active_loadout_index)
             self.damage_numbers.clear()
             self.damage_counter.reset(self.sample.state.total_damage_dealt)
             self.combo_counter.reset(self.sample.state.combo_count)
@@ -261,6 +321,10 @@ class UiTest:
             # 닫힘이 끝나는 프레임도 전투 시간에 더하지 않는다.
             return
         self.transition.update(delta_seconds)
+        self.weapon_swap.request(self.sample.state.active_weapon_kind)
+        self.weapon_swap.update(delta_seconds)
+        self.loadout_slide.request(self.sample.state.active_loadout_index)
+        self.loadout_slide.update(delta_seconds)
         self.damage_numbers.update(delta_seconds)
         self.damage_counter.set_value(self.sample.state.total_damage_dealt)
         self.damage_counter.update(delta_seconds)
@@ -276,11 +340,16 @@ class UiTest:
         if not self.transition.active:
             scene = self.transition.target
             pose = self.transition.pose(scene)
-            buttons = self.current_buttons(scene)
-            self.inputs.handle("move", *self.mouse, buttons, pose.offset_x)
             mouse_x, mouse_y = self.mouse
             width, height = self.config.window["width"], self.config.window["height"]
-            over_button = any(button.rect.contains(mouse_x - pose.offset_x, mouse_y, button.hit_padding)
+            if scene == "combat":
+                activation_height = self.config.data["debug_toolbar"]["activation_height_pixels"]
+                engaged = (0 <= mouse_x < width and height - activation_height <= mouse_y < height)
+                self.debug_toolbar.update(delta_seconds, engaged or self.inputs.pressed_id is not None)
+            buttons = self.input_buttons(scene)
+            offset_y = self.debug_toolbar.offset_y if scene == "combat" else 0
+            self.inputs.handle("move", *self.mouse, buttons, pose.offset_x, offset_y)
+            over_button = any(button.rect.contains(mouse_x - pose.offset_x, mouse_y - offset_y, button.hit_padding)
                               for button in buttons)
             if (scene == "combat" and not over_button
                     and 0 <= mouse_x < width and 0 <= mouse_y < height and mouse_x != width / 2):
@@ -321,9 +390,13 @@ class UiTest:
                                  counters_opacity=self.counter_visibility.opacity,
                                  cursor_position=self.crosshair_position,
                                  player_trailing_ratio=self.player_health_trail.trailing_ratio,
-                                 target_trailing_ratio=self.target_health_trail.trailing_ratio)
-                self.view.buttons("combat", self.inputs, pose.opacity, pose.offset_x,
-                                  self.current_buttons("combat"))
+                                 target_trailing_ratio=self.target_health_trail.trailing_ratio,
+                                 weapon_swap_visual=self.weapon_swap.visual,
+                                 loadout_visual=self.loadout_slide.visual)
+                if self.debug_toolbar.opacity > 0:
+                    self.view.buttons("combat", self.inputs, pose.opacity * self.debug_toolbar.opacity,
+                                      pose.offset_x, self.current_buttons("combat"),
+                                      offset_y=self.debug_toolbar.offset_y)
         if self.pause.opacity > 0:
             self.view.pause(self.pause.opacity, self.inputs)
 

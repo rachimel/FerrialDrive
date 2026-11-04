@@ -12,6 +12,9 @@ def _events(pico):
         event = pico.Event(raw.type)
         if raw.type == pico.SDL_QUIT:
             yield event
+        elif raw.type == pico.SDL_WINDOWEVENT:
+            event.window_event = raw.window.event
+            yield event
         elif raw.type in (pico.SDL_KEYDOWN, pico.SDL_KEYUP):
             if not raw.key.repeat:
                 event.key = raw.key.keysym.sym

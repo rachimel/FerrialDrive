@@ -5,6 +5,10 @@ from math import isfinite, sin, tau
 from typing import Callable
 
 
+def linear(progress: float) -> float:
+    return max(0.0, min(1.0, progress))
+
+
 def smooth_step(progress: float) -> float:
     progress = max(0.0, min(1.0, progress))
     return progress * progress * (3.0 - 2.0 * progress)
@@ -13,6 +17,13 @@ def smooth_step(progress: float) -> float:
 def ease_in_quad(progress: float) -> float:
     progress = max(0.0, min(1.0, progress))
     return progress * progress
+
+
+def ease_in_out_quint(progress: float) -> float:
+    progress = linear(progress)
+    if progress < 0.5:
+        return 16 * progress ** 5
+    return 1 - (-2 * progress + 2) ** 5 / 2
 
 
 def elastic_in_out(progress: float, period: float = 0.4) -> float:

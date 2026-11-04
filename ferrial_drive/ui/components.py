@@ -47,11 +47,12 @@ class ButtonInput:
         self.pressed_id = None
 
     def handle(self, kind: str, x: float, y: float,
-               buttons: Iterable[Button], offset_x: float = 0) -> InputResult:
+               buttons: Iterable[Button], offset_x: float = 0, offset_y: float = 0) -> InputResult:
         buttons = tuple(buttons)
         local_x = x - offset_x
+        local_y = y - offset_y
         hit = next((button for button in reversed(buttons)
-                    if button.rect.contains(local_x, y, button.hit_padding)), None)
+                    if button.rect.contains(local_x, local_y, button.hit_padding)), None)
         self.hovered_id = hit.button_id if hit and hit.enabled else None
         if kind == "move":
             return InputResult(self.pressed_id is not None)

@@ -1,12 +1,14 @@
 """Pico2D가 연 SDL 렌더러에 그리는 어댑터. 라이브러리 원본은 수정하지 않는다."""
 
 from collections import OrderedDict
+from contextlib import contextmanager
 from ctypes import byref, c_int, memmove
 from functools import lru_cache
 from math import ceil, cos, exp, floor, sin, sqrt, tau
 from pathlib import Path
 
 from .components import Rect
+from .weapon_icons import weapon_icon_pixels
 
 
 @lru_cache(maxsize=64)
@@ -44,6 +46,8 @@ class PicoRenderer:
         self.fonts = {}
         self.textures = OrderedDict()
         self.panel_textures = OrderedDict()
+        self.images = OrderedDict()
+        self.weapon_icons = {}
         self.measurements = OrderedDict()
         self.ascents = {}
         try:
@@ -75,15 +79,37 @@ class PicoRenderer:
         pico.SDL_SetRenderDrawColor(pico.renderer, *self.rgba(color, opacity))
         pico.SDL_RenderDrawLine(pico.renderer, round(x1), round(y1), round(x2), round(y2))
 
+    @contextmanager
+    def clip(self, rect):
+        """패널 경계에서 그리기를 잘라내고 중첩·예외 시에도 이전 영역을 복원한다."""
+        pico = self.pico
+        previous = pico.SDL_Rect()
+        enabled = pico.SDL_RenderIsClipEnabled(pico.renderer)
+        pico.SDL_RenderGetClipRect(pico.renderer, byref(previous))
+        left, top = ceil(rect.x), ceil(rect.y)
+        right, bottom = floor(rect.x + rect.width), floor(rect.y + rect.height)
+        if enabled:
+            left, top = max(left, previous.x), max(top, previous.y)
+            right = min(right, previous.x + previous.w)
+            bottom = min(bottom, previous.y + previous.h)
+        target = pico.SDL_Rect(left, top, max(0, right - left), max(0, bottom - top))
+        if pico.SDL_RenderSetClipRect(pico.renderer, byref(target)) != 0:
+            raise RuntimeError("패널 클리핑 영역 설정 실패")
+        try:
+            yield
+        finally:
+            pico.SDL_RenderSetClipRect(pico.renderer, byref(previous) if enabled else None)
+
     def metallic_rect(self, rect: Rect, color: str, opacity: float = 1, *,
                       contrast: float = 0.28, highlight_center=(0.5, 1.15),
-                      highlight_radius=(1.25, 1.3)):
+                      highlight_radius=(1.25, 1.3), corner_cut_ratio=(0.0, 0.0)):
         """넓은 방사형 광택을 저장해 패널마다 한 번의 복사로 그린다."""
         if opacity <= 0 or rect.width <= 0 or rect.height <= 0:
             return
         center_x, center_y = highlight_center
         radius_x, radius_y = highlight_radius
-        key = (color, contrast, center_x, center_y, radius_x, radius_y)
+        cut_x, cut_y = corner_cut_ratio
+        key = (color, contrast, center_x, center_y, radius_x, radius_y, cut_x, cut_y)
         pico = self.pico
         if key not in self.panel_textures:
             width, height = 128, 256
@@ -99,14 +125,20 @@ class PicoRenderer:
                     horizontal = tuple(((x / (width - 1) - center_x) / radius_x) ** 2
                                        for x in range(width))
                     for y in range(height):
+                        # 왼쪽 위와 오른쪽 아래 모서리를 같은 비율로 자른다.
+                        left_edge = (cut_x * width * max(0.0, 1 - (y + 0.5) / (cut_y * height))
+                                     if cut_y > 0 else 0.0)
+                        right_edge = width - (cut_x * width * max(
+                            0.0, 1 - (height - y - 0.5) / (cut_y * height)) if cut_y > 0 else 0.0)
                         vertical = ((y / (height - 1) - center_y) / radius_y) ** 2
                         row = bytearray()
-                        for distance_x in horizontal:
+                        for x, distance_x in enumerate(horizontal):
                             # 아래쪽 중심에서 부드럽게 어두워지는 넓은 광택을 만든다.
                             light = exp(-2 * (distance_x + vertical))
                             shade = 1 + contrast * (2 * light - 1)
                             row.extend(max(0, min(255, round(channel * shade))) for channel in base)
-                            row.append(255)
+                            coverage = max(0.0, min(1.0, x + 1 - left_edge, right_edge - x))
+                            row.append(round(255 * coverage))
                         memmove(surface.contents.pixels + y * surface.contents.pitch,
                                 bytes(row), width * 4)
                 finally:
@@ -253,6 +285,74 @@ class PicoRenderer:
         self.textures.move_to_end(key)
         return self.textures[key]
 
+    def image(self, path, rect, opacity=1, *, vertical_scale=1.0):
+        """무기 이미지는 비율을 유지하며 영역 중앙에 맞춘다."""
+        pico = self.pico
+        key = str(Path(path).resolve())
+        if key not in self.images:
+            surface = pico.IMG_Load(key.encode("utf-8"))
+            if not surface:
+                raise RuntimeError(f"무기 이미지 로드 실패: {key}")
+            try:
+                width, height = surface.contents.w, surface.contents.h
+                texture = pico.SDL_CreateTextureFromSurface(pico.renderer, surface)
+            finally:
+                pico.SDL_FreeSurface(surface)
+            if not texture:
+                raise RuntimeError(f"무기 이미지 텍스처 생성 실패: {key}")
+            pico.SDL_SetTextureBlendMode(texture, pico.SDL_BLENDMODE_BLEND)
+            self.images[key] = (texture, width, height)
+            if len(self.images) > 8:
+                _, (old_texture, _, _) = self.images.popitem(last=False)
+                pico.SDL_DestroyTexture(old_texture)
+        self.images.move_to_end(key)
+        texture, width, height = self.images[key]
+        if vertical_scale <= 0:
+            return
+        scale = min(rect.width / width, rect.height / vertical_scale / height)
+        draw_height = height * scale * vertical_scale
+        destination = pico.SDL_Rect(round(rect.x + (rect.width - width * scale) / 2),
+                                    round(rect.y + (rect.height - draw_height) / 2),
+                                    round(width * scale), round(draw_height))
+        pico.SDL_SetTextureAlphaMod(texture, self.rgba("#FFFFFF", opacity)[3])
+        pico.SDL_RenderCopy(pico.renderer, texture, None, byref(destination))
+
+    def weapon_silhouette(self, kind, rect, color, opacity, outline_color, outline_width):
+        """부품별 반올림 대신 합쳐 둔 원본을 일정 비율로 그린다."""
+        pico = self.pico
+        key = (kind, color, outline_color, outline_width)
+        if key not in self.weapon_icons:
+            width, height, pixels = weapon_icon_pixels(kind, _rgb(color), _rgb(outline_color), outline_width)
+            surface = pico.SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, pico.SDL_PIXELFORMAT_RGBA32)
+            if not surface:
+                raise RuntimeError("무기 실루엣 surface 생성 실패")
+            try:
+                if pico.SDL_LockSurface(surface) != 0:
+                    raise RuntimeError("무기 실루엣 surface 잠금 실패")
+                try:
+                    for y in range(height):
+                        row = bytes(pixels[y * width * 4:(y + 1) * width * 4])
+                        memmove(surface.contents.pixels + y * surface.contents.pitch, row, width * 4)
+                finally:
+                    pico.SDL_UnlockSurface(surface)
+                texture = pico.SDL_CreateTextureFromSurface(pico.renderer, surface)
+            finally:
+                pico.SDL_FreeSurface(surface)
+            if not texture:
+                raise RuntimeError("무기 실루엣 텍스처 생성 실패")
+            try:
+                pico.SDL_SetTextureBlendMode(texture, pico.SDL_BLENDMODE_BLEND)
+                if pico.SDL_SetTextureScaleMode(texture, pico.SDL_ScaleModeLinear) != 0:
+                    raise RuntimeError("무기 실루엣 축소 필터 설정 실패")
+            except BaseException:
+                pico.SDL_DestroyTexture(texture)
+                raise
+            self.weapon_icons[key] = texture
+        texture = self.weapon_icons[key]
+        pico.SDL_SetTextureAlphaMod(texture, self.rgba(color, opacity)[3])
+        target = pico.SDL_Rect(round(rect.x), round(rect.y), round(rect.width), round(rect.height))
+        pico.SDL_RenderCopy(pico.renderer, texture, None, byref(target))
+
     def save_frame(self, path: Path, width: int, height: int):
         """자동 실행 확인용 PNG. 프레젠트하기 전의 현재 화면을 저장한다."""
         pico = self.pico
@@ -271,6 +371,12 @@ class PicoRenderer:
             pico.SDL_FreeSurface(surface)
 
     def close(self):
+        for texture in self.weapon_icons.values():
+            self.pico.SDL_DestroyTexture(texture)
+        self.weapon_icons.clear()
+        for texture, _, _ in self.images.values():
+            self.pico.SDL_DestroyTexture(texture)
+        self.images.clear()
         for texture in self.panel_textures.values():
             self.pico.SDL_DestroyTexture(texture)
         self.panel_textures.clear()

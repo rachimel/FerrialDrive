@@ -15,6 +15,37 @@ class UiConfig:
         self.labels = self.data["labels"]
         self.layout = self.data["layout"]
         self.window = self.data["window"]
+        activation_height = self.data["debug_toolbar"]["activation_height_pixels"]
+        if not isfinite(activation_height) or not 0 < activation_height <= self.window["height"]:
+            raise ValueError("디버그 버튼 활성 영역 높이는 0 초과 창 높이 이하의 픽셀 값이어야 한다.")
+        for key in ("inactive_opacity", "crossing_opacity"):
+            alpha = self.data["weapon_swap"][key]
+            if not isfinite(alpha) or not 0 <= alpha <= 1:
+                raise ValueError("무장 패널의 비사용·교차 투명도는 0~1이어야 한다.")
+        for settings, keys in ((self.data["weapon_swap"], ("diamond_half_width_pixels", "screen_edge_margin_pixels")),
+                               (self.data["loadout_slide"], ("exit_padding_pixels",))):
+            if not all(isfinite(settings[key]) and settings[key] >= 0 for key in keys):
+                raise ValueError("무장 궤도 폭·화면 여백은 0 이상의 유한한 픽셀 값이어야 한다.")
+        blur = self.data["equipment_motion_blur"]
+        corner = self.data["equipment_style"]["corner_cut_ratio"]
+        if len(corner) != 2 or not all(isfinite(value) and 0 <= value < 0.5 for value in corner):
+            raise ValueError("웨폰 카드 모서리의 가로·세로 절단 비율은 0 이상 0.5 미만이어야 한다.")
+        equipment = self.data["equipment_style"]
+        padding = equipment["name_plate_padding_pixels"]
+        if len(padding) != 2 or not all(isfinite(value) and value >= 0 for value in padding):
+            raise ValueError("무기명 플레이트 여백은 0 이상의 가로·세로 픽셀 값이어야 한다.")
+        if not isfinite(equipment["name_plate_min_width_pixels"]) or equipment["name_plate_min_width_pixels"] < 0:
+            raise ValueError("무기명 플레이트 최소 폭은 0 이상이어야 한다.")
+        outline = equipment["silhouette_outline_pixels"]
+        if type(outline) is not int or not 0 <= outline <= 8:
+            raise ValueError("실루엣 원본 윤곽선 두께는 0~8의 정수여야 한다.")
+        if type(blur["samples"]) is not int or not 0 <= blur["samples"] <= 8:
+            raise ValueError("무장 패널 잔상 수는 0~8의 정수여야 한다.")
+        if not isfinite(blur["opacity"]) or not 0 <= blur["opacity"] <= 1:
+            raise ValueError("무장 패널 잔상 알파는 0~1이어야 한다.")
+        if not all(isfinite(blur[key]) and blur[key] >= 0
+                   for key in ("shutter_seconds", "max_length_pixels")):
+            raise ValueError("무장 패널 셔터 시간·잔상 길이는 0 이상의 유한한 값이어야 한다.")
         self.font_paths = {
             role: (self.path.parent / entry["path"]).resolve()
             for role, entry in self.data["fonts"].items()

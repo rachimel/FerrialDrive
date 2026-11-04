@@ -2,6 +2,12 @@
     "player_name": "플레이어",
     "player_health": {"current": 860, "maximum": 1200},
     "attack_direction_x": 1,
+    "loadouts": [
+        {"melee": {"name": "도검"}, "ranged": {"name": "PDW", "rounds": 45}},
+        {"melee": {"name": "도검"}, "ranged": {"name": "PDW", "rounds": 18}}
+    ],
+    "active_loadout_index": 0,
+    "active_weapon_kind": "ranged",
     "target": {"name": "훈련 표적 A", "health": {"current": 540, "maximum": 800}},
     "combo_count": 0,
     "total_damage_dealt": 0,
