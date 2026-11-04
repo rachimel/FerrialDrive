@@ -11,6 +11,8 @@ JRPG식 3/4 Top-Down 화면과 사전 렌더링한 2D 에셋을 사용한다.
 - [UI 작업 정리](docs/unit-tests/ui_checkpoint.md): 완료 범위·모듈 책임·미완료·다음 작업·검증 상태
 - [UI Unit Test 명세](docs/unit-tests/ui_unit_test.md): 현재 우선 검증할 두 장면·입력·HUD·애니메이션
 - [독립 Unit Test 실행기](Tools/unit_test_runner/README.md): 공통 실행 규약과 테스트 `.py` 실행 방법
+- [대화 기록](Tools/conversation_log_viewer/README.md): 루트 `대화 기록.lnk`로 요약 검색·누락 보완·되돌리기
+- [공통 테마 기준](docs/theme_reference.md): 도구의 색상·글꼴·간격 역할과 공통 JSON
 - [선택적 성능 계측](docs/tool-usage/performance_timing.md): 게임·테스트 공통 시간/호출 수 수집·반복 측정·JSON 로그
 - [문서 목록](docs/README.md): 제작 도구와 데이터 준비 문서
 - [이미지 제작 파이프라인](docs/ai-asset-pipeline/image_pipeline.md): JANIMA 레퍼런스 생성 → GPT 디테일 보정
@@ -40,13 +42,16 @@ JRPG식 3/4 Top-Down 화면과 사전 렌더링한 2D 에셋을 사용한다.
 | `tests/` | 실행기 바로가기와 직접 조작용 샘플 |
 | `tests/automated/` | 실행기·시간 진행·버튼 판정 자동 검사 |
 | `Tools/unit_test_runner/` | 게임과 독립된 공통 테스트 실행 도구 |
+| `Tools/conversation_log_viewer/` | 대화 요약 열람·검색·누락 보완 도구 |
+| `Tools/theme_reference/` | 도구 공통 색상·글꼴·간격 설정 |
+| `samples/conversation_log_viewer/` | 실제 기록과 분리된 가짜 대화 시연 데이터 |
 | `samples/unit_test_runner/` | 공통 실행기의 두 화면·흐름 전환 샘플 |
 | `Tools/portrait_editor/` | 표정 스튜디오와 영역 지정 도구 |
 | `Tools/blender_pipeline/` | Blender 기반 원본 생성 도구 |
 | `Tools/SSheetCutil.py` | 기존 스프라이트 시트 편집 도구 |
 | `run_portrait_editor.cmd` | 로컬 표정 스튜디오 실행 파일 |
 
-실제 UI 테스트는 `tests/ui_test.py`다. `tests/Unit Test Runner.lnk`로 실행기를 열고 **열린 GUI 창에 `ui_test.py`를 드롭**한다. [확인할 조작과 기대 결과](samples/ui_unit_test/README.md)를 따른다. `python tests/ui_test.py`는 Runner 없이 자체 창·실행 루프로 직접 실행한다. GUI 드롭은 별도 테스트 프로세스를 시작하며 재드롭으로 모듈 변경을 새로 읽는다. 테스트 창 종료와 Runner 종료는 구분한다.
+실제 UI 테스트는 `tests/ui_test.py`다. 루트의 `Unit Test Runner.lnk`로 실행기를 열고 `tests/` 탐색 목록에서 `ui_test.py`를 더블클릭하거나 **열린 GUI 창에 드롭**한다. [확인할 조작과 기대 결과](samples/ui_unit_test/README.md)를 따른다. `python tests/ui_test.py`는 Runner 없이 자체 창·실행 루프로 직접 실행한다. GUI 실행은 별도 테스트 프로세스를 시작하며 재실행으로 모듈 변경을 새로 읽는다. 테스트 종료 시 Runner를 앞으로 올리며 Runner 종료는 소유한 테스트도 종료한다.
 
 UI 실행에는 Python 3.11·`requirements-ui.txt`의 Pico2D가 필요하다. 현재 사용하는 [역할별 폰트와 이용 조건](data/fonts/README.md)은 저장소에 포함하므로 복제 후 별도 폰트 다운로드·시스템 설치 없이 프로젝트 파일을 직접 읽는다.
 
@@ -56,7 +61,7 @@ UI 실행에는 Python 3.11·`requirements-ui.txt`의 Pico2D가 필요하다. �
 python Tools/unit_test_runner/run.py
 ```
 
-바로가기는 `Tools/unit_test_runner/create_launcher.py`로 생성한다. `Tools/unit_test_runner/workspace/Unit Test Runner.lnk`를 열면 같은 GUI가 실행된다. 테스트 파일은 **열린 GUI 창에 드롭**한다. 파일 경로를 인자로 주는 직접 실행도 지원한다. [실행기 안내](Tools/unit_test_runner/README.md)에 사용법을 정리했다.
+바로가기는 `Tools/unit_test_runner/create_launcher.py`로 프로젝트 루트에 생성한다. `Unit Test Runner.lnk`를 열면 `tests/` 폴더에서 탐색을 시작한다. 목록에서 실행하거나 테스트 파일을 **열린 GUI 창에 드롭**한다. 파일 경로를 인자로 주는 직접 실행도 지원한다. [실행기 안내](Tools/unit_test_runner/README.md)에 사용법을 정리했다.
 
 ## 제작 도구 실행 조건
 
