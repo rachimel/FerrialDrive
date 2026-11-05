@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import hashlib
 import re
-from .readable import SECTION_TITLES, item_label, proposal_id, section_number
+from .readable import SECTION_TITLES, item_label, linked_metadata, proposal_id, section_number
 
 LEGACY_HEADING = "## 원기록 — 이전 형식/당시 상태 보존"
 GAP_PATTERN = re.compile(r"\[\[FDLOG_MISSING_([A-Z_]+):([^\]]+)\]\]")
@@ -62,6 +62,7 @@ def parse_record(path, data=None):
     bubbles = []
     sections = re.split(r"(?m)^## ", front)
     metadata = "\n".join(line for line in sections[0].splitlines() if not line.startswith("# "))
+    metadata = linked_metadata(metadata, front)
     if re.sub(r"<!--.*?-->", "", metadata, flags=re.S).strip():
         bubbles.append(Bubble("기록", "기록 정보", metadata.strip()))
     ordered = []
