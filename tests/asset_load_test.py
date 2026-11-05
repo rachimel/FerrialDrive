@@ -160,9 +160,9 @@ class AssetLoadTest:
                    930, 354, 'body', colors['text'])
             r.text(f'{playback.clip.fps:g} FPS / {"정지" if playback.paused else "재생"}',
                    930, 390, 'small', colors['muted'])
-            self.draw_sprite(direction, playback.frame_index, 300, 205, 3)
+            self.draw_sprite(direction, playback.frame_index, 300, 190, 3)
             r.text('3배 확대 · 발 기준점 고정', 200, 570, 'small', colors['muted'])
-            self.draw_sprite(direction, playback.frame_index, 710, 205, 3, body=False, shadow=True)
+            self.draw_sprite(direction, playback.frame_index, 710, 190, 3, body=False, shadow=True)
             r.text('분리 그림자', 650, 570, 'small', colors['muted'])
             r.text('주황색 = 모델 앞쪽', 930, 168, 'small', colors['warning'])
             r.text(f'본체 {"ON" if self.body_visible else "OFF"}', 930, 210, 'body', colors['text'])
