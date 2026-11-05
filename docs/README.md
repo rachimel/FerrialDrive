@@ -2,7 +2,7 @@
 
 ## 기획
 
-- [사전 PRD v0.1](Ferrial_Drive_PRE_PRD_v0.1.md)
+- [사전 PRD v0.1](Ferrial_Drive_PRE_PRD_v0.1.md): 현재 게임 설계·훈련 데모 범위·검토안·미정 사항
 - 후속 서사 기획: 로컬 전용으로 관리하며 Git 추적·공개 대상에서 제외한다.
 - [UI Unit Test 명세](unit-tests/ui_unit_test.md): 메뉴·전투 HUD의 독립 검증 범위와 미정 사항
 - [UI 작업 정리](unit-tests/ui_checkpoint.md): UI Unit Test 승인·최종 코드 정리·남은 작업·검증 경계
