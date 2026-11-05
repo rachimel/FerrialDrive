@@ -14,7 +14,7 @@
 
 ## 현재 도구
 
-- [대화 기록](../Tools/conversation_log_viewer/README.md): 요약·누락 보완·Codex 원문 검색·UTC/KST 시각·범위 가져오기·저장/취소
+- [대화 기록](../Tools/conversation_log_viewer/README.md): 읽기용 Markdown·누락 설명·Codex 원문 검색·한국 시각·범위 가져오기·저장/취소
 - [Codex 원문 근거 작성](tool-usage/conversation_log_evidence.md): 대화/발언 식별·짧은 인용·회고와 원문 확인 구분
 - [Theme Reference](theme_reference.md): 도구 공통 색상·글꼴·간격·선의 역할
 - [독립 Unit Test 실행기](../Tools/unit_test_runner/README.md): `.py` 선택·별도 프로세스 실행·종료·오류 표시

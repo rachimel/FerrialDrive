@@ -227,7 +227,7 @@ def selection_data(messages, *, require_time=False):
         evidence.extend((f"대화: {message.thread_title}", f"대화 ID: {message.thread_id}",
                          f"턴 ID: {message.turn_id or '기록 없음'}", f"발언 ID: {message.item_id or '기록 없음'}",
                          f"원문 위치: 기록 {message.line}번째 줄", f"발언자: {message.actor}",
-                         f"기록 UTC: {message.utc or '미상'}", f"기록 KST: {message.kst + ' KST' if message.kst else '미상'}",
+                         f"기록 시각: {message.kst + ' KST' if message.kst else '미상'}",
                          "원문: " + message.text.strip()[:240], ""))
     return event_time, "\n".join(evidence).rstrip()
 

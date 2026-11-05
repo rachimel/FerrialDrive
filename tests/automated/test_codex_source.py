@@ -93,6 +93,7 @@ class CodexSourceTests(unittest.TestCase):
         time, evidence = selection_data([messages[0], messages[-1]], require_time=True)
         self.assertEqual(time, "2026-01-01 12:00:00.125 ~ 2026-01-01 12:02:00.500")
         self.assertIn("demo-agent-2", evidence)
+        self.assertNotIn("UTC", evidence)
         self.assertNotIn(str(self.home), evidence)
         seconds = replace(messages[0], timestamp="2026-01-01T03:00:00Z")
         millis = replace(messages[-1], timestamp="2026-01-01T12:00:00.125+09:00")
@@ -150,6 +151,8 @@ class CodexSourceTests(unittest.TestCase):
         viewer = self.viewer()
         browser = viewer.source_browser
         browser.open()
+        self.assertEqual(browser.context.record_id, viewer.record.record_id)
+        self.assertIn("시각", browser.context.label)
         browser.editors["source_query"].text = "시연용"
         browser.search()
         browser.future.result(timeout=10)
@@ -186,9 +189,12 @@ class CodexSourceTests(unittest.TestCase):
     def test_modal_click_enter_and_import_do_not_apply_main_document(self):
         viewer = self.viewer()
         original = viewer.record.path.read_bytes()
+        viewer.click(1120, 282)
+        self.assertFalse(viewer.source_browser.visible)
+        self.assertEqual(viewer.source_kind, "recollection")
         viewer.click(1120, 105)
         self.assertTrue(viewer.source_browser.visible)
-        viewer.click(80, 155)
+        viewer.click(80, 273)
         viewer.insert("시연용")
         pico = SimpleNamespace(KMOD_CTRL=1, KMOD_SHIFT=2, SDLK_ESCAPE=27, SDLK_RETURN=13,
                                SDLK_F5=116, SDLK_TAB=9)
@@ -199,7 +205,7 @@ class CodexSourceTests(unittest.TestCase):
         viewer.focus = None
         viewer.key(SimpleNamespace(key=9, mod=0), pico)
         self.assertEqual(viewer.focus, "source_query")
-        viewer.click(400, 265)
+        viewer.click(400, 385)
         self.assertEqual(browser.selected.role, "user")
         viewer.click(850, 730)
         self.assertFalse(browser.visible)
@@ -215,9 +221,9 @@ class CodexSourceTests(unittest.TestCase):
         browser.open()
         browser.editors["source_thread"].text = OTHER
         browser.add_thread()
-        browser.click(635, 105)
+        browser.click(635, 225)
         self.assertEqual(browser.extra_ids, [])
-        browser.click(80, 105)
+        browser.click(80, 225)
         self.assertEqual(browser.extra_ids, [OTHER])
         browser.add_thread()
         self.assertEqual(browser.extra_ids, [])

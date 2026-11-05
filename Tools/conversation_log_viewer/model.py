@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import hashlib
 import re
+from .readable import SECTION_TITLES, item_label, proposal_id, section_number
 
 LEGACY_HEADING = "## 원기록 — 이전 형식/당시 상태 보존"
 GAP_PATTERN = re.compile(r"\[\[FDLOG_MISSING_([A-Z_]+):([^\]]+)\]\]")
@@ -33,6 +34,7 @@ class Bubble:
     title: str
     text: str
     origin: str = "요약"
+    kind: str = "content"
 
 
 @dataclass(frozen=True)
@@ -52,30 +54,36 @@ def parse_record(path, data=None):
     text = data.decode("utf-8-sig")
     front = reviewed_part(text)
     title = next((line[2:].strip() for line in front.splitlines() if line.startswith("# ")), path.stem)
-    identity = re.search(r"- 기록 ID:\s*`([^`]+)`", front)
+    identity = re.search(r"- (?:\*\*)?기록 ID:(?:\*\*)?\s*(?:\*\*)?`?([\w.-]+)", front)
     gaps = []
     for line in front.splitlines():
         for match in GAP_PATTERN.finditer(line):
             gaps.append(Gap(match.group(0), match.group(1), match.group(2).rsplit(":", 1)[-1], line.strip()))
     bubbles = []
     sections = re.split(r"(?m)^## ", front)
-    if GAP_PATTERN.search(sections[0]):
-        metadata = "\n".join(line for line in sections[0].splitlines() if not line.startswith("# "))
+    metadata = "\n".join(line for line in sections[0].splitlines() if not line.startswith("# "))
+    if re.sub(r"<!--.*?-->", "", metadata, flags=re.S).strip():
         bubbles.append(Bubble("기록", "기록 정보", metadata.strip()))
-    for part in sections[1:]:
+    ordered = []
+    for index, part in enumerate(sections[1:]):
         heading, _, body = part.partition("\n")
         heading, body = heading.strip(), body.strip()
         if not body:
             continue
-        number = re.match(r"([1-7])\.", heading)
-        actor = ("사용자" if number and number[1] in ("1", "6") else
-                 "AI" if number and number[1] in ("2", "7") else "기록")
+        number = section_number(heading)
+        ordered.append((number or 8, index, heading, body))
+    for number, _, heading, body in sorted(ordered):
+        heading = f"{number}. {SECTION_TITLES[number-1]}" if number <= 7 else heading
+        actor = ("사용자" if number in (1, 6) else "AI" if number in (3, 7) else "기록")
         origin = "사용자 보완" if heading.startswith("사용자 보완") else "요약 · 원문 연결" if "원문 위치:" in body else "요약"
-        chunks = re.split(r"(?m)(?=^- \*\*U\d+)", body) if number and number[1] == "1" else [body]
+        bubbles.append(Bubble(actor, heading, "", origin, "heading"))
+        chunks = re.split(r"(?m)(?=^- (?:\*\*)?(?:[UA]\d+|(?:사용자 제안|AI 제안)\s*\d+\s*\([UA]\d+\)))", body) if number in (1, 3) else [body]
         for chunk in chunks:
             if chunk.strip():
+                proposal = proposal_id(chunk.strip())
+                content_title = item_label(proposal) if proposal else "관련 내용"
                 bubbles.append(Bubble("사용자 보완" if origin == "사용자 보완" else actor,
-                                      heading, chunk.strip(), origin))
+                                      content_title, chunk.strip(), origin))
     return LogRecord(path, title, identity[1] if identity else path.stem, text, digest(data),
                      tuple(gaps), tuple(bubbles))
 

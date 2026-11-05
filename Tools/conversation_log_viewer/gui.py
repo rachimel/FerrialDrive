@@ -12,6 +12,7 @@ from .model import Bubble, GAP_NAMES, LEGACY_HEADING, filter_records, list_recor
 from .store import LogStore, _atomic_write
 from .codex_source import CodexSource, selection_data
 from .source_browser import SourceBrowser
+from .readable import item_label
 from .text_input import TextInput
 
 WINDOW = WindowSpec(1280, 800, "Ferrial Drive | 대화 기록")
@@ -111,8 +112,8 @@ class LogViewer:
     def chat_layout(self, canvas, bubbles):
         layout, total = [], 0
         for bubble in bubbles:
-            lines = canvas.gap_lines(bubble.text, 496, "small")
-            height = 64 + len(lines) * 20
+            lines = [] if bubble.kind == "heading" else canvas.gap_lines(bubble.text, 496, "small")
+            height = 38 if bubble.kind == "heading" else 64 + len(lines) * 20
             layout.append((bubble, lines, total, height))
             total += height + 12
         self.chat_max = max(0, total - 568)
@@ -244,8 +245,6 @@ class LogViewer:
             self.select_gap(self.gap_offset + (y - 134) // 28)
         elif contains((920,268,154,30),x,y) and self.gap:
             self.source_kind = "recollection"
-        elif contains((1086,268,162,30),x,y) and self.gap:
-            self.source_kind = "source_checked"
         elif contains((920,680,154,38),x,y):
             self.apply()
         elif contains((1086,680,162,38),x,y):
@@ -348,7 +347,7 @@ class LogViewer:
             for row,line in enumerate(lines[offset:offset+visible]):
                 canvas.text(line,x+8,y+6+row*20,"small")
             if name == "evidence" and not editor.text and self.focus != name:
-                hint = "Codex 대화 ID · UTC 시각 · 발언자 · 짧은 인용"
+                hint = "대화·발언 ID · 한국 시각 · 짧은 원문"
                 for row, line in enumerate(canvas.wrap(hint, width-16, "small")[:visible]):
                     canvas.text(line,x+8,y+6+row*20,"small","disabled")
             if self.focus == name:
@@ -402,6 +401,11 @@ class LogViewer:
                 top=172+offset-self.chat_offset
                 if top+height<172 or top>740:
                     continue
+                if bubble.kind == "heading":
+                    canvas.fill((320,top,552,34),"panel_surface")
+                    canvas.fill((320,top,4,34),"accent")
+                    canvas.text(bubble.title,332,top+5,"body","accent",528)
+                    continue
                 x=344 if bubble.actor.startswith("사용자") else 320
                 canvas.panel((x,top,528,height),"user_bubble" if bubble.actor.startswith("사용자") else "ai_bubble" if bubble.actor=="AI" else "panel_surface")
                 canvas.text(bubble.actor+"  ·  "+bubble.origin,x+12,top+8,"small","accent",504)
@@ -418,11 +422,11 @@ class LogViewer:
                 y=134+row*28
                 if self.gap_index==self.gap_offset+row:
                     canvas.fill((920,y,328,28),"selected")
-                canvas.text(f"{GAP_NAMES.get(gap.kind,gap.kind)} · {gap.item}",928,y+4,"small","warning",312)
+                canvas.text(f"{GAP_NAMES.get(gap.kind,gap.kind)} · {item_label(gap.item)}",928,y+4,"small","warning",312)
         canvas.text("Codex에서 가져온 근거" if self.source_kind=="codex_record" else "누락 선택 → 가운데 위치로 이동",920,246,"small","muted",328)
         self.button(canvas,(920,268,154,30),"사용자 회고",self.source_kind=="recollection",bool(self.gap))
-        self.button(canvas,(1086,268,162,30),"원문 확인",self.source_kind=="source_checked",bool(self.gap))
-        for label,y in (("보완 내용",310),("근거·원문 위치 (원문 확인이면 필수)",506),("당시 시각 (시각 항목이면 필수)",602)):
+        canvas.text("원문 근거 연결됨" if self.source_kind=="codex_record" else "원문 찾기로 연결",1092,275,"small","accent" if self.source_kind=="codex_record" else "muted",156)
+        for label,y in (("보완 내용",310),("원문 근거 · 직접 보완한 내용",506),("당시 시각 · 한국 시각",602)):
             canvas.text(label,920,y,"small","muted",328)
         for name in ("body","evidence","event_time"):
             self.input_box(canvas,name)

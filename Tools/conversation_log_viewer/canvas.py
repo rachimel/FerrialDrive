@@ -123,21 +123,29 @@ class Canvas:
         return self.wraps[key]
 
     def gap_line(self, line, x, y, selected_token=None):
-        cursor = 0
-        for mark in line.marks:
-            prefix = line.text[cursor:mark.start]
-            self.text(prefix, x, y, "small")
-            x += self.size(prefix, "small")[0]
-            label = line.text[mark.start:mark.end]
+        boundaries = sorted({0, len(line.text), *(point for mark in (*line.marks, *line.styles) for point in (mark.start, mark.end))})
+        priority = {"record_id": 5, "heading": 4, "strong": 3, "reference": 2, "code": 1}
+        for start, end in zip(boundaries, boundaries[1:]):
+            label = line.text[start:end]
             width, height = self.size(label, "small")
-            selected = mark.token == selected_token
-            self.fill((x, y, width, height), "warning" if selected else "selected")
-            self.text(label, x, y, "small", "button_text" if selected else "warning")
-            if not selected:
+            gap = next((mark for mark in line.marks if mark.start <= start and mark.end >= end), None)
+            kinds = [mark.kind for mark in line.styles if mark.start <= start and mark.end >= end]
+            kind = max(kinds, key=priority.get) if kinds else None
+            if gap:
+                selected = gap.token == selected_token
+                self.fill((x, y, width, height), "warning" if selected else "selected")
+                self.text(label, x, y, "small", "button_text" if selected else "warning")
+                if not selected:
+                    self.fill((x, y + height - 1, width, 1), "warning")
+            elif kind:
+                if kind in ("record_id", "code"):
+                    self.fill((x, y, width, height), "selected" if kind == "record_id" else "input")
+                self.text(label, x, y, "small", "accent")
+            else:
+                self.text(label, x, y, "small")
+            if kind == "heading" and not gap:
                 self.fill((x, y + height - 1, width, 1), "warning")
             x += width
-            cursor = mark.end
-        self.text(line.text[cursor:], x, y, "small")
 
     @contextmanager
     def clip(self, rect):

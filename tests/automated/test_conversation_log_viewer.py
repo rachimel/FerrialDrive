@@ -170,11 +170,11 @@ class ConversationLogTests(unittest.TestCase):
         text, marks = display_text(raw)
         self.assertNotIn("sample.md", text)
         self.assertEqual(len(marks), 2)
-        self.assertEqual(text[marks[0].start:marks[0].end], "[미확인: 시각 · U1]")
+        self.assertEqual(text[marks[0].start:marks[0].end], "[미확인: 시각 · 사용자 제안 1]")
         lines = wrap_gap_lines(raw, 35, lambda value: len(value) * 7)
         for token in (first, second):
             pieces = [line.text[mark.start:mark.end] for line in lines for mark in line.marks if mark.token == token]
-            self.assertEqual("".join(pieces), "[미확인: 시각 · U1]")
+            self.assertEqual("".join(pieces), "[미확인: 시각 · 사용자 제안 1]")
         self.assertTrue(all(len(line.text) <= 5 for line in lines))
 
     def test_gap_click_reveals_hidden_actor_and_scrolls_to_wrapped_target(self):
