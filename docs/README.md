@@ -3,6 +3,7 @@
 ## 기획
 
 - [사전 PRD v0.1](Ferrial_Drive_PRE_PRD_v0.1.md)
+- 후속 서사 기획: 로컬 전용으로 관리하며 Git 추적·공개 대상에서 제외한다.
 - [UI Unit Test 명세](unit-tests/ui_unit_test.md): 메뉴·전투 HUD의 독립 검증 범위와 미정 사항
 - [UI 작업 정리](unit-tests/ui_checkpoint.md): UI Unit Test 승인·최종 코드 정리·남은 작업·검증 경계
 - [상세 기획서 PPT](presentation/기획서.pptx): 기존 29쪽 초안. 이후 결정은 PRE-PRD와 개별 명세를 따른다.
