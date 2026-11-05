@@ -19,12 +19,17 @@ def main(argv=None):
     parser.add_argument("--frames", type=int, help="자동 확인용 실행 프레임 수")
     parser.add_argument("--screenshot", type=Path, help="자동 확인용 첫 화면 PNG")
     parser.add_argument("--select", help="처음 선택할 로그 파일명")
+    parser.add_argument("--codex-home", type=Path, help="읽기 전용 Codex 로컬 기록 위치")
+    parser.add_argument("--codex-project", default="Ferrial Drive", help="처음 선택할 Codex 프로젝트 이름")
+    parser.add_argument("--source-query", help="원문 검색 화면에서 시작할 구절(확인·시연용)")
     args = parser.parse_args(argv)
     if args.frames is not None and args.frames <= 0:
         parser.error("--frames는 양수여야 한다.")
     workspace = args.workspace or Path(__file__).with_name("workspace")
     directory = args.logs or root / "docs/ai-dev-log"
     if args.demo:
+        if args.codex_home is None:
+            args.codex_home = root / "samples/conversation_log_viewer/codex_demo"
         directory = workspace / "demo_logs"
         directory.mkdir(parents=True, exist_ok=True)
         for source in (root / "samples/conversation_log_viewer").glob("*.md"):
@@ -35,7 +40,8 @@ def main(argv=None):
         parser.error("로그 폴더가 없다.")
     from conversation_log_viewer.gui import run_gui
     run_gui(directory, workspace, frame_limit=args.frames, screenshot=args.screenshot,
-            selected_file=args.select)
+            selected_file=args.select,codex_home=args.codex_home,project_name=args.codex_project,
+            source_query=args.source_query)
     return 0
 
 

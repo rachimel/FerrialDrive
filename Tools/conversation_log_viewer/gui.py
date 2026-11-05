@@ -10,6 +10,8 @@ from unit_test_runner.runner import PicoWindow
 from .canvas import Canvas
 from .model import Bubble, GAP_NAMES, LEGACY_HEADING, filter_records, list_records
 from .store import LogStore, _atomic_write
+from .codex_source import CodexSource, selection_data
+from .source_browser import SourceBrowser
 from .text_input import TextInput
 
 WINDOW = WindowSpec(1280, 800, "Ferrial Drive | 대화 기록")
@@ -22,12 +24,14 @@ def contains(rect, x, y):
 
 class LogViewer:
     FIELDS = {"search": (28, 114, 256, 34), "body": (920, 330, 328, 158),
-              "evidence": (920, 526, 328, 56), "event_time": (920, 624, 328, 34)}
+              "evidence": (920, 526, 328, 56), "event_time": (920, 624, 328, 52)}
 
-    def __init__(self, directory, workspace):
+    def __init__(self, directory, workspace, *, codex_home=None, project_name="Ferrial Drive"):
         self.directory, self.workspace = Path(directory).resolve(), Path(workspace).resolve()
         self.store = LogStore(self.directory, self.workspace)
         self.editors = {key: TextInput(multiline=key in ("body", "evidence")) for key in self.FIELDS}
+        self.source_browser = SourceBrowser(self, CodexSource(codex_home), project_name)
+        self.editors.update(self.source_browser.editors)
         self.focus = None
         self.source_kind = "recollection"
         self.only_missing, self.actor_filter, self.show_original = False, "전체", False
@@ -139,6 +143,30 @@ class LogViewer:
         except (OSError, ValueError) as error:
             self.status, self.error = str(error), True
 
+    def use_codex_messages(self, messages):
+        if not self.gap:
+            raise ValueError("연결할 누락 항목을 먼저 선택한다.")
+        event_time, evidence = selection_data(messages, require_time=self.gap.kind == "TIME")
+        previous = self.editors["evidence"].text.strip()
+        if previous and evidence not in previous:
+            evidence = previous + "\n\n" + evidence
+        elif previous:
+            evidence = previous
+        if len(evidence) > 2000:
+            raise ValueError("기존 근거와 합치면 2000자를 넘는다. 기존 근거를 정리한 뒤 가져온다.")
+        self.editors["evidence"].text = evidence
+        if event_time:
+            self.editors["event_time"].text = event_time
+        if not self.editors["body"].text.strip():
+            self.editors["body"].text = "선택한 Codex 원문 기록을 근거로 연결했다."
+        for name in ("body", "evidence", "event_time"):
+            self.editors[name].cursor = len(self.editors[name].text)
+            self.editors[name].anchor = None
+            self.editors[name].composition = ""
+        self.source_kind = "codex_record"
+        self.status, self.error = "원문 근거와 기록 시각을 가져왔다. 의미를 확인한 뒤 적용한다.", False
+        self.stash_draft()
+
     def undo(self):
         if self.record is None:
             return
@@ -151,13 +179,21 @@ class LogViewer:
 
     def insert(self, value):
         editor = self.editors[self.focus]
-        limit = {"search": 200, "body": 8000, "evidence": 2000, "event_time": 19}[self.focus]
+        limit = {"search": 200, "body": 8000, "evidence": 2000, "event_time": 55,
+                 "source_query": 200, "source_thread": 36}[self.focus]
         start, end = editor.selection
         editor.insert(value[:max(0, limit - len(editor.text) + end - start)])
         if self.focus == "search":
             self.refilter()
 
     def handle(self, event, pico):
+        if self.source_browser.visible:
+            if event.type == pico.SDL_MOUSEWHEEL:
+                self.source_browser.wheel(event.y)
+                return
+            if event.type == pico.SDL_MOUSEBUTTONDOWN and event.button == pico.SDL_BUTTON_LEFT:
+                self.source_browser.click(event.x, event.y)
+                return
         if event.type == pico.SDL_MOUSEMOTION:
             self.mouse = (event.x, event.y)
         elif event.type == pico.SDL_MOUSEWHEEL:
@@ -178,6 +214,9 @@ class LogViewer:
             self.key(event, pico)
 
     def click(self, x, y):
+        if self.source_browser.visible:
+            self.source_browser.click(x, y)
+            return
         for name, rect in self.FIELDS.items():
             if contains(rect, x, y):
                 if name != "search" and not self.gap:
@@ -187,7 +226,9 @@ class LogViewer:
                 editor.cursor, editor.anchor = len(editor.text), None
                 return
         self.focus = None
-        if contains((28,154,72,30),x,y):
+        if contains((1098,94,150,30),x,y):
+            self.source_browser.open()
+        elif contains((28,154,72,30),x,y):
             self.only_missing = False
             self.refilter()
         elif contains((110,154,88,30),x,y):
@@ -217,6 +258,19 @@ class LogViewer:
 
     def key(self, event, pico):
         ctrl, shift = bool(event.mod & pico.KMOD_CTRL), bool(event.mod & pico.KMOD_SHIFT)
+        if self.source_browser.visible:
+            if event.key == pico.SDLK_ESCAPE:
+                self.source_browser.dismiss()
+                return
+            if event.key == pico.SDLK_RETURN and not any(editor.composition for editor in self.editors.values()):
+                if self.focus == "source_thread":
+                    self.source_browser.add_thread()
+                else:
+                    self.source_browser.search()
+                return
+            if event.key == pico.SDLK_F5:
+                self.source_browser.search()
+                return
         if event.key == pico.SDLK_F5:
             self.reload()
             return
@@ -224,8 +278,8 @@ class LogViewer:
             self.apply()
             return
         if event.key == pico.SDLK_TAB:
-            names = list(self.editors)
-            self.focus = names[(names.index(self.focus) + 1) % len(names)] if self.focus in names else "search"
+            names = list(self.source_browser.editors if self.source_browser.visible else self.FIELDS)
+            self.focus = names[(names.index(self.focus) + 1) % len(names)] if self.focus in names else names[0]
             return
         if not self.focus:
             return
@@ -279,8 +333,8 @@ class LogViewer:
         canvas.fill(rect, color if enabled else "panel_surface")
         canvas.text(label,rect[0]+8,rect[1]+6,"small","button_text" if enabled else "disabled",rect[2]-16)
 
-    def input_box(self, canvas, name):
-        rect = self.FIELDS[name]
+    def input_box(self, canvas, name, rect=None):
+        rect = rect or self.FIELDS[name]
         x,y,width,height = rect
         editor = self.editors[name]
         canvas.fill(rect,"selected" if editor.anchor is not None else "input")
@@ -357,15 +411,15 @@ class LogViewer:
                     if 150<line_y<742:
                         canvas.gap_line(line,x+12,line_y,selected_token)
         canvas.text("말풍선은 요약이다. 원문 연결과 사용자 보완을 구분한다.",320,756,"small","muted",560)
-        canvas.text("누락 보완",920,96,"title","accent")
-        canvas.text(f"{len(self.record.gaps) if self.record else 0}개",1190,100,"small","warning")
+        canvas.text("누락 보완",920,96,"title","accent",170)
+        self.button(canvas,(1098,94,150,30),"원문 찾기")
         if self.record:
             for row,gap in enumerate(self.record.gaps[self.gap_offset:self.gap_offset+4]):
                 y=134+row*28
                 if self.gap_index==self.gap_offset+row:
                     canvas.fill((920,y,328,28),"selected")
                 canvas.text(f"{GAP_NAMES.get(gap.kind,gap.kind)} · {gap.item}",928,y+4,"small","warning",312)
-        canvas.text("누락 선택 → 가운데 위치로 이동",920,246,"small","muted",328)
+        canvas.text("Codex에서 가져온 근거" if self.source_kind=="codex_record" else "누락 선택 → 가운데 위치로 이동",920,246,"small","muted",328)
         self.button(canvas,(920,268,154,30),"사용자 회고",self.source_kind=="recollection",bool(self.gap))
         self.button(canvas,(1086,268,162,30),"원문 확인",self.source_kind=="source_checked",bool(self.gap))
         for label,y in (("보완 내용",310),("근거·원문 위치 (원문 확인이면 필수)",506),("당시 시각 (시각 항목이면 필수)",602)):
@@ -376,24 +430,32 @@ class LogViewer:
         self.button(canvas,(1086,680,162,38),"마지막 보완 취소",enabled=bool(self.record))
         for row,line in enumerate(canvas.wrap(self.status,328,"small")[:3]):
             canvas.text(line,920,732+row*16,"small","error" if self.error else "muted",328)
+        if self.source_browser.visible:
+            self.source_browser.draw(canvas)
 
     def close(self):
+        self.source_browser.close()
         self.stash_draft()
         self.workspace.mkdir(parents=True,exist_ok=True)
         _atomic_write(self.workspace/"drafts.json",json.dumps(self.drafts,ensure_ascii=False,indent=2).encode("utf-8"))
 
 
-def run_gui(directory, workspace, *, frame_limit=None, screenshot=None, selected_file=None):
+def run_gui(directory, workspace, *, frame_limit=None, screenshot=None, selected_file=None,
+            codex_home=None, project_name="Ferrial Drive", source_query=None):
     backend=PicoWindow(accept_text=True)
     backend.open(WINDOW)
     canvas=viewer=None
     try:
         canvas=Canvas(backend)
-        viewer=LogViewer(directory,workspace)
+        viewer=LogViewer(directory,workspace,codex_home=codex_home,project_name=project_name)
         if selected_file:
             selected=next((record for record in viewer.records if record.path.name==selected_file),None)
             if selected:
                 viewer.select_record(selected)
+        if source_query is not None:
+            viewer.source_browser.open()
+            viewer.editors["source_query"].text = source_query
+            viewer.source_browser.search()
         frames=0
         running=True
         while running:
@@ -406,7 +468,7 @@ def run_gui(directory, workspace, *, frame_limit=None, screenshot=None, selected
             if not running:
                 break
             viewer.draw(canvas)
-            if screenshot:
+            if screenshot and (source_query is None or viewer.source_browser.future is None):
                 target=Path(screenshot)
                 target.parent.mkdir(parents=True,exist_ok=True)
                 pico=backend.pico

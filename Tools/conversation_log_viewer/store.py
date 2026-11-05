@@ -120,9 +120,9 @@ class LogStore:
         body, evidence, event_time = body.strip(), evidence.strip(), event_time.strip()
         if not body or len(body) > 8000 or len(evidence) > 2000:
             raise ValueError("보완 내용은 1~8000자, 근거는 2000자 이내로 입력한다.")
-        if source_kind not in ("recollection", "source_checked"):
+        if source_kind not in ("recollection", "source_checked", "codex_record"):
             raise ValueError("보완 출처를 선택한다.")
-        if source_kind == "source_checked" and not evidence:
+        if source_kind in ("source_checked", "codex_record") and not evidence:
             raise ValueError("원문 확인을 선택한 경우 원문 위치나 확인 근거를 입력한다.")
         gap = next((gap for gap in record.gaps if gap.token == token), None)
         if gap is None:
@@ -130,12 +130,15 @@ class LogStore:
         if gap.kind == "TIME" and not event_time:
             raise ValueError("시각 항목은 당시 시각 또는 날짜도 입력한다.")
         if event_time:
-            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?", event_time):
-                raise ValueError("당시 시각은 YYYY-MM-DD 또는 YYYY-MM-DD HH:MM[:SS] 형식으로 입력한다.")
+            parts = event_time.split(" ~ ")
+            if len(parts) > 2 or any(not re.fullmatch(r"\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?)?", part) for part in parts):
+                raise ValueError("당시 시각은 날짜·시각(소수 초 허용), 범위는 시작 ~ 끝으로 입력한다.")
             try:
-                datetime.fromisoformat(event_time)
+                values = [datetime.fromisoformat(part) for part in parts]
             except ValueError:
                 raise ValueError("실제로 존재하는 날짜와 시각을 입력한다.") from None
+            if len(values) == 2 and values[0] > values[1]:
+                raise ValueError("시각 범위의 시작은 끝보다 늦을 수 없다.")
         with self._lock():
             path = self._path(record.path)
             before = path.read_bytes()
@@ -147,7 +150,8 @@ class LogStore:
                 raise ConflictError("누락 표식이 바뀌었다. 새로고침한다.")
             now = datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3] + " KST"
             entry_id = "B-" + uuid4().hex[:12]
-            source = "사용자 회고" if source_kind == "recollection" else "사용자가 원문 확인으로 보완"
+            source = {"recollection": "사용자 회고", "source_checked": "사용자가 원문 확인으로 보완",
+                      "codex_record": "Codex 원문 선택으로 보완"}[source_kind]
             lines = front.splitlines(keepends=True)
             for index, line in enumerate(lines):
                 if token in line:
@@ -167,7 +171,9 @@ class LogStore:
                         f"- 보완 기록 시각: {now}", "- 내용:"]
             addition += ["> " + _literal(line) for line in body.splitlines()]
             addition += ["- 근거·원문 위치:"] + ["> " + _literal(line) for line in (evidence or "미입력 — 원문 검증으로 간주하지 않는다.").splitlines()]
-            addition += ["- 원문 확인 여부는 사용자의 입력 표시이며 툴이 원문을 자동 검증한 결과가 아니다."]
+            addition += ["- Codex 원문과 기록 시각을 가져왔으며 제안·수용 등 의미의 연결은 사용자가 선택했다."
+                         if source_kind == "codex_record" else
+                         "- 원문 확인 여부는 사용자의 입력 표시이며 툴이 원문을 자동 검증한 결과가 아니다."]
             after = (front + "\n\n" + "\n".join(addition) + "\n\n" + separator + legacy).encode("utf-8")
             if before.startswith(b"\xef\xbb\xbf"):
                 after = b"\xef\xbb\xbf" + after

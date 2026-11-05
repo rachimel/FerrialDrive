@@ -1,0 +1,2 @@
+{"timestamp":"2026-01-01T03:03:00Z","type":"session_meta","payload":{"id":"22222222-2222-2222-2222-222222222222","cwd":"C:/sample/shared"}}
+{"timestamp":"2026-01-01T03:03:00.750Z","type":"response_item","payload":{"type":"message","id":"demo-user-other","role":"user","content":[{"type":"input_text","text":"직접 추가한 채팅의 시연용 발언이다."}]}}
