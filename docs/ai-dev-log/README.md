@@ -1,5 +1,7 @@
 # AI 개발 로그
 
+- [2026-11-09 에셋 로더 메카 분리 UI](2026-11-09-asset-loader-mech-workspace.md): 상단 공통 정보·메카 작업본 5개 탭·전환 시점/프레임 순서·실제 분리 출력은 미구현
+
 Ferrial Drive 프로젝트 대화에서 나온 결정과 작업 흐름을 요약한다.
 
 현재 상태는 [UI 작업 정리](../unit-tests/ui_checkpoint.md)와 [UI 명세](../unit-tests/ui_unit_test.md)를 먼저 확인한다. 아래 기록은 변경 이력이며 이전 폰트·수치·표시 동작을 현재 기준으로 적용하지 않는다.

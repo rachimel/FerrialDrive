@@ -78,10 +78,10 @@ class AssetPanelTests(unittest.TestCase):
         self.assertFalse(self.app.running)
 
     def test_filter_dropdown_changes_shared_display_and_escape_only_closes_menu(self):
-        from Tools.asset_loader.app import FILTER_RECT
+        from Tools.asset_loader.app import FILTER_OPTIONS_Y, FILTER_RECT
         self.click(FILTER_RECT)
         self.assertTrue(self.app.filter_popup)
-        self.click(SimpleNamespace(x=882, y=405))
+        self.click(SimpleNamespace(x=FILTER_RECT.x, y=FILTER_OPTIONS_Y))
         self.assertEqual(self.app.handle.resource.filtering, 'nearest')
         self.assertEqual(self.app.filtering, 'nearest')
         self.click(FILTER_RECT)

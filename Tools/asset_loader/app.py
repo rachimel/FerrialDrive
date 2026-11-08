@@ -16,10 +16,13 @@ from .library import DEFAULT_CATALOG, SAMPLE, prepare_library, store_asset
 
 ROOT = Path(__file__).resolve().parents[2]
 WINDOW = {"width": 1280, "height": 800, "title": "FDrive | Asset Loader"}
-VIEW = Rect(24, 116, 820, 568)
-PRODUCTION_MENU = Rect(1136, 18, 120, 34)
-PRODUCTION_ITEMS = [("3D 프리렌더…", "render"), ("애니메이션 조립…", "compose"), ("렌더 취소", "cancel_render")]
-FILTER_RECT = Rect(882, 371, 358, 28)
+VIEW = Rect(20, 174, 844, 482)
+PRODUCTION_MENU = Rect(1164, 12, 96, 34)
+PRODUCTION_ITEMS = [("메카 · 무기 분리…", "mech"), ("3D 프리렌더…", "render"),
+                    ("애니메이션 조립…", "compose"), ("렌더 취소", "cancel_render")]
+FILTER_RECT = Rect(900, 590, 344, 28)
+CATALOG_RECT = Rect(892, 216, 360, 320)
+FILTER_OPTIONS_Y = 622
 FILTERS = ('nearest', 'linear', 'bicubic')
 
 
@@ -49,17 +52,24 @@ class AssetLoaderApp:
         self.build = None
         self.menu_open = False
         self.panel = None
+        self.mech_drafts = {}
         self.mouse = (0, 0)
         self.filtering, self.filter_popup = 'bicubic', False
         self.buttons = [
-            ("불러오기 O", "open", Rect(24, 64, 150, 36)),
-            ("ID 변경 I", "id", Rect(184, 64, 138, 36)),
-            ("등록 S", "register", Rect(332, 64, 130, 36)),
-            ("핫 로드 D", "debug", Rect(472, 64, 150, 36)),
-            ("새로고침 R", "reload", Rect(632, 64, 152, 36)),
-            ("카탈로그", "catalog", Rect(794, 64, 138, 36)),
-            ("맞춤 F", "fit", Rect(942, 64, 126, 36)),
-            ("1:1", "actual", Rect(1078, 64, 88, 36)),
+            ("불러오기 O", "open", Rect(226, 12, 118, 34)),
+            ("ID 변경 I", "id", Rect(352, 12, 104, 34)),
+            ("등록 S", "register", Rect(464, 12, 82, 34)),
+            ("핫 로드 D", "debug", Rect(554, 12, 150, 34)),
+            ("새로고침 R", "reload", Rect(712, 12, 126, 34)),
+            ("카탈로그", "catalog", Rect(846, 12, 112, 34)),
+            ("메카 분리", "mech", Rect(966, 12, 112, 34)),
+            ("맞춤 F", "fit", Rect(20, 668, 104, 32)),
+            ("1:1", "actual", Rect(132, 668, 64, 32)),
+            ("재생 / 정지", "play", Rect(208, 668, 128, 32)),
+            ("◀", "previous", Rect(348, 668, 44, 32)),
+            ("▶", "next", Rect(400, 668, 44, 32)),
+            ("본체 B", "body", Rect(900, 546, 156, 32)),
+            ("그림자 H", "shadow", Rect(1068, 546, 176, 32)),
         ]
 
     def enter(self):
@@ -69,7 +79,6 @@ class AssetLoaderApp:
         self.theme = load_theme()
         paths = {role: ROOT / "data/fonts" / entry["path"] for role, entry in self.theme["fonts"].items()}
         sizes = {role: entry["size"] for role, entry in self.theme["fonts"].items()}
-        sizes["title"] = 28
         self.renderer = PicoRenderer(paths, sizes)
         if self.catalog_path == DEFAULT_CATALOG:
             try:
@@ -251,6 +260,20 @@ class AssetLoaderApp:
                 self.configure_render()
             elif action == "compose":
                 self.compose()
+            elif action == "mech":
+                from .mech_panel import MechPanel
+                if self.handle is None:
+                    raise ValueError("먼저 에셋을 선택한다.")
+                self.set_panel(MechPanel(self))
+            elif action == "play":
+                self.paused = not self.paused
+            elif action in ("previous", "next") and self.clip:
+                self.paused = True
+                self.elapsed = ((self.frame_index + (-1 if action == "previous" else 1)) % len(self.clip.frames)) / self.clip.fps
+            elif action == "body":
+                self.show_body = not self.show_body
+            elif action == "shadow":
+                self.show_shadow = not self.show_shadow
             elif action == "cancel_render" and self.build:
                 self.build.close()
                 self.message, self.error = "렌더 취소", False
@@ -304,7 +327,7 @@ class AssetLoaderApp:
             if self.filter_popup:
                 self.filter_popup = False
                 for index, mode in enumerate(FILTERS):
-                    if Rect(882, 405 + index * 32, 358, 32).contains(event.x, event.y):
+                    if Rect(FILTER_RECT.x, FILTER_OPTIONS_Y + index * 32, FILTER_RECT.width, 32).contains(event.x, event.y):
                         self.handle.resource.set_filtering(mode)
                         self.filtering = mode
                         return
@@ -321,14 +344,17 @@ class AssetLoaderApp:
                 if rect.contains(event.x, event.y):
                     self.action(action)
                     return
-            if 870 <= event.x < 1254 and 430 <= event.y < 686:
-                index = self.list_offset + int((event.y - 430) // 32)
+            if CATALOG_RECT.contains(event.x, event.y):
+                index = self.list_offset + int((event.y - CATALOG_RECT.y) // 40)
                 definitions = list(self.catalog.definitions.values())
                 if index < len(definitions):
                     definition = definitions[index]
                     self.open_source(definition.source, kind=definition.kind, asset_id=definition.asset_id)
         elif event.type == pico.SDL_MOUSEWHEEL:
-            self.zoom = max(0.01, min(16.0, self.zoom * 1.2 ** event.y))
+            if CATALOG_RECT.contains(*self.mouse):
+                self.list_offset = max(0, min(max(0, len(self.catalog.definitions) - 8), self.list_offset - event.y))
+            elif VIEW.contains(*self.mouse):
+                self.zoom = max(0.01, min(16.0, self.zoom * 1.2 ** event.y))
 
     def apply_reload(self, events):
         for event in events:
@@ -358,19 +384,36 @@ class AssetLoaderApp:
     def draw(self):
         r, c = self.renderer, self.theme["colors"]
         r.clear(c["background"])
-        r.text("FDrive · 에셋 로더", 24, 20, "title", c["text"])
-        r.text("제작", PRODUCTION_MENU.x + 12, PRODUCTION_MENU.y + 5, "body", c["text"])
-        r.line(1204, 32, 1209, 37, c["text"])
-        r.line(1209, 37, 1214, 32, c["text"])
+        # 공통 본문 글꼴로 영문과 한글의 시각적 간격을 맞춘다.
+        r.text("FDrive 에셋 로더", 20, 19, "body", c["text"])
+        r.rect(Rect(20, 60, 1240, 100), c["panel"])
+        r.text("공통 정보", 36, 72, "small", c["accent"])
+        resource = self.handle.resource if self.handle else None
+        details = [(f"ID: {self.asset_id or '-'}", 142, 72, 310),
+                   (f"종류: {resource.definition.kind if resource else '-'}", 482, 72, 180),
+                   (f"원본: {self.source.name if self.source else '-'}", 690, 72, 550),
+                   (f"동작: {self.clip_name or '-'}", 36, 112, 330),
+                   (f"프레임: {self.frame_index + 1}/{len(self.clip.frames)} · {self.clip.fps:g} FPS" if self.clip else "프레임: -", 390, 112, 300),
+                   (f"배율: {self.zoom:.2f}", 716, 112, 160),
+                   (f"RGBA8 추정: {resource.estimated_bytes / 1048576:.2f} MiB" if resource else "RGBA8 추정: -", 918, 112, 322)]
+        for text, x, y, width in details:
+            r.text(text, x, y, "small", c["text"], max_width=width)
+        r.rect(PRODUCTION_MENU, c["button"])
+        r.text("제작", PRODUCTION_MENU.x + 12, PRODUCTION_MENU.y + 5, "body", c["button_text"])
+        r.line(1230, 24, 1235, 29, c["button_text"])
+        r.line(1235, 29, 1240, 24, c["button_text"])
         for label, action, rect in self.buttons:
-            active = action == "debug" and self.debug
+            active = ((action == "debug" and self.debug) or (action == "body" and self.show_body)
+                      or (action == "shadow" and self.show_shadow))
             r.rect(rect, c["selected"] if active else c["button"])
             if action == "debug":
                 label = f"핫 로드 {'ON' if self.debug else 'OFF'} D"
+            elif action == "play":
+                label = "재생 Space" if self.paused else "정지 Space"
             r.text(label, rect.x + 10, rect.y + 10, "small", c["text"] if active else c["button_text"])
         with r.clip(VIEW):
-            for row in range(10):
-                for column in range(13):
+            for row in range(int(VIEW.height // 64) + 1):
+                for column in range(int(VIEW.width // 64) + 1):
                     r.rect(Rect(VIEW.x + column * 64, VIEW.y + row * 64, 64, 64),
                            c["panel"] if (row + column) % 2 else c["panel_surface"])
             if self.clip:
@@ -382,30 +425,22 @@ class AssetLoaderApp:
                 ui_y = WINDOW["height"] - y
                 r.line(x - 10, ui_y, x + 10, ui_y, c["accent"])
                 r.line(x, ui_y - 10, x, ui_y + 10, c["accent"])
-        r.rect(Rect(866, 116, 390, 570), c["panel"])
-        details = [f"ID: {self.asset_id or '-'}", f"종류: {self.handle.resource.definition.kind if self.handle else '-'}",
-                   f"원본: {self.source.name if self.source else '-'}", f"동작: {self.clip_name or '-'}"]
-        if self.clip:
-            resource = self.handle.resource
-            details.extend([f"프레임: {self.frame_index + 1}/{len(self.clip.frames)} · {self.clip.fps:g} FPS",
-                            f"배율: {self.zoom:.2f} · 세대: {self.handle.generation}",
-                            f"RGBA8 추정: {resource.estimated_bytes / 1048576:.2f} MiB",
-                            f"본체 {'ON' if self.show_body else 'OFF'} / 그림자 {'ON' if self.show_shadow else 'OFF'}"])
-        for index, line in enumerate(details):
-            r.text(line, 882, 132 + index * 29, "small", c["text"], max_width=358)
+        # 사이드바 배경은 조작 버튼 뒤를 덮지 않도록 목록 영역에만 그린다.
+        r.rect(Rect(884, 174, 376, 362), c["panel"])
         r.rect(FILTER_RECT, c["input"])
         current_filter = self.handle.resource.filtering.title() if self.handle else '-'
-        r.text(f"필터: {current_filter}", 892, 377, "small", c["text"])
-        r.line(1220, 382, 1225, 387, c["text"])
-        r.line(1225, 387, 1230, 382, c["text"])
-        r.text(f"등록 목록 ({len(self.catalog.definitions)}) · PgUp/PgDn", 882, 405, "small", c["muted"])
+        r.text(f"필터: {current_filter}", FILTER_RECT.x + 10, FILTER_RECT.y + 6, "small", c["text"])
+        r.line(1220, 600, 1225, 605, c["text"])
+        r.line(1225, 605, 1230, 600, c["text"])
+        r.text(f"등록 목록 ({len(self.catalog.definitions)}) · 휠 / PgUp/PgDn", 900, 188, "small", c["muted"])
         for index, definition in enumerate(list(self.catalog.definitions.values())[self.list_offset:self.list_offset + 8]):
-            y = 430 + index * 32
-            r.rect(Rect(878, y, 366, 30), c["selected"] if definition.asset_id == self.asset_id else c["background"])
-            r.text(definition.asset_id, 888, y + 5, "small", c["text"], max_width=346)
-        r.text(self.message, 24, 700, "small", c["error"] if self.error else c["accent"], max_width=1230)
-        r.text(f"카탈로그: {self.catalog_path.as_posix()}", 24, 730, "small", c["muted"], max_width=1230)
-        r.text("← → 동작/방향 · Space 재생/정지 · . 다음 프레임 · 휠 확대 · B 본체 · H 그림자 · Esc 종료", 24, 763, "small", c["muted"])
+            y = CATALOG_RECT.y + index * 40
+            r.rect(Rect(CATALOG_RECT.x, y, CATALOG_RECT.width, 38), c["selected"] if definition.asset_id == self.asset_id else c["background"])
+            r.text(definition.asset_id, CATALOG_RECT.x + 10, y + 10, "small", c["text"], max_width=340)
+        r.text("← → 동작/방향 · . 다음 프레임", 466, 678, "small", c["muted"])
+        r.text(self.message, 20, 714, "small", c["error"] if self.error else c["accent"], max_width=1240)
+        r.text(f"카탈로그: {self.catalog_path.as_posix()}", 20, 742, "small", c["muted"], max_width=1240)
+        r.text("미리보기에서 휠 확대 · 메카 분리에서 출력 단위/동작/전환 시점 편집 · Esc 종료", 20, 773, "small", c["muted"])
         if self.menu_open:
             for index, (label, _) in enumerate(PRODUCTION_ITEMS):
                 rect = Rect(1030, 56 + index * 36, 226, 36)
@@ -413,8 +448,8 @@ class AssetLoaderApp:
                 r.text(label, rect.x + 12, rect.y + 8, "small", c["text"])
         if self.filter_popup:
             for index, mode in enumerate(FILTERS):
-                r.rect(Rect(882, 405 + index * 32, 358, 32), c["selected"] if mode == self.filtering else c["input"])
-                r.text(mode.title(), 894, 412 + index * 32, "small", c["text"])
+                r.rect(Rect(FILTER_RECT.x, FILTER_OPTIONS_Y + index * 32, FILTER_RECT.width, 32), c["selected"] if mode == self.filtering else c["input"])
+                r.text(mode.title(), FILTER_RECT.x + 12, FILTER_OPTIONS_Y + 7 + index * 32, "small", c["text"])
         if self.panel is not None:
             self.panel.draw()
         if self.capture and self.first_draw:
