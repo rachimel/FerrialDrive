@@ -104,7 +104,7 @@ class AssetLoaderApp:
         self.clip_name = next(iter(handle.resource.clips))
         self.elapsed = 0.0
         self.fit()
-        self.message, self.error = "로딩 검증 완료 · 등록하면 카탈로그에 저장한다.", False
+        self.message, self.error = "", False
         return True
 
     @property
