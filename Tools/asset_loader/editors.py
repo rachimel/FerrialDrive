@@ -26,8 +26,8 @@ class RenderPanel(Panel):
         self.button("찾기", Rect(1012, 160, 124, 36), self.browse)
         definitions = [("root", "모델 루트", ""), ("asset_id", "에셋 ID", app.asset_id or "model"),
             ("animation", "동작 이름", "idle"), ("frames", "프레임", "1,3,5,7"),
-            ("fps", "FPS", "8"), ("width", "너비 (px)", "160"),
-            ("height", "높이 (px)", "160"), ("scale", "정사영 범위", "4.5"),
+            ("fps", "FPS", "8"), ("width", "너비 (px)", "240"),
+            ("height", "높이 (px)", "240"), ("scale", "정사영 범위", "4.5"),
             ("samples", "렌더 샘플", "32")]
         for index, (name, label, value) in enumerate(definitions):
             x, y = 144 + index % 2 * 510, 228 + index // 2 * 52
