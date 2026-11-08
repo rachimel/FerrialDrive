@@ -91,12 +91,53 @@ def build_scene(config):
     return scene, root, actor, floor
 
 
+def prepare_saved_scene(config):
+    """원본을 덮어쓰지 않고 기존 계층·리그·키프레임을 렌더용 부모 아래 보존한다."""
+    scene = bpy.context.scene
+    root_name = config.get('root_object', '')
+    model = bpy.data.objects.get(root_name) if root_name else bpy.data.objects.get('ActorRoot')
+    if root_name and model is None:
+        raise ValueError(f'모델 루트 오브젝트가 없다: {root_name}')
+    root = bpy.data.objects.new('FDriveExportRoot', None)
+    scene.collection.objects.link(root)
+    floor = bpy.data.objects.get('ShadowCatcher')
+    objects = [model] if model else [obj for obj in scene.objects
+        if obj.parent is None and obj is not root and obj is not floor
+        and obj.type not in {'CAMERA', 'LIGHT'}]
+    if not objects:
+        raise ValueError('렌더할 모델이 없다.')
+    for obj in objects:
+        world = obj.matrix_world.copy()
+        obj.parent = root
+        obj.matrix_world = world
+    if not any(obj.type == 'MESH' for obj in root.children_recursive):
+        raise ValueError('모델 루트 아래에 메시가 필요하다.')
+    if floor is None:
+        bpy.ops.mesh.primitive_plane_add(size=200)
+        floor = bpy.context.object
+        floor.name = 'ShadowCatcher'
+    floor.is_shadow_catcher = True
+    if not config.get('use_scene_camera', True) or scene.camera is None:
+        bpy.ops.object.camera_add(location=config['camera']['position'])
+        camera = bpy.context.object
+        camera.rotation_euler = (Vector(config['camera']['target']) - camera.location).to_track_quat('-Z', 'Y').to_euler()
+        camera.data.type, camera.data.ortho_scale = 'ORTHO', config['camera']['ortho_scale']
+        scene.camera = camera
+    if not any(obj.type == 'LIGHT' and not obj.hide_render for obj in scene.objects):
+        bpy.ops.object.light_add(type='AREA', location=config['light']['position'])
+        light = bpy.context.object
+        light.rotation_euler = (-light.location).to_track_quat('-Z', 'Y').to_euler()
+        light.data.energy, light.data.shape, light.data.size = config['light']['energy'], 'DISK', config['light']['size']
+    scene.render.fps = int(config['fps'])
+    return scene, root, floor
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--work-file', type=Path, required=True)
-    parser.add_argument('--source-blend', type=Path, help='ActorRoot·ShadowCatcher·카메라를 가진 저장 장면')
+    parser.add_argument('--source-blend', type=Path, help='기존 모델·리그·키프레임을 가진 저장 장면')
     args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:])
     config_bytes = args.config.read_bytes()
     config = json.loads(config_bytes)
@@ -104,10 +145,7 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     if args.source_blend:
         bpy.ops.wm.open_mainfile(filepath=str(args.source_blend.resolve()))
-        scene = bpy.context.scene
-        root, floor = bpy.data.objects.get('ActorRoot'), bpy.data.objects.get('ShadowCatcher')
-        if root is None or floor is None or scene.camera is None:
-            raise ValueError('입력 장면에는 ActorRoot·ShadowCatcher·카메라가 필요하다.')
+        scene, root, floor = prepare_saved_scene(config)
         scene.render.engine = 'CYCLES'
         scene.cycles.device = 'CPU'
         scene.cycles.samples = config['render']['samples']
@@ -121,6 +159,7 @@ def main():
         scene.render.image_settings.color_depth = '8'
     else:
         scene, root, actor, floor = build_scene(config)
+    root_name = root.name
     scene.frame_set(1)
     floor.hide_render = True
     args.work_file.parent.mkdir(parents=True, exist_ok=True)
@@ -129,8 +168,8 @@ def main():
     # 메모리의 장면만 렌더하지 않고 저장된 작업본을 실제로 다시 불러온다.
     bpy.ops.wm.open_mainfile(filepath=str(args.work_file.resolve()))
     scene = bpy.context.scene
-    root, floor = bpy.data.objects['ActorRoot'], bpy.data.objects['ShadowCatcher']
-    actor = [obj for obj in root.children_recursive if obj.type == 'MESH']
+    root, floor = bpy.data.objects[root_name], bpy.data.objects['ShadowCatcher']
+    actor = [obj for obj in root.children_recursive if obj.type == 'MESH' and obj is not floor]
     scene.frame_set(1)
     point = world_to_camera_view(scene, scene.camera, Vector((0, 0, 0)))
     width, height = config['frame_size_pixels']

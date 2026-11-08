@@ -1,6 +1,6 @@
 # 에셋 로더 독립 샘플
 
-직접 작성한 기본 도형으로 만든 공개 가능한 샘플이다. 실제 게임 이미지·Blender·AI 생성물을 사용하지 않는다.
+직접 작성한 기본 도형으로 만든 공개 가능한 샘플이다. 기본 이미지 시연은 Blender 없이 실행하며 실제 게임 에셋·AI 생성물을 사용하지 않는다.
 
 - `image.png`: 일반 투명 이미지.
 - `body.json` / `body.png`: SSheetCutil v1 시트. 8방향·방향별 4프레임·6FPS.
@@ -32,3 +32,15 @@ python Tools/asset_loader/run.py samples/asset_loader/bundle.json --debug
 실행 위치와 다른 작업 폴더에서 실행할 때는 진입 스크립트와 입력에 절대 경로를 전달한다. 메타데이터의 이미지 참조는 메타데이터 파일 위치, 카탈로그 참조는 카탈로그 파일 위치를 기준으로 읽는다.
 
 UI 사용법과 런타임 연결은 [도구 안내](../../Tools/asset_loader/README.md)를 따른다.
+
+## 3D 리그 샘플
+
+`make_rig_sample.py`는 Blender에서 큐브·단일 본·스키닝·1/3/5프레임 키프레임을 생성한다. 실제 게임 모델과 별개이며 모델 자동 리깅 기능이 아니다.
+
+```text
+blender --background --factory-startup --python samples/asset_loader/make_rig_sample.py -- --output Tools/asset_loader/workspace/rig_sample.blend
+```
+
+에셋 로더에서 **제작 → 3D 프리렌더**로 생성한 모델을 선택한다. 모델 루트는 `SampleRig`, 프레임은 `1,3`, 해상도는 `96×96`, FPS는 `8`, 렌더 샘플은 `2`로 지정한다. 카메라는 도구 설정을 사용한다. 이는 빠른 기능 확인용 값이다.
+
+완료 후 8방향·방향별 2프레임·본체/그림자 분리를 확인한다. **제작 → 애니메이션 조립**에서 순서를 바꾸거나 반복하고 FPS·피봇을 편집해 저장한다. 저장한 시트의 방향별 동작과 그림자가 일치하고 원본 `.blend`가 보존되는지 확인한다. 새 결과는 작업/출력 폴더에만 남긴다.

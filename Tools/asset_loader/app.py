@@ -2,7 +2,9 @@
 
 from math import isfinite
 from pathlib import Path
+import json
 import re
+from uuid import uuid4
 
 from ferrial_drive.assets import AssetCatalog, AssetDefinition, AssetManager, detect_kind
 from ferrial_drive.assets.pico_assets import PicoAssetBackend
@@ -15,7 +17,9 @@ ROOT = Path(__file__).resolve().parents[2]
 SAMPLE = ROOT / "samples/asset_loader/bundle.json"
 DEFAULT_CATALOG = Path(__file__).with_name("workspace") / "catalog.json"
 WINDOW = {"width": 1280, "height": 800, "title": "FDrive | Asset Loader"}
-VIEW = Rect(24, 154, 820, 530)
+VIEW = Rect(24, 116, 820, 568)
+PRODUCTION_MENU = Rect(1136, 18, 120, 34)
+PRODUCTION_ITEMS = [("3D 프리렌더…", "render"), ("애니메이션 조립…", "compose"), ("렌더 취소", "cancel_render")]
 
 
 def dialog(kind, **options):
@@ -53,15 +57,17 @@ class AssetLoaderApp:
         self.error = False
         self.list_offset = 0
         self.first_draw = True
+        self.build = None
+        self.menu_open = False
         self.buttons = [
-            ("불러오기 O", "open", Rect(24, 80, 150, 44)),
-            ("ID 변경 I", "id", Rect(184, 80, 138, 44)),
-            ("등록 S", "register", Rect(332, 80, 130, 44)),
-            ("핫 로드 D", "debug", Rect(472, 80, 150, 44)),
-            ("새로고침 R", "reload", Rect(632, 80, 152, 44)),
-            ("카탈로그", "catalog", Rect(794, 80, 138, 44)),
-            ("맞춤 F", "fit", Rect(942, 80, 126, 44)),
-            ("1:1", "actual", Rect(1078, 80, 88, 44)),
+            ("불러오기 O", "open", Rect(24, 64, 150, 36)),
+            ("ID 변경 I", "id", Rect(184, 64, 138, 36)),
+            ("등록 S", "register", Rect(332, 64, 130, 36)),
+            ("핫 로드 D", "debug", Rect(472, 64, 150, 36)),
+            ("새로고침 R", "reload", Rect(632, 64, 152, 36)),
+            ("카탈로그", "catalog", Rect(794, 64, 138, 36)),
+            ("맞춤 F", "fit", Rect(942, 64, 126, 36)),
+            ("1:1", "actual", Rect(1078, 64, 88, 36)),
         ]
 
     def enter(self):
@@ -71,6 +77,7 @@ class AssetLoaderApp:
         self.theme = load_theme()
         paths = {role: ROOT / "data/fonts" / entry["path"] for role, entry in self.theme["fonts"].items()}
         sizes = {role: entry["size"] for role, entry in self.theme["fonts"].items()}
+        sizes["title"] = 28
         self.renderer = PicoRenderer(paths, sizes)
         if self.catalog_path.exists():
             try:
@@ -78,7 +85,10 @@ class AssetLoaderApp:
             except (OSError, ValueError, KeyError, TypeError) as error:
                 self.report(error)
                 return
-        self.open_source(self.initial_source)
+        if self.initial_source.suffix.lower() == ".blend":
+            self.configure_render(self.initial_source)
+        else:
+            self.open_source(self.initial_source)
 
     def report(self, error):
         self.message, self.error = str(error), True
@@ -101,7 +111,7 @@ class AssetLoaderApp:
         self.manager, self.handle, self.source = candidate, handle, source
         hint = handle.resource.suggested_id
         self.asset_id = asset_id or re.sub(r"[^A-Za-z0-9_.-]", "_", str(hint)).strip("_.-") or "asset"
-        self.clip_name = next(iter(handle.resource.clips))
+        self.clip_name = handle.resource.default_clip
         self.elapsed = 0.0
         self.fit()
         self.message, self.error = "", False
@@ -151,13 +161,50 @@ class AssetLoaderApp:
         self.catalog = catalog
         self.message, self.error = f"등록 완료: {self.asset_id}", False
 
+    def configure_render(self, source=None):
+        from .editors import render_dialog
+        if self.build and self.build.process is not None:
+            raise ValueError("렌더 작업이 진행 중이다.")
+        recipe = render_dialog(self.asset_id, source)
+        if recipe:
+            self.start_render(*recipe)
+
+    def start_render(self, source, config, *, blender=None):
+        from .production import WORKSPACE
+        from Tools.blender_pipeline.asset_build import AssetBuild
+        if self.build and self.build.process is not None:
+            raise ValueError("렌더 작업이 진행 중이다.")
+        path = WORKSPACE / "render_jobs" / (uuid4().hex + ".json")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
+        if self.build:
+            self.build.close()
+        self.build = AssetBuild(path, source_blend=source, blender=blender,
+                                output_root=ROOT / "output/asset_loader/renders")
+        self.build.start()
+        self.message, self.error = "3D 프리렌더링 중", False
+
+    def compose(self):
+        from .editors import assembly_dialog
+        if self.handle is None:
+            raise ValueError("먼저 에셋을 선택한다.")
+        resource = self.handle.resource
+        result = assembly_dialog(resource.definition, resource.sizes["body"], self.clip_name, self.asset_id)
+        if result:
+            path, clip_name = result
+            if self.open_source(path, asset_id=self.asset_id):
+                self.clip_name = clip_name
+
     def action(self, action):
         try:
             if action == "open":
-                path = dialog("open", title="이미지·시트·번들 열기", filetypes=[
-                    ("이미지·메타데이터", "*.png *.jpg *.jpeg *.bmp *.json"), ("모든 파일", "*.*")])
+                path = dialog("open", title="모델·이미지·시트 열기", filetypes=[
+                    ("모델·이미지·메타데이터", "*.blend *.png *.jpg *.jpeg *.bmp *.json"), ("모든 파일", "*.*")])
                 if path:
-                    self.open_source(path)
+                    if Path(path).suffix.lower() == ".blend":
+                        self.configure_render(path)
+                    else:
+                        self.open_source(path)
             elif action == "id":
                 value = dialog("id", initialvalue=self.asset_id)
                 if value is not None:
@@ -186,6 +233,13 @@ class AssetLoaderApp:
                 self.fit()
             elif action == "actual":
                 self.zoom = 1.0
+            elif action == "render":
+                self.configure_render()
+            elif action == "compose":
+                self.compose()
+            elif action == "cancel_render" and self.build:
+                self.build.close()
+                self.message, self.error = "렌더 취소", False
         except (OSError, ValueError, KeyError, TypeError, RuntimeError) as error:
             self.report(error)
 
@@ -198,7 +252,10 @@ class AssetLoaderApp:
             if key in actions:
                 self.action(actions[key])
             elif key == pico.SDLK_ESCAPE:
-                self.running = False
+                if self.menu_open:
+                    self.menu_open = False
+                else:
+                    self.running = False
             elif key == pico.SDLK_SPACE:
                 self.paused = not self.paused
             elif key in (pico.SDLK_LEFT, pico.SDLK_RIGHT):
@@ -214,6 +271,15 @@ class AssetLoaderApp:
                 count = len(self.catalog.definitions)
                 self.list_offset = max(0, min(max(0, count - 8), self.list_offset + (-8 if key == pico.SDLK_PAGEUP else 8)))
         elif event.type == pico.SDL_MOUSEBUTTONDOWN and event.button == pico.SDL_BUTTON_LEFT:
+            if PRODUCTION_MENU.contains(event.x, event.y):
+                self.menu_open = not self.menu_open
+                return
+            if self.menu_open:
+                self.menu_open = False
+                for index, (_, action) in enumerate(PRODUCTION_ITEMS):
+                    if Rect(1030, 56 + index * 36, 226, 36).contains(event.x, event.y):
+                        self.action(action)
+                        return
             for _, action, rect in self.buttons:
                 if rect.contains(event.x, event.y):
                     self.action(action)
@@ -238,6 +304,12 @@ class AssetLoaderApp:
             raise ValueError("갱신 시간은 0 이상의 유한한 초 단위다.")
         if self.manager:
             self.apply_reload(self.manager.poll_reload())
+        if self.build and self.build.process is not None:
+            result = self.build.poll()
+            if result is True:
+                self.open_source(self.build.result)
+            elif result is False:
+                self.report(self.build.error)
         if not self.paused:
             self.elapsed += delta_seconds
 
@@ -245,6 +317,9 @@ class AssetLoaderApp:
         r, c = self.renderer, self.theme["colors"]
         r.clear(c["background"])
         r.text("FDrive · 에셋 로더", 24, 20, "title", c["text"])
+        r.text("제작", PRODUCTION_MENU.x + 12, PRODUCTION_MENU.y + 5, "body", c["text"])
+        r.line(1204, 32, 1209, 37, c["text"])
+        r.line(1209, 37, 1214, 32, c["text"])
         for label, action, rect in self.buttons:
             active = action == "debug" and self.debug
             r.rect(rect, c["selected"] if active else c["button"])
@@ -252,7 +327,7 @@ class AssetLoaderApp:
                 label = f"핫 로드 {'ON' if self.debug else 'OFF'} D"
             r.text(label, rect.x + 10, rect.y + 10, "small", c["text"] if active else c["button_text"])
         with r.clip(VIEW):
-            for row in range(9):
+            for row in range(10):
                 for column in range(13):
                     r.rect(Rect(VIEW.x + column * 64, VIEW.y + row * 64, 64, 64),
                            c["panel"] if (row + column) % 2 else c["panel_surface"])
@@ -265,7 +340,7 @@ class AssetLoaderApp:
                 ui_y = WINDOW["height"] - y
                 r.line(x - 10, ui_y, x + 10, ui_y, c["accent"])
                 r.line(x, ui_y - 10, x, ui_y + 10, c["accent"])
-        r.rect(Rect(866, 154, 390, 532), c["panel"])
+        r.rect(Rect(866, 116, 390, 570), c["panel"])
         details = [f"ID: {self.asset_id or '-'}", f"종류: {self.handle.resource.definition.kind if self.handle else '-'}",
                    f"원본: {self.source.name if self.source else '-'}", f"동작: {self.clip_name or '-'}"]
         if self.clip:
@@ -275,7 +350,7 @@ class AssetLoaderApp:
                             f"RGBA8 추정: {resource.estimated_bytes / 1048576:.2f} MiB",
                             f"본체 {'ON' if self.show_body else 'OFF'} / 그림자 {'ON' if self.show_shadow else 'OFF'}"])
         for index, line in enumerate(details):
-            r.text(line, 882, 170 + index * 29, "small", c["text"], max_width=358)
+            r.text(line, 882, 132 + index * 29, "small", c["text"], max_width=358)
         r.text(f"등록 목록 ({len(self.catalog.definitions)}) · PgUp/PgDn", 882, 405, "small", c["muted"])
         for index, definition in enumerate(list(self.catalog.definitions.values())[self.list_offset:self.list_offset + 8]):
             y = 430 + index * 32
@@ -284,6 +359,11 @@ class AssetLoaderApp:
         r.text(self.message, 24, 700, "small", c["error"] if self.error else c["accent"], max_width=1230)
         r.text(f"카탈로그: {self.catalog_path.as_posix()}", 24, 730, "small", c["muted"], max_width=1230)
         r.text("← → 동작/방향 · Space 재생/정지 · . 다음 프레임 · 휠 확대 · B 본체 · H 그림자 · Esc 종료", 24, 763, "small", c["muted"])
+        if self.menu_open:
+            for index, (label, _) in enumerate(PRODUCTION_ITEMS):
+                rect = Rect(1030, 56 + index * 36, 226, 36)
+                r.rect(rect, c["panel"])
+                r.text(label, rect.x + 12, rect.y + 8, "small", c["text"])
         if self.capture and self.first_draw:
             self.save_capture()
         self.first_draw = False
@@ -305,6 +385,8 @@ class AssetLoaderApp:
 
     def exit(self):
         try:
+            if self.build:
+                self.build.close()
             if self.manager:
                 self.manager.close()
         finally:

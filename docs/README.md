@@ -14,7 +14,7 @@
 
 ## 현재 도구
 
-- [FDrive 에셋 로더](../Tools/asset_loader/README.md): 이미지·시트·번들 미리보기·등록·디버그 핫 로드·공통 자원 공유와 수명 관리
+- [FDrive 에셋 로더](../Tools/asset_loader/README.md): 3D 프리렌더·애니메이션 조립·미리보기·등록·디버그 핫 로드·공통 자원 관리
 - [대화 기록](../Tools/conversation_log_viewer/README.md): 읽기용 Markdown·누락 설명·Codex 원문 검색·한국 시각·범위 가져오기·저장/취소
 - [Codex 원문 근거 작성](tool-usage/conversation_log_evidence.md): 대화/발언 식별·짧은 인용·회고와 원문 확인 구분
 - [Theme Reference](theme_reference.md): 도구 공통 색상·글꼴·간격·선의 역할

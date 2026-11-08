@@ -87,6 +87,7 @@ class AssetDocument:
     sheets: dict
     dependencies: tuple
     suggested_id: str | None = None
+    default_clip: str | None = None
 
 
 def detect_kind(source):
@@ -117,7 +118,7 @@ def _read_document(definition):
     paths = (source, (source.parent / data["body"]).resolve(),
              (source.parent / data["shadow"]).resolve(), bundle.body.image_path, bundle.shadow.image_path)
     return AssetDocument(definition, {"body": bundle.body, "shadow": bundle.shadow},
-                         tuple(dict.fromkeys(paths)), bundle.asset_id)
+                         tuple(dict.fromkeys(paths)), bundle.asset_id, next(iter(bundle.directions.values())))
 
 
 def read_document(definition):

@@ -48,6 +48,21 @@ class PicoAssetLoaderTests(unittest.TestCase):
                 resource.draw(name, 0, 100, 100, body=False, shadow=True)
         self.assertEqual(self.manager.snapshot(), {})
 
+    def test_assembled_bundle_opens_its_selected_default_animation(self):
+        from Tools.asset_loader.assembly import SpriteAssembly
+        from Tools.asset_loader.app import AssetLoaderApp
+        assembly = SpriteAssembly(self.catalog.definitions["sample_mech"])
+        assembly.apply("idle/e", "attack", [1, 0], 12, None)
+        path = assembly.save(self.root / "assembled", asset_id="assembled")
+        app = AssetLoaderApp(source=path, catalog=self.root / "catalog.json")
+        try:
+            app.enter()
+            self.assertFalse(app.error)
+            self.assertEqual(app.clip_name, "attack/e")
+            self.assertEqual(app.clip.fps, 12)
+        finally:
+            app.exit()
+
     def test_metadata_size_mismatch_keeps_previous_texture_and_recovers(self):
         handle = self.manager.acquire("sample_sheet")
         previous = handle.resource

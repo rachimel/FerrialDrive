@@ -50,6 +50,7 @@ class PicoAssetResource:
             else:
                 width, height = self.sizes["body"]
                 self.clips = {"image": SpriteClip(1.0, (SpriteFrame((0, 0, width, height), (width / 2, 0)),))}
+            self.default_clip = document.default_clip or next(iter(self.clips))
         except BaseException:
             self.close()
             raise
