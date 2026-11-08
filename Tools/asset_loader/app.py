@@ -16,13 +16,13 @@ from .library import DEFAULT_CATALOG, SAMPLE, prepare_library, store_asset
 
 ROOT = Path(__file__).resolve().parents[2]
 WINDOW = {"width": 1280, "height": 800, "title": "FDrive | Asset Loader"}
-VIEW = Rect(20, 174, 844, 482)
-PRODUCTION_MENU = Rect(1164, 12, 96, 34)
-PRODUCTION_ITEMS = [("메카 · 무기 분리…", "mech"), ("3D 프리렌더…", "render"),
-                    ("애니메이션 조립…", "compose"), ("렌더 취소", "cancel_render")]
-FILTER_RECT = Rect(900, 590, 344, 28)
-CATALOG_RECT = Rect(892, 216, 360, 320)
-FILTER_OPTIONS_Y = 622
+VIEW = Rect(16, 88, 916, 616)
+PRODUCTION_MENU = Rect(1152, 10, 112, 30)
+PRODUCTION_ITEMS = [("ID 변경 I", "id"), ("카탈로그 열기", "catalog"),
+                    ("핫 로드 전환 D", "debug"), ("새로고침 R", "reload"), ("렌더 취소", "cancel_render")]
+FILTER_RECT = Rect(964, 472, 288, 28)
+CATALOG_RECT = Rect(956, 124, 304, 272)
+FILTER_OPTIONS_Y = 504
 FILTERS = ('nearest', 'linear', 'bicubic')
 
 
@@ -53,23 +53,23 @@ class AssetLoaderApp:
         self.menu_open = False
         self.panel = None
         self.mech_drafts = {}
+        self.show_details = False
         self.mouse = (0, 0)
         self.filtering, self.filter_popup = 'bicubic', False
         self.buttons = [
-            ("불러오기 O", "open", Rect(226, 12, 118, 34)),
-            ("ID 변경 I", "id", Rect(352, 12, 104, 34)),
-            ("등록 S", "register", Rect(464, 12, 82, 34)),
-            ("핫 로드 D", "debug", Rect(554, 12, 150, 34)),
-            ("새로고침 R", "reload", Rect(712, 12, 126, 34)),
-            ("카탈로그", "catalog", Rect(846, 12, 112, 34)),
-            ("메카 분리", "mech", Rect(966, 12, 112, 34)),
-            ("맞춤 F", "fit", Rect(20, 668, 104, 32)),
-            ("1:1", "actual", Rect(132, 668, 64, 32)),
-            ("재생 / 정지", "play", Rect(208, 668, 128, 32)),
-            ("◀", "previous", Rect(348, 668, 44, 32)),
-            ("▶", "next", Rect(400, 668, 44, 32)),
-            ("본체 B", "body", Rect(900, 546, 156, 32)),
-            ("그림자 H", "shadow", Rect(1068, 546, 176, 32)),
+            ("불러오기 O", "open", Rect(184, 10, 112, 30)),
+            ("등록 S", "register", Rect(304, 10, 80, 30)),
+            ("메카 설정", "mech", Rect(412, 10, 120, 30)),
+            ("애니메이션 조립", "compose", Rect(540, 10, 152, 30)),
+            ("3D 렌더", "render", Rect(700, 10, 112, 30)),
+            ("맞춤 F", "fit", Rect(16, 716, 88, 30)),
+            ("1:1", "actual", Rect(112, 716, 56, 30)),
+            ("재생 / 정지", "play", Rect(196, 716, 120, 30)),
+            ("◀", "previous", Rect(324, 716, 40, 30)),
+            ("▶", "next", Rect(372, 716, 40, 30)),
+            ("본체 B", "body", Rect(964, 432, 136, 28)),
+            ("그림자 H", "shadow", Rect(1112, 432, 140, 28)),
+            ("상세 정보 ▸", "details", Rect(964, 516, 288, 28)),
         ]
 
     def enter(self):
@@ -274,6 +274,8 @@ class AssetLoaderApp:
                 self.show_body = not self.show_body
             elif action == "shadow":
                 self.show_shadow = not self.show_shadow
+            elif action == "details":
+                self.show_details = not self.show_details
             elif action == "cancel_render" and self.build:
                 self.build.close()
                 self.message, self.error = "렌더 취소", False
@@ -345,7 +347,7 @@ class AssetLoaderApp:
                     self.action(action)
                     return
             if CATALOG_RECT.contains(event.x, event.y):
-                index = self.list_offset + int((event.y - CATALOG_RECT.y) // 40)
+                index = self.list_offset + int((event.y - CATALOG_RECT.y) // 34)
                 definitions = list(self.catalog.definitions.values())
                 if index < len(definitions):
                     definition = definitions[index]
@@ -385,32 +387,37 @@ class AssetLoaderApp:
         r, c = self.renderer, self.theme["colors"]
         r.clear(c["background"])
         # 공통 본문 글꼴로 영문과 한글의 시각적 간격을 맞춘다.
-        r.text("FDrive 에셋 로더", 20, 19, "body", c["text"])
-        r.rect(Rect(20, 60, 1240, 100), c["panel"])
-        r.text("공통 정보", 36, 72, "small", c["accent"])
+        r.text("FDrive 에셋 로더", 16, 16, "body", c["text"])
+        r.line(398, 14, 398, 36, c["line"])
+        r.rect(Rect(16, 50, 1248, 28), c["panel"])
         resource = self.handle.resource if self.handle else None
-        details = [(f"ID: {self.asset_id or '-'}", 142, 72, 310),
-                   (f"종류: {resource.definition.kind if resource else '-'}", 482, 72, 180),
-                   (f"원본: {self.source.name if self.source else '-'}", 690, 72, 550),
-                   (f"동작: {self.clip_name or '-'}", 36, 112, 330),
-                   (f"프레임: {self.frame_index + 1}/{len(self.clip.frames)} · {self.clip.fps:g} FPS" if self.clip else "프레임: -", 390, 112, 300),
-                   (f"배율: {self.zoom:.2f}", 716, 112, 160),
-                   (f"RGBA8 추정: {resource.estimated_bytes / 1048576:.2f} MiB" if resource else "RGBA8 추정: -", 918, 112, 322)]
-        for text, x, y, width in details:
-            r.text(text, x, y, "small", c["text"], max_width=width)
-        r.rect(PRODUCTION_MENU, c["button"])
-        r.text("제작", PRODUCTION_MENU.x + 12, PRODUCTION_MENU.y + 5, "body", c["button_text"])
-        r.line(1230, 24, 1235, 29, c["button_text"])
-        r.line(1235, 29, 1240, 24, c["button_text"])
+        details = [(f"ID  {self.asset_id or '-'}", 28, 300),
+                   (f"원본  {self.source.name if self.source else '-'}", 350, 360),
+                   (f"동작  {self.clip_name or '-'}", 734, 250),
+                   (f"{self.frame_index + 1}/{len(self.clip.frames)} 프레임 · {self.clip.fps:g} FPS" if self.clip else "프레임 -", 1010, 242)]
+        for text, x, width in details:
+            r.text(text, x, 57, "small", c["text"], max_width=width)
+        r.rect(PRODUCTION_MENU, c["input"])
+        r.text("관리", PRODUCTION_MENU.x + 12, PRODUCTION_MENU.y + 7, "small", c["text"])
+        r.line(1240, 22, 1244, 26, c["muted"])
+        r.line(1244, 26, 1248, 22, c["muted"])
         for label, action, rect in self.buttons:
             active = ((action == "debug" and self.debug) or (action == "body" and self.show_body)
                       or (action == "shadow" and self.show_shadow))
-            r.rect(rect, c["selected"] if active else c["button"])
+            r.rect(rect, c["selected"] if active else c["input"])
             if action == "debug":
                 label = f"핫 로드 {'ON' if self.debug else 'OFF'} D"
             elif action == "play":
                 label = "재생 Space" if self.paused else "정지 Space"
-            r.text(label, rect.x + 10, rect.y + 10, "small", c["text"] if active else c["button_text"])
+            elif action == "details":
+                label = "상세 정보"
+            r.text(label, rect.x + 10, rect.y + 7, "small", c["text"])
+            if action == "details":
+                x, y = rect.x + rect.width - 18, rect.y + 14
+                points = ((x - 4, y - 2, x, y + 2), (x, y + 2, x + 4, y - 2)) if self.show_details else (
+                    (x - 2, y - 4, x + 2, y), (x + 2, y, x - 2, y + 4))
+                for x1, y1, x2, y2 in points:
+                    r.line(x1, y1, x2, y2, c["muted"])
         with r.clip(VIEW):
             for row in range(int(VIEW.height // 64) + 1):
                 for column in range(int(VIEW.width // 64) + 1):
@@ -426,21 +433,29 @@ class AssetLoaderApp:
                 r.line(x - 10, ui_y, x + 10, ui_y, c["accent"])
                 r.line(x, ui_y - 10, x, ui_y + 10, c["accent"])
         # 사이드바 배경은 조작 버튼 뒤를 덮지 않도록 목록 영역에만 그린다.
-        r.rect(Rect(884, 174, 376, 362), c["panel"])
+        r.rect(Rect(948, 88, 316, 316), c["panel"])
         r.rect(FILTER_RECT, c["input"])
         current_filter = self.handle.resource.filtering.title() if self.handle else '-'
         r.text(f"필터: {current_filter}", FILTER_RECT.x + 10, FILTER_RECT.y + 6, "small", c["text"])
-        r.line(1220, 600, 1225, 605, c["text"])
-        r.line(1225, 605, 1230, 600, c["text"])
-        r.text(f"등록 목록 ({len(self.catalog.definitions)}) · 휠 / PgUp/PgDn", 900, 188, "small", c["muted"])
+        r.line(1230, 483, 1234, 487, c["muted"])
+        r.line(1234, 487, 1238, 483, c["muted"])
+        r.text(f"에셋 목록  {len(self.catalog.definitions)}", 964, 100, "small", c["muted"])
         for index, definition in enumerate(list(self.catalog.definitions.values())[self.list_offset:self.list_offset + 8]):
-            y = CATALOG_RECT.y + index * 40
-            r.rect(Rect(CATALOG_RECT.x, y, CATALOG_RECT.width, 38), c["selected"] if definition.asset_id == self.asset_id else c["background"])
-            r.text(definition.asset_id, CATALOG_RECT.x + 10, y + 10, "small", c["text"], max_width=340)
-        r.text("← → 동작/방향 · . 다음 프레임", 466, 678, "small", c["muted"])
-        r.text(self.message, 20, 714, "small", c["error"] if self.error else c["accent"], max_width=1240)
-        r.text(f"카탈로그: {self.catalog_path.as_posix()}", 20, 742, "small", c["muted"], max_width=1240)
-        r.text("미리보기에서 휠 확대 · 메카 분리에서 출력 단위/동작/전환 시점 편집 · Esc 종료", 20, 773, "small", c["muted"])
+            y = CATALOG_RECT.y + index * 34
+            r.rect(Rect(CATALOG_RECT.x, y, CATALOG_RECT.width, 32), c["selected"] if definition.asset_id == self.asset_id else c["background"])
+            r.text(definition.asset_id, CATALOG_RECT.x + 8, y + 8, "small", c["text"], max_width=288)
+        r.text("표시", 964, 410, "small", c["muted"])
+        r.text(f"배율 {self.zoom:.2f}×", 436, 724, "small", c["muted"])
+        r.text("← → 동작/방향 · 휠 확대", 584, 724, "small", c["muted"])
+        if self.show_details:
+            lines = [f"종류: {resource.definition.kind if resource else '-'}",
+                     f"RGBA8 추정: {resource.estimated_bytes / 1048576:.2f} MiB" if resource else "RGBA8 추정: -",
+                     f"핫 로드: {'ON' if self.debug else 'OFF'}", "카탈로그:", self.catalog_path.as_posix()]
+            for index, line in enumerate(lines):
+                r.text(line, 964, 556 + index * 26, "small", c["muted"], max_width=288)
+        r.line(16, 756, 1264, 756, c["line"])
+        r.text(self.message or "에셋을 열고 미리보기하거나 상단에서 작업을 선택한다.", 16, 768, "small",
+               c["error"] if self.error else c["muted"], max_width=1248)
         if self.menu_open:
             for index, (label, _) in enumerate(PRODUCTION_ITEMS):
                 rect = Rect(1030, 56 + index * 36, 226, 36)

@@ -148,15 +148,15 @@ class MechPanelTests(unittest.TestCase):
 
     def test_layer_mapping_and_empty_hand_survive_close_and_reopen(self):
         self.panel.switch(tab=1, layer=1)
-        self.panel.fields["objects"].text = "Hand.L,Sword"
-        self.panel.fields["empty_hand"].text = "Hand.L"
+        self.panel.fields["left_hand.objects"].text = "Hand.L,Sword"
+        self.panel.fields["left_hand.empty_hand"].text = "Hand.L"
         self.panel.close()
         from Tools.asset_loader.mech_panel import MechPanel
         with patch("Tools.asset_loader.mech_panel.plan_path", return_value=self.panel.path):
             reopened = MechPanel(self.app)
         reopened.switch(tab=1, layer=1)
-        self.assertEqual(reopened.value("empty_hand"), "Hand.L")
-        self.assertEqual(reopened.value("objects"), "Hand.L,Sword")
+        self.assertEqual(reopened.value("left_hand.empty_hand"), "Hand.L")
+        self.assertEqual(reopened.value("left_hand.objects"), "Hand.L,Sword")
 
     def test_step_buttons_and_catalog_wheel_keep_preview_controls_separate(self):
         self.panel.close()
@@ -165,13 +165,15 @@ class MechPanelTests(unittest.TestCase):
         self.assertEqual(self.app.frame_index, 3)
         self.app.action("next")
         self.assertEqual(self.app.frame_index, 0)
-        self.app.mouse = (920, 240)
+        from Tools.asset_loader.app import CATALOG_RECT
+        self.app.mouse = (CATALOG_RECT.x + 8, CATALOG_RECT.y + 8)
         zoom = self.app.zoom
         self.app.handle_event(SimpleNamespace(type=self.pico.SDL_MOUSEWHEEL, y=-1))
         self.assertEqual(self.app.zoom, zoom)
 
     def test_frame_order_edit_does_not_change_default_or_other_direction(self):
         self.panel.switch(tab=2, motion=2)
+        self.panel.toggle("frame_options")
         original = deepcopy(self.panel.current_motion["orders"])
         self.panel.fields["override_frame"].text = "3"
         self.panel.add_override()
@@ -188,6 +190,43 @@ class MechPanelTests(unittest.TestCase):
         self.panel.submit()
         self.panel.reload()
         self.assertEqual(self.panel.current_motion["overrides"][0]["order"], changed)
+
+    def test_motion_dropdown_selects_directly_and_escape_only_dismisses_list(self):
+        self.panel.switch(tab=2)
+        self.panel.fields["clip"].text = "edited_idle"
+        button = next(row for row in self.panel.buttons if row[0].startswith("동작:"))
+        self.panel.handle_event(SimpleNamespace(type=self.pico.SDL_MOUSEBUTTONDOWN,
+            button=self.pico.SDL_BUTTON_LEFT, x=button[1].x + 4, y=button[1].y + 4))
+        popup = self.panel.choice_popup[0]
+        self.app.draw()
+        self.panel.handle_event(SimpleNamespace(type=self.pico.SDL_MOUSEBUTTONDOWN,
+            button=self.pico.SDL_BUTTON_LEFT, x=popup.x + 4, y=popup.y + 7 * 28 + 4))
+        self.assertEqual(self.panel.motion, 7)
+        self.assertEqual(self.panel.data["motions"]["stowed_idle"]["clip"], "edited_idle")
+        next(row for row in self.panel.buttons if row[0].startswith("동작:"))[2]()
+        self.panel.handle_event(SimpleNamespace(type=self.pico.SDL_KEYDOWN, key=self.pico.SDLK_ESCAPE))
+        self.assertIsNone(self.panel.choice_popup)
+        self.assertIs(self.app.panel, self.panel)
+        next(row for row in self.panel.buttons if row[0].startswith("동작:"))[2]()
+        self.panel.handle_event(SimpleNamespace(type=self.pico.SDL_KEYDOWN, key=self.pico.SDLK_F4, mod=self.pico.KMOD_ALT))
+        self.assertFalse(self.app.running)
+
+    def test_folded_settings_and_multiple_layer_rows_keep_their_values(self):
+        self.panel.switch(tab=1)
+        self.panel.fields["left_hand.objects"].text = "LeftHand,Sword"
+        self.panel.fields["right_hand.objects"].text = "RightHand,Gun"
+        self.panel.switch(tab=0)
+        self.panel.toggle("advanced")
+        self.panel.fields["scale"].text = "6.5"
+        self.panel.toggle("advanced")
+        self.assertNotIn("scale", self.panel.fields)
+        self.panel.submit()
+        self.panel.reload()
+        self.panel.toggle("advanced")
+        self.assertEqual(self.panel.value("scale"), "6.5")
+        self.panel.switch(tab=1)
+        self.assertEqual(self.panel.value("left_hand.objects"), "LeftHand,Sword")
+        self.assertEqual(self.panel.value("right_hand.objects"), "RightHand,Gun")
 
 
 if __name__ == "__main__":

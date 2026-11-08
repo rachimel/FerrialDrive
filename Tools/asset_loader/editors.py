@@ -14,30 +14,32 @@ from .widgets import Panel
 
 class RenderPanel(Panel):
     title = "3D 프리렌더"
-    sample_rect = Rect(144, 506, 220, 28)
-    camera_rect = Rect(404, 506, 300, 28)
-    automatic_rect = Rect(774, 506, 330, 28)
-    sharpen_rect = Rect(144, 552, 250, 28)
+    rect = Rect(192, 88, 896, 624)
+    button_surface = "input"
+    sample_rect = Rect(216, 548, 380, 28)
+    camera_rect = Rect(216, 500, 380, 28)
+    automatic_rect = Rect(664, 500, 400, 28)
+    sharpen_rect = Rect(664, 548, 380, 28)
 
     def __init__(self, app, source=None):
         super().__init__(app)
         self.labels = []
         self.sample, self.scene_camera, self.auto_fit = False, False, True
         self.sharpen = True
-        self.add_field("source", source or "", Rect(144, 160, 856, 36))
-        self.button("찾기", Rect(1012, 160, 124, 36), self.browse)
-        definitions = [("root", "모델 루트", ""), ("asset_id", "에셋 ID", app.asset_id or "model"),
-            ("animation", "동작 이름", "idle"), ("frames", "프레임", "1,3,5,7"),
-            ("fps", "FPS", "8"), ("width", "너비 (px)", "240"),
-            ("height", "높이 (px)", "240"), ("scale", "정사영 범위", "4.5"),
-            ("samples", "렌더 샘플", "32")]
-        for index, (name, label, value) in enumerate(definitions):
-            x, y = 144 + index % 2 * 510, 228 + index // 2 * 52
-            self.labels.append((label, x, y + 9))
-            self.add_field(name, value, Rect(x + 120, y, 362, 36))
+        self.add_field("source", source or "", Rect(216, 174, 716, 32))
+        self.button("찾기", Rect(944, 174, 120, 32), self.browse)
+        definitions = [("asset_id", "에셋 ID", app.asset_id or "model", 216, 242, 400),
+            ("root", "모델 루트", "", 664, 242, 400),
+            ("animation", "동작 이름", "idle", 216, 306, 400), ("frames", "프레임", "1,3,5,7", 664, 306, 400),
+            ("width", "너비 (px)", "240", 216, 418, 120), ("height", "높이 (px)", "240", 352, 418, 120),
+            ("fps", "FPS", "8", 488, 418, 128), ("scale", "정사영 범위", "4.5", 664, 418, 184),
+            ("samples", "렌더 샘플", "32", 864, 418, 200)]
+        for name, label, value, x, y, width in definitions:
+            self.labels.append((label, x, y - 20))
+            self.add_field(name, value, Rect(x, y, width, 32))
         self.focus = "source"
-        self.button("렌더 시작", Rect(996, 660, 140, 36), self.submit)
-        self.button("취소", Rect(864, 660, 120, 36), self.close)
+        self.button("렌더 시작", Rect(924, 656, 140, 32), self.submit, style="button")
+        self.button("취소", Rect(812, 656, 100, 32), self.close)
 
     def browse(self):
         def selected(path):
@@ -73,7 +75,9 @@ class RenderPanel(Panel):
     def draw(self):
         super().draw()
         r, colors = self.app.renderer, self.app.theme["colors"]
-        r.text("모델 (.blend)", 144, 134, "small", colors["muted"])
+        r.text("모델 (.blend)", 216, 154, "small", colors["muted"])
+        r.text("이미지·재생", 216, 368, "body", colors["text"])
+        r.text("카메라·품질", 664, 368, "body", colors["text"])
         for label, x, y in self.labels:
             r.text(label, x, y, "small", colors["text"])
         self.check(self.sample_rect, "기본 도형 샘플", self.sample)

@@ -9,14 +9,17 @@ from .production import frame_numbers
 from .widgets import Panel
 
 
-TABS = ("공통 렌더", "출력 단위", "동작·그리기 순서", "전환 시점", "무기 조건·검수")
+TABS = ("공통 렌더", "출력 단위", "동작·순서", "전환 시점", "무기 조건·검수")
 EVENT_HINTS = ("손이 손잡이를 잡는 시점", "수납 부착점 → 손목", "칼집·장착부를 완전히 벗어남",
                "손목 → 수납 부착점", "빈손으로 전환", "수납 부착점 → 독립 위치·회전")
 
 
 class MechPanel(Panel):
-    title = "메카 · 무기 분리 작업"
-    rect = Rect(48, 48, 1184, 704)
+    title = "메카 설정"
+    rect = Rect(16, 16, 1248, 768)
+    button_surface = "input"
+    error_x, error_y = 264, 706
+    error_width = 976
 
     def __init__(self, app):
         super().__init__(app)
@@ -27,6 +30,7 @@ class MechPanel(Panel):
         self.side, self.weapon = "left", "sword"
         self.saved = False
         self.labels = []
+        self.advanced = self.help_open = self.frame_options = False
         self.rebuild()
         if str(self.path) not in app.mech_drafts and self.path.exists():
             self.attempt(self.reload)
@@ -48,18 +52,20 @@ class MechPanel(Panel):
         return self.current_motion["orders"][direction]
 
     def field(self, name, label, value, x, y, width=300):
-        self.labels.append((label, x, y - 24))
-        self.add_field(name, value, Rect(x, y, width, 34))
+        self.labels.append((label, x, y - 20))
+        self.add_field(name, value, Rect(x, y, width, 30))
 
     def remember(self):
         if self.tab == 0:
             for key in ("camera", "frames", "fps", "width", "height", "scale", "pivot"):
-                self.data["render"][key] = self.value(key)
-        elif self.tab == 1:
-            row = self.data["layers"][LAYERS[self.layer][0]]
-            for key in ("objects", "anchor", "empty_hand"):
                 if key in self.fields:
-                    row[key] = self.value(key)
+                    self.data["render"][key] = self.value(key)
+        elif self.tab == 1:
+            for layer, _, _ in LAYERS:
+                for key in ("objects", "anchor", "empty_hand"):
+                    name = f"{layer}.{key}"
+                    if name in self.fields:
+                        self.data["layers"][layer][key] = self.value(name)
         elif self.tab == 2:
             for key in ("clip", "frames", "reuse", "notes"):
                 self.current_motion[key] = self.value(key)
@@ -98,73 +104,96 @@ class MechPanel(Panel):
         self.saved = False
         self.rebuild()
 
+    def toggle(self, name):
+        self.remember()
+        setattr(self, name, not getattr(self, name))
+        self.rebuild()
+
+    def choose(self, mapping, key, value):
+        self.remember()
+        mapping[key], self.saved = value, False
+        self.rebuild()
+
     def rebuild(self):
         self.fields, self.buttons, self.labels, self.focus = {}, [], [], None
+        self.button_styles, self.button_markers, self.choice_popup = {}, {}, None
         for index, label in enumerate(TABS):
-            self.button(label, Rect(72 + index * 226, 112, 214, 34), lambda i=index: self.switch(tab=i))
-        self.button("작업본 저장", Rect(1052, 698, 156, 34), self.submit)
-        self.button("저장본 불러오기", Rect(852, 698, 188, 34), self.reload)
-        self.button("닫기", Rect(72, 698, 100, 34), self.close)
+            y = (116, 154, 240, 278, 364)[index]
+            self.button(label, Rect(32, y, 192, 32), lambda i=index: self.switch(tab=i),
+                        style="selected" if index == self.tab else "input")
+        self.button("저장", Rect(1144, 736, 96, 32), self.submit, style="button")
+        self.button("저장본 불러오기", Rect(964, 736, 168, 32), self.reload)
+        self.button("미리보기로", Rect(32, 736, 192, 32), self.close)
+        self.disclosure("도움말", Rect(32, 684, 192, 30), lambda: self.toggle("help_open"), expanded=self.help_open)
         if self.tab == 0:
-            fields = (("camera", "공통 카메라 · Blender 오브젝트", 540),
-                      ("frames", "기본 Blender 프레임 · 쉼표 구분", 540),
-                      ("fps", "공통 FPS", 230), ("scale", "공통 정사영 범위", 230),
-                      ("width", "이미지 너비 (px)", 230), ("height", "이미지 높이 (px)", 230),
-                      ("pivot", "공통 기준점 X,Y · bottom-left", 300))
-            positions = ((92, 212), (668, 212), (92, 302), (370, 302), (668, 302), (946, 302), (92, 392))
-            for (key, label, width), (x, y) in zip(fields, positions):
+            for key, label, x, y, width in (("camera", "카메라 오브젝트", 264, 150, 460),
+                    ("frames", "기본 프레임 · 쉼표 구분", 756, 150, 460),
+                    ("width", "너비 (px)", 264, 254, 210), ("height", "높이 (px)", 494, 254, 210),
+                    ("fps", "FPS", 724, 254, 144)):
                 self.field(key, label, self.data["render"][key], x, y, width)
             purpose = "전투 로드아웃" if self.data["render"]["purpose"] == "combat" else "장비 선택 대표 자세"
-            self.button(f"출력 용도: {purpose}", Rect(668, 392, 508, 34),
-                        lambda: self.cycle(self.data["render"], "purpose", ("combat", "preview")))
+            self.choice(purpose, [("combat", "전투 로드아웃"), ("preview", "장비 선택 대표 자세")], Rect(900, 254, 316, 30),
+                        lambda value: self.choose(self.data["render"], "purpose", value))
+            self.disclosure("세부 설정", Rect(264, 316, 172, 30), lambda: self.toggle("advanced"), expanded=self.advanced)
+            if self.advanced:
+                self.field("scale", "정사영 범위", self.data["render"]["scale"], 264, 390, 300)
+                self.field("pivot", "기준점 X,Y · bottom-left", self.data["render"]["pivot"], 596, 390, 300)
         elif self.tab == 1:
-            for index, (_, label, _) in enumerate(LAYERS):
-                self.button(label, Rect(92, 184 + index * 44, 284, 34), lambda i=index: self.switch(layer=i))
-            row = self.data["layers"][LAYERS[self.layer][0]]
-            self.field("objects", "출력에 포함할 독립 오브젝트 · 쉼표 구분", row["objects"], 420, 226, 756)
-            self.field("anchor", "부착 기준 · 본/오브젝트 이름", row["anchor"], 420, 322, 756)
-            if LAYERS[self.layer][0] in ("left_hand", "right_hand"):
-                self.field("empty_hand", "빈손 출력 오브젝트 · 필수 준비", row["empty_hand"], 420, 418, 756)
+            for index, (layer, _, _) in enumerate(LAYERS):
+                y, row = 150 + index * 46, self.data["layers"][layer]
+                self.add_field(f"{layer}.objects", row["objects"], Rect(432, y, 348, 30))
+                self.add_field(f"{layer}.anchor", row["anchor"], Rect(796, y, 188, 30))
+                if layer in ("left_hand", "right_hand"):
+                    self.add_field(f"{layer}.empty_hand", row["empty_hand"], Rect(1000, y, 216, 30))
         elif self.tab in (2, 3):
-            self.button("◀ 동작", Rect(92, 172, 108, 34), lambda: self.switch(motion=(self.motion - 1) % len(MOTIONS)))
-            self.button("다음 동작 ▶", Rect(580, 172, 140, 34), lambda: self.switch(motion=(self.motion + 1) % len(MOTIONS)))
+            self.choice("동작: " + MOTIONS[self.motion][1], [(i, label) for i, (_, label) in enumerate(MOTIONS)],
+                        Rect(264, 98, 320, 32), lambda value: self.switch(motion=value))
             if self.tab == 2:
-                for index, (key, label) in enumerate((("clip", "클립 이름"), ("frames", "Blender 프레임 · 쉼표 구분 / 비우면 공통 프레임"),
-                                                     ("reuse", "재사용할 동작 · 비우면 별도 제작"), ("notes", "팔·손목·몸통 동작 메모"))):
-                    self.field(key, label, self.current_motion[key], 92, 252 + index * 86, 604)
+                for index, (key, label) in enumerate((("clip", "클립 이름"), ("frames", "프레임 · 비우면 공통 값"),
+                                                     ("reuse", "재사용 동작 · 비우면 별도 제작"), ("notes", "동작 메모"))):
+                    self.field(key, label, self.current_motion[key], 264, 188 + index * 64, 432)
                 direction = DIRECTIONS[self.direction]
-                self.button(f"방향: {direction} ▶", Rect(760, 172, 220, 34),
-                            lambda: self.switch(direction=(self.direction + 1) % len(DIRECTIONS)))
+                self.choice("방향: " + direction, [(i, value) for i, value in enumerate(DIRECTIONS)], Rect(744, 98, 144, 32),
+                            lambda value: self.switch(direction=value))
+                self.choice("가림: " + self.current_motion["occlusion"][direction], [(value, value) for value in OCCLUSION],
+                            Rect(900, 98, 316, 32), lambda value: self.choose(self.current_motion["occlusion"], direction, value))
                 for index, key in enumerate(self.current_order):
                     self.button(f"{index + 1}. {dict((k, v) for k, v, _ in LAYERS)[key]}",
-                                Rect(760, 224 + index * 34, 416, 30), lambda i=index: self.select_order(i))
-                self.button("뒤로 ↑", Rect(760, 504, 130, 34), lambda: self.move_order(-1))
-                self.button("앞으로 ↓", Rect(902, 504, 130, 34), lambda: self.move_order(1))
-                self.button(self.current_motion["occlusion"][direction], Rect(1044, 504, 132, 34),
-                            lambda: self.cycle(self.current_motion["occlusion"], direction, OCCLUSION))
-                self.field("override_frame", "예외 편집할 Blender 프레임", self.order_frame or "", 760, 574, 170)
-                self.button("프레임 순서 편집", Rect(946, 574, 230, 34), self.add_override)
-                self.button("기본 순서로 돌아가기", Rect(760, 620, 238, 30), self.base_order)
-                self.button("이 예외 삭제", Rect(1010, 620, 166, 30), self.clear_override)
+                                Rect(744, 188 + index * 32, 472, 30), lambda i=index: self.select_order(i),
+                                style="selected" if index == self.order_index else "input")
+                self.button("↑ 뒤로", Rect(744, 454, 112, 30), lambda: self.move_order(-1))
+                self.button("↓ 앞으로", Rect(868, 454, 112, 30), lambda: self.move_order(1))
+                self.disclosure("프레임별 순서", Rect(744, 504, 224, 30),
+                                lambda: self.toggle("frame_options"), expanded=self.frame_options)
+                if self.frame_options:
+                    self.field("override_frame", "Blender 프레임", self.order_frame if self.order_frame is not None else "", 744, 568, 144)
+                    self.button("이 프레임 편집", Rect(900, 568, 164, 30), self.add_override)
+                    self.button("기본 순서", Rect(1076, 568, 140, 30), self.base_order)
+                    if self.order_frame is not None:
+                        self.button("현재 예외 삭제", Rect(744, 610, 180, 30), self.clear_override)
             else:
-                self.button("왼손" if self.side == "left" else "오른손", Rect(760, 172, 180, 34),
-                            lambda: self.switch(side="right" if self.side == "left" else "left"))
-                self.button("플라즈마 소드" if self.weapon == "sword" else "제식 기관단총", Rect(956, 172, 220, 34),
-                            lambda: self.switch(weapon="gun" if self.weapon == "sword" else "sword"))
+                for side, label, x in (("left", "왼손", 616), ("right", "오른손", 708)):
+                    self.button(label, Rect(x, 98, 84, 32), lambda value=side: self.switch(side=value),
+                                style="selected" if self.side == side else "input")
+                self.choice("플라즈마 소드" if self.weapon == "sword" else "제식 기관단총",
+                            [("sword", "플라즈마 소드"), ("gun", "제식 기관단총")], Rect(824, 98, 392, 32),
+                            lambda value: self.switch(weapon=value))
                 events = {row["kind"]: row["frame"] for row in self.current_motion["events"]
                           if (row["side"], row["weapon"]) == (self.side, self.weapon)}
-                for index, (key, label) in enumerate(EVENTS):
-                    self.field(key, label, events.get(key, ""), 92, 262 + index * 64, 180)
+                for index, (key, _) in enumerate(EVENTS):
+                    self.add_field(key, events.get(key, ""), Rect(504, 188 + index * 52, 112, 30))
         else:
             for index, (key, label) in enumerate(CHECKS):
-                self.button(self.data["checks"][key], Rect(92, 184 + index * 46, 120, 32),
-                            lambda k=key: self.cycle(self.data["checks"], k, STATUSES))
-            for index, (key, label) in enumerate((("sword_reset_frame", "검 길이 복귀 시작 · 수납 동작 프레임 / 미정은 빈칸"),
-                                                 ("gun_storage", "기관단총 수납 위치"), ("deferred", "미확정 사항"), ("notes", "검수 메모"))):
-                self.field(key, label, self.data[key], 760, 222 + index * 112, 416)
+                self.choice(self.data["checks"][key], [(value, value) for value in STATUSES], Rect(264, 150 + index * 42, 96, 30),
+                            lambda value, k=key: self.choose(self.data["checks"], k, value))
+            for index, (key, label) in enumerate((("sword_reset_frame", "검 길이 복귀 · 수납 프레임 / 빈칸은 미정"),
+                                                 ("gun_storage", "총 수납 위치"), ("deferred", "미확정 사항"), ("notes", "검수 메모"))):
+                self.field(key, label, self.data[key], 904, 150 + index * 80, 312)
 
     def select_order(self, index):
         self.order_index = index
+        self.remember()
+        self.rebuild()
 
     def move_order(self, delta):
         self.remember()
@@ -231,45 +260,62 @@ class MechPanel(Panel):
     def draw(self):
         super().draw()
         r, c = self.app.renderer, self.app.theme["colors"]
-        r.rect(Rect(72 + self.tab * 226, 146, 214, 3), c["accent"])
-        r.text("작업 설정 편집 · Blender 분리 출력 / 연속 동작 / 게임 합성은 미구현", 420, 72, "small", c["warning"])
+        r.line(240, 80, 240, 768, c["line"])
+        r.text(TABS[self.tab], 264, 36, "body", c["text"])
+        r.text(self.app.asset_id, 620, 40, "small", c["muted"], max_width=540)
+        for label, y in (("모델·출력", 92), ("애니메이션", 216), ("확인", 340)):
+            r.text(label, 40, y, "small", c["muted"])
         for label, x, y in self.labels:
             r.text(label, x, y, "small", c["muted"])
         if self.tab == 0:
-            lines = ("모든 출력 단위는 같은 카메라·배율·방향·프레임·크기·기준점 사용",
-                     "무기를 파지한 하나의 장면에서 출력 · 레이어별 중앙 맞춤/자동 배율 금지",
-                     "동작별 프레임은 동작 탭에서 지정하며, 해당 동작의 모든 레이어에 공통 적용",
-                     "전투: 사용할 로드아웃의 필요한 모션부터 준비 · 장비 미리보기: 대표 자세 별도 출력")
-            for index, line in enumerate(lines):
-                r.text(line, 92, 478 + index * 38, "small", c["text"])
+            r.text("장면·프레임", 264, 96, "body", c["text"])
+            r.text("이미지·재생", 264, 200, "body", c["text"])
+            r.text("출력 용도", 900, 234, "small", c["muted"])
+            r.text("모든 레이어에 같은 카메라·크기·기준점 적용", 264, 452, "small", c["muted"])
         elif self.tab == 1:
-            r.rect(Rect(88, 184 + self.layer * 44, 3, 34), c["accent"])
-            for index, line in enumerate(("본체는 손목까지 포함 · 좌우 손과 빈손은 별도 출력",
-                                          "손·검·총·칼집은 독립 오브젝트 유지",
-                                          "손+무기는 출력할 때 묶음 · 영구 메시 병합 금지",
-                                          "분리 무기는 독립 위치·회전 · 칼집은 몸체에 유지")):
-                r.text(line, 420, 490 + index * 36, "small", c["text"])
+            for label, x in (("출력 단위", 264), ("오브젝트 · 쉼표 구분", 432), ("부착 기준", 796), ("빈손 오브젝트", 1000)):
+                r.text(label, x, 118, "small", c["muted"])
+            for index, (_, label, _) in enumerate(LAYERS):
+                r.text(label, 264, 158 + index * 46, "small", c["text"], max_width=156)
+            r.text("손·무기·칼집은 독립 유지 · 손+무기는 출력 시 묶음", 264, 548, "small", c["muted"])
         elif self.tab in (2, 3):
-            r.text(MOTIONS[self.motion][1], 220, 180, "body", c["text"])
             if self.tab == 2:
-                r.rect(Rect(754, 224 + self.order_index * 34, 3, 30), c["accent"])
-                r.text("위에서 아래로 뒤 → 앞 · 좌우 손 독립", 760, 152, "small", c["muted"])
-                r.text("순서만으로 해결 못 하는 가림은 별도 결정", 92, 596, "small", c["warning"])
+                r.text("그리기 순서 · 위에서 아래로 뒤 → 앞", 744, 160, "small", c["muted"])
                 rows = [str(row["frame"]) for row in self.current_motion["overrides"]
                         if row["direction"] == DIRECTIONS[self.direction]]
-                r.text("프레임 예외: " + (", ".join(rows) or "없음"), 92, 626, "small", c["muted"], max_width=604)
+                r.text("프레임 예외: " + (", ".join(rows) or "없음"), 264, 504, "small", c["muted"], max_width=432)
                 r.text("편집: " + (f"프레임 {self.order_frame}" if self.order_frame is not None else "기본 순서"),
-                       92, 564, "small", c["accent"])
+                       1000, 462, "small", c["accent"])
             else:
-                r.text("Blender 원본 프레임 번호 · 빈칸은 미지정", 92, 218, "small", c["muted"])
-                r.text("동작 프레임: " + self.motion_frames, 540, 218, "small", c["muted"], max_width=630)
-                for index, line in enumerate(EVENT_HINTS):
-                    r.text(line, 320, 270 + index * 64, "small", c["text"])
-                r.text("위치·회전 연속성과 무기 중복/누락은 실제 동작으로 검수", 320, 640, "small", c["warning"])
+                for label, x in (("전환", 264), ("프레임", 504), ("부착·상태 변화", 648)):
+                    r.text(label, x, 160, "small", c["muted"])
+                for index, ((_, label), hint) in enumerate(zip(EVENTS, EVENT_HINTS)):
+                    r.text(label, 264, 196 + index * 52, "small", c["text"])
+                    r.text(hint, 648, 196 + index * 52, "small", c["muted"])
+                r.text("사용 프레임: " + self.motion_frames + " · 빈칸은 미지정", 264, 536, "small", c["muted"], max_width=950)
         elif self.tab == 4:
+            r.text("검수 상태", 264, 96, "body", c["text"])
+            r.text("무기 설정", 904, 96, "body", c["text"])
             for index, (_, label) in enumerate(CHECKS):
-                r.text(label, 232, 191 + index * 46, "small", c["text"], max_width=500)
-            r.text("확인 상태는 사용자가 실제 검수 후 지정", 92, 588, "small", c["warning"])
+                r.text(label, 376, 158 + index * 42, "small", c["text"], max_width=504)
+            r.text("실제 결과를 검수한 뒤 상태 지정", 264, 526, "small", c["muted"])
+        if self.help_open:
+            explanations = (
+                ("한 장면에서 모든 레이어를 출력한다. 레이어별 자동 맞춤은 사용하지 않는다.",
+                 "세부 설정에서 정사영 범위와 기준점을 조정한다. 동작별 프레임은 비우면 공통 값을 사용한다."),
+                ("본체는 손목까지 포함한다. 좌우 손과 빈손을 별도로 지정한다.",
+                 "칼집은 본체에 남으며 분리된 무기는 독립 위치·회전으로 표시한다."),
+                ("기본 순서와 프레임별 예외는 독립적이다. 프레임별 순서를 펼쳐 특정 프레임을 편집한다.",
+                 "몸 앞뒤를 동시에 가로지르는 무기는 가림 방식에서 추가 분할 또는 가림 처리를 지정한다."),
+                ("재생 인덱스가 아닌 Blender 원본 프레임을 입력한다.",
+                 "부착 전후의 위치·회전 연속성과 무기 중복/누락은 실제 동작에서 확인한다."),
+                ("검 길이 복귀 시작은 수납 동작에 포함된 프레임으로 지정한다.",
+                 "손·팔 수납과 에임 보정기 접기는 미정이다. 검수 상태는 자동 검증 결과가 아니다."),
+            )
+            r.rect(Rect(264, 654, 952, 44), c["input"])
+            for index, line in enumerate(explanations[self.tab]):
+                r.text(line, 274, 660 + index * 18, "small", c["muted"], max_width=930)
+        r.line(264, 726, 1240, 726, c["line"])
         if not self.error:
-            r.text("작업본 저장 완료" if self.saved else "작업본 편집 · 저장 전 검증 · 닫아도 이번 실행 중 입력 유지",
-                   220, 708, "small", c["accent"], max_width=610)
+            r.text("저장 완료" if self.saved else "설정 작업본 · 분리 출력 미연결", 264, 746, "small", c["muted"])
+        self.draw_choices()

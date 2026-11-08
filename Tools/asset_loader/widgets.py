@@ -63,6 +63,7 @@ class Field:
 class Panel:
     title = ""
     rect = Rect(120, 82, 1040, 636)
+    button_surface = "button"
 
     def __init__(self, app, *, parent=None):
         self.app, self.parent = app, parent
@@ -70,6 +71,9 @@ class Panel:
         self.focus = None
         self.error = ""
         self.buttons = []
+        self.button_styles = {}
+        self.button_markers = {}
+        self.choice_popup = None
         self.close_rect = Rect(self.rect.x + self.rect.width - 48, self.rect.y + 12, 32, 32)
 
     def add_field(self, name, value, rect):
@@ -81,8 +85,23 @@ class Panel:
     def close(self):
         self.app.set_panel(self.parent)
 
-    def button(self, label, rect, callback):
+    def button(self, label, rect, callback, *, style=None):
         self.buttons.append((label, rect, callback))
+        if style:
+            self.button_styles[(rect.x, rect.y)] = style
+
+    def choice(self, label, options, rect, callback):
+        """값/표시 이름의 목록을 한 번에 선택한다. 옵션마다 별도 버튼을 늘리지 않는다."""
+        def open_choice():
+            height = len(options) * 28
+            top = min(rect.y + rect.height + 2, 790 - height)
+            self.choice_popup = (Rect(rect.x, top, rect.width, height), options, callback)
+        self.button(label, rect, open_choice)
+        self.button_markers[(rect.x, rect.y)] = "down"
+
+    def disclosure(self, label, rect, callback, *, expanded=False):
+        self.button(label, rect, callback)
+        self.button_markers[(rect.x, rect.y)] = "down" if expanded else "right"
 
     def attempt(self, callback):
         try:
@@ -93,6 +112,22 @@ class Panel:
 
     def handle_event(self, event):
         pico = self.app.pico
+        if event.type == pico.SDL_KEYDOWN and event.key == pico.SDLK_F4 and getattr(event, "mod", 0) & pico.KMOD_ALT:
+            self.app.running = False
+            return
+        if self.choice_popup:
+            if event.type == pico.SDL_KEYDOWN and event.key == pico.SDLK_ESCAPE:
+                self.choice_popup = None
+                return
+            if event.type == pico.SDL_MOUSEBUTTONDOWN and event.button == pico.SDL_BUTTON_LEFT:
+                rect, options, callback = self.choice_popup
+                self.choice_popup = None
+                if rect.contains(event.x, event.y):
+                    value, _ = options[int((event.y - rect.y) // 28)]
+                    self.attempt(lambda: callback(value))
+                    return
+            elif event.type in (pico.SDL_KEYDOWN, pico.SDL_TEXTINPUT, pico.SDL_TEXTEDITING):
+                return
         if event.type == pico.SDL_KEYDOWN:
             if event.key == pico.SDLK_ESCAPE:
                 self.close()
@@ -172,11 +207,30 @@ class Panel:
                 target = pico.SDL_Rect(round(rect.x), round(rect.y), round(rect.width), round(rect.height))
                 pico.SDL_SetTextInputRect(byref(target))
         for label, rect, _ in self.buttons:
-            r.rect(rect, colors["button"])
-            r.text(label, rect.x + 12, rect.y + 9, "small", colors["button_text"])
+            style = self.button_styles.get((rect.x, rect.y), self.button_surface)
+            r.rect(rect, colors[style])
+            marker = self.button_markers.get((rect.x, rect.y))
+            r.text(label, rect.x + 10, rect.y + 8, "small",
+                   colors["button_text"] if style == "button" else colors["text"], max_width=rect.width - (36 if marker else 20))
+            if marker:
+                x, y = rect.x + rect.width - 18, rect.y + rect.height / 2
+                points = ((x - 4, y - 2, x, y + 2), (x, y + 2, x + 4, y - 2)) if marker == "down" else (
+                    (x - 2, y - 4, x + 2, y), (x + 2, y, x - 2, y + 4))
+                for x1, y1, x2, y2 in points:
+                    r.line(x1, y1, x2, y2, colors["muted"])
         if self.error:
-            r.text(self.error, self.rect.x + 24, self.rect.y + self.rect.height - 88,
-                   "small", colors["error"], max_width=self.rect.width - 48)
+            r.text(self.error, getattr(self, "error_x", self.rect.x + 24),
+                   getattr(self, "error_y", self.rect.y + self.rect.height - 88),
+                   "small", colors["error"], max_width=getattr(self, "error_width", self.rect.width - 48))
+
+    def draw_choices(self):
+        if self.choice_popup:
+            r, colors = self.app.renderer, self.app.theme["colors"]
+            rect, options, _ = self.choice_popup
+            r.rect(rect, colors["panel"])
+            r.rect(rect, colors["line"], filled=False)
+            for index, (_, label) in enumerate(options):
+                r.text(label, rect.x + 10, rect.y + index * 28 + 6, "small", colors["text"], max_width=rect.width - 20)
 
     def check(self, rect, label, enabled, *, disabled=False):
         r, colors = self.app.renderer, self.app.theme["colors"]
