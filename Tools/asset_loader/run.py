@@ -17,7 +17,7 @@ UNIT_TEST_ENTRYPOINT = "standalone"
 
 def main():
     from Tools.asset_loader.app import AssetLoaderApp, DEFAULT_CATALOG, WINDOW
-    from ferrial_drive.ui.standalone import run_preview
+    from ferrial_drive.runtime import run_application
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source", type=Path, nargs="?")
@@ -34,7 +34,7 @@ def main():
     app = AssetLoaderApp(source=args.source, catalog=args.catalog, debug=args.debug,
                          timings=timings, capture=args.capture)
     try:
-        run_preview(app, **WINDOW, frame_limit=args.frames, timings=timings)
+        run_application(app, **WINDOW, frame_limit=args.frames, timings=timings)
     finally:
         if timings is not None:
             active_error = sys.exc_info()[1]

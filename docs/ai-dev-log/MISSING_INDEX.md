@@ -3,7 +3,7 @@
 - 갱신 기준일: 2026-11-08 KST
 - 로컬 전용 서사 기록은 집계에서 제외한다.
 - 새 요약 영역만 집계한다. 원기록은 변경하거나 집계하지 않는다.
-- 기록 114개 · 누락 필드 458개.
+- 기록 115개 · 누락 필드 459개.
 - 사용자 보완은 원문 확인/회고의 출처 표시와 함께 각 기록에 남는다.
 
 [작성 규칙](FORMAT.md) · [기록 양식](_template.md)
@@ -14,6 +14,7 @@
 
 | 기록 | 개수 | 종류·항목 |
 | --- | ---: | --- |
+| [FDrive 공통 OpenGL](2026-11-08-fdrive-shared-opengl.md) | 1 | TIME(scope) |
 | [에셋 샤프닝·GPU Bicubic](2026-11-08-asset-sharpen-runtime-bicubic.md) | 1 | TIME(scope) |
 | [프리렌더 진행률](2026-11-08-prerender-progress.md) | 1 | TIME(scope) |
 | [에셋 그림자·광원](2026-11-08-asset-shadow-light.md) | 1 | TIME(scope) |
@@ -127,6 +128,6 @@
 | REASON | 111 |
 | RESULT | 4 |
 | SOURCE | 8 |
-| TIME | 82 |
+| TIME | 83 |
 
 - FDLOG-20261108-blender-model-pipeline-v1: request TIME 미확인. 현재 대화의 파이프라인 요약/모듈화/독립 검사/삭제 승인/1차 최종 플레이어 모델 승격/파일 통합 요청 시각으로 보완. 기록: 2026-11-08-blender-model-pipeline-v1.md

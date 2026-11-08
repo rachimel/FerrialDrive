@@ -25,7 +25,6 @@ FILTERS = ('nearest', 'linear', 'bicubic')
 
 class AssetLoaderApp:
     accept_text = True
-    render_driver = 'opengl'
 
     def __init__(self, *, source=None, catalog=DEFAULT_CATALOG, debug=False, timings=None, capture=None):
         self.running = True

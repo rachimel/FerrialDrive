@@ -17,7 +17,7 @@ from ferrial_drive.assets import SpriteBundle, SpritePlayback
 from ferrial_drive.assets.pico_sprites import PicoSprite
 from ferrial_drive.ui.components import Rect
 from ferrial_drive.ui.pico_renderer import PicoRenderer
-from ferrial_drive.ui.standalone import run_preview
+from ferrial_drive.runtime import run_application
 from Tools.blender_pipeline.asset_build import AssetBuild
 from Tools.theme_reference import load_theme
 
@@ -30,7 +30,6 @@ DIRECTION_LABELS = {'e': '동', 'ne': '북동', 'n': '북', 'nw': '북서',
 
 
 class AssetLoadTest:
-    render_driver = 'opengl'
     def __init__(self, *, config=DEFAULT_CONFIG, blender=None, bundle=None, rebuild=False, scene=None):
         self.running = True
         self.build = AssetBuild(config, blender=blender, source_blend=scene)
@@ -231,7 +230,7 @@ def main():
         return
     program = create_test(config=args.config, blender=args.blender, bundle=args.bundle, rebuild=args.rebuild,
                           scene=args.scene)
-    run_preview(program, **WINDOW, frame_limit=args.frames)
+    run_application(program, **WINDOW, frame_limit=args.frames)
     if program.error:
         raise SystemExit(1)
 

@@ -14,6 +14,7 @@
 
 ## 현재 도구
 
+- [FDrive 공통 실행부·렌더링](rendering.md): 본편/도구/독립 테스트의 OpenGL 캔버스·Bicubic·입력/표시 루프·자원 수명
 - [FDrive 에셋 로더](../Tools/asset_loader/README.md): 3D 프리렌더·애니메이션 조립·미리보기·등록·디버그 핫 로드·공통 자원 관리
 - [대화 기록](../Tools/conversation_log_viewer/README.md): 읽기용 Markdown·누락 설명·Codex 원문 검색·한국 시각·범위 가져오기·저장/취소
 - [Codex 원문 근거 작성](tool-usage/conversation_log_evidence.md): 대화/발언 식별·짧은 인용·회고와 원문 확인 구분

@@ -5,7 +5,7 @@ from contextlib import nullcontext
 
 from .sprites import SpriteClip, SpriteFrame
 from .pico_opacity import DEFAULT_SHADOW_OPACITY, shadow_opacity as modulate_shadow
-from .bicubic import acquire_sampler
+from ferrial_drive.rendering.bicubic import acquire_sampler
 
 
 class PicoAssetBackend:

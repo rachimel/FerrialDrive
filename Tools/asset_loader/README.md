@@ -57,7 +57,7 @@ python Tools/asset_loader/create_launcher.py
 
 미리보기의 기본 필터는 **GPU Bicubic(Catmull-Rom)**이다. 화면에 그리는 스프라이트 픽셀을 보간하며 게임·독립 테스트의 공통 `PicoAssetResource`와 `PicoSprite`도 같은 경로를 사용한다. 프레임 경계에서 샘플을 제한해 인접 시트 프레임을 섞지 않고 투명 색상의 번짐을 억제한다. HUD·폰트에는 적용하지 않는다.
 
-도구는 Pico2D 캔버스를 열기 전에 SDL OpenGL 드라이버를 요청한다. 다른 드라이버·SDL dummy에서는 Linear로 대체하며 오른쪽 메뉴에 **실제로 적용한 필터**를 표시한다. Pico2D 원본은 변경하지 않는다. SDL의 기본 `best`는 Bicubic이 아니므로 별도 셰이더를 사용한다. 근거: [SDL 필터 모드](https://wiki.libsdl.org/SDL2/SDL_HINT_RENDER_SCALE_QUALITY), [SDL 텍스처의 OpenGL 연결](https://wiki.libsdl.org/SDL2/SDL_GL_BindTexture), [SDL/외부 렌더 명령 동기화](https://wiki.libsdl.org/SDL2/SDL_RenderFlush).
+도구는 [FDrive 공통 실행부·렌더링](../../docs/rendering.md)의 OpenGL 캔버스를 사용한다. 다른 드라이버·SDL dummy에서는 Linear로 대체하며 오른쪽 메뉴에 **실제로 적용한 필터**를 표시한다. Pico2D 원본은 변경하지 않는다. SDL의 기본 `best`는 Bicubic이 아니므로 별도 셰이더를 사용한다. 근거: [SDL 필터 모드](https://wiki.libsdl.org/SDL2/SDL_HINT_RENDER_SCALE_QUALITY), [SDL 텍스처의 OpenGL 연결](https://wiki.libsdl.org/SDL2/SDL_GL_BindTexture), [SDL/외부 렌더 명령 동기화](https://wiki.libsdl.org/SDL2/SDL_RenderFlush).
 
 프리렌더 중에는 하단에 `프리렌더 45% (29/64)`처럼 완료 PNG 수와 비율을 표시한다. 전체 수는 방향 × 프레임 × 본체/그림자 2레이어다. 렌더 후에는 `100% (64/64) · 시트 패킹 중`, 패킹까지 성공하면 `프리렌더 완료 100% (64/64)`로 표시한다. 준비·실패·취소 상태와 완료를 구분하며 Blender 로그에 기록된 실제 완료 수를 사용한다.
 
@@ -92,7 +92,7 @@ Blender는 설치 경로 또는 `BLENDER_EXECUTABLE`에서 찾는다. [리그 �
 
 재사용 모듈은 `ferrial_drive/assets/`다. 게임은 `Tools`나 테스트 실행부를 import하지 않는다.
 
-GPU Bicubic을 사용할 실행부는 `open_canvas()` 전에 `SDL_HINT_RENDER_DRIVER`를 `opengl`로 지정한다. 공통 `run_preview()`를 사용하면 프로그램의 `render_driver = 'opengl'`로 요청할 수 있다. `PicoAssetBackend(filtering='bicubic')`가 기본이며 자원의 `set_filtering()`으로 변경한다. 실제 적용 결과는 `resource.filtering`에서 확인한다.
+본편과 도구는 `ferrial_drive.runtime.run_application()` 또는 `ferrial_drive.rendering.PicoCanvas`를 사용한다. 공통 기본 드라이버는 OpenGL이며 실행부마다 SDL 초기화를 복제하지 않는다. `PicoAssetBackend(filtering='bicubic')`가 기본이며 자원의 `set_filtering()`으로 변경한다. 실제 적용 결과는 `resource.filtering`에서 확인한다.
 
 다수 에셋을 연속으로 그릴 때는 한 자원의 `render_batch()` 문맥 안에서 같은 렌더러의 에셋들을 그려 GL 상태 저장/복원을 묶을 수 있다. 이 문맥 안에서는 SDL UI 그리기·뷰포트/렌더 타깃 변경을 섞지 않는다. 종료 시 SDL 상태를 복원한다. GPU 드라이버와 자원은 렌더러 소유 스레드에서 사용한다.
 

@@ -5,10 +5,12 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from ferrial_drive.assets import AssetCatalog, AssetDefinition, AssetManager
 from ferrial_drive.assets.pico_assets import PicoAssetBackend
 from ferrial_drive.assets.sprites import SpriteFrame
+from ferrial_drive.rendering import PicoCanvas
 from samples.asset_loader.make_sample import write_png
 
 
@@ -21,21 +23,19 @@ class AssetBicubicGpuTests(unittest.TestCase):
         cls.previous_driver = os.environ.pop('SDL_VIDEODRIVER', None)
         if os.name == 'nt':
             os.environ['SDL_VIDEODRIVER'] = 'windows'
-        pico.SDL_Init(pico.SDL_INIT_VIDEO)
-        pico.SDL_SetHint(pico.SDL_HINT_RENDER_DRIVER, b'opengl')
-        pico.window = pico.SDL_CreateWindow(b'FDrive Bicubic GPU check', 0, 0, 64, 64,
-                                           pico.SDL_WINDOW_HIDDEN | pico.SDL_WINDOW_OPENGL)
-        pico.renderer = pico.SDL_CreateRenderer(pico.window, -1, pico.SDL_RENDERER_ACCELERATED | pico.SDL_RENDERER_TARGETTEXTURE)
-        if not pico.renderer:
-            raise RuntimeError(pico.SDL_GetError())
-        pico.canvas_width = pico.canvas_height = 64
+        create_window = pico.SDL_CreateWindow
+        def hidden_window(title, x, y, width, height, flags):
+            return create_window(title, x, y, width, height, (flags & ~pico.SDL_WINDOW_SHOWN) | pico.SDL_WINDOW_HIDDEN)
+        cls.canvas = PicoCanvas(64, 64, 'FDrive Bicubic GPU check')
+        with patch.object(pico, 'SDL_CreateWindow', side_effect=hidden_window):
+            cls.canvas.open()
+        if cls.canvas.info.name != 'opengl':
+            cls.canvas.close()
+            raise RuntimeError('실제 OpenGL 렌더러가 필요하다.')
 
     @classmethod
     def tearDownClass(cls):
-        cls.pico.SDL_DestroyRenderer(cls.pico.renderer)
-        cls.pico.SDL_DestroyWindow(cls.pico.window)
-        cls.pico.SDL_Quit()
-        cls.pico.SDL_ResetHint(cls.pico.SDL_HINT_RENDER_DRIVER)
+        cls.canvas.close()
         os.environ.pop('SDL_VIDEODRIVER', None)
         if cls.previous_driver is not None:
             os.environ['SDL_VIDEODRIVER'] = cls.previous_driver
