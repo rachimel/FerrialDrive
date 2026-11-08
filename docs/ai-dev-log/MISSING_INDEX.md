@@ -3,7 +3,7 @@
 - 갱신 기준일: 2026-11-08 KST
 - 로컬 전용 서사 기록은 집계에서 제외한다.
 - 새 요약 영역만 집계한다. 원기록은 변경하거나 집계하지 않는다.
-- 기록 108개 · 누락 필드 452개.
+- 기록 109개 · 누락 필드 453개.
 - 사용자 보완은 원문 확인/회고의 출처 표시와 함께 각 기록에 남는다.
 
 [작성 규칙](FORMAT.md) · [기록 양식](_template.md)
@@ -14,6 +14,7 @@
 
 | 기록 | 개수 | 종류·항목 |
 | --- | ---: | --- |
+| [에셋 카메라 자동 맞춤](2026-11-08-asset-camera-framing.md) | 1 | TIME(scope) |
 | [에셋 로더 제작 흐름](2026-11-08-asset-loader-production.md) | 1 | TIME(scope) |
 | [FDrive 에셋 로더](2026-11-08-fdrive-asset-loader.md) | 1 | TIME(scope) |
 | [FDrive 60FPS·Live2D 24FPS·화면 옵션](2026-11-08-fdrive-fps-display-options.md) | 1 | TIME(scope) |
@@ -121,4 +122,4 @@
 | REASON | 111 |
 | RESULT | 4 |
 | SOURCE | 8 |
-| TIME | 76 |
+| TIME | 77 |

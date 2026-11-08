@@ -85,11 +85,17 @@ def render_dialog(asset_id, source=None):
         if path:
             fields["source"].set(path)
     ttk.Button(content, text="…", command=browse, width=3).grid(row=0, column=2, padx=(8, 0))
-    sample, camera = tk.BooleanVar(value=False), tk.BooleanVar(value=False)
+    sample, camera, auto_fit = tk.BooleanVar(value=False), tk.BooleanVar(value=False), tk.BooleanVar(value=True)
     ttk.Checkbutton(content, text="기본 도형 샘플", variable=sample).grid(row=10, column=1, sticky="w", pady=5)
-    ttk.Checkbutton(content, text="모델에 저장된 카메라 사용", variable=camera).grid(row=11, column=1, sticky="w", pady=5)
+    def camera_mode():
+        auto_fit.set(not camera.get())
+        automatic.state(["disabled"] if camera.get() else ["!disabled"])
+    ttk.Checkbutton(content, text="모델에 저장된 카메라 사용", variable=camera,
+                    command=camera_mode).grid(row=11, column=1, sticky="w", pady=5)
+    automatic = ttk.Checkbutton(content, text="기체·그림자 자동 맞춤", variable=auto_fit)
+    automatic.grid(row=12, column=1, sticky="w", pady=5)
     error = tk.StringVar()
-    ttk.Label(content, textvariable=error, wraplength=480).grid(row=12, column=0, columnspan=3, sticky="w", pady=8)
+    ttk.Label(content, textvariable=error, wraplength=480).grid(row=13, column=0, columnspan=3, sticky="w", pady=8)
     def accept():
         nonlocal result
         try:
@@ -99,12 +105,12 @@ def render_dialog(asset_id, source=None):
             config = render_config(asset_id=fields["asset_id"].get(), animation_name=fields["animation"].get(),
                 frames=fields["frames"].get(), fps=fields["fps"].get(), width=fields["width"].get(),
                 height=fields["height"].get(), ortho_scale=fields["scale"].get(), samples=fields["samples"].get(),
-                root_object=fields["root"].get(), use_scene_camera=camera.get())
+                root_object=fields["root"].get(), use_scene_camera=camera.get(), auto_fit=auto_fit.get())
             result = source, config
             root.destroy()
         except (OSError, ValueError) as problem:
             error.set(str(problem))
-    ttk.Button(content, text="렌더 시작", command=accept).grid(row=13, column=1, sticky="e")
+    ttk.Button(content, text="렌더 시작", command=accept).grid(row=14, column=1, sticky="e")
     root.bind("<Escape>", lambda _: root.destroy())
     root.mainloop()
     return result

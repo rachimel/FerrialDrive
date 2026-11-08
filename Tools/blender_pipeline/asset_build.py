@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def pipeline_signature():
     directory = Path(__file__).parent
     return hashlib.sha256(b''.join((directory / name).read_bytes() for name in
-                                  ('render_asset_sample.py', 'pack_sprites.py'))).hexdigest()
+                                  ('render_asset_sample.py', 'pack_sprites.py', 'framing.py'))).hexdigest()
 
 
 def find_blender(explicit=None):

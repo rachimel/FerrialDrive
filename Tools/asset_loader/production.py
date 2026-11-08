@@ -27,7 +27,7 @@ def frame_numbers(text):
 
 
 def render_config(*, asset_id, animation_name, frames, fps, width, height,
-                  ortho_scale, samples, root_object="", use_scene_camera=False):
+                  ortho_scale, samples, root_object="", use_scene_camera=False, auto_fit=True):
     AssetDefinition(asset_id, "image", DEFAULT_CONFIG)
     if not animation_name.strip() or "/" in animation_name or "\\" in animation_name:
         raise ValueError("동작 이름은 경로 구분자 없이 작성한다.")
@@ -45,7 +45,7 @@ def render_config(*, asset_id, animation_name, frames, fps, width, height,
     config = deepcopy(json.loads(DEFAULT_CONFIG.read_text(encoding="utf-8")))
     config.update(asset_id=asset_id, animation_name=animation_name.strip(), frames=frames,
                   fps=int(fps), frame_size_pixels=[width, height], root_object=root_object.strip(),
-                  use_scene_camera=bool(use_scene_camera))
+                  use_scene_camera=bool(use_scene_camera), auto_fit=bool(auto_fit) and not use_scene_camera)
     config["camera"]["ortho_scale"] = ortho_scale
     config["render"].update(samples=samples, shadow_samples=samples)
     config.pop("note", None)

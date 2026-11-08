@@ -33,6 +33,9 @@ class AssetProductionTests(unittest.TestCase):
         self.assertEqual(config["root_object"], "SampleRig")
         self.assertEqual(len(config["directions"]), 8)
         self.assertFalse(config["use_scene_camera"])
+        self.assertTrue(config["auto_fit"])
+        self.assertFalse(render_config(**(values | {"use_scene_camera": True}))["auto_fit"])
+        self.assertFalse(render_config(**(values | {"auto_fit": False}))["auto_fit"])
         for key, value in (("fps", "nan"), ("frames", "1,1"), ("width", "0"), ("animation_name", "../walk"),
                            ("samples", "0"), ("ortho_scale", "inf"), ("fps", "23.5")):
             with self.subTest(key=key), self.assertRaises(ValueError):
@@ -150,6 +153,12 @@ class AssetProductionTests(unittest.TestCase):
         source.write_bytes(b"fixture")
         def submit(root, content):
             entries = {int(widget.grid_info()["row"]): widget for widget in content.winfo_children() if isinstance(widget, ttk.Entry)}
+            camera = next(widget for widget in content.winfo_children() if isinstance(widget, ttk.Checkbutton) and widget.cget("text") == "모델에 저장된 카메라 사용")
+            automatic = next(widget for widget in content.winfo_children() if isinstance(widget, ttk.Checkbutton) and widget.cget("text") == "기체·그림자 자동 맞춤")
+            camera.invoke()
+            self.assertTrue(automatic.instate(["disabled", "!selected"]))
+            camera.invoke()
+            self.assertTrue(automatic.instate(["!disabled", "selected"]))
             entries[4].delete(0, "end")
             entries[4].insert(0, "1,5")
             button = next(widget for widget in content.winfo_children() if isinstance(widget, ttk.Button) and widget.cget("text") == "렌더 시작")
@@ -158,6 +167,7 @@ class AssetProductionTests(unittest.TestCase):
             result = render_dialog("rig", source)
         self.assertEqual(result[0], source)
         self.assertEqual(result[1]["frames"], [1, 5])
+        self.assertTrue(result[1]["auto_fit"])
 
     def test_native_assembly_form_saves_order_fps_and_active_clip(self):
         from tkinter import ttk

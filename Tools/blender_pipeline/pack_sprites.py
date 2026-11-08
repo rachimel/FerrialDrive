@@ -48,7 +48,8 @@ def pack_rendered_frames(source):
                             raise ValueError(f'비어 있거나 투명 배경이 없는 프레임: {path}')
                         edge = alpha[:width] + alpha[-width:] + alpha[::width] + alpha[width - 1::width]
                         if max(edge) > 8:
-                            raise ValueError(f'프레임 경계 잘림: {path}')
+                            raise ValueError(f'프레임 경계 잘림: {row["id"]}/{path.name}. '
+                                             '기체·그림자 자동 맞춤을 켜거나 정사영 범위를 늘린다.')
                         report.append({'path': entry[layer], 'edge_alpha_max': max(edge),
                                        'visible_pixels': sum(value > 8 for value in alpha)})
                         # 투명 surface 위에 합성하지 않고 RGBA를 그대로 복사한다.

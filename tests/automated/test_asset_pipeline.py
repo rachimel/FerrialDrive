@@ -140,6 +140,15 @@ class AssetPipelineTests(unittest.TestCase):
         self.assertIn('idle/e', bundle.body.clips)
         self.assertEqual(bundle.body.clips['idle/e'], bundle.shadow.clips['idle/e'])
 
+    def test_clipped_body_and_shadow_are_still_rejected_with_framing_hint(self):
+        from samples.asset_loader.make_sample import write_png as make_png
+        for layer in ('body', 'shadow'):
+            path = self.directory / self.data['directions'][0]['frames'][0][layer]
+            make_png(path, 4, 4, lambda x, y: (0, 0, 0, 255) if x == 0 and y == 2 else (0, 0, 0, 0))
+            with self.assertRaisesRegex(ValueError, '프레임 경계 잘림:.*자동 맞춤'):
+                pack_rendered_frames(self.source)
+            write_png(path, (100, 100, 100, 128))
+
     def test_failed_blender_does_not_publish_a_new_latest_pointer(self):
         pointer = self.directory / 'latest.json'
         pointer.write_text('previous')

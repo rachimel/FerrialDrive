@@ -11,6 +11,9 @@ import bpy
 from bpy_extras.object_utils import world_to_camera_view
 from mathutils import Vector
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from Tools.blender_pipeline.framing import orthographic_fit
+
 
 def material(name, color):
     result = bpy.data.materials.new(name)
@@ -132,6 +135,81 @@ def prepare_saved_scene(config):
     return scene, root, floor
 
 
+def light_rays(lights):
+    result = []
+    for obj in lights:
+        if obj.data.type == 'SUN':
+            result.append(('direction', obj.matrix_world.to_quaternion() @ Vector((0, 0, -1))))
+        else:
+            result.append(('position', obj.matrix_world.translation.copy()))
+            if obj.data.type == 'AREA':
+                half_x = obj.data.size / 2
+                half_y = getattr(obj.data, 'size_y', obj.data.size) / 2 if obj.data.shape in {'RECTANGLE', 'ELLIPSE'} else half_x
+                for x in (-half_x, half_x):
+                    for y in (-half_y, half_y):
+                        result.append(('position', obj.matrix_world @ Vector((x, y, 0))))
+    return result
+
+
+def fit_camera(scene, root, floor, actor, config):
+    """모든 방향·프레임과 지면 그림자를 같은 카메라에 맞춰 재생 중 배율을 유지한다."""
+    camera = scene.camera
+    if camera.data.type != 'ORTHO':
+        raise ValueError('자동 맞춤은 정사영 카메라가 필요하다.')
+    rotation = camera.matrix_world.to_quaternion()
+    inverse = rotation.inverted()
+    old_scale = camera.data.ortho_scale
+    camera.data.ortho_scale = 1
+    viewport = camera.data.view_frame(scene=scene)
+    camera.data.ortho_scale = old_scale
+    left, right = min(p.x for p in viewport), max(p.x for p in viewport)
+    bottom, top = min(p.y for p in viewport), max(p.y for p in viewport)
+    original_rotation, original_frame = root.rotation_euler.copy(), scene.frame_current
+    lights = [obj for obj in scene.objects if obj.type == 'LIGHT' and not obj.hide_render and obj.data.energy > 0]
+    ground = floor.matrix_world.translation.copy()
+    normal = floor.matrix_world.to_quaternion() @ Vector((0, 0, 1))
+    def points():
+        # 지면 원점(피봇)도 출력 영역에 포함한다.
+        yield tuple(inverse @ Vector((0, 0, 0)))
+        try:
+            for direction in config['directions']:
+                root.rotation_euler.z = radians(direction['heading_degrees'])
+                for frame in config['frames']:
+                    scene.frame_set(frame)
+                    depsgraph = bpy.context.evaluated_depsgraph_get()
+                    rays = light_rays(lights)
+                    for obj in actor:
+                        if obj.hide_render:
+                            continue
+                        evaluated = obj.evaluated_get(depsgraph)
+                        for corner in evaluated.bound_box:
+                            point = evaluated.matrix_world @ Vector(corner)
+                            yield tuple(inverse @ point)
+                            for kind, light in rays:
+                                ray = light if kind == 'direction' else point - light
+                                denominator = ray.dot(normal)
+                                if abs(denominator) < 1e-6:
+                                    continue
+                                distance = (ground - point).dot(normal) / denominator
+                                if distance >= 0:
+                                    yield tuple(inverse @ (point + distance * ray))
+        finally:
+            root.rotation_euler = original_rotation
+            scene.frame_set(original_frame)
+    center, scale, depth = orthographic_fit(points(), right - left, top - bottom, old_scale)
+    local = inverse @ camera.location
+    local.x = center[0] - (left + right) * scale / 2
+    local.y = center[1] - (bottom + top) * scale / 2
+    local.z = max(local.z, depth[1] + max(scale, 1))
+    camera.location = rotation @ local
+    camera.data.ortho_scale = scale
+    camera.data.clip_end = max(camera.data.clip_end, local.z - depth[0] + scale)
+    bpy.context.view_layer.update()
+    result = {'ortho_scale': scale, 'position': list(camera.location), 'padding': 0.08}
+    print('ASSET_FRAMING ' + json.dumps(result), flush=True)
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, required=True)
@@ -162,6 +240,10 @@ def main():
     root_name = root.name
     scene.frame_set(1)
     floor.hide_render = True
+    actor = [obj for obj in root.children_recursive if obj.type == 'MESH' and obj is not floor]
+    framing = None
+    if config.get('auto_fit', not config.get('use_scene_camera', True)):
+        framing = fit_camera(scene, root, floor, actor, config)
     args.work_file.parent.mkdir(parents=True, exist_ok=True)
     # 렌더 전 설정·애니메이션을 재사용할 수 있는 작업본으로 남긴다.
     bpy.ops.wm.save_as_mainfile(filepath=str(args.work_file.resolve()))
@@ -199,6 +281,7 @@ def main():
                 'animation_name': config.get('animation_name', 'walk'),
                 'pivot': [point.x * width, point.y * height], 'fps': config['fps'], 'directions': rows,
                 'config': config, 'config_sha256': hashlib.sha256(config_bytes).hexdigest(),
+                'framing': framing,
                 'blender_version': bpy.app.version_string}
     (output / 'rendered_frames.json').write_text(json.dumps(document, ensure_ascii=False, indent=2), encoding='utf-8')
 

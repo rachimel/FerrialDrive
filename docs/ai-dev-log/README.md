@@ -8,6 +8,7 @@ Ferrial Drive 프로젝트 대화에서 나온 결정과 작업 흐름을 요약
 
 ## 기록
 
+- [2026-11-08 에셋 카메라 자동 맞춤](2026-11-08-asset-camera-framing.md): 실제 모델 경계 오류·기체/그림자 공통 구도·64장 재렌더·자동 50개·원본 보존
 - [2026-11-08 에셋 로더 제작 흐름](2026-11-08-asset-loader-production.md): 3D 리그/키프레임 렌더·본체/그림자 조립·상단 배치·자동 44개/실제 Blender/Pico2D 확인
 - [2026-11-08 FDrive 에셋 로더](2026-11-08-fdrive-asset-loader.md): 이미지/시트/번들·등록·공유 수명·디버그 핫 로드·실패 시 정상 자원 유지·자동 33개/SDL dummy 확인
 - [2026-11-08 FDrive 60FPS·Live2D 24FPS·화면 옵션](2026-11-08-fdrive-fps-display-options.md): 프로그램 규모 검토·게임 60FPS·조건부 Live2D 24FPS·VSync 켜기/끄기·필터링 변경
