@@ -84,7 +84,7 @@ class AssetLoadTest:
         if self.build.process is not None:
             return
         self.build.start()
-        self.message, self.error = 'Blender 프리렌더링 중 · 완료 후 새 시트를 불러온다.', False
+        self.message, self.error = self.build.progress_text, False
 
     def action(self, action):
         if action == 'render':
@@ -139,6 +139,8 @@ class AssetLoadTest:
                 self.load_bundle(self.build.result)
             except (OSError, ValueError, KeyError, RuntimeError) as error:
                 self.fail(error)
+        elif self.build.process is not None:
+            self.message, self.error = self.build.progress_text, False
         if self.playback:
             self.playback.update(delta_seconds)
 

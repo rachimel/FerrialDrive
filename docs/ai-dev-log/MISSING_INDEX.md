@@ -3,7 +3,7 @@
 - 갱신 기준일: 2026-11-08 KST
 - 로컬 전용 서사 기록은 집계에서 제외한다.
 - 새 요약 영역만 집계한다. 원기록은 변경하거나 집계하지 않는다.
-- 기록 112개 · 누락 필드 456개.
+- 기록 113개 · 누락 필드 457개.
 - 사용자 보완은 원문 확인/회고의 출처 표시와 함께 각 기록에 남는다.
 
 [작성 규칙](FORMAT.md) · [기록 양식](_template.md)
@@ -14,6 +14,7 @@
 
 | 기록 | 개수 | 종류·항목 |
 | --- | ---: | --- |
+| [프리렌더 진행률](2026-11-08-prerender-progress.md) | 1 | TIME(scope) |
 | [에셋 그림자·광원](2026-11-08-asset-shadow-light.md) | 1 | TIME(scope) |
 | [data/catalog 에셋 보관](2026-11-08-asset-catalog-directory.md) | 1 | TIME(scope) |
 | [에셋 로더 단일 창](2026-11-08-asset-loader-single-window.md) | 1 | TIME(scope) |
@@ -125,4 +126,4 @@
 | REASON | 111 |
 | RESULT | 4 |
 | SOURCE | 8 |
-| TIME | 80 |
+| TIME | 81 |

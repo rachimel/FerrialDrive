@@ -205,7 +205,7 @@ class AssetLoaderApp:
         self.build = AssetBuild(path, source_blend=source, blender=blender,
                                 output_root=ROOT / "output/asset_loader/renders")
         self.build.start()
-        self.message, self.error = "3D 프리렌더링 중", False
+        self.message, self.error = self.build.progress_text, False
 
     def compose(self):
         from .editors import AssemblyPanel
@@ -328,9 +328,12 @@ class AssetLoaderApp:
         if self.build and self.build.process is not None:
             result = self.build.poll()
             if result is True:
-                self.open_source(self.build.result)
+                if self.open_source(self.build.result):
+                    self.message = self.build.progress_text
             elif result is False:
                 self.report(self.build.error)
+            else:
+                self.message, self.error = self.build.progress_text, False
         if not self.paused:
             self.elapsed += delta_seconds
         if self.panel is not None:

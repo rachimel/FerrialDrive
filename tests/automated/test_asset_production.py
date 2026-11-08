@@ -115,10 +115,12 @@ class AssetProductionTests(unittest.TestCase):
     def test_completed_render_opens_result_and_failed_render_keeps_preview(self):
         from Tools.asset_loader.app import AssetLoaderApp
         app = AssetLoaderApp()
-        app.build = SimpleNamespace(process=object(), poll=lambda: True, result=self.definition.source)
+        app.build = SimpleNamespace(process=object(), poll=lambda: True, result=self.definition.source,
+                                    progress_text="프리렌더 완료 100% (64/64)")
         with patch.object(app, "open_source") as opened:
             app.update(0.1)
             opened.assert_called_once_with(self.definition.source)
+        self.assertEqual(app.message, "프리렌더 완료 100% (64/64)")
         app.build = SimpleNamespace(process=object(), poll=lambda: False, error="render failed")
         with patch.object(app, "open_source") as opened:
             app.update(0.1)

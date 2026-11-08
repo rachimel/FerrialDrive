@@ -64,6 +64,60 @@ class AssetBuild:
         self.result = None
         self.error = None
         self.scope = None
+        self.stage = 'idle'
+        self.total_images = 0
+        self._expected_images = set()
+        self._completed_images = set()
+        self._progress_reader = None
+        self._progress_pending = b''
+
+    @property
+    def completed_images(self):
+        return len(self._completed_images)
+
+    @property
+    def progress_percent(self):
+        return self.completed_images * 100 // self.total_images if self.total_images else 0
+
+    @property
+    def progress_text(self):
+        count = f'{self.progress_percent}% ({self.completed_images}/{self.total_images})'
+        if self.stage == 'complete':
+            return f'프리렌더 완료 {count}'
+        suffix = {'starting': ' · 준비 중', 'packing': ' · 시트 패킹 중',
+                  'cancelled': ' · 취소', 'failed': ' · 실패'}.get(self.stage, '')
+        return f'프리렌더 {count}{suffix}'
+
+    def _prepare_progress(self, config_bytes):
+        config = json.loads(config_bytes)
+        self._expected_images = {(str(direction['id']), str(frame), layer)
+            for direction in config['directions'] for frame in config['frames'] for layer in ('body', 'shadow')}
+        if not self._expected_images:
+            raise ValueError('렌더할 방향과 프레임이 필요하다.')
+        self.total_images = len(self._expected_images)
+        self._completed_images = set()
+        self._progress_pending = b''
+        self.stage = 'starting'
+
+    def _read_progress(self, *, drain=False):
+        if self._progress_reader is None:
+            return
+        while True:
+            chunk = self._progress_reader.read(65536)
+            if not chunk:
+                break
+            lines = (self._progress_pending + chunk).split(b'\n')
+            self._progress_pending = lines.pop()
+            for line in lines:
+                parts = line.strip().decode('utf-8', errors='replace').split()
+                if len(parts) == 4 and parts[0] == 'ASSET_FRAME':
+                    image = tuple(parts[1:])
+                    if image in self._expected_images:
+                        self._completed_images.add(image)
+            if self.completed_images and self.stage == 'starting':
+                self.stage = 'rendering'
+            if not drain:
+                break
 
     def cached_result(self):
         pointer = self.output_root / 'latest.json'
@@ -91,12 +145,14 @@ class AssetBuild:
         if self.process is not None:
             raise RuntimeError('이미 진행 중인 빌드다.')
         executable = find_blender(self.blender)
+        config_bytes = self.config_path.read_bytes()
+        self._prepare_progress(config_bytes)
         self.source_sha256 = self.source_signature()
         stamp = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%SZ') + '-' + uuid4().hex[:8]
         self.directory = self.output_root / stamp
         self.directory.mkdir(parents=True)
         config = self.directory / 'render_config.json'
-        config.write_bytes(self.config_path.read_bytes())
+        config.write_bytes(config_bytes)
         work_file = ROOT / 'Tools/blender_pipeline/workspace/asset_load_test' / stamp / 'sample.blend'
         command = [str(executable), '--background', '--factory-startup', '--python-exit-code', '1',
                    '--python', str(Path(__file__).with_name('render_asset_sample.py')), '--',
@@ -106,6 +162,7 @@ class AssetBuild:
         self.error, self.result = None, None
         self.log = (self.directory / 'blender.log').open('wb')
         try:
+            self._progress_reader = (self.directory / 'blender.log').open('rb')
             self.scope = ChildScope()
             self.process = subprocess.Popen(command, cwd=ROOT, stdin=subprocess.DEVNULL,
                                             stdout=self.log, stderr=subprocess.STDOUT,
@@ -113,18 +170,30 @@ class AssetBuild:
             self.scope.attach(self.process)
         except BaseException:
             self.close()
+            self.stage = 'failed'
             raise
 
     def poll(self):
-        if self.process is None or self.process.poll() is None:
+        if self.process is None:
             return None
+        self._read_progress()
+        if self.process.poll() is None:
+            return None
+        self._read_progress(drain=True)
         returncode = self.process.returncode
+        # 한 번 화면에 패킹 상태를 표시한 뒤 다음 갱신에서 패킹한다.
+        if returncode == 0 and self.stage != 'packing':
+            self.stage = 'packing'
+            return None
         self.process = None
         if self.scope:
             self.scope.close()
             self.scope = None
         self.log.close()
         self.log = None
+        if self._progress_reader is not None:
+            self._progress_reader.close()
+            self._progress_reader = None
         try:
             if returncode:
                 raise RuntimeError(f'Blender 종료 코드 {returncode}. {self.directory / "blender.log"}')
@@ -139,11 +208,16 @@ class AssetBuild:
             temporary.write_text(json.dumps({'bundle': result.relative_to(self.output_root).as_posix()}), encoding='utf-8')
             os.replace(temporary, pointer)
             self.result = result
+            self._completed_images = set(self._expected_images)
+            self.stage = 'complete'
         except (OSError, ValueError, KeyError, TypeError, RuntimeError) as error:
             self.error = str(error)
+            self.stage = 'failed'
         return self.error is None
 
     def close(self):
+        if self.stage in ('starting', 'rendering', 'packing'):
+            self.stage = 'cancelled'
         if self.process is not None:
             if self.process.poll() is None:
                 self.process.terminate()
@@ -159,3 +233,6 @@ class AssetBuild:
         if self.log is not None:
             self.log.close()
             self.log = None
+        if self._progress_reader is not None:
+            self._progress_reader.close()
+            self._progress_reader = None
