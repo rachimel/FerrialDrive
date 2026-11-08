@@ -17,11 +17,13 @@ class RenderPanel(Panel):
     sample_rect = Rect(144, 506, 220, 28)
     camera_rect = Rect(404, 506, 300, 28)
     automatic_rect = Rect(774, 506, 330, 28)
+    sharpen_rect = Rect(144, 552, 250, 28)
 
     def __init__(self, app, source=None):
         super().__init__(app)
         self.labels = []
         self.sample, self.scene_camera, self.auto_fit = False, False, True
+        self.sharpen = True
         self.add_field("source", source or "", Rect(144, 160, 856, 36))
         self.button("찾기", Rect(1012, 160, 124, 36), self.browse)
         definitions = [("root", "모델 루트", ""), ("asset_id", "에셋 ID", app.asset_id or "model"),
@@ -51,7 +53,8 @@ class RenderPanel(Panel):
         config = render_config(asset_id=self.value("asset_id"), animation_name=self.value("animation"),
             frames=self.value("frames"), fps=self.value("fps"), width=self.value("width"),
             height=self.value("height"), ortho_scale=self.value("scale"), samples=self.value("samples"),
-            root_object=self.value("root"), use_scene_camera=self.scene_camera, auto_fit=self.auto_fit)
+            root_object=self.value("root"), use_scene_camera=self.scene_camera, auto_fit=self.auto_fit,
+            sharpen=0.35 if self.sharpen else 0)
         self.app.start_render(source, config)
         self.close()
 
@@ -64,6 +67,8 @@ class RenderPanel(Panel):
                 self.auto_fit = not self.scene_camera
             elif self.automatic_rect.contains(event.x, event.y) and not self.scene_camera:
                 self.auto_fit = not self.auto_fit
+            elif self.sharpen_rect.contains(event.x, event.y):
+                self.sharpen = not self.sharpen
 
     def draw(self):
         super().draw()
@@ -74,6 +79,7 @@ class RenderPanel(Panel):
         self.check(self.sample_rect, "기본 도형 샘플", self.sample)
         self.check(self.camera_rect, "모델에 저장된 카메라 사용", self.scene_camera)
         self.check(self.automatic_rect, "기체·그림자 자동 맞춤", self.auto_fit, disabled=self.scene_camera)
+        self.check(self.sharpen_rect, "본체 샤프닝", self.sharpen)
 
 
 class AssemblyPanel(Panel):

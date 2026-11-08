@@ -30,6 +30,7 @@ DIRECTION_LABELS = {'e': '동', 'ne': '북동', 'n': '북', 'nw': '북서',
 
 
 class AssetLoadTest:
+    render_driver = 'opengl'
     def __init__(self, *, config=DEFAULT_CONFIG, blender=None, bundle=None, rebuild=False, scene=None):
         self.running = True
         self.build = AssetBuild(config, blender=blender, source_blend=scene)

@@ -27,7 +27,7 @@ def frame_numbers(text):
 
 
 def render_config(*, asset_id, animation_name, frames, fps, width, height,
-                  ortho_scale, samples, root_object="", use_scene_camera=False, auto_fit=True):
+                  ortho_scale, samples, root_object="", use_scene_camera=False, auto_fit=True, sharpen=0.35):
     AssetDefinition(asset_id, "image", DEFAULT_CONFIG)
     if not animation_name.strip() or "/" in animation_name or "\\" in animation_name:
         raise ValueError("동작 이름은 경로 구분자 없이 작성한다.")
@@ -50,5 +50,8 @@ def render_config(*, asset_id, animation_name, frames, fps, width, height,
     config["light"].update(position=[-3, -4, 12], energy=1400)
     config["use_scene_lighting"] = False
     config["render"].update(samples=samples, shadow_samples=samples)
+    if type(sharpen) not in (int, float) or not isfinite(sharpen) or not 0 <= sharpen <= 2:
+        raise ValueError("샤프닝 강도는 0~2 범위여야 한다.")
+    config["postprocess"] = {"sharpen": sharpen}
     config.pop("note", None)
     return config

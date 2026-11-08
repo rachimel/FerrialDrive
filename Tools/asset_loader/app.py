@@ -19,10 +19,13 @@ WINDOW = {"width": 1280, "height": 800, "title": "FDrive | Asset Loader"}
 VIEW = Rect(24, 116, 820, 568)
 PRODUCTION_MENU = Rect(1136, 18, 120, 34)
 PRODUCTION_ITEMS = [("3D 프리렌더…", "render"), ("애니메이션 조립…", "compose"), ("렌더 취소", "cancel_render")]
+FILTER_RECT = Rect(882, 371, 358, 28)
+FILTERS = ('nearest', 'linear', 'bicubic')
 
 
 class AssetLoaderApp:
     accept_text = True
+    render_driver = 'opengl'
 
     def __init__(self, *, source=None, catalog=DEFAULT_CATALOG, debug=False, timings=None, capture=None):
         self.running = True
@@ -48,6 +51,7 @@ class AssetLoaderApp:
         self.menu_open = False
         self.panel = None
         self.mouse = (0, 0)
+        self.filtering, self.filter_popup = 'bicubic', False
         self.buttons = [
             ("불러오기 O", "open", Rect(24, 64, 150, 36)),
             ("ID 변경 I", "id", Rect(184, 64, 138, 36)),
@@ -93,7 +97,7 @@ class AssetLoaderApp:
         try:
             source = Path(source).resolve()
             definition = AssetDefinition("preview", kind or detect_kind(source), source)
-            candidate = AssetManager(AssetCatalog([definition]), PicoAssetBackend(),
+            candidate = AssetManager(AssetCatalog([definition]), PicoAssetBackend(self.filtering),
                                      debug=self.debug, timings=self.timings)
             handle = candidate.acquire("preview")
         except (OSError, ValueError, KeyError, TypeError, RuntimeError) as error:
@@ -175,6 +179,7 @@ class AssetLoaderApp:
 
     def set_panel(self, panel):
         self.panel, self.menu_open = panel, False
+        self.filter_popup = False
         if hasattr(self, "pico"):
             if panel is not None:
                 self.pico.SDL_StartTextInput()
@@ -273,7 +278,9 @@ class AssetLoaderApp:
             if key in actions:
                 self.action(actions[key])
             elif key == pico.SDLK_ESCAPE:
-                if self.menu_open:
+                if self.filter_popup:
+                    self.filter_popup = False
+                elif self.menu_open:
                     self.menu_open = False
                 else:
                     self.running = False
@@ -292,6 +299,16 @@ class AssetLoaderApp:
                 count = len(self.catalog.definitions)
                 self.list_offset = max(0, min(max(0, count - 8), self.list_offset + (-8 if key == pico.SDLK_PAGEUP else 8)))
         elif event.type == pico.SDL_MOUSEBUTTONDOWN and event.button == pico.SDL_BUTTON_LEFT:
+            if FILTER_RECT.contains(event.x, event.y) and self.handle:
+                self.filter_popup, self.menu_open = not self.filter_popup, False
+                return
+            if self.filter_popup:
+                self.filter_popup = False
+                for index, mode in enumerate(FILTERS):
+                    if Rect(882, 405 + index * 32, 358, 32).contains(event.x, event.y):
+                        self.handle.resource.set_filtering(mode)
+                        self.filtering = mode
+                        return
             if PRODUCTION_MENU.contains(event.x, event.y):
                 self.menu_open = not self.menu_open
                 return
@@ -377,6 +394,11 @@ class AssetLoaderApp:
                             f"본체 {'ON' if self.show_body else 'OFF'} / 그림자 {'ON' if self.show_shadow else 'OFF'}"])
         for index, line in enumerate(details):
             r.text(line, 882, 132 + index * 29, "small", c["text"], max_width=358)
+        r.rect(FILTER_RECT, c["input"])
+        current_filter = self.handle.resource.filtering.title() if self.handle else '-'
+        r.text(f"필터: {current_filter}", 892, 377, "small", c["text"])
+        r.line(1220, 382, 1225, 387, c["text"])
+        r.line(1225, 387, 1230, 382, c["text"])
         r.text(f"등록 목록 ({len(self.catalog.definitions)}) · PgUp/PgDn", 882, 405, "small", c["muted"])
         for index, definition in enumerate(list(self.catalog.definitions.values())[self.list_offset:self.list_offset + 8]):
             y = 430 + index * 32
@@ -390,6 +412,10 @@ class AssetLoaderApp:
                 rect = Rect(1030, 56 + index * 36, 226, 36)
                 r.rect(rect, c["panel"])
                 r.text(label, rect.x + 12, rect.y + 8, "small", c["text"])
+        if self.filter_popup:
+            for index, mode in enumerate(FILTERS):
+                r.rect(Rect(882, 405 + index * 32, 358, 32), c["selected"] if mode == self.filtering else c["input"])
+                r.text(mode.title(), 894, 412 + index * 32, "small", c["text"])
         if self.panel is not None:
             self.panel.draw()
         if self.capture and self.first_draw:

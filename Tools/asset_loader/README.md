@@ -41,6 +41,7 @@ python Tools/asset_loader/create_launcher.py
 | Space / . | 재생·정지 / 다음 프레임 |
 | 휠 / 맞춤 F / 1:1 | 확대·축소 / 영역 맞춤 / 원래 배율 |
 | B / H | 본체 / 그림자 표시 |
+| 오른쪽 필터 메뉴 | Nearest / Linear / Bicubic 표시 비교 |
 | PgUp / PgDn | 등록 목록 페이지 이동 |
 | Esc / 창 X | 종료·GPU 자원 정리 |
 
@@ -51,6 +52,12 @@ python Tools/asset_loader/create_launcher.py
 ## 모델에서 스프라이트까지
 
 렌더 설정의 기본 프레임 크기는 **240×240px**다. 현재 비교용 기준이며 최종 게임 표시 크기는 별도로 조정한다.
+
+**샤프닝은 사전 처리, Bicubic은 표시 시 처리**한다. 새 프리렌더는 본체 시트에 강도 `0.35`의 샤프닝을 적용한다. 제작 패널의 **본체 샤프닝**을 끄면 원래 색상을 보존한다. 원본 프레임·그림자와 프레임 해상도·알파는 유지하며 PNG를 확대 저장하지 않는다. 기존 시트를 열기만 해서는 샤프닝을 새로 적용하지 않는다.
+
+미리보기의 기본 필터는 **GPU Bicubic(Catmull-Rom)**이다. 화면에 그리는 스프라이트 픽셀을 보간하며 게임·독립 테스트의 공통 `PicoAssetResource`와 `PicoSprite`도 같은 경로를 사용한다. 프레임 경계에서 샘플을 제한해 인접 시트 프레임을 섞지 않고 투명 색상의 번짐을 억제한다. HUD·폰트에는 적용하지 않는다.
+
+도구는 Pico2D 캔버스를 열기 전에 SDL OpenGL 드라이버를 요청한다. 다른 드라이버·SDL dummy에서는 Linear로 대체하며 오른쪽 메뉴에 **실제로 적용한 필터**를 표시한다. Pico2D 원본은 변경하지 않는다. SDL의 기본 `best`는 Bicubic이 아니므로 별도 셰이더를 사용한다. 근거: [SDL 필터 모드](https://wiki.libsdl.org/SDL2/SDL_HINT_RENDER_SCALE_QUALITY), [SDL 텍스처의 OpenGL 연결](https://wiki.libsdl.org/SDL2/SDL_GL_BindTexture), [SDL/외부 렌더 명령 동기화](https://wiki.libsdl.org/SDL2/SDL_RenderFlush).
 
 프리렌더 중에는 하단에 `프리렌더 45% (29/64)`처럼 완료 PNG 수와 비율을 표시한다. 전체 수는 방향 × 프레임 × 본체/그림자 2레이어다. 렌더 후에는 `100% (64/64) · 시트 패킹 중`, 패킹까지 성공하면 `프리렌더 완료 100% (64/64)`로 표시한다. 준비·실패·취소 상태와 완료를 구분하며 Blender 로그에 기록된 실제 완료 수를 사용한다.
 
@@ -85,6 +92,10 @@ Blender는 설치 경로 또는 `BLENDER_EXECUTABLE`에서 찾는다. [리그 �
 
 재사용 모듈은 `ferrial_drive/assets/`다. 게임은 `Tools`나 테스트 실행부를 import하지 않는다.
 
+GPU Bicubic을 사용할 실행부는 `open_canvas()` 전에 `SDL_HINT_RENDER_DRIVER`를 `opengl`로 지정한다. 공통 `run_preview()`를 사용하면 프로그램의 `render_driver = 'opengl'`로 요청할 수 있다. `PicoAssetBackend(filtering='bicubic')`가 기본이며 자원의 `set_filtering()`으로 변경한다. 실제 적용 결과는 `resource.filtering`에서 확인한다.
+
+다수 에셋을 연속으로 그릴 때는 한 자원의 `render_batch()` 문맥 안에서 같은 렌더러의 에셋들을 그려 GL 상태 저장/복원을 묶을 수 있다. 이 문맥 안에서는 SDL UI 그리기·뷰포트/렌더 타깃 변경을 섞지 않는다. 종료 시 SDL 상태를 복원한다. GPU 드라이버와 자원은 렌더러 소유 스레드에서 사용한다.
+
 1. 열린 Pico2D 렌더러에서 `AssetCatalog.load(path)`와 `PicoAssetBackend`로 `AssetManager`를 구성한다.
 2. `manager.acquire(asset_id)`로 핸들을 얻는다. 같은 관리자에서 같은 ID를 획득하면 자원을 공유한다. 서로 다른 ID나 서로 다른 관리자는 별도 캐시다.
 3. 개체마다 재생 시간·동작을 관리하고 그릴 때 `handle.resource`의 최신 자원을 조회한다. `generation` 변화로 동작·프레임 구성 변경에 대응할 수 있다.
@@ -108,7 +119,8 @@ python Tools/asset_loader/run.py --frames 3 --capture output/asset_loader_review
 
 ## 확인 상태
 
-- 공통 로더·실제 Pico2D 로딩·등록·핫 로드·조립·카메라 맞춤·그림자 강도·진행률·메인 창 패널·로컬 보관·기존 패킹 호환 자동 검사 73개 통과.
+- 에셋 자동 검사 **84개 통과**: 기존 로더/패킹/도구 경로와 사전 샤프닝·필터 메뉴를 포함한다. 이 중 **6개는 실제 OpenGL GPU**에서 원래 배율·Bicubic 확대·투명 경계/인접 프레임·클리핑·렌더 타깃·SDL 상태 복원을 확인했다. `FDRIVE_GPU_TESTS=1`을 지정하지 않으면 GPU 6개는 건너뛴다.
+- 기존 실제 모델 프레임을 재패킹해 본체 샤프닝·240px/원본 보존·OpenGL 미리보기의 Bicubic 적용을 확인했다. 이번 검사는 Blender 재렌더나 목표 Iris 기기의 60FPS 달성 검증은 아니다.
 - 단일 본·스키닝·키프레임이 있는 기본 도형의 실제 Blender 8방향 × 2프레임 × 본체/그림자 렌더·시트 패킹·순서 조립·Pico2D 로딩을 확인했다. 원본 .blend 해시 보존과 키프레임에 따른 이미지 변화도 검사했다.
 - 실제 모델의 8방향 × 4프레임 × 본체/그림자 64장도 자동 맞춤으로 렌더·패킹했다. 픽셀 경계 검사는 유지하며 잘린 본체·그림자는 계속 거절한다.
 - SDL dummy로 실제 도형 이미지·시트·번들 로딩, 합성 키 입력·등록 저장/재로딩과 툴 화면을 확인했다.

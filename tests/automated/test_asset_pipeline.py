@@ -149,6 +149,36 @@ class AssetPipelineTests(unittest.TestCase):
                 pack_rendered_frames(self.source)
             write_png(path, (100, 100, 100, 128))
 
+    def test_sharpened_sheet_preserves_raw_frames_size_alpha_and_shadow(self):
+        import hashlib
+        import pico2d.pico2d as pico
+        from samples.asset_loader.make_sample import write_png as make_png
+        body = self.directory / self.data['directions'][0]['frames'][0]['body']
+        make_png(body, 4, 4, lambda x, y: (80 + x * 40, 90, 60, 255)
+                 if 1 <= x <= 2 and 1 <= y <= 2 else (0, 0, 0, 0))
+        original = hashlib.sha256(body.read_bytes()).hexdigest()
+        previous_shadow = (self.directory / 'shadow.png').read_bytes()
+        self.data['config'] = {'postprocess': {'sharpen': 0.35}}
+        self.source.write_text(json.dumps(self.data), encoding='utf-8')
+        result = pack_rendered_frames(self.source)
+        self.assertEqual(hashlib.sha256(body.read_bytes()).hexdigest(), original)
+        self.assertEqual((self.directory / 'shadow.png').read_bytes(), previous_shadow)
+        self.assertEqual(SpriteBundle.load(result).body.size, (8, 32))
+        surface = pico.IMG_Load(str(self.directory / 'body.png').encode())
+        rgba = pico.SDL_ConvertSurfaceFormat(surface, pico.SDL_PIXELFORMAT_RGBA32, 0)
+        try:
+            raw = string_at(rgba.contents.pixels, rgba.contents.pitch * 32)
+            self.assertLess(raw[rgba.contents.pitch + 4], 120)
+            self.assertGreater(raw[rgba.contents.pitch + 8], 160)
+            self.assertEqual(raw[rgba.contents.pitch + 7], 255)
+        finally:
+            pico.SDL_FreeSurface(rgba)
+            pico.SDL_FreeSurface(surface)
+        first = (self.directory / 'body.png').read_bytes()
+        pack_rendered_frames(self.source)
+        self.assertEqual((self.directory / 'body.png').read_bytes(), first)
+        self.assertEqual(json.loads(result.read_text())['postprocess'], {'sharpen': 0.35, 'bicubic': 'runtime'})
+
     def test_failed_blender_does_not_publish_a_new_latest_pointer(self):
         pointer = self.directory / 'latest.json'
         pointer.write_text('previous')

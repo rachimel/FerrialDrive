@@ -77,6 +77,19 @@ class AssetPanelTests(unittest.TestCase):
         self.app.handle_event(SimpleNamespace(type=self.pico.SDL_WINDOWEVENT, window_event=self.pico.SDL_WINDOWEVENT_CLOSE))
         self.assertFalse(self.app.running)
 
+    def test_filter_dropdown_changes_shared_display_and_escape_only_closes_menu(self):
+        from Tools.asset_loader.app import FILTER_RECT
+        self.click(FILTER_RECT)
+        self.assertTrue(self.app.filter_popup)
+        self.click(SimpleNamespace(x=882, y=405))
+        self.assertEqual(self.app.handle.resource.filtering, 'nearest')
+        self.assertEqual(self.app.filtering, 'nearest')
+        self.click(FILTER_RECT)
+        self.app.draw()
+        self.key(self.pico.SDLK_ESCAPE)
+        self.assertFalse(self.app.filter_popup)
+        self.assertTrue(self.app.running)
+
     def test_alt_f4_is_not_swallowed_by_a_focused_text_field(self):
         self.app.action("id")
         self.key(self.pico.SDLK_F4, self.pico.KMOD_ALT)

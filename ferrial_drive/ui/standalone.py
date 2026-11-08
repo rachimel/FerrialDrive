@@ -2,6 +2,7 @@
 
 from ctypes import byref
 from math import isfinite
+import os
 from time import perf_counter, sleep
 
 
@@ -45,7 +46,18 @@ def run_preview(program, *, width, height, title, frames_per_second=60, frame_li
         raise ValueError("프레임 제한은 양수 정수여야 한다.")
     import pico2d.pico2d as pico
 
-    pico.open_canvas(width, height)
+    driver = getattr(program, 'render_driver', None) if os.environ.get('SDL_VIDEODRIVER') != 'dummy' else None
+    previous_driver = pico.SDL_GetHint(pico.SDL_HINT_RENDER_DRIVER)
+    if driver:
+        pico.SDL_SetHint(pico.SDL_HINT_RENDER_DRIVER, driver.encode())
+    try:
+        pico.open_canvas(width, height)
+    finally:
+        if driver:
+            if previous_driver is None:
+                pico.SDL_ResetHint(pico.SDL_HINT_RENDER_DRIVER)
+            else:
+                pico.SDL_SetHint(pico.SDL_HINT_RENDER_DRIVER, previous_driver)
     try:
         if not pico.renderer:
             pico.renderer = pico.SDL_CreateRenderer(pico.window, -1, pico.SDL_RENDERER_SOFTWARE)

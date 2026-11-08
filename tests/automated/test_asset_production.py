@@ -36,6 +36,7 @@ class AssetProductionTests(unittest.TestCase):
         self.assertEqual(config["light"]["position"], [-3, -4, 12])
         self.assertEqual(config["light"]["energy"], 1400)
         self.assertFalse(config["use_scene_lighting"])
+        self.assertEqual(config["postprocess"], {"sharpen": 0.35})
         self.assertTrue(config["auto_fit"])
         self.assertFalse(render_config(**(values | {"use_scene_camera": True}))["auto_fit"])
         self.assertFalse(render_config(**(values | {"auto_fit": False}))["auto_fit"])

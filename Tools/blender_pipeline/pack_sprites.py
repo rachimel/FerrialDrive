@@ -1,8 +1,9 @@
 """Blender 프레임을 SSheetCutil 호환 시트·프로젝트 JSON으로 패킹한다."""
 
-from ctypes import string_at
+from ctypes import memmove, string_at
 import json
 from pathlib import Path
+from .postprocess import sharpen_rgba
 
 
 def pack_rendered_frames(source):
@@ -11,6 +12,7 @@ def pack_rendered_frames(source):
 
     source = Path(source).resolve()
     data = json.loads(source.read_text(encoding='utf-8'))
+    sharpen = data.get('config', {}).get('postprocess', {}).get('sharpen', 0)
     width, height = data['frame_size_pixels']
     directions = data['directions']
     columns = len(directions[0]['frames'])
@@ -52,6 +54,11 @@ def pack_rendered_frames(source):
                                              '기체·그림자 자동 맞춤을 켜거나 정사영 범위를 늘린다.')
                         report.append({'path': entry[layer], 'edge_alpha_max': max(edge),
                                        'visible_pixels': sum(value > 8 for value in alpha)})
+                        if layer == 'body' and sharpen:
+                            packed = b''.join(raw[y * pixels.pitch:y * pixels.pitch + width * 4] for y in range(height))
+                            processed = sharpen_rgba(packed, width, height, sharpen)
+                            for y in range(height):
+                                memmove(pixels.pixels + y * pixels.pitch, processed[y * width * 4:(y + 1) * width * 4], width * 4)
                         # 투명 surface 위에 합성하지 않고 RGBA를 그대로 복사한다.
                         pico.SDL_SetSurfaceBlendMode(rgba, pico.SDL_BLENDMODE_NONE)
                         target = pico.SDL_Rect(column * width, row_index * height, width, height)
@@ -75,7 +82,8 @@ def pack_rendered_frames(source):
         (source.parent / f'{layer}.json').write_text(json.dumps(project, ensure_ascii=False, indent=2), encoding='utf-8')
     bundle = {'version': 1, 'asset_id': data['asset_id'], 'body': 'body.json', 'shadow': 'shadow.json',
               'directions': {row['id']: f'{animation_name}/{row["id"]}' for row in directions},
-              'config_sha256': data['config_sha256'], 'blender_version': data['blender_version']}
+              'config_sha256': data['config_sha256'], 'blender_version': data['blender_version'],
+              'postprocess': {'sharpen': sharpen, 'bicubic': 'runtime'}}
     (source.parent / 'pixel_report.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     result = source.parent / 'bundle.json'
     # 모든 이미지·검사가 성공한 뒤에만 완성 번들의 진입점을 쓴다.

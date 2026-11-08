@@ -1,18 +1,23 @@
 """열린 Pico2D 렌더러에 이미지·시트·번들을 올리는 공통 백엔드."""
 
 from ctypes import byref, c_int, c_void_p, cast
+from contextlib import nullcontext
 
 from .sprites import SpriteClip, SpriteFrame
 from .pico_opacity import DEFAULT_SHADOW_OPACITY, shadow_opacity as modulate_shadow
+from .bicubic import acquire_sampler
 
 
 class PicoAssetBackend:
+    def __init__(self, filtering='bicubic'):
+        self.filtering = filtering
+
     def load(self, document):
-        return PicoAssetResource(document)
+        return PicoAssetResource(document, filtering=self.filtering)
 
 
 class PicoAssetResource:
-    def __init__(self, document):
+    def __init__(self, document, *, filtering='bicubic'):
         import pico2d.pico2d as pico
 
         if not pico.renderer:
@@ -25,6 +30,7 @@ class PicoAssetResource:
         self.estimated_bytes = 0
         self.closed = False
         self.clips = {}
+        self.sampler = None
         try:
             layers = ({"body": document.definition.source} if not document.sheets
                       else {layer: sheet.image_path for layer, sheet in document.sheets.items()})
@@ -52,9 +58,24 @@ class PicoAssetResource:
                 width, height = self.sizes["body"]
                 self.clips = {"image": SpriteClip(1.0, (SpriteFrame((0, 0, width, height), (width / 2, 0)),))}
             self.default_clip = document.default_clip or next(iter(self.clips))
+            self.set_filtering(filtering)
         except BaseException:
             self.close()
             raise
+
+    def set_filtering(self, mode):
+        if mode not in ('nearest', 'linear', 'bicubic'):
+            raise ValueError('지원하지 않는 표시 필터다.')
+        if mode == 'bicubic' and self.sampler is None:
+            self.sampler = acquire_sampler(self.pico)
+        self.filtering = 'linear' if mode == 'bicubic' and self.sampler is None else mode
+        quality = self.pico.SDL_ScaleModeLinear if self.filtering == 'linear' else self.pico.SDL_ScaleModeNearest
+        for texture in self.textures.values():
+            if self.pico.SDL_SetTextureScaleMode(texture, quality) != 0:
+                raise RuntimeError('텍스처 표시 필터 설정 실패')
+
+    def render_batch(self):
+        return self.sampler.batch() if self.filtering == 'bicubic' else nullcontext()
 
     def draw(self, clip_name, frame_index, x, y, *, scale=1.0, body=True, shadow=True,
              shadow_opacity=DEFAULT_SHADOW_OPACITY):
@@ -69,6 +90,10 @@ class PicoAssetResource:
             raise RuntimeError("해제한 에셋이다.")
         if scale <= 0:
             return
+        with self.render_batch():
+            self._draw_layers(frame, x, y, scale, body, shadow, shadow_opacity)
+
+    def _draw_layers(self, frame, x, y, scale, body, shadow, shadow_opacity):
         pico = self.pico
         left, bottom, width, height = frame.rect
         for layer, visible in (("shadow", shadow), ("body", body)):
@@ -79,9 +104,15 @@ class PicoAssetResource:
                                       width * scale, height * scale)
             if layer == "shadow":
                 with modulate_shadow(pico, self.textures[layer], shadow_opacity):
-                    pico.SDL_RenderCopy(pico.renderer, self.textures[layer], source, target)
+                    self._copy(layer, source, target)
             else:
-                pico.SDL_RenderCopy(pico.renderer, self.textures[layer], source, target)
+                self._copy(layer, source, target)
+
+    def _copy(self, layer, source, target):
+        if self.filtering == 'bicubic':
+            self.sampler.draw(self.textures[layer], self.sizes[layer], source, target)
+        else:
+            self.pico.SDL_RenderCopy(self.pico.renderer, self.textures[layer], source, target)
 
     def close(self):
         if not self.closed:
@@ -93,3 +124,6 @@ class PicoAssetResource:
                     seen.add(identity)
                     self.pico.SDL_DestroyTexture(texture)
             self.textures.clear()
+            if self.sampler is not None:
+                self.sampler.release()
+                self.sampler = None
