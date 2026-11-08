@@ -245,7 +245,6 @@ class AssetLoaderApp:
         r, c = self.renderer, self.theme["colors"]
         r.clear(c["background"])
         r.text("FDrive · 에셋 로더", 24, 20, "title", c["text"])
-        r.text("미리보기 / 등록 / 디버그 핫 로드", 330, 24, "body", c["muted"])
         for label, action, rect in self.buttons:
             active = action == "debug" and self.debug
             r.rect(rect, c["selected"] if active else c["button"])
