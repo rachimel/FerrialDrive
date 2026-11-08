@@ -52,6 +52,12 @@
 | `set_visibility` | object, hidden |
 | `assign_material` | object, material, 기존 slot |
 | `pack_images` | 파일/생성 이미지를 현재 후보에 패킹 |
+| `set_frame` / `freeze_pose` | 검토 프레임 선택 / 후보 Armature의 Action·NLA를 멈추고 현재 포즈 유지. 드라이버는 유지 |
+| `aim_bone` | object, bone, world_direction. 본 길이와 연결을 유지하며 후보 포즈 방향 조정 |
+| `attach_world` | object, parent, 선택적 bone, matrix_world. 평가된 부모 프레임에서 명시한 월드 배치 유지 |
+| `attachment_switch` | control/property, stowed_target, held_target. 동일 오브젝트의 수납/파지 앵커 전환. 연속 발도 동작은 별도 |
+
+생성 연산은 선택적으로 `rotation_degrees`와 `properties`를 받는다. 재질의 `energy_control`은 지정 객체의 `energy_color_r/g/b`, `energy_strength` 속성으로 발광을 구동한다. 검토 렌더는 `objects`로 확대 대상, `views`로 방향을 지정할 수 있다. 무기별 치수·포즈는 공통 코드에 넣지 않고 로컬 에셋 JSON으로 관리한다.
 
 manifest의 `schema_version`은 1, `asset_id`는 에셋 식별자다. 기존 source에는 `source_sha256`이 필수다. 경로는 manifest 위치 기준으로 해석한다. `change_objects`에 수정할 기존 객체명을 선언하고 `allow_additions`로 새 객체 추가를 허용한다. source가 없는 새 에셋은 allow_additions=true를 사용한다.
 

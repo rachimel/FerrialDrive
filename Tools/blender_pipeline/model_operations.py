@@ -34,8 +34,65 @@ def apply_operations(operations):
             if operation.get('parent'):
                 obj.parent = bpy.data.objects[operation['parent']]
             obj.location = vector(operation.get('location', [0, 0, 0]))
+            obj.rotation_euler = [math.radians(x) for x in vector(operation.get('rotation_degrees', [0, 0, 0]))]
+            for key, value in operation.get('properties', {}).items():
+                obj[key] = value
             if operation.get('material') and obj.type == 'MESH':
                 obj.data.materials.append(bpy.data.materials[operation['material']])
+        elif kind == 'set_frame':
+            bpy.context.scene.frame_set(int(operation['frame']))
+        elif kind == 'freeze_pose':
+            obj = bpy.data.objects[operation['object']]
+            if obj.type != 'ARMATURE':
+                raise TypeError('포즈 고정 대상은 Armature여야 한다.')
+            matrices = {b.name: b.matrix_basis.copy() for b in obj.pose.bones}
+            if obj.animation_data:
+                obj.animation_data.action = None
+                for track in obj.animation_data.nla_tracks:
+                    track.mute = True
+            for name, matrix in matrices.items():
+                obj.pose.bones[name].matrix_basis = matrix
+        elif kind == 'aim_bone':
+            from mathutils import Matrix
+            obj = bpy.data.objects[operation['object']]
+            bone = obj.pose.bones[operation['bone']]
+            desired = Vector(vector(operation['world_direction']))
+            if desired.length < 1e-8:
+                raise ValueError('본 방향은 영벡터일 수 없다.')
+            world = obj.matrix_world @ bone.matrix
+            delta = world.to_3x3().col[1].normalized().rotation_difference(desired.normalized())
+            world = Matrix.Translation(world.translation) @ delta.to_matrix().to_4x4() @ Matrix.Translation(-world.translation) @ world
+            bone.matrix = obj.matrix_world.inverted() @ world
+        elif kind == 'attach_world':
+            from mathutils import Matrix
+            from model_geometry import set_world_matrix_from_parent_frame
+            obj = bpy.data.objects[operation['object']]
+            rows = operation['matrix_world']
+            if len(rows) != 4 or any(len(row) != 4 or not all(math.isfinite(x) for x in row) for row in rows):
+                raise ValueError('유한한 4x4 월드 행렬이 필요하다.')
+            obj.parent = bpy.data.objects[operation['parent']]
+            obj.parent_type = 'BONE' if operation.get('bone') else 'OBJECT'
+            obj.parent_bone = operation.get('bone', '')
+            if obj.parent_type == 'BONE' and obj.parent_bone not in obj.parent.data.bones:
+                raise ValueError('장착 대상 본이 없다.')
+            bpy.context.view_layer.update()
+            set_world_matrix_from_parent_frame(obj, Matrix(rows))
+        elif kind == 'attachment_switch':
+            obj = bpy.data.objects[operation['object']]
+            control = bpy.data.objects[operation['control']]
+            key = operation['property']
+            if key not in control:
+                raise ValueError('전환 제어 속성이 없다.')
+            for target, driven in ((operation['stowed_target'], False), (operation['held_target'], True)):
+                constraint = obj.constraints.new('COPY_TRANSFORMS')
+                constraint.target = bpy.data.objects[target]
+                if driven:
+                    driver = constraint.driver_add('influence').driver
+                    variable = driver.variables.new()
+                    variable.name = 'stowed'
+                    variable.targets[0].id = control
+                    variable.targets[0].data_path = f'["{key}"]'
+                    driver.expression = '1-min(max(stowed,0),1)'
         elif kind == 'create_material':
             name = operation['name']
             if name in bpy.data.materials:
@@ -49,6 +106,21 @@ def apply_operations(operations):
                 if not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 <= value <= 1:
                     raise ValueError(f'{field}는 0~1이어야 한다.')
                 node.inputs[socket].default_value = value
+            if operation.get('energy_control'):
+                control = bpy.data.objects[operation['energy_control']]
+                for index, key in enumerate(('energy_color_r', 'energy_color_g', 'energy_color_b')):
+                    driver = node.inputs['Emission Color'].driver_add('default_value', index).driver
+                    var = driver.variables.new()
+                    var.name = 'value'
+                    var.targets[0].id = control
+                    var.targets[0].data_path = f'["{key}"]'
+                    driver.expression = 'value'
+                driver = node.inputs['Emission Strength'].driver_add('default_value').driver
+                var = driver.variables.new()
+                var.name = 'value'
+                var.targets[0].id = control
+                var.targets[0].data_path = '["energy_strength"]'
+                driver.expression = 'value'
         elif kind == 'add_bevel':
             obj = bpy.data.objects[operation['object']]
             width = operation.get('width', .005)

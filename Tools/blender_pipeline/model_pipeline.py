@@ -15,7 +15,9 @@ def review(config, directory):
     from mathutils import Vector
     scene = bpy.context.scene
     root = bpy.data.objects[config['root_object']]
-    meshes = [o for o in [root, *root.children_recursive] if o.type == 'MESH' and not o.hide_render]
+    candidates = ([bpy.data.objects[name] for name in config['objects']] if config.get('objects')
+                  else [root, *root.children_recursive])
+    meshes = [o for o in candidates if o.type == 'MESH' and not o.hide_render]
     points = []
     for obj in meshes:
         evaluated = obj.evaluated_get(bpy.context.evaluated_depsgraph_get())
@@ -55,7 +57,7 @@ def review(config, directory):
     camera.data.type = 'ORTHO'
     scene.camera = camera
     output = []
-    for name, direction in [('front', (1, 0, .25)), ('rear', (-1, 0, .25)), ('oblique', (1, -1, .5))]:
+    for name, direction in config.get('views', [('front', (1, 0, .25)), ('rear', (-1, 0, .25)), ('oblique', (1, -1, .5))]):
         camera.location = center + Vector(direction).normalized() * radius * 4
         camera.rotation_euler = (center - camera.location).to_track_quat('-Z', 'Y').to_euler()
         for label, size in [('detail', config.get('detail_size', 640)), ('game', config.get('game_size', 192))]:

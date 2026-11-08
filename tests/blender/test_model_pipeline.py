@@ -47,6 +47,38 @@ class ModelPipelineTests(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             self.run_build()
 
+    def test_bone_attachment_preserves_world_and_follows_pose(self):
+        from model_operations import apply_operations
+        from mathutils import Vector
+        bpy.ops.object.armature_add()
+        rig = bpy.context.object
+        rig.name = 'FitRig'
+        apply_operations([
+            {'op': 'create_empty', 'name': 'Attachment'},
+            {'op': 'attach_world', 'object': 'Attachment', 'parent': 'FitRig',
+             'bone': 'Bone', 'matrix_world': [[1, 0, 0, 2], [0, 1, 0, 0], [0, 0, 1, 1], [0, 0, 0, 1]]},
+        ])
+        attached = bpy.data.objects['Attachment']
+        self.assertLess((attached.matrix_world.translation - Vector((2, 0, 1))).length, 1e-5)
+        local = (rig.matrix_world @ rig.pose.bones['Bone'].matrix).inverted() @ attached.matrix_world
+        apply_operations([{'op': 'aim_bone', 'object': 'FitRig', 'bone': 'Bone', 'world_direction': [1, 0, 0]}])
+        expected = rig.matrix_world @ rig.pose.bones['Bone'].matrix @ local
+        self.assertLess((attached.matrix_world.translation - expected.translation).length, 1e-5)
+
+    def test_attachment_switch_uses_same_object(self):
+        from model_operations import apply_operations
+        apply_operations([
+            {'op': 'create_empty', 'name': 'Control', 'properties': {'stowed': 0.0}},
+            {'op': 'create_empty', 'name': 'Held', 'location': [2, 0, 0]},
+            {'op': 'create_empty', 'name': 'Stowed', 'location': [-2, 0, 0]},
+            {'op': 'create_empty', 'name': 'Prop'},
+            {'op': 'attachment_switch', 'object': 'Prop', 'control': 'Control',
+             'property': 'stowed', 'stowed_target': 'Stowed', 'held_target': 'Held'},
+        ])
+        self.assertAlmostEqual(bpy.data.objects['Prop'].matrix_world.translation.x, 2)
+        apply_operations([{'op': 'set_properties', 'object': 'Control', 'values': {'stowed': 1.0}}])
+        self.assertAlmostEqual(bpy.data.objects['Prop'].matrix_world.translation.x, -2)
+
     def test_collision_is_failure_not_just_console_message(self):
         self.spec['operations'][2]['location'] = [.1, .1, 1.2]
         result = self.run_build()
