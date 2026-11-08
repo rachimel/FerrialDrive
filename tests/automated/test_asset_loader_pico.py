@@ -188,6 +188,44 @@ class PicoAssetLoaderTests(unittest.TestCase):
         with self.manager.acquire("sample_mech") as handle:
             self.assertEqual(handle.resource.estimated_bytes, 256 * 512 * 4)
 
+    def test_shadow_opacity_does_not_dim_shared_body_or_leave_texture_state_changed(self):
+        from ctypes import byref, c_ubyte
+        from unittest.mock import patch
+        data = json.loads((self.root / "shadow.json").read_text())
+        data["image"]["path"] = "body.png"
+        (self.root / "shadow.json").write_text(json.dumps(data))
+        with self.manager.acquire("sample_mech") as handle:
+            resource, observed = handle.resource, []
+            original = self.pico.SDL_RenderCopy
+            def draw(renderer, texture, source, destination):
+                alpha = c_ubyte()
+                self.pico.SDL_GetTextureAlphaMod(texture, byref(alpha))
+                observed.append(alpha.value)
+                return original(renderer, texture, source, destination)
+            with patch.object(self.pico, "SDL_RenderCopy", side_effect=draw):
+                resource.draw("idle/e", 0, 100, 100)
+                resource.draw("idle/e", 0, 100, 100, shadow_opacity=1)
+            self.assertEqual(observed, [128, 255, 255, 255])
+            current = c_ubyte()
+            self.pico.SDL_GetTextureAlphaMod(resource.textures["body"], byref(current))
+            self.assertEqual(current.value, 255)
+
+    def test_shadow_opacity_restores_alpha_after_failed_draw_and_rejects_invalid_values(self):
+        from ctypes import byref, c_ubyte
+        from unittest.mock import patch
+        with self.manager.acquire("sample_mech") as handle:
+            resource = handle.resource
+            self.pico.SDL_SetTextureAlphaMod(resource.textures["shadow"], 100)
+            with patch.object(self.pico, "SDL_RenderCopy", side_effect=RuntimeError("draw failed")):
+                with self.assertRaisesRegex(RuntimeError, "draw failed"):
+                    resource.draw("idle/e", 0, 100, 100)
+            current = c_ubyte()
+            self.pico.SDL_GetTextureAlphaMod(resource.textures["shadow"], byref(current))
+            self.assertEqual(current.value, 100)
+            for opacity in (-1, 2, float("nan")):
+                with self.assertRaises(ValueError):
+                    resource.draw("idle/e", 0, 100, 100, shadow_opacity=opacity)
+
     def test_preview_keyboard_controls_and_readonly_sample_catalog(self):
         from types import SimpleNamespace
         from Tools.asset_loader.app import AssetLoaderApp, ROOT

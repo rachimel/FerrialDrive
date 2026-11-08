@@ -38,6 +38,16 @@ def cube(name, position, size, surface, parent):
     return obj
 
 
+def add_key_light(config):
+    bpy.ops.object.light_add(type='AREA', location=config['light']['position'])
+    light = bpy.context.object
+    light.name = 'FDriveKeyLight'
+    light.rotation_euler = (-light.location).to_track_quat('-Z', 'Y').to_euler()
+    light.data.energy, light.data.shape, light.data.size = config['light']['energy'], 'DISK', config['light']['size']
+    print('ASSET_LIGHT ' + json.dumps({'position': list(light.location), 'energy': light.data.energy}), flush=True)
+    return light
+
+
 def build_scene(config):
     bpy.ops.object.select_all(action='SELECT')
     bpy.ops.object.delete(use_global=False)
@@ -87,10 +97,7 @@ def build_scene(config):
     camera.rotation_euler = (Vector(config['camera']['target']) - camera.location).to_track_quat('-Z', 'Y').to_euler()
     camera.data.type, camera.data.ortho_scale = 'ORTHO', config['camera']['ortho_scale']
     scene.camera = camera
-    bpy.ops.object.light_add(type='AREA', location=config['light']['position'])
-    light = bpy.context.object
-    light.rotation_euler = (-light.location).to_track_quat('-Z', 'Y').to_euler()
-    light.data.energy, light.data.shape, light.data.size = config['light']['energy'], 'DISK', config['light']['size']
+    add_key_light(config)
     return scene, root, actor, floor
 
 
@@ -126,11 +133,11 @@ def prepare_saved_scene(config):
         camera.rotation_euler = (Vector(config['camera']['target']) - camera.location).to_track_quat('-Z', 'Y').to_euler()
         camera.data.type, camera.data.ortho_scale = 'ORTHO', config['camera']['ortho_scale']
         scene.camera = camera
-    if not any(obj.type == 'LIGHT' and not obj.hide_render for obj in scene.objects):
-        bpy.ops.object.light_add(type='AREA', location=config['light']['position'])
-        light = bpy.context.object
-        light.rotation_euler = (-light.location).to_track_quat('-Z', 'Y').to_euler()
-        light.data.energy, light.data.shape, light.data.size = config['light']['energy'], 'DISK', config['light']['size']
+    lights = [obj for obj in scene.objects if obj.type == 'LIGHT' and not obj.hide_render]
+    if not lights or not config.get('use_scene_lighting', True):
+        for obj in lights:
+            obj.hide_render = True
+        add_key_light(config)
     scene.render.fps = int(config['fps'])
     return scene, root, floor
 

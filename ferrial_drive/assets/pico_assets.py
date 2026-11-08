@@ -3,6 +3,7 @@
 from ctypes import byref, c_int, c_void_p, cast
 
 from .sprites import SpriteClip, SpriteFrame
+from .pico_opacity import DEFAULT_SHADOW_OPACITY, shadow_opacity as modulate_shadow
 
 
 class PicoAssetBackend:
@@ -55,13 +56,15 @@ class PicoAssetResource:
             self.close()
             raise
 
-    def draw(self, clip_name, frame_index, x, y, *, scale=1.0, body=True, shadow=True):
+    def draw(self, clip_name, frame_index, x, y, *, scale=1.0, body=True, shadow=True,
+             shadow_opacity=DEFAULT_SHADOW_OPACITY):
         if self.closed:
             raise RuntimeError("해제한 에셋이다.")
         self.draw_frame(self.clips[clip_name].frames[frame_index], x, y,
-                        scale=scale, body=body, shadow=shadow)
+                        scale=scale, body=body, shadow=shadow, shadow_opacity=shadow_opacity)
 
-    def draw_frame(self, frame, x, y, *, scale=1.0, body=True, shadow=True):
+    def draw_frame(self, frame, x, y, *, scale=1.0, body=True, shadow=True,
+                   shadow_opacity=DEFAULT_SHADOW_OPACITY):
         if self.closed:
             raise RuntimeError("해제한 에셋이다.")
         if scale <= 0:
@@ -74,7 +77,11 @@ class PicoAssetResource:
             source = pico.SDL_Rect(left, self.sizes[layer][1] - bottom - height, width, height)
             target = pico.to_sdl_rect(x - frame.pivot[0] * scale, y - frame.pivot[1] * scale,
                                       width * scale, height * scale)
-            pico.SDL_RenderCopy(pico.renderer, self.textures[layer], source, target)
+            if layer == "shadow":
+                with modulate_shadow(pico, self.textures[layer], shadow_opacity):
+                    pico.SDL_RenderCopy(pico.renderer, self.textures[layer], source, target)
+            else:
+                pico.SDL_RenderCopy(pico.renderer, self.textures[layer], source, target)
 
     def close(self):
         if not self.closed:

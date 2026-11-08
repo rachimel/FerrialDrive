@@ -1,6 +1,7 @@
 """열린 Pico2D 캔버스에 같은 발 기준점으로 그림자·본체를 합성한다."""
 
 from ctypes import byref, c_int
+from .pico_opacity import DEFAULT_SHADOW_OPACITY, shadow_opacity as modulate_shadow
 
 
 class PicoSprite:
@@ -24,7 +25,8 @@ class PicoSprite:
             self.close()
             raise
 
-    def draw(self, direction, frame_index, x, y, *, scale=1.0, body=True, shadow=True):
+    def draw(self, direction, frame_index, x, y, *, scale=1.0, body=True, shadow=True,
+             shadow_opacity=DEFAULT_SHADOW_OPACITY):
         """x/y는 화면 왼쪽 아래 원점의 지면 피봇이다."""
         pico = self.pico
         name = self.bundle.directions[direction]
@@ -36,7 +38,11 @@ class PicoSprite:
             source = pico.SDL_Rect(left, sheet.size[1] - bottom - height, width, height)
             destination = pico.to_sdl_rect(x - frame.pivot[0] * scale, y - frame.pivot[1] * scale,
                                            width * scale, height * scale)
-            pico.SDL_RenderCopy(pico.renderer, self.textures[layer], source, destination)
+            if layer == 'shadow':
+                with modulate_shadow(pico, self.textures[layer], shadow_opacity):
+                    pico.SDL_RenderCopy(pico.renderer, self.textures[layer], source, destination)
+            else:
+                pico.SDL_RenderCopy(pico.renderer, self.textures[layer], source, destination)
 
     def close(self):
         for texture in self.textures.values():

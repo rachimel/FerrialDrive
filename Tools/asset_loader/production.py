@@ -47,6 +47,8 @@ def render_config(*, asset_id, animation_name, frames, fps, width, height,
                   fps=int(fps), frame_size_pixels=[width, height], root_object=root_object.strip(),
                   use_scene_camera=bool(use_scene_camera), auto_fit=bool(auto_fit) and not use_scene_camera)
     config["camera"]["ortho_scale"] = ortho_scale
+    config["light"].update(position=[-3, -4, 12], energy=1400)
+    config["use_scene_lighting"] = False
     config["render"].update(samples=samples, shadow_samples=samples)
     config.pop("note", None)
     return config
