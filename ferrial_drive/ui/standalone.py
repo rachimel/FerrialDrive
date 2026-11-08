@@ -5,7 +5,7 @@ from math import isfinite
 from time import perf_counter, sleep
 
 
-def _events(pico):
+def _events(pico, *, accept_text=False):
     """Pico2D 이벤트를 전달하되 FPS 제목 덮어쓰기와 실행기 의존은 피한다."""
     raw = pico.SDL_Event()
     while pico.SDL_PollEvent(byref(raw)):
@@ -16,14 +16,20 @@ def _events(pico):
             event.window_event = raw.window.event
             yield event
         elif raw.type in (pico.SDL_KEYDOWN, pico.SDL_KEYUP):
-            if not raw.key.repeat:
+            if not raw.key.repeat or accept_text:
                 event.key = raw.key.keysym.sym
+                event.mod = raw.key.keysym.mod
+                event.repeat = bool(raw.key.repeat)
                 yield event
+        elif accept_text and raw.type in (pico.SDL_TEXTINPUT, pico.SDL_TEXTEDITING):
+            event.text = bytes(raw.text.text if raw.type == pico.SDL_TEXTINPUT else raw.edit.text).split(b"\0", 1)[0].decode("utf-8", errors="replace")
+            yield event
         elif raw.type == pico.SDL_MOUSEMOTION:
             event.x, event.y = raw.motion.x, raw.motion.y
             yield event
         elif raw.type in (pico.SDL_MOUSEBUTTONDOWN, pico.SDL_MOUSEBUTTONUP):
             event.button, event.x, event.y = raw.button.button, raw.button.x, raw.button.y
+            event.clicks = raw.button.clicks
             yield event
         elif raw.type == pico.SDL_MOUSEWHEEL:
             event.x, event.y = raw.wheel.x, raw.wheel.y
@@ -62,7 +68,7 @@ def run_preview(program, *, width, height, title, frames_per_second=60, frame_li
                 frame_start = perf_counter()
                 delta_seconds = frame_start - previous_seconds
                 previous_seconds = frame_start
-                for event in _events(pico):
+                for event in _events(pico, accept_text=getattr(program, "accept_text", False)):
                     if event.type == pico.SDL_QUIT:
                         program.running = False
                     else:

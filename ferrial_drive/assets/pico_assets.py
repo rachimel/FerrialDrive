@@ -58,10 +58,15 @@ class PicoAssetResource:
     def draw(self, clip_name, frame_index, x, y, *, scale=1.0, body=True, shadow=True):
         if self.closed:
             raise RuntimeError("해제한 에셋이다.")
+        self.draw_frame(self.clips[clip_name].frames[frame_index], x, y,
+                        scale=scale, body=body, shadow=shadow)
+
+    def draw_frame(self, frame, x, y, *, scale=1.0, body=True, shadow=True):
+        if self.closed:
+            raise RuntimeError("해제한 에셋이다.")
         if scale <= 0:
             return
         pico = self.pico
-        frame = self.clips[clip_name].frames[frame_index]
         left, bottom, width, height = frame.rect
         for layer, visible in (("shadow", shadow), ("body", body)):
             if not visible or layer not in self.textures:

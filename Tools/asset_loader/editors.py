@@ -1,267 +1,230 @@
-"""제작 설정·프레임 조립 입력창. 처리와 저장은 화면 밖의 모듈에 위임한다."""
+"""Pico2D 메인 루프에서 갱신하는 제작·조립 패널. 별도 창을 열지 않는다."""
 
 from datetime import datetime
-from math import ceil, isfinite
-import os
+from math import isfinite
 from pathlib import Path
-import tempfile
 from uuid import uuid4
 
+from ferrial_drive.assets.sprites import SpriteFrame
+from ferrial_drive.ui.components import Rect
 from .assembly import SpriteAssembly
+from .file_panel import FilePanel
 from .production import WORKSPACE, render_config
-from Tools.theme_reference import load_theme
+from .widgets import Panel
 
 
-def editor_window(title):
-    import tkinter as tk
-    from tkinter import ttk
+class RenderPanel(Panel):
+    title = "3D 프리렌더"
+    sample_rect = Rect(144, 506, 220, 28)
+    camera_rect = Rect(404, 506, 300, 28)
+    automatic_rect = Rect(774, 506, 330, 28)
 
-    theme = load_theme()
-    colors = theme["colors"]
-    root = tk.Tk()
-    root.title(title)
-    root.configure(bg=colors["background"])
-    root.resizable(True, True)
-    style = ttk.Style(root)
-    style.theme_use("clam")
-    font = ("TkDefaultFont", -theme["fonts"]["small"]["size"])
-    if os.name == "nt":
-        import ctypes
-        import pico2d.pico2d as pico
-        settings = theme["fonts"]["small"]
-        path = Path(__file__).resolve().parents[2] / "data/fonts" / settings["path"]
-        gdi = ctypes.WinDLL("gdi32")
-        gdi.AddFontResourceExW.argtypes = [ctypes.c_wchar_p, ctypes.c_uint, ctypes.c_void_p]
-        gdi.RemoveFontResourceExW.argtypes = [ctypes.c_wchar_p, ctypes.c_uint, ctypes.c_void_p]
-        if gdi.AddFontResourceExW(str(path), 0x10, None):
-            def release(event):
-                if event.widget is root:
-                    gdi.RemoveFontResourceExW(str(path), 0x10, None)
-            root.bind("<Destroy>", release, add=True)
-            pico.TTF_Init()
-            face = pico.TTF_OpenFont(str(path).encode("utf-8"), settings["size"])
-            try:
-                if face:
-                    family = pico.TTF_FontFaceFamilyName(face)
-                    if family:
-                        font = (family.decode("utf-8"), -settings["size"])
-            finally:
-                if face:
-                    pico.TTF_CloseFont(face)
-                pico.TTF_Quit()
-    style.configure(".", font=font)
-    style.configure("TFrame", background=colors["background"])
-    style.configure("TLabel", background=colors["background"], foreground=colors["text"])
-    style.configure("TCheckbutton", background=colors["background"], foreground=colors["text"])
-    style.configure("TEntry", fieldbackground=colors["input"], foreground=colors["text"])
-    style.configure("TButton", background=colors["button"], foreground=colors["button_text"], padding=6)
-    style.configure("Treeview", background=colors["panel"], fieldbackground=colors["panel"], foreground=colors["text"], rowheight=28)
-    style.map("Treeview", background=[("selected", colors["selected"])])
-    content = ttk.Frame(root, padding=20)
-    content.pack(fill="both", expand=True)
-    content.columnconfigure(1, weight=1)
-    return root, content
+    def __init__(self, app, source=None):
+        super().__init__(app)
+        self.labels = []
+        self.sample, self.scene_camera, self.auto_fit = False, False, True
+        self.add_field("source", source or "", Rect(144, 160, 856, 36))
+        self.button("찾기", Rect(1012, 160, 124, 36), self.browse)
+        definitions = [("root", "모델 루트", ""), ("asset_id", "에셋 ID", app.asset_id or "model"),
+            ("animation", "동작 이름", "idle"), ("frames", "프레임", "1,3,5,7"),
+            ("fps", "FPS", "8"), ("width", "너비 (px)", "160"),
+            ("height", "높이 (px)", "160"), ("scale", "정사영 범위", "4.5"),
+            ("samples", "렌더 샘플", "32")]
+        for index, (name, label, value) in enumerate(definitions):
+            x, y = 144 + index % 2 * 510, 228 + index // 2 * 52
+            self.labels.append((label, x, y + 9))
+            self.add_field(name, value, Rect(x + 120, y, 362, 36))
+        self.focus = "source"
+        self.button("렌더 시작", Rect(996, 660, 140, 36), self.submit)
+        self.button("취소", Rect(864, 660, 120, 36), self.close)
 
+    def browse(self):
+        def selected(path):
+            field = self.fields["source"]
+            field.text, field.cursor = str(path), len(str(path))
+        self.app.set_panel(FilePanel(self.app, selected, extensions={".blend"},
+                                    initial=self.value("source") or WORKSPACE, parent=self))
 
-def render_dialog(asset_id, source=None):
-    import tkinter as tk
-    from tkinter import filedialog, ttk
+    def submit(self):
+        source = None if self.sample else Path(self.value("source").strip('"')).expanduser().resolve()
+        if source is not None and (source.suffix.lower() != ".blend" or not source.is_file()):
+            raise ValueError("저장된 .blend 모델을 선택한다.")
+        config = render_config(asset_id=self.value("asset_id"), animation_name=self.value("animation"),
+            frames=self.value("frames"), fps=self.value("fps"), width=self.value("width"),
+            height=self.value("height"), ortho_scale=self.value("scale"), samples=self.value("samples"),
+            root_object=self.value("root"), use_scene_camera=self.scene_camera, auto_fit=self.auto_fit)
+        self.app.start_render(source, config)
+        self.close()
 
-    root, content = editor_window("3D 프리렌더")
-    result = None
-    fields = {}
-    defaults = [("source", "모델 (.blend)", str(source) if source else ""), ("root", "모델 루트", ""),
-        ("asset_id", "에셋 ID", asset_id or "model"), ("animation", "동작 이름", "idle"),
-        ("frames", "Blender 프레임", "1,3,5,7"), ("fps", "FPS", "8"),
-        ("width", "너비 (px)", "160"), ("height", "높이 (px)", "160"),
-        ("scale", "정사영 범위", "4.5"), ("samples", "렌더 샘플", "32")]
-    for row, (key, label, default) in enumerate(defaults):
-        ttk.Label(content, text=label).grid(row=row, column=0, sticky="w", padx=(0, 20), pady=5)
-        variable = tk.StringVar(value=default)
-        fields[key] = variable
-        ttk.Entry(content, textvariable=variable, width=40).grid(row=row, column=1, sticky="ew", pady=5)
-    def browse():
-        path = filedialog.askopenfilename(parent=root, filetypes=[("Blender 모델", "*.blend")])
-        if path:
-            fields["source"].set(path)
-    ttk.Button(content, text="…", command=browse, width=3).grid(row=0, column=2, padx=(8, 0))
-    sample, camera, auto_fit = tk.BooleanVar(value=False), tk.BooleanVar(value=False), tk.BooleanVar(value=True)
-    ttk.Checkbutton(content, text="기본 도형 샘플", variable=sample).grid(row=10, column=1, sticky="w", pady=5)
-    def camera_mode():
-        auto_fit.set(not camera.get())
-        automatic.state(["disabled"] if camera.get() else ["!disabled"])
-    ttk.Checkbutton(content, text="모델에 저장된 카메라 사용", variable=camera,
-                    command=camera_mode).grid(row=11, column=1, sticky="w", pady=5)
-    automatic = ttk.Checkbutton(content, text="기체·그림자 자동 맞춤", variable=auto_fit)
-    automatic.grid(row=12, column=1, sticky="w", pady=5)
-    error = tk.StringVar()
-    ttk.Label(content, textvariable=error, wraplength=480).grid(row=13, column=0, columnspan=3, sticky="w", pady=8)
-    def accept():
-        nonlocal result
-        try:
-            source = None if sample.get() else Path(fields["source"].get()).resolve()
-            if source is not None and (source.suffix.lower() != ".blend" or not source.is_file()):
-                raise ValueError("저장된 .blend 모델을 선택한다.")
-            config = render_config(asset_id=fields["asset_id"].get(), animation_name=fields["animation"].get(),
-                frames=fields["frames"].get(), fps=fields["fps"].get(), width=fields["width"].get(),
-                height=fields["height"].get(), ortho_scale=fields["scale"].get(), samples=fields["samples"].get(),
-                root_object=fields["root"].get(), use_scene_camera=camera.get(), auto_fit=auto_fit.get())
-            result = source, config
-            root.destroy()
-        except (OSError, ValueError) as problem:
-            error.set(str(problem))
-    ttk.Button(content, text="렌더 시작", command=accept).grid(row=14, column=1, sticky="e")
-    root.bind("<Escape>", lambda _: root.destroy())
-    root.mainloop()
-    return result
+    def content_event(self, event):
+        if event.type == self.app.pico.SDL_MOUSEBUTTONDOWN and event.button == self.app.pico.SDL_BUTTON_LEFT:
+            if self.sample_rect.contains(event.x, event.y):
+                self.sample = not self.sample
+            elif self.camera_rect.contains(event.x, event.y):
+                self.scene_camera = not self.scene_camera
+                self.auto_fit = not self.scene_camera
+            elif self.automatic_rect.contains(event.x, event.y) and not self.scene_camera:
+                self.auto_fit = not self.auto_fit
+
+    def draw(self):
+        super().draw()
+        r, colors = self.app.renderer, self.app.theme["colors"]
+        r.text("모델 (.blend)", 144, 134, "small", colors["muted"])
+        for label, x, y in self.labels:
+            r.text(label, x, y, "small", colors["text"])
+        self.check(self.sample_rect, "기본 도형 샘플", self.sample)
+        self.check(self.camera_rect, "모델에 저장된 카메라 사용", self.scene_camera)
+        self.check(self.automatic_rect, "기체·그림자 자동 맞춤", self.auto_fit, disabled=self.scene_camera)
 
 
-def assembly_dialog(definition, image_size, clip_name, asset_id):
-    import tkinter as tk
-    from tkinter import ttk
+class AssemblyPanel(Panel):
+    title = "애니메이션 조립"
+    rect = Rect(48, 72, 1184, 656)
+    timeline = Rect(344, 506, 856, 116)
+    preview = Rect(796, 144, 404, 320)
+    together_rect = Rect(344, 370, 340, 28)
+    playing_rect = Rect(344, 414, 140, 28)
 
-    assembly = SpriteAssembly(definition, image_size=image_size)
-    root, content = editor_window("애니메이션 조립")
-    root.minsize(650, 540)
-    result = None
-    source = tk.StringVar(value=clip_name)
-    name, fps, px, py = (tk.StringVar() for _ in range(4))
-    together = tk.BooleanVar(value=True)
-    error = tk.StringVar()
-    selection = ttk.Combobox(content, values=assembly.names, textvariable=source, state="readonly")
-    ttk.Label(content, text="원본 동작 / 방향").grid(row=0, column=0, sticky="w", padx=(0, 20))
-    selection.grid(row=0, column=1, sticky="ew", pady=6)
-    for row, (label, variable) in enumerate((("동작 이름", name), ("FPS", fps), ("피봇 X (px)", px), ("피봇 Y (px)", py)), 1):
-        ttk.Label(content, text=label).grid(row=row, column=0, sticky="w")
-        ttk.Entry(content, textvariable=variable).grid(row=row, column=1, sticky="ew", pady=6)
-    ttk.Checkbutton(content, text="모든 방향에 적용", variable=together,
-                    state="normal" if assembly.bundle else "disabled").grid(row=5, column=1, sticky="w", pady=6)
-    tree = ttk.Treeview(content, columns=("index", "rect"), show="headings", selectmode="extended", height=8)
-    tree.heading("index", text="원본 프레임")
-    tree.heading("rect", text="영역 (x, y, w, h)")
-    tree.column("index", width=110, stretch=False)
-    tree.column("rect", width=280)
-    tree.grid(row=6, column=0, columnspan=3, sticky="nsew", pady=8)
-    content.rowconfigure(6, weight=1)
-    ttk.Label(content, text="드래그 순서 변경 · Delete 제외 · Ctrl+D 반복").grid(row=7, column=0, columnspan=3, sticky="w")
-    ttk.Label(content, textvariable=error, wraplength=680).grid(row=8, column=0, columnspan=3, sticky="w", pady=10)
-    colors = load_theme()["colors"]
-    canvas = tk.Canvas(content, width=240, height=200, bg=colors["input"], highlightthickness=0)
-    canvas.grid(row=0, column=2, rowspan=5, padx=(20, 0))
-    playing = tk.BooleanVar(value=True)
-    ttk.Checkbutton(content, text="재생", variable=playing).grid(row=5, column=2, sticky="w", padx=(20, 0))
-    # Tk가 직접 읽지 못하는 JPG/BMP도 기존 SDL 이미지 경로로 변환한다.
-    import pico2d.pico2d as pico
-    from .production import WORKSPACE
-    WORKSPACE.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="preview-", dir=WORKSPACE) as directory:
-        surface = pico.IMG_Load(str(assembly.images["body"]).encode("utf-8"))
-        try:
-            if not surface or pico.IMG_SavePNG(surface, str(Path(directory) / "atlas.png").encode("utf-8")) != 0:
-                root.destroy()
-                raise OSError("조립 미리보기 이미지 로딩 실패")
-            atlas = tk.PhotoImage(file=str(Path(directory) / "atlas.png"), master=root)
-        finally:
-            if surface:
-                pico.SDL_FreeSurface(surface)
-    previews, rectangles = [], []
-    cursor = 0
-    def populate(_=None):
-        nonlocal cursor
-        row = assembly.row(source.get())
-        name.set(row["name"].rsplit("/", 1)[0])
-        fps.set(f'{row["fps"]:g}')
-        pivots = {tuple(frame["pivot"]) for frame in row["frames"]}
-        px.set(str(row["frames"][0]["pivot"][0]) if len(pivots) == 1 else "")
-        py.set(str(row["frames"][0]["pivot"][1]) if len(pivots) == 1 else "")
-        tree.delete(*tree.get_children())
-        previews.clear()
-        rectangles.clear()
-        cursor = 0
-        for index, frame in enumerate(row["frames"]):
-            tree.insert("", "end", values=(index + 1, str(tuple(frame["rect"]))))
-            x, y, width, height = frame["rect"]
-            cropped = tk.PhotoImage(master=root, width=width, height=height)
-            root.tk.call(str(cropped), "copy", str(atlas), "-from", x, atlas.height() - y - height, x + width, atlas.height() - y)
-            factor = max(1, ceil(max(width / 220, height / 180)))
-            if factor > 1:
-                cropped = cropped.subsample(factor, factor)
-            previews.append(cropped)
-            rectangles.append((width, height, frame["pivot"], cropped.width() / width))
-    def drop(event):
-        target = tree.identify_row(event.y)
-        selected = tree.selection()
-        if target and target not in selected:
-            index = tree.index(target)
-            for offset, item in enumerate(selected):
-                tree.move(item, "", index + offset)
-    def remove(_):
-        for item in tree.selection():
-            tree.delete(item)
-    def duplicate(_):
-        for item in tree.selection():
-            tree.insert("", tree.index(item) + 1, values=tree.item(item, "values"))
-        return "break"
-    def apply():
-        try:
-            order = [int(tree.item(item, "values")[0]) - 1 for item in tree.get_children()]
-            pivot = None if not px.get().strip() and not py.get().strip() else (float(px.get()), float(py.get()))
-            current = assembly.apply(source.get(), name.get(), order, float(fps.get()), pivot, all_directions=together.get())
-            selection.configure(values=assembly.names)
-            source.set(current)
-            populate()
-            error.set("")
-            return True
-        except (ValueError, KeyError, StopIteration) as problem:
-            error.set(str(problem))
-            return False
-    def save():
-        nonlocal result
-        if not apply():
-            return
-        try:
-            folder = WORKSPACE / "sprites" / (datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:8])
-            result = assembly.save(folder, asset_id=asset_id), source.get()
-            root.destroy()
-        except (OSError, ValueError) as problem:
-            error.set(str(problem))
-    def animate():
-        nonlocal cursor
-        items = tree.get_children()
-        if items:
-            if not playing.get() and tree.selection():
-                item = tree.selection()[0]
+    def __init__(self, app):
+        super().__init__(app)
+        resource = app.handle.resource
+        self.assembly = SpriteAssembly(resource.definition, image_size=resource.sizes["body"])
+        self.asset_id = app.asset_id
+        self.source_name = app.clip_name
+        self.source_offset = self.offset = self.selected = 0
+        self.dragging = None
+        self.elapsed = 0.0
+        self.playing, self.together = True, self.assembly.bundle is not None
+        self.labels = []
+        for index, (name, label) in enumerate((("name", "동작 이름"), ("fps", "FPS"), ("px", "피봇 X"), ("py", "피봇 Y"))):
+            y = 154 + index * 50
+            self.labels.append((label, 344, y + 9))
+            self.add_field(name, "", Rect(452, y, 308, 36))
+        self.button("동작 적용", Rect(344, 660, 140, 36), self.apply)
+        self.button("스프라이트 저장", Rect(1020, 660, 180, 36), self.submit)
+        self.button("취소", Rect(888, 660, 120, 36), self.close)
+        self.load_clip(self.source_name)
+
+    def load_clip(self, name):
+        self.source_name = name
+        row = self.assembly.row(name)
+        self.frames = row["frames"]
+        self.order = list(range(len(self.frames)))
+        pivots = {tuple(frame["pivot"]) for frame in self.frames}
+        values = {"name": name.rsplit("/", 1)[0], "fps": f'{row["fps"]:g}',
+                  "px": str(self.frames[0]["pivot"][0]) if len(pivots) == 1 else "",
+                  "py": str(self.frames[0]["pivot"][1]) if len(pivots) == 1 else ""}
+        for key, value in values.items():
+            field = self.fields[key]
+            field.text, field.cursor, field.selected, field.composition = value, len(value), False, ""
+        self.offset = self.selected = 0
+        self.elapsed = 0.0
+
+    def apply(self):
+        pivot = None if not self.value("px") and not self.value("py") else (float(self.value("px")), float(self.value("py")))
+        current = self.assembly.apply(self.source_name, self.value("name"), self.order,
+                                      float(self.value("fps")), pivot, all_directions=self.together)
+        self.load_clip(current)
+
+    def submit(self):
+        self.apply()
+        folder = WORKSPACE / "sprites" / (datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:8])
+        result = self.assembly.save(folder, asset_id=self.asset_id)
+        if not self.app.open_source(result, asset_id=self.asset_id):
+            raise ValueError(self.app.message)
+        self.app.clip_name = self.source_name
+        self.close()
+
+    def content_event(self, event):
+        pico = self.app.pico
+        if event.type == pico.SDL_MOUSEWHEEL:
+            if self.app.mouse[0] < 320:
+                self.source_offset = max(0, min(max(0, len(self.assembly.names) - 14), self.source_offset - event.y * 3))
             else:
-                item = items[cursor % len(items)]
-            index = int(tree.item(item, "values")[0]) - 1
-            canvas.delete("all")
-            canvas.create_image(120, 100, image=previews[index])
-            width, height, pivot, scale = rectangles[index]
+                self.offset = max(0, min(max(0, len(self.order) - 8), self.offset - event.y * 2))
+        elif event.type == pico.SDL_MOUSEBUTTONDOWN and event.button == pico.SDL_BUTTON_LEFT:
+            if Rect(72, 154, 240, 448).contains(event.x, event.y):
+                index = self.source_offset + int((event.y - 154) // 32)
+                if index < len(self.assembly.names):
+                    self.load_clip(self.assembly.names[index])
+            elif self.together_rect.contains(event.x, event.y) and self.assembly.bundle:
+                self.together = not self.together
+            elif self.playing_rect.contains(event.x, event.y):
+                self.playing = not self.playing
+            elif self.timeline.contains(event.x, event.y):
+                index = self.offset + int((event.x - self.timeline.x) // 104)
+                if index < len(self.order):
+                    self.selected, self.dragging, self.playing = index, index, False
+        elif event.type == pico.SDL_MOUSEBUTTONUP and event.button == pico.SDL_BUTTON_LEFT and self.dragging is not None:
+            if self.timeline.contains(event.x, event.y) and self.order:
+                target = min(len(self.order) - 1, self.offset + int((event.x - self.timeline.x) // 104))
+                self.order.insert(target, self.order.pop(self.dragging))
+                self.selected = target
+            self.dragging = None
+        elif event.type == pico.SDL_KEYDOWN and self.order:
+            if event.key == pico.SDLK_DELETE:
+                self.order.pop(self.selected)
+                self.selected = max(0, min(self.selected, len(self.order) - 1))
+                self.offset = min(self.offset, max(0, len(self.order) - 8))
+            elif event.key == pico.SDLK_d and getattr(event, "mod", 0) & pico.KMOD_CTRL:
+                self.order.insert(self.selected + 1, self.order[self.selected])
+                self.selected += 1
+            elif event.key == pico.SDLK_SPACE:
+                self.playing = not self.playing
+            elif event.key in (pico.SDLK_LEFT, pico.SDLK_RIGHT):
+                self.selected = (self.selected + (-1 if event.key == pico.SDLK_LEFT else 1)) % len(self.order)
+                self.playing = False
+
+    def update(self, delta_seconds):
+        if self.playing:
+            self.elapsed += delta_seconds
+
+    def draw_frame(self, source_index, rect, *, pivot_override=False):
+        data = self.frames[source_index]
+        pivot = data["pivot"]
+        if pivot_override:
             try:
-                candidate = (float(px.get()), float(py.get())) if px.get() and py.get() else pivot
+                candidate = (float(self.value("px")), float(self.value("py")))
                 if all(isfinite(value) for value in candidate):
                     pivot = candidate
             except ValueError:
                 pass
-            x = 120 + (pivot[0] - width / 2) * scale
-            y = 100 - (pivot[1] - height / 2) * scale
-            canvas.create_line(x - 6, y, x + 6, y, fill=colors["accent"])
-            canvas.create_line(x, y - 6, x, y + 6, fill=colors["accent"])
-            if playing.get():
-                cursor += 1
-        try:
-            rate = max(0.1, min(240, float(fps.get())))
-        except ValueError:
-            rate = 8
-        root.after(max(4, round(1000 / rate)), animate)
-    selection.bind("<<ComboboxSelected>>", populate)
-    tree.bind("<ButtonRelease-1>", drop)
-    tree.bind("<Delete>", remove)
-    tree.bind("<Control-d>", duplicate)
-    ttk.Button(content, text="동작 적용", command=apply).grid(row=9, column=0, sticky="w")
-    ttk.Button(content, text="스프라이트 저장", command=save).grid(row=9, column=1, sticky="e")
-    root.bind("<Escape>", lambda _: root.destroy())
-    populate()
-    animate()
-    root.mainloop()
-    return result
+        frame = SpriteFrame(tuple(data["rect"]), tuple(pivot))
+        width, height = frame.rect[2:]
+        scale = min((rect.width - 24) / width, (rect.height - 24) / height, 4)
+        x = rect.x + rect.width / 2 + (pivot[0] - width / 2) * scale
+        y = 800 - rect.y - rect.height / 2 + (pivot[1] - height / 2) * scale
+        r, colors = self.app.renderer, self.app.theme["colors"]
+        with r.clip(rect):
+            self.app.handle.resource.draw_frame(frame, x, y, scale=scale)
+            if pivot_override:
+                r.line(x - 8, 800 - y, x + 8, 800 - y, colors["accent"])
+                r.line(x, 800 - y - 8, x, 800 - y + 8, colors["accent"])
+
+    def draw(self):
+        super().draw()
+        r, colors = self.app.renderer, self.app.theme["colors"]
+        r.text("원본 동작 / 방향", 72, 126, "small", colors["muted"])
+        for index, name in enumerate(self.assembly.names[self.source_offset:self.source_offset + 14]):
+            y = 154 + index * 32
+            r.rect(Rect(72, y, 240, 30), colors["selected"] if name == self.source_name else colors["input"])
+            r.text(name, 82, y + 6, "small", colors["text"], max_width=220)
+        for label, x, y in self.labels:
+            r.text(label, x, y, "small", colors["text"])
+        self.check(self.together_rect, "모든 방향에 적용", self.together, disabled=self.assembly.bundle is None)
+        self.check(self.playing_rect, "재생", self.playing)
+        r.rect(self.preview, colors["input"])
+        if self.order:
+            try:
+                rate = float(self.value("fps"))
+                rate = rate if isfinite(rate) and 0.1 <= rate <= 240 else 8
+            except ValueError:
+                rate = 8
+            index = int(self.elapsed * rate) % len(self.order) if self.playing else self.selected
+            self.draw_frame(self.order[index], self.preview, pivot_override=True)
+        for index, source in enumerate(self.order[self.offset:self.offset + 8]):
+            slot = Rect(self.timeline.x + index * 104, self.timeline.y, 98, 112)
+            r.rect(slot, colors["selected"] if self.offset + index == self.selected else colors["input"])
+            self.draw_frame(source, Rect(slot.x, slot.y, slot.width, 84))
+            r.text(str(source + 1), slot.x + 8, slot.y + 88, "small", colors["text"])
+        r.text("드래그 순서 변경 · Delete 제외 · Ctrl+D 반복", 344, 476, "small", colors["muted"])

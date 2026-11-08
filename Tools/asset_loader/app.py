@@ -22,21 +22,9 @@ PRODUCTION_MENU = Rect(1136, 18, 120, 34)
 PRODUCTION_ITEMS = [("3D 프리렌더…", "render"), ("애니메이션 조립…", "compose"), ("렌더 취소", "cancel_render")]
 
 
-def dialog(kind, **options):
-    import tkinter as tk
-    from tkinter import filedialog, simpledialog
-
-    root = tk.Tk()
-    root.withdraw()
-    try:
-        if kind == "id":
-            return simpledialog.askstring("에셋 ID", "영문·숫자·밑줄·점·하이픈", parent=root, **options)
-        return filedialog.askopenfilename(parent=root, **options)
-    finally:
-        root.destroy()
-
-
 class AssetLoaderApp:
+    accept_text = True
+
     def __init__(self, *, source=None, catalog=DEFAULT_CATALOG, debug=False, timings=None, capture=None):
         self.running = True
         self.initial_source = Path(source).resolve() if source else SAMPLE
@@ -59,6 +47,8 @@ class AssetLoaderApp:
         self.first_draw = True
         self.build = None
         self.menu_open = False
+        self.panel = None
+        self.mouse = (0, 0)
         self.buttons = [
             ("불러오기 O", "open", Rect(24, 64, 150, 36)),
             ("ID 변경 I", "id", Rect(184, 64, 138, 36)),
@@ -162,12 +152,29 @@ class AssetLoaderApp:
         self.message, self.error = f"등록 완료: {self.asset_id}", False
 
     def configure_render(self, source=None):
-        from .editors import render_dialog
+        from .editors import RenderPanel
         if self.build and self.build.process is not None:
             raise ValueError("렌더 작업이 진행 중이다.")
-        recipe = render_dialog(self.asset_id, source)
-        if recipe:
-            self.start_render(*recipe)
+        self.set_panel(RenderPanel(self, source))
+
+    def set_panel(self, panel):
+        self.panel, self.menu_open = panel, False
+        if hasattr(self, "pico"):
+            if panel is not None:
+                self.pico.SDL_StartTextInput()
+            else:
+                self.pico.SDL_StopTextInput()
+
+    def choose_source(self, path):
+        if Path(path).suffix.lower() == ".blend":
+            self.configure_render(path)
+        elif not self.open_source(path):
+            raise ValueError(self.message)
+
+    def choose_catalog(self, path):
+        candidate = AssetCatalog.load(path)
+        self.catalog, self.catalog_path, self.list_offset = candidate, candidate.path, 0
+        self.message, self.error = "카탈로그 열기 완료", False
 
     def start_render(self, source, config, *, blender=None):
         from .production import WORKSPACE
@@ -185,31 +192,22 @@ class AssetLoaderApp:
         self.message, self.error = "3D 프리렌더링 중", False
 
     def compose(self):
-        from .editors import assembly_dialog
+        from .editors import AssemblyPanel
         if self.handle is None:
             raise ValueError("먼저 에셋을 선택한다.")
-        resource = self.handle.resource
-        result = assembly_dialog(resource.definition, resource.sizes["body"], self.clip_name, self.asset_id)
-        if result:
-            path, clip_name = result
-            if self.open_source(path, asset_id=self.asset_id):
-                self.clip_name = clip_name
+        if self.build and self.build.process is not None:
+            raise ValueError("렌더 완료 후 조립한다.")
+        self.set_panel(AssemblyPanel(self))
 
     def action(self, action):
         try:
             if action == "open":
-                path = dialog("open", title="모델·이미지·시트 열기", filetypes=[
-                    ("모델·이미지·메타데이터", "*.blend *.png *.jpg *.jpeg *.bmp *.json"), ("모든 파일", "*.*")])
-                if path:
-                    if Path(path).suffix.lower() == ".blend":
-                        self.configure_render(path)
-                    else:
-                        self.open_source(path)
+                from .file_panel import FilePanel
+                self.set_panel(FilePanel(self, self.choose_source,
+                    extensions={".blend", ".png", ".jpg", ".jpeg", ".bmp", ".json"}, initial=self.source or ROOT))
             elif action == "id":
-                value = dialog("id", initialvalue=self.asset_id)
-                if value is not None:
-                    AssetDefinition(value, "image", self.source or SAMPLE)
-                    self.asset_id = value
+                from .file_panel import IdPanel
+                self.set_panel(IdPanel(self))
             elif action == "register":
                 self.register()
             elif action == "debug":
@@ -223,12 +221,8 @@ class AssetLoaderApp:
                 elif self.source:
                     self.open_source(self.source, asset_id=self.asset_id)
             elif action == "catalog":
-                path = dialog("open", title="등록 카탈로그 열기", filetypes=[("JSON", "*.json")])
-                if path:
-                    candidate = AssetCatalog.load(path)
-                    self.catalog, self.catalog_path = candidate, candidate.path
-                    self.list_offset = 0
-                    self.message, self.error = "카탈로그 열기 완료", False
+                from .file_panel import FilePanel
+                self.set_panel(FilePanel(self, self.choose_catalog, extensions={".json"}, initial=self.catalog_path))
             elif action == "fit":
                 self.fit()
             elif action == "actual":
@@ -245,7 +239,18 @@ class AssetLoaderApp:
 
     def handle_event(self, event):
         pico = self.pico
+        if (event.type == pico.SDL_QUIT or event.type == pico.SDL_WINDOWEVENT
+                and event.window_event == pico.SDL_WINDOWEVENT_CLOSE):
+            self.running = False
+            return
+        if event.type == pico.SDL_MOUSEMOTION:
+            self.mouse = (event.x, event.y)
+        if self.panel is not None:
+            self.panel.handle_event(event)
+            return
         if event.type == pico.SDL_KEYDOWN:
+            if getattr(event, "repeat", False):
+                return
             key = event.key
             actions = {pico.SDLK_o: "open", pico.SDLK_i: "id", pico.SDLK_s: "register",
                        pico.SDLK_d: "debug", pico.SDLK_r: "reload", pico.SDLK_f: "fit"}
@@ -302,7 +307,7 @@ class AssetLoaderApp:
     def update(self, delta_seconds):
         if not isfinite(delta_seconds) or delta_seconds < 0:
             raise ValueError("갱신 시간은 0 이상의 유한한 초 단위다.")
-        if self.manager:
+        if self.manager and self.panel is None:
             self.apply_reload(self.manager.poll_reload())
         if self.build and self.build.process is not None:
             result = self.build.poll()
@@ -312,6 +317,8 @@ class AssetLoaderApp:
                 self.report(self.build.error)
         if not self.paused:
             self.elapsed += delta_seconds
+        if self.panel is not None:
+            self.panel.update(delta_seconds)
 
     def draw(self):
         r, c = self.renderer, self.theme["colors"]
@@ -364,6 +371,8 @@ class AssetLoaderApp:
                 rect = Rect(1030, 56 + index * 36, 226, 36)
                 r.rect(rect, c["panel"])
                 r.text(label, rect.x + 12, rect.y + 8, "small", c["text"])
+        if self.panel is not None:
+            self.panel.draw()
         if self.capture and self.first_draw:
             self.save_capture()
         self.first_draw = False
@@ -385,6 +394,7 @@ class AssetLoaderApp:
 
     def exit(self):
         try:
+            self.set_panel(None)
             if self.build:
                 self.build.close()
             if self.manager:

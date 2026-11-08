@@ -122,71 +122,22 @@ class AssetProductionTests(unittest.TestCase):
             opened.assert_not_called()
         self.assertEqual(app.message, "render failed")
 
-    def native_editor(self, callback):
-        from Tools.asset_loader import editors
-        original = editors.editor_window
-        def hidden_window(title):
-            try:
-                root, content = original(title)
-            except Exception as error:
-                import tkinter
-                if isinstance(error, tkinter.TclError):
-                    self.skipTest(str(error))
-                raise
-            root.withdraw()
-            def mainloop():
-                try:
-                    callback(root, content)
-                finally:
-                    try:
-                        root.destroy()
-                    except Exception:
-                        pass
-            root.mainloop = mainloop
-            return root, content
-        return patch.object(editors, "editor_window", side_effect=hidden_window)
-
-    def test_native_render_form_returns_valid_recipe(self):
-        from tkinter import ttk
-        from Tools.asset_loader.editors import render_dialog
+    def test_render_panel_returns_recipe_without_starting_another_loop(self):
+        from Tools.asset_loader.app import AssetLoaderApp
+        from Tools.asset_loader.editors import RenderPanel
+        app = AssetLoaderApp()
         source = self.root / "model.blend"
         source.write_bytes(b"fixture")
-        def submit(root, content):
-            entries = {int(widget.grid_info()["row"]): widget for widget in content.winfo_children() if isinstance(widget, ttk.Entry)}
-            camera = next(widget for widget in content.winfo_children() if isinstance(widget, ttk.Checkbutton) and widget.cget("text") == "모델에 저장된 카메라 사용")
-            automatic = next(widget for widget in content.winfo_children() if isinstance(widget, ttk.Checkbutton) and widget.cget("text") == "기체·그림자 자동 맞춤")
-            camera.invoke()
-            self.assertTrue(automatic.instate(["disabled", "!selected"]))
-            camera.invoke()
-            self.assertTrue(automatic.instate(["!disabled", "selected"]))
-            entries[4].delete(0, "end")
-            entries[4].insert(0, "1,5")
-            button = next(widget for widget in content.winfo_children() if isinstance(widget, ttk.Button) and widget.cget("text") == "렌더 시작")
-            button.invoke()
-        with self.native_editor(submit):
-            result = render_dialog("rig", source)
-        self.assertEqual(result[0], source)
-        self.assertEqual(result[1]["frames"], [1, 5])
-        self.assertTrue(result[1]["auto_fit"])
-
-    def test_native_assembly_form_saves_order_fps_and_active_clip(self):
-        from tkinter import ttk
-        from Tools.asset_loader.editors import assembly_dialog
-        def submit(root, content):
-            entries = {int(widget.grid_info()["row"]): widget for widget in content.winfo_children() if type(widget) is ttk.Entry}
-            for row, value in ((1, "attack"), (2, "12")):
-                entries[row].delete(0, "end")
-                entries[row].insert(0, value)
-            tree = next(widget for widget in content.winfo_children() if isinstance(widget, ttk.Treeview))
-            tree.move(tree.get_children()[2], "", 0)
-            button = next(widget for widget in content.winfo_children() if isinstance(widget, ttk.Button) and widget.cget("text") == "스프라이트 저장")
-            button.invoke()
-        with self.native_editor(submit), patch("Tools.asset_loader.editors.WORKSPACE", self.root / "workspace"):
-            path, name = assembly_dialog(self.definition, (256, 512), "idle/e", "edited")
-        clip = SpriteBundle.load(path).body.clips[name]
-        self.assertEqual(name, "attack/e")
-        self.assertEqual(clip.fps, 12)
-        self.assertEqual(clip.frames[0].rect[0], 128)
+        app.configure_render(source)
+        self.assertIsInstance(app.panel, RenderPanel)
+        app.panel.fields["frames"].text = "1,5"
+        with patch.object(app, "start_render") as start:
+            app.panel.submit()
+        self.assertIsNone(app.panel)
+        model, config = start.call_args.args
+        self.assertEqual(model, source)
+        self.assertEqual(config["frames"], [1, 5])
+        self.assertTrue(config["auto_fit"])
 
 
 if __name__ == "__main__":
