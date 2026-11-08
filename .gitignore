@@ -56,3 +56,11 @@ Desktop.ini
 /docs/**/*.pptx
 !/docs/presentation/발표자료.pptx
 !/docs/presentation/기획서.pptx
+
+# 장기 서사와 관련 대화 기록은 로컬 전용
+/docs/private/
+/docs/adv_narrative_plan.md
+/docs/FerrialDrive_MainNarrative*.md
+/docs/ai-dev-log/*main-narrative*.md
+/docs/ai-dev-log/*adv-agi-route*.md
+/docs/ai-dev-log/*agi-heroine*.md
