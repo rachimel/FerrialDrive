@@ -18,8 +18,8 @@ ROOT = Path(__file__).resolve().parents[2]
 WINDOW = {"width": 1280, "height": 800, "title": "FDrive | Asset Loader"}
 VIEW = Rect(16, 88, 916, 616)
 PRODUCTION_MENU = Rect(1152, 10, 112, 30)
-PRODUCTION_ITEMS = [("ID 변경 I", "id"), ("카탈로그 열기", "catalog"),
-                    ("핫 로드 전환 D", "debug"), ("새로고침 R", "reload"), ("렌더 취소", "cancel_render")]
+PRODUCTION_ITEMS = [("ID 변경", "id"), ("카탈로그 열기", "catalog"),
+                    ("핫 로드 전환", "debug"), ("새로고침", "reload"), ("렌더 취소", "cancel_render")]
 FILTER_RECT = Rect(964, 472, 288, 28)
 CATALOG_RECT = Rect(956, 124, 304, 272)
 FILTER_OPTIONS_Y = 504
@@ -57,18 +57,18 @@ class AssetLoaderApp:
         self.mouse = (0, 0)
         self.filtering, self.filter_popup = 'bicubic', False
         self.buttons = [
-            ("불러오기 O", "open", Rect(184, 10, 112, 30)),
-            ("등록 S", "register", Rect(304, 10, 80, 30)),
+            ("불러오기", "open", Rect(184, 10, 112, 30)),
+            ("등록", "register", Rect(304, 10, 80, 30)),
             ("메카 설정", "mech", Rect(412, 10, 120, 30)),
             ("애니메이션 조립", "compose", Rect(540, 10, 152, 30)),
             ("3D 렌더", "render", Rect(700, 10, 112, 30)),
-            ("맞춤 F", "fit", Rect(16, 716, 88, 30)),
+            ("맞춤", "fit", Rect(16, 716, 88, 30)),
             ("1:1", "actual", Rect(112, 716, 56, 30)),
             ("재생 / 정지", "play", Rect(196, 716, 120, 30)),
             ("◀", "previous", Rect(324, 716, 40, 30)),
             ("▶", "next", Rect(372, 716, 40, 30)),
-            ("본체 B", "body", Rect(964, 432, 136, 28)),
-            ("그림자 H", "shadow", Rect(1112, 432, 140, 28)),
+            ("본체", "body", Rect(964, 432, 136, 28)),
+            ("그림자", "shadow", Rect(1112, 432, 140, 28)),
             ("상세 정보 ▸", "details", Rect(964, 516, 288, 28)),
         ]
 
@@ -297,11 +297,7 @@ class AssetLoaderApp:
             if getattr(event, "repeat", False):
                 return
             key = event.key
-            actions = {pico.SDLK_o: "open", pico.SDLK_i: "id", pico.SDLK_s: "register",
-                       pico.SDLK_d: "debug", pico.SDLK_r: "reload", pico.SDLK_f: "fit"}
-            if key in actions:
-                self.action(actions[key])
-            elif key == pico.SDLK_ESCAPE:
+            if key == pico.SDLK_ESCAPE:
                 if self.filter_popup:
                     self.filter_popup = False
                 elif self.menu_open:
@@ -315,10 +311,6 @@ class AssetLoaderApp:
             elif key == pico.SDLK_PERIOD and self.clip:
                 self.paused = True
                 self.elapsed = (self.frame_index + 1) / self.clip.fps
-            elif key == pico.SDLK_b:
-                self.show_body = not self.show_body
-            elif key == pico.SDLK_h:
-                self.show_shadow = not self.show_shadow
             elif key in (pico.SDLK_PAGEUP, pico.SDLK_PAGEDOWN):
                 count = len(self.catalog.definitions)
                 self.list_offset = max(0, min(max(0, count - 8), self.list_offset + (-8 if key == pico.SDLK_PAGEUP else 8)))
@@ -405,10 +397,8 @@ class AssetLoaderApp:
             active = ((action == "debug" and self.debug) or (action == "body" and self.show_body)
                       or (action == "shadow" and self.show_shadow))
             r.rect(rect, c["selected"] if active else c["input"])
-            if action == "debug":
-                label = f"핫 로드 {'ON' if self.debug else 'OFF'} D"
-            elif action == "play":
-                label = "재생 Space" if self.paused else "정지 Space"
+            if action == "play":
+                label = "재생" if self.paused else "정지"
             elif action == "details":
                 label = "상세 정보"
             r.text(label, rect.x + 10, rect.y + 7, "small", c["text"])

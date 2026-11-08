@@ -243,8 +243,18 @@ class PicoAssetLoaderTests(unittest.TestCase):
             key(self.pico.SDLK_PERIOD)
             self.assertEqual(app.frame_index, (before + 1) % len(app.clip.frames))
             key(self.pico.SDLK_b)
-            self.assertFalse(app.show_body)
+            self.assertTrue(app.show_body)
+            key(self.pico.SDLK_h)
+            self.assertTrue(app.show_shadow)
             key(self.pico.SDLK_d)
+            self.assertFalse(app.manager.debug)
+            for action in ("body", "shadow"):
+                rect = next(rect for _, name, rect in app.buttons if name == action)
+                app.handle_event(SimpleNamespace(type=self.pico.SDL_MOUSEBUTTONDOWN,
+                    button=self.pico.SDL_BUTTON_LEFT, x=rect.x + 4, y=rect.y + 4))
+            app.action("debug")
+            self.assertFalse(app.show_body)
+            self.assertFalse(app.show_shadow)
             self.assertTrue(app.manager.debug)
             app.catalog_path = ROOT / "samples/asset_loader/catalog.json"
             with self.assertRaises(ValueError):
