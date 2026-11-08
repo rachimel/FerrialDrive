@@ -48,6 +48,32 @@ class PicoAssetLoaderTests(unittest.TestCase):
                 resource.draw(name, 0, 100, 100, body=False, shadow=True)
         self.assertEqual(self.manager.snapshot(), {})
 
+    def test_default_library_registration_imports_asset_and_keeps_catalog_local(self):
+        from unittest.mock import patch
+        from Tools.asset_loader.app import AssetLoaderApp
+        from Tools.asset_loader.library import prepare_library, store_asset
+        library = self.root / "library"
+        prepare_library(library, sample_source=self.root)
+        catalog_path = library / "catalog.json"
+        app = AssetLoaderApp(source=self.root / "bundle.json", catalog=catalog_path)
+        def initialize():
+            return prepare_library(library, sample_source=self.root)
+        def store(definition, **options):
+            return store_asset(definition, root=library, **options)
+        with patch("Tools.asset_loader.app.DEFAULT_CATALOG", catalog_path), \
+             patch("Tools.asset_loader.app.prepare_library", side_effect=initialize), \
+             patch("Tools.asset_loader.app.store_asset", side_effect=store):
+            try:
+                app.enter()
+                app.asset_id = "registered_mech"
+                app.register()
+                definition = AssetCatalog.load(catalog_path).definitions["registered_mech"]
+                self.assertIn(library / "prerender", definition.source.parents)
+                self.assertEqual(app.source, definition.source)
+                self.assertEqual(len(app.catalog.definitions), 4)
+            finally:
+                app.exit()
+
     def test_assembled_bundle_opens_its_selected_default_animation(self):
         from Tools.asset_loader.assembly import SpriteAssembly
         from Tools.asset_loader.app import AssetLoaderApp

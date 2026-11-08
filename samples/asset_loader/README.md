@@ -2,6 +2,8 @@
 
 직접 작성한 기본 도형으로 만든 공개 가능한 샘플이다. 기본 이미지 시연은 Blender 없이 실행하며 실제 게임 에셋·AI 생성물을 사용하지 않는다.
 
+이 폴더는 공개 샘플 원본이다. 도구가 실제로 사용하는 사본은 최초 실행 시 `data/catalog/samples/asset_loader/`에 준비한다. 기존 사본은 덮어쓰지 않는다.
+
 - `image.png`: 일반 투명 이미지.
 - `body.json` / `body.png`: SSheetCutil v1 시트. 8방향·방향별 4프레임·6FPS.
 - `shadow.json` / `shadow.png`: 같은 프레임·피봇의 분리 그림자.
@@ -17,7 +19,7 @@ Pico2D가 설치된 Python 환경에서 프로젝트 루트 기준으로 실행�
 python Tools/asset_loader/run.py --debug
 ```
 
-기본 도형이 열리면 방향·프레임·피봇·본체/그림자 표시를 확인한다. ID를 변경하고 등록하면 **작업 카탈로그**인 `Tools/asset_loader/workspace/catalog.json`에 추가된다. 종료 후 같은 카탈로그의 등록 항목을 클릭해 다시 확인한다.
+기본 도형이 열리면 방향·프레임·피봇·본체/그림자 표시를 확인한다. 기본 목록 `data/catalog/catalog.json`에는 샘플 3종이 등록되어 있다. ID를 변경하고 등록하면 별도 항목으로 추가된다. 조립해 저장한 완성 에셋은 `data/catalog/prerender/<ID>/<버전>/`에 남는다.
 
 이미지·시트·번들을 각각 열려면:
 
@@ -27,7 +29,7 @@ python Tools/asset_loader/run.py samples/asset_loader/body.json
 python Tools/asset_loader/run.py samples/asset_loader/bundle.json --debug
 ```
 
-핫 로드 검증에는 샘플 폴더를 작업 경로로 복사하고 복사본을 연다. 디버그를 켠 상태에서 이미지나 JSON을 바꾸면 세대가 증가한다. 잘못된 JSON·이미지 크기·손상 PNG에서는 이전 정상 화면과 오류를 확인하고, 수정 후 정상 자원으로 돌아오는지 확인한다. 샘플 원본은 변경하지 않는다.
+핫 로드 검증에는 `data/catalog/samples/asset_loader/`의 사본을 사용한다. 디버그를 켠 상태에서 이미지나 JSON을 바꾸면 세대가 증가한다. 잘못된 JSON·이미지 크기·손상 PNG에서는 이전 정상 화면과 오류를 확인하고, 수정 후 정상 자원으로 돌아오는지 확인한다. 공개 샘플 원본은 변경하지 않는다.
 
 실행 위치와 다른 작업 폴더에서 실행할 때는 진입 스크립트와 입력에 절대 경로를 전달한다. 메타데이터의 이미지 참조는 메타데이터 파일 위치, 카탈로그 참조는 카탈로그 파일 위치를 기준으로 읽는다.
 

@@ -138,7 +138,7 @@ class AssetPanelTests(unittest.TestCase):
         self.key(self.pico.SDLK_DELETE)
         self.assertEqual(len(panel.order), 4)
         self.app.draw()
-        with patch("Tools.asset_loader.editors.WORKSPACE", self.root / "workspace"):
+        with patch("Tools.asset_loader.editors.asset_directory", return_value=self.root / "prerender/edited"):
             panel.submit()
         self.assertIsNone(self.app.panel)
         self.assertEqual(self.app.clip_name, "attack/e")

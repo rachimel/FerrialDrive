@@ -1,15 +1,14 @@
 """Pico2D 메인 루프에서 갱신하는 제작·조립 패널. 별도 창을 열지 않는다."""
 
-from datetime import datetime
 from math import isfinite
 from pathlib import Path
-from uuid import uuid4
 
 from ferrial_drive.assets.sprites import SpriteFrame
 from ferrial_drive.ui.components import Rect
 from .assembly import SpriteAssembly
 from .file_panel import FilePanel
 from .production import WORKSPACE, render_config
+from .library import asset_directory
 from .widgets import Panel
 
 
@@ -128,7 +127,7 @@ class AssemblyPanel(Panel):
 
     def submit(self):
         self.apply()
-        folder = WORKSPACE / "sprites" / (datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:8])
+        folder = asset_directory(self.asset_id)
         result = self.assembly.save(folder, asset_id=self.asset_id)
         if not self.app.open_source(result, asset_id=self.asset_id):
             raise ValueError(self.app.message)

@@ -12,7 +12,9 @@ python Tools/asset_loader/run.py 경로/bundle.json --debug
 python Tools/asset_loader/run.py --catalog 작업경로/catalog.json --debug
 ```
 
-인자 없이 실행하면 공개 가능한 도형 샘플을 연다. 기본 등록 위치는 `Tools/asset_loader/workspace/catalog.json`이며 Git 추적에서 제외한다. 등록은 이미지를 원래 위치에서 참조하며 복사·수정하지 않는다.
+인자 없이 실행하면 `data/catalog/samples/asset_loader/`의 도형 샘플을 연다. 처음 실행할 때 공개 샘플 원본을 이곳에 복사하고 `data/catalog/catalog.json`에 샘플 3종을 등록한다. 기존 파일과 등록 목록은 덮어쓰지 않는다.
+
+기본 카탈로그에 외부 에셋을 등록하면 이미지·시트·번들의 필요한 파일을 `data/catalog/prerender/<ID>/<버전>/`에 복사한 뒤 그 사본을 등록한다. 이미 `data/catalog/` 안에 필요한 파일이 모두 있으면 같은 파일을 참조한다. `--catalog`로 별도 목록을 지정하면 기존처럼 원본 경로를 참조한다. `data/catalog/`의 실제 파일은 Git 추적에서 제외한다.
 
 Windows 바로가기 생성:
 
@@ -54,7 +56,7 @@ python Tools/asset_loader/create_launcher.py
 4. 다른 이름으로 **동작 적용**하면 새 동작을 추가한다. 같은 이름은 해당 동작을 편집한다. 번들은 본체·그림자를 항상 함께 수정하고, **모든 방향에 적용**을 켜면 동일한 순서·FPS·피봇을 방향별로 적용한다. 여러 동작을 구성한 뒤 **스프라이트 저장**을 선택한다.
 5. 저장한 결과가 미리보기에 열리면 ID를 확인하고 등록한다. 저장 시 선택한 동작을 번들의 기본 방향 대응으로 유지한다. 기존 시트 픽셀을 공유하며 프레임 순서를 JSON에 기록한다. 편집에서 제외한 픽셀까지 시트를 다시 크롭·압축하는 기능은 아니다.
 
-설정은 `Tools/asset_loader/workspace/render_jobs/`, 조립 결과는 `workspace/sprites/`, 렌더 결과와 로그는 `output/asset_loader/renders/`에 둔다. 조립 결과는 새 폴더에 이미지와 JSON을 함께 저장하며 입력 파일을 수정하지 않는다. 렌더 실패·취소 시 기존 미리보기를 유지한다.
+설정은 `Tools/asset_loader/workspace/render_jobs/`, 조립한 완성 에셋은 `data/catalog/prerender/<ID>/<버전>/`, 렌더 중간 결과와 로그는 `output/asset_loader/renders/`에 둔다. 조립 결과는 새 폴더에 이미지와 JSON을 함께 저장하며 입력 파일을 수정하지 않는다. 렌더 실패·취소 시 기존 미리보기를 유지한다.
 
 `SSheetCutil.py`의 v1 JSON·bottom-left 영역·피봇·동작별 FPS 규격과 기존 패킹 경로를 재사용한다. 생성한 JSON을 기존 편집기에서도 읽을 수 있다. 기존 리그 재생은 지원하며 **본 생성·스키닝·리타기팅·3D 동작 편집 UI는 후속 범위**다. 모델의 방향·배율·지면·활성 동작은 원본 장면에서 준비한다.
 
@@ -67,7 +69,7 @@ Blender는 설치 경로 또는 `BLENDER_EXECUTABLE`에서 찾는다. [리그 �
 - 번들: 기존 `bundle.json`의 본체/그림자 시트와 방향별 동작. 본체와 그림자의 크기·프레임·FPS·피봇 일치를 검사한다.
 - 카탈로그: [샘플 규격](../../samples/asset_loader/catalog.json)의 `version: 1`, `assets` 목록, 항목별 `id`·`kind`·`source`.
 
-등록은 ID·참조 경로를 저장한다. 저장 위치 기준 상대 경로를 사용하며 Windows의 서로 다른 드라이브는 절대 경로로 저장한다. 이동·배포하려면 참조 이미지와 메타데이터도 함께 옮겨야 한다. 카탈로그만으로 에셋 파일을 패키징하는 기능은 아니다.
+등록 목록은 ID·참조 경로를 저장한다. 저장 위치 기준 상대 경로를 사용하며 Windows의 서로 다른 드라이브는 절대 경로로 저장한다. 기본 보관 경로는 `data/catalog/`이며 이 폴더의 목록·이미지·메타데이터를 함께 옮겨야 한다. 목록 JSON 하나만으로 에셋이 패키징되는 것은 아니다.
 
 원본 파일을 손상시킨 상태에서는 마지막 정상 미리보기가 남아 있어도 등록을 거절한다. 외부에서 변경한 카탈로그는 등록 직전에 다시 읽어 보존한다. 샘플 카탈로그는 읽기 전용이다.
 
@@ -98,7 +100,7 @@ python Tools/asset_loader/run.py --frames 3 --capture output/asset_loader_review
 
 ## 확인 상태
 
-- 공통 로더·실제 Pico2D 로딩·등록·핫 로드·조립·카메라 맞춤·메인 창 패널·기존 패킹 호환 자동 검사 58개 통과.
+- 공통 로더·실제 Pico2D 로딩·등록·핫 로드·조립·카메라 맞춤·메인 창 패널·로컬 보관·기존 패킹 호환 자동 검사 64개 통과.
 - 단일 본·스키닝·키프레임이 있는 기본 도형의 실제 Blender 8방향 × 2프레임 × 본체/그림자 렌더·시트 패킹·순서 조립·Pico2D 로딩을 확인했다. 원본 .blend 해시 보존과 키프레임에 따른 이미지 변화도 검사했다.
 - 실제 모델의 8방향 × 4프레임 × 본체/그림자 64장도 자동 맞춤으로 렌더·패킹했다. 픽셀 경계 검사는 유지하며 잘린 본체·그림자는 계속 거절한다.
 - SDL dummy로 실제 도형 이미지·시트·번들 로딩, 합성 키 입력·등록 저장/재로딩과 툴 화면을 확인했다.

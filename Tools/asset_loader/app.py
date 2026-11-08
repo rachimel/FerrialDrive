@@ -11,11 +11,10 @@ from ferrial_drive.assets.pico_assets import PicoAssetBackend
 from ferrial_drive.ui.components import Rect
 from ferrial_drive.ui.pico_renderer import PicoRenderer
 from Tools.theme_reference import load_theme
+from .library import DEFAULT_CATALOG, SAMPLE, prepare_library, store_asset
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SAMPLE = ROOT / "samples/asset_loader/bundle.json"
-DEFAULT_CATALOG = Path(__file__).with_name("workspace") / "catalog.json"
 WINDOW = {"width": 1280, "height": 800, "title": "FDrive | Asset Loader"}
 VIEW = Rect(24, 116, 820, 568)
 PRODUCTION_MENU = Rect(1136, 18, 120, 34)
@@ -69,6 +68,12 @@ class AssetLoaderApp:
         sizes = {role: entry["size"] for role, entry in self.theme["fonts"].items()}
         sizes["title"] = 28
         self.renderer = PicoRenderer(paths, sizes)
+        if self.catalog_path == DEFAULT_CATALOG:
+            try:
+                prepare_library()
+            except (OSError, ValueError, KeyError, TypeError) as error:
+                self.report(error)
+                return
         if self.catalog_path.exists():
             try:
                 self.catalog = AssetCatalog.load(self.catalog_path)
@@ -143,12 +148,23 @@ class AssetLoaderApp:
         catalog.add(definition)
         verification = AssetManager(AssetCatalog([definition]), PicoAssetBackend(), timings=self.timings)
         try:
-            with verification.acquire(definition.asset_id):
-                pass
+            with verification.acquire(definition.asset_id) as current:
+                stored = (store_asset(definition, image_size=current.resource.sizes["body"])
+                          if self.catalog_path == DEFAULT_CATALOG else definition)
         finally:
             verification.close()
+        if stored != definition:
+            verification = AssetManager(AssetCatalog([stored]), PicoAssetBackend(), timings=self.timings)
+            try:
+                with verification.acquire(stored.asset_id):
+                    pass
+            finally:
+                verification.close()
+            catalog.definitions[definition.asset_id] = stored
         catalog.save()
         self.catalog = catalog
+        if stored != definition:
+            self.open_source(stored.source, kind=stored.kind, asset_id=stored.asset_id)
         self.message, self.error = f"등록 완료: {self.asset_id}", False
 
     def configure_render(self, source=None):
