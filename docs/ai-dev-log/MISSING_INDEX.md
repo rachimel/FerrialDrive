@@ -3,7 +3,7 @@
 - 갱신 기준일: 2026-11-08 KST
 - 로컬 전용 서사 기록은 집계에서 제외한다.
 - 새 요약 영역만 집계한다. 원기록은 변경하거나 집계하지 않는다.
-- 기록 102개 · 누락 필드 446개.
+- 기록 103개 · 누락 필드 447개.
 - 사용자 보완은 원문 확인/회고의 출처 표시와 함께 각 기록에 남는다.
 
 [작성 규칙](FORMAT.md) · [기록 양식](_template.md)
@@ -14,6 +14,7 @@
 
 | 기록 | 개수 | 종류·항목 |
 | --- | ---: | --- |
+| [FDrive 균일 격자·경로 탐색](2026-11-08-fdrive-uniform-grid-pathfinding.md) | 1 | TIME(scope) |
 | [FDrive 전투 장면·ADV 요구](2026-11-08-fdrive-combat-scene-adv-requirements.md) | 1 | TIME(scope) |
 | [FDrive 초기 책임·선택적 계측](2026-11-08-fdrive-framework-binding-plan.md) | 1 | TIME(scope) |
 | [카드 형태·번호/잔탄 정렬](2026-11-04-equipment-cards.md) | 4 | REASON(U2); REASON(U3); PROPOSAL(A1); ACCEPTANCE(A1) |
@@ -115,4 +116,4 @@
 | REASON | 111 |
 | RESULT | 4 |
 | SOURCE | 8 |
-| TIME | 70 |
+| TIME | 71 |
