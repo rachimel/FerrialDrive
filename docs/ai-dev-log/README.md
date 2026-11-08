@@ -8,6 +8,7 @@ Ferrial Drive 프로젝트 대화에서 나온 결정과 작업 흐름을 요약
 
 ## 기록
 
+- [2026-11-08 FDrive 2GiB·적과 이펙트 우선](2026-11-08-fdrive-2gib-resource-priority.md): 전체 메모리 목표 확정·기체/효과 우선 배분·HUD/ADV 유지·세부 예산은 검토안
 - [2026-11-08 FDrive 이펙트 레이어·예산](2026-11-08-fdrive-effect-layer-budget.md): 화려한 전투 연출·효과 재생/수명/정렬 분리·공유 자원/씬별 로딩·메모리와 중첩 그리기 비용 검증
 - [2026-11-08 FDrive 균일 격자·경로 탐색](2026-11-08-fdrive-uniform-grid-pathfinding.md): 공간 검색 균일 격자·기본 A*·병목 시 JPS+/Goal Bounding 후보·전처리와 동적 장애물 갱신 검토
 - [2026-11-08 FDrive 전투 장면·ADV 요구](2026-11-08-fdrive-combat-scene-adv-requirements.md): 플레이어/NPC/동료/적·수백 기 목표·이동 가능 영역·오브젝트·전투 내/독립 스크립트 ADV·화상/배경/실루엣·Ctrl 스킵
