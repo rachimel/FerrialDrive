@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "assets": [
+    {
+      "id": "sample_image",
+      "kind": "image",
+      "source": "image.png"
+    },
+    {
+      "id": "sample_sheet",
+      "kind": "sheet",
+      "source": "body.json"
+    },
+    {
+      "id": "sample_mech",
+      "kind": "bundle",
+      "source": "bundle.json"
+    }
+  ]
+}

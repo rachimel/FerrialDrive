@@ -8,6 +8,7 @@ Ferrial Drive 프로젝트 대화에서 나온 결정과 작업 흐름을 요약
 
 ## 기록
 
+- [2026-11-08 FDrive 에셋 로더](2026-11-08-fdrive-asset-loader.md): 이미지/시트/번들·등록·공유 수명·디버그 핫 로드·실패 시 정상 자원 유지·자동 33개/SDL dummy 확인
 - [2026-11-08 FDrive 60FPS·Live2D 24FPS·화면 옵션](2026-11-08-fdrive-fps-display-options.md): 프로그램 규모 검토·게임 60FPS·조건부 Live2D 24FPS·VSync 켜기/끄기·필터링 변경
 - [2026-11-08 FDrive 2GiB·적과 이펙트 우선](2026-11-08-fdrive-2gib-resource-priority.md): 전체 메모리 목표 확정·기체/효과 우선 배분·HUD/ADV 유지·세부 예산은 검토안
 - [2026-11-08 FDrive 이펙트 레이어·예산](2026-11-08-fdrive-effect-layer-budget.md): 화려한 전투 연출·효과 재생/수명/정렬 분리·공유 자원/씬별 로딩·메모리와 중첩 그리기 비용 검증

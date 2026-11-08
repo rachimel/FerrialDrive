@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "asset_id": "sample_mech",
+  "body": "body.json",
+  "shadow": "shadow.json",
+  "directions": {
+    "e": "idle/e",
+    "ne": "idle/ne",
+    "n": "idle/n",
+    "nw": "idle/nw",
+    "w": "idle/w",
+    "sw": "idle/sw",
+    "s": "idle/s",
+    "se": "idle/se"
+  },
+  "config_sha256": "425600e4b1ce563acd279d603d64e2847995e9038ed78e1346e813b3827cb063"
+}
