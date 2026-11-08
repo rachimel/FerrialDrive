@@ -1,4 +1,10 @@
-# Blender 원본 생성 경로
+# Blender 에셋 제작 경로
+
+## 현재 모델 제작 진입점
+
+새 모델/수정은 [모델 제작 파이프라인 1차](model_workflow.md)를 따른다. 공통 모듈과 에셋별 JSON을 재사용하며 버전별 Python 복제를 피한다. 형상·UV·이미지·간섭 검사는 독립 실행 파일로 분리한다. [기본 도형 샘플](../../samples/model_pipeline/README.md)에서 실제 모델 없이 실행한다.
+
+플레이어 기준은 **1차 최종 플레이어 모델 v078**이며 현재 파일은 `data/models/player_mech/player_mech.blend`다. 구버전 모델/출력물은 승인받아 정리했다. 아래 초기 계획/구현 기록은 당시 범위의 참고 정보이며 현재 구현/미구현 구분은 위 1차 안내를 우선한다.
 
 소스 위치: `Tools/blender_pipeline/`. 실행 명령은 프로젝트 루트 기준이다.
 

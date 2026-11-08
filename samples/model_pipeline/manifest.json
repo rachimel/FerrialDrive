@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "asset_id": "primitive_model_demo",
+  "source": null,
+  "operations": [
+    {"op": "create_empty", "name": "ActorRoot"},
+    {"op": "create_box", "name": "Plate", "parent": "ActorRoot", "location": [0, 0, 1.2], "size": [0.22, 0.55, 0.65]},
+    {"op": "create_box", "name": "Joint", "parent": "ActorRoot", "location": [0, 0, 0.25], "size": [0.18, 0.20, 0.20]}
+  ],
+  "change_objects": [],
+  "allow_additions": true,
+  "review": {"root_object": "ActorRoot", "detail_size": 512, "game_size": 192, "samples": 8}
+}

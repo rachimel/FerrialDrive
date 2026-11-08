@@ -50,6 +50,7 @@ Desktop.ini
 /output/
 # 툴의 로컬 저장 프로젝트·레이아웃·영역 작업
 /Tools/*/workspace/
+/Tools/blender_pipeline/99_Archives/
 /docs/report-archive/
 # 이전 로컬 전용 보고서는 legacy로 옮긴 뒤에도 제외
 /legacy/lora/local-only/
