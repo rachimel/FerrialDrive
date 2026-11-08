@@ -32,6 +32,8 @@
 
 ## 아트 제작
 
+메카의 조형 기준은 [메카 디자인·제작 규칙](ai-asset-pipeline/mech_design_rules.md), 실행 절차는 [모델 제작 흐름](ai-asset-pipeline/model_workflow.md)에서 관리한다.
+
 현재 흐름은 **JANIMA로 레퍼런스 이미지 생성 → GPT로 디테일 보정**이다.
 AI 생성 이미지·모델과 가공 에셋은 로컬에 보관한다.
 

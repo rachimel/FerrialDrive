@@ -1,5 +1,7 @@
 # Blender 에셋 파이프라인
 
+메카 작업은 먼저 [디자인·제작 규칙](../../docs/ai-asset-pipeline/mech_design_rules.md)을 읽고 수정 범위·장착 영향·검증 대상을 정한다.
+
 새 작업은 [모델 제작 흐름](../../docs/ai-asset-pipeline/model_workflow.md)을 따른다. [기본 도형 샘플](../../samples/model_pipeline/README.md)은 실제 메카나 게임 없이 JSON만으로 실행한다.
 
 - 제작: `model_pipeline.py`, `model_operations.py`, `model_primitives.py`, `model_geometry.py`.
