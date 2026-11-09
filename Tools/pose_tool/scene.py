@@ -581,6 +581,9 @@ def export_clip(destination):
             bpy.context.scene.frame_set(frame)
             sample = {"frame": frame, "bones": {name: [list(row) for row in matrix]
                        for name, matrix in local_basis(original, world_bones(original)).items()}}
+            if data.get("independent_parts"):
+                sample["objects"] = {name: [list(row) for row in bpy.data.objects[name].matrix_basis]
+                                     for name in data["independent_parts"]}
             if eq:
                 sample["properties"] = {eq.name: {p: eq[p] for p in equipment.get("properties", []) if p in eq}}
             samples.append(sample)

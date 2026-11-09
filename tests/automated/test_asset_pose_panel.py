@@ -3,7 +3,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 import tempfile
 
 from Tools.asset_loader.app import AssetLoaderApp
@@ -41,7 +41,7 @@ class PosePanelTests(unittest.TestCase):
         x, y = p.preview.x+p.preview.width*.5, p.preview.y+p.preview.height*.5
         p.content_event(SimpleNamespace(type=1, button=1, x=x, y=y))
         p.content_event(SimpleNamespace(type=2, x=x+28, y=y-56))
-        p.session.send.assert_called_with("move", control="hand.R", world=[1.2, 2, 3.4])
+        p.session.send.assert_called_with("move", control="hand.R", world=[1.2, 2, 3.4], gesture=ANY)
         p.content_event(SimpleNamespace(type=3, button=1))
         self.assertIsNone(p.drag)
 
@@ -113,7 +113,32 @@ class PosePanelTests(unittest.TestCase):
         x, y = 592, 440
         self.panel.content_event(SimpleNamespace(type=1, button=1, x=x, y=y))
         self.panel.content_event(SimpleNamespace(type=2, x=x+14, y=y))
-        self.panel.session.send.assert_called_with("bend", control="pole.foot.R", world=[.1, 0, 1])
+        command, = self.panel.session.send.call_args.args
+        self.assertEqual(command, "bend")
+        self.assertEqual(self.panel.session.send.call_args.kwargs["control"], "pole.foot.R")
+        self.assertAlmostEqual(self.panel.session.send.call_args.kwargs["world"][0], .1)
+
+    def test_ctrl_z_reaches_pose_history_even_when_a_field_is_focused(self):
+        self.app.pico.SDL_KEYDOWN, self.app.pico.SDLK_z, self.app.pico.KMOD_CTRL = 9, 122, 64
+        self.panel.focus = "degrees"
+        self.panel.handle_event(SimpleNamespace(type=9, key=122, mod=64))
+        self.panel.session.send.assert_called_once_with("undo")
+
+    def test_world_axis_buttons_switch_between_move_and_rotate(self):
+        self.panel.axis_step("Z", -1)
+        self.panel.session.send.assert_called_with("translate", control="hand.R", axis="Z", amount=-.05)
+        self.panel.change_mode("rotate")
+        self.panel.axis_step("Y", 1)
+        self.panel.session.send.assert_called_with("rotate", control="hand.R", axis="Y", degrees=5)
+
+    def test_independent_parts_replace_attachment_buttons(self):
+        self.panel.select("object:Scabbard")
+        labels = {label for label, _, _ in self.panel.buttons}
+        self.assertNotIn("검 수납/파지", labels)
+        self.assertNotIn("보조손 고정", labels)
+        self.assertIn("이전 프레임 파츠 복제", labels)
+        self.assertIn("칼 → 칼집 자동 정렬", labels)
+        self.assertNotIn("손가락 굽히기", labels)
 
     def test_rotation_and_equipment_use_explicit_commands(self):
         self.panel.rotate("Z", -1)
@@ -128,6 +153,18 @@ class PosePanelTests(unittest.TestCase):
         self.panel.session.state["file_dirty"] = True
         with self.assertRaises(ValueError):
             self.panel.to_render()
+
+    def test_render_submission_keeps_independent_weapon_roots(self):
+        from Tools.asset_loader.editors import RenderPanel
+        from Tools.asset_loader.production import render_config
+        render = RenderPanel(self.app)
+        render.sample = True
+        render.render_preset = render_config(asset_id="parts", animation_name="idle", frames="1", fps=12,
+                                             width=240, height=240, ortho_scale=5, samples=1)
+        render.render_preset["extra_root_objects"] = ["Gun", "Sword", "Scabbard"]
+        self.app.start_render = Mock()
+        render.submit()
+        self.assertEqual(self.app.start_render.call_args.args[1]["extra_root_objects"], ["Gun", "Sword", "Scabbard"])
 
     def test_only_consecutive_moves_are_coalesced_and_key_keeps_order(self):
         session = PoseSession.__new__(PoseSession)

@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from math import hypot
+from uuid import uuid4
 
 from ferrial_drive.assets import AssetDefinition
 from ferrial_drive.assets.catalog import read_document
@@ -10,6 +11,7 @@ from ferrial_drive.ui.components import Rect
 from Tools.pose_tool.session import PoseSession
 from .widgets import Panel
 from .file_panel import FilePanel
+from . import pose_controls
 
 
 LABELS = {"pelvis": "골반", "waist": "허리", "chest": "몸통", "head": "머리",
@@ -35,35 +37,12 @@ class PosePanel(Panel):
         self.selected = "hand.R"
         self.clip_offset = 0
         self.drag = None
+        self.list_tab, self.part_category = "parts", "body"
+        self.part_offset = 0
+        self.transform_mode = "translate"
+        self.finger, self.finger_joint = "all", "all"
         self.add_field("source", source or "", Rect(40, 78, 684, 30))
-        self.add_field("frame", "1", Rect(560, 120, 80, 28))
-        self.add_field("degrees", "5", Rect(1000, 450, 68, 28))
-        self.button("찾기", Rect(732, 78, 72, 30), self.browse)
-        self.button("모델 / 작업본 열기", Rect(812, 78, 224, 30), self.open_model)
-        self.button("도형 샘플", Rect(1044, 78, 192, 30), lambda: self.open_model(sample=True))
-        for index, (key, label) in enumerate((("oblique", "사선"), ("front", "정면"), ("side", "측면"), ("back", "후면"), ("top", "위"))):
-            self.button(label, Rect(272+index*54, 120, 50, 28), lambda k=key: self.send("view", name=k))
-        self.button("이동", Rect(648, 120, 56, 28), self.seek)
-        self.button("◀", Rect(712, 120, 40, 28), lambda: self.step(-1))
-        self.button("▶", Rect(756, 120, 40, 28), lambda: self.step(1))
-        self.button("−", Rect(812, 120, 44, 28), lambda: self.send("zoom", factor=1.15))
-        self.button("+", Rect(864, 120, 44, 28), lambda: self.send("zoom", factor=1/1.15))
-        for index, key in enumerate(LABELS):
-            self.button(LABELS[key], Rect(928+(index % 2)*156, 168+(index//2)*32, 148, 28), lambda k=key: self.select(k))
-        self.button("좌 → 우", Rect(928, 490, 96, 28), lambda: self.send("mirror", direction="L_TO_R"))
-        self.button("우 → 좌", Rect(1032, 490, 96, 28), lambda: self.send("mirror", direction="R_TO_L"))
-        self.button("전체 반전", Rect(1136, 490, 100, 28), lambda: self.send("mirror", direction="BOTH"))
-        for index, axis in enumerate("XYZ"):
-            self.button(axis+" −", Rect(928+index*104, 418, 48, 28), lambda a=axis: self.rotate(a, -1))
-            self.button(axis+" +", Rect(980+index*104, 418, 48, 28), lambda a=axis: self.rotate(a, 1))
-        self.button("보조손 고정", Rect(928, 532, 148, 28), lambda: self.send("support", enabled=True))
-        self.button("고정 해제", Rect(1084, 532, 152, 28), lambda: self.send("support", enabled=False))
-        for index, (prop, label) in enumerate((("sword_stowed", "검"), ("gun_stowed", "총"))):
-            self.button(label+" 수납/파지", Rect(928+index*156, 568, 148, 28), lambda p=prop: self.toggle_equipment(p))
-        self.button("현재 포즈 키 저장", Rect(928, 610, 308, 34), lambda: self.send("key"), style="button")
-        self.button("작업본 저장", Rect(928, 652, 148, 30), lambda: self.send("save"))
-        self.button("동작 출력", Rect(1084, 652, 152, 30), lambda: self.send("export"))
-        self.button("출력 → 3D 렌더", Rect(928, 690, 308, 30), self.to_render)
+        pose_controls.rebuild(self)
 
     @property
     def data(self):
@@ -104,6 +83,71 @@ class PosePanel(Panel):
     def select(self, key):
         self.selected = key
         self.focus = None
+        entry = self.data.get("parts", {}).get(key) if self.data else None
+        if entry and entry["category"] != self.part_category:
+            self.part_category, self.part_offset = entry["category"], 0
+        if entry and entry["category"] == "fingers":
+            name = key.removeprefix("bone:").split(".")[0]
+            self.finger = next((prefix for prefix in ("Thumb", "Index", "Middle", "Ring", "Little") if name.startswith(prefix)), "all")
+            self.finger_joint = name[len(self.finger):] if self.finger != "all" else "all"
+            self.transform_mode = "rotate"
+        elif key in ("hand.L", "hand.R"):
+            self.finger, self.finger_joint = "all", "all"
+        pose_controls.rebuild(self)
+
+    def switch_list(self, value):
+        self.list_tab = value
+        pose_controls.rebuild(self)
+
+    def choose_category(self, value):
+        self.part_category, self.part_offset = value, 0
+        if "filter" in self.fields:
+            self.fields["filter"].text = ""
+        pose_controls.rebuild(self)
+
+    def change_mode(self, value):
+        self.transform_mode = value
+        pose_controls.rebuild(self)
+
+    def choose_finger(self, value):
+        self.finger = value
+        pose_controls.rebuild(self)
+
+    def choose_joint(self, value):
+        self.finger_joint = value
+        pose_controls.rebuild(self)
+
+    def filtered_parts(self):
+        text = self.value("filter").casefold() if "filter" in self.fields else ""
+        entries = self.data.get("parts", {}) if self.data else {}
+        result = [(key, entry["label"]) for key, entry in entries.items()
+                  if entry["category"] == self.part_category and (not text or text in (key+entry["label"]).casefold())]
+        self.part_offset = min(self.part_offset, max(0, len(result)-16))
+        return result
+
+    def axis_step(self, axis, sign):
+        if self.transform_mode == "rotate":
+            self.rotate(axis, sign)
+        else:
+            self.send("translate", control=self.selected, axis=axis, amount=float(self.value("distance"))*sign)
+
+    def curl(self, sign):
+        entry = self.data.get("parts", {}).get(self.selected, {}) if self.data else {}
+        if self.selected not in ("hand.L", "hand.R") and entry.get("category") != "fingers":
+            raise ValueError("조절할 손 또는 손가락 파츠를 선택한다.")
+        self.send("fingers", side=self.selected[-1], finger=self.finger, joint=self.finger_joint,
+                  degrees=float(self.value("degrees"))*sign)
+
+    def align_sword(self):
+        self.send("align_sword")
+        self.select("object:Sword")
+
+    def handle_event(self, event):
+        pico = self.app.pico
+        if event.type == getattr(pico, "SDL_KEYDOWN", -1) and event.key == getattr(pico, "SDLK_z", -2) and getattr(event, "mod", 0) & pico.KMOD_CTRL:
+            self.attempt(lambda: self.send("undo"))
+            return
+        super().handle_event(event)
 
     def seek(self):
         self.send("frame", frame=int(self.value("frame")))
@@ -155,53 +199,75 @@ class PosePanel(Panel):
         if not data or self.choice_popup:
             return
         if event.type == pico.SDL_MOUSEWHEEL and 40 <= self.app.mouse[0] <= 252:
-            self.clip_offset = max(0, min(max(0, len(data["clips"])-18), self.clip_offset-event.y))
+            if self.list_tab == "motions":
+                self.clip_offset = max(0, min(max(0, len(data["clips"])-18), self.clip_offset-event.y))
+            else:
+                self.part_offset = max(0, min(max(0, len(self.filtered_parts())-16), self.part_offset-event.y))
         elif event.type == pico.SDL_MOUSEBUTTONDOWN and event.button == pico.SDL_BUTTON_LEFT:
-            if 40 <= event.x < 252 and 164 <= event.y < 704:
+            if self.list_tab == "parts" and 40 <= event.x < 252 and 240 <= event.y < 688:
+                index = self.part_offset+int((event.y-240)//28)
+                parts = self.filtered_parts()
+                if index < len(parts):
+                    self.select(parts[index][0])
+            elif self.list_tab == "motions" and 40 <= event.x < 252 and 164 <= event.y < 704:
                 index = self.clip_offset + (event.y-164)//30
                 if index < len(data["clips"]):
                     self.attempt(lambda: self.send("clip", name=data["clips"][index]["name"]))
             elif self.preview.contains(event.x, event.y) and not self.session.busy:
+                axes = [(hypot(event.x-h["point"][0], event.y-h["point"][1]), h) for h in pose_controls.axis_handles(self)]
+                if axes and min(axes, key=lambda pair: pair[0])[0] < 11:
+                    handle = min(axes, key=lambda pair: pair[0])[1]
+                    if self.transform_mode == "rotate":
+                        self.attempt(lambda: self.axis_step(handle["axis"], handle["sign"]))
+                    else:
+                        self.drag = {"x": event.x, "y": event.y, "world": data["points"][self.selected]["world"],
+                                     "scale": data["scale"], "axis": handle, "gesture": uuid4().hex, "moved": False}
+                    return
                 visible = [(hypot(event.x-x, event.y-y), key) for key, x, y in self.projected_points()]
                 if visible and min(visible)[0] < 16:
-                    self.selected = min(visible)[1]
-                    self.drag = (event.x, event.y, data["points"][self.selected]["world"],
-                                 data["right"], data["up"], data["scale"])
+                    self.select(min(visible)[1])
+                    self.drag = {"x": event.x, "y": event.y, "world": data["points"][self.selected]["world"],
+                                 "right": data["right"], "up": data["up"], "scale": data["scale"],
+                                 "gesture": uuid4().hex, "moved": False}
         elif event.type == pico.SDL_MOUSEMOTION and self.drag:
-            x, y, world, right, up, scale = self.drag
-            dx, dy = (event.x-x)/self.preview.height*scale, (event.y-y)/self.preview.height*scale
-            target = [world[i]+right[i]*dx-up[i]*dy for i in range(3)]
+            drag = self.drag
+            dx, dy = event.x-drag["x"], event.y-drag["y"]
+            if hypot(dx, dy) < 3:
+                return
+            drag["moved"] = True
+            unit = drag["scale"]/self.preview.height
+            if "axis" in drag:
+                ax, ay = drag["axis"]["direction"]
+                amount = (dx*ax+dy*ay)/(ax*ax+ay*ay)*unit
+                target = [drag["world"][i]+(amount if i == "XYZ".index(drag["axis"]["axis"]) else 0) for i in range(3)]
+            else:
+                target = [drag["world"][i]+drag["right"][i]*dx*unit-drag["up"][i]*dy*unit for i in range(3)]
             command = "bend" if self.selected.startswith("pole.") else "move"
-            self.attempt(lambda: self.send(command, control=self.selected, world=target))
+            self.attempt(lambda: self.send(command, control=self.selected, world=target, gesture=drag["gesture"]))
         elif event.type == pico.SDL_MOUSEBUTTONUP and event.button == pico.SDL_BUTTON_LEFT:
+            if self.drag and "axis" in self.drag and not self.drag["moved"]:
+                handle = self.drag["axis"]
+                self.attempt(lambda: self.axis_step(handle["axis"], handle["sign"]))
             self.drag = None
 
     def projected_points(self):
         for key, point in self.data["points"].items():
+            category = self.data.get("parts", {}).get(key, {}).get("category", "body")
+            if category != self.part_category and key != self.selected:
+                continue
             x, y, z = point["uv"]
             if z > 0 and 0 <= x <= 1 and 0 <= y <= 1:
                 yield key, self.preview.x+x*self.preview.width, self.preview.y+(1-y)*self.preview.height
 
     def draw(self):
         self.title = "포즈 편집" + (" · "+self.loaded_source.name if self.loaded_source else " · 도형 샘플" if self.is_sample else "")
-        for index, key in enumerate(LABELS):
-            self.button_styles[(928+(index % 2)*156, 168+(index//2)*32)] = "selected" if key == self.selected else "input"
         super().draw()
         r, colors, data = self.app.renderer, self.app.theme["colors"], self.data
         r.rect(self.preview, colors["background"])
         if self.resource:
             self.resource.draw("image", 0, self.preview.x+self.preview.width/2,
                                800-self.preview.y-self.preview.height, scale=1)
-        r.text("동작", 40, 132, "body", colors["text"])
-        r.text("컨트롤 · 기체 좌우 기준", 928, 132, "small", colors["muted"])
-        r.text("회전 · 월드 축", 928, 394, "small", colors["muted"])
-        r.text("회전각", 928, 457, "small", colors["muted"])
-        r.text("도", 1078, 457, "small", colors["muted"])
         if data:
-            for index, clip in enumerate(data["clips"][self.clip_offset:self.clip_offset+18]):
-                rect = Rect(40, 164+index*30, 212, 28)
-                r.rect(rect, colors["selected"] if clip["name"] == data["active"] else colors["input"])
-                r.text(clip["label"], rect.x+8, rect.y+7, "small", colors["text"], max_width=196)
             with r.clip(self.preview):
                 for key, x, y in self.projected_points():
                     color = colors["button_hover"] if key == self.selected else colors["accent"]
@@ -222,7 +288,8 @@ class PosePanel(Panel):
                     else:
                         r.rect(Rect(x-size, y-size, size*2, size*2), color, filled=key == self.selected)
                     if key == self.selected:
-                        r.text(LABELS.get(key, key), x+10, y-20, "small", colors["text"])
+                        label = data.get("parts", {}).get(key, {}).get("label", LABELS.get(key, key))
+                        r.text(label, x+10, y-20, "small", colors["text"])
             status = "계산·미리보기 갱신 중" if self.session.busy else "포즈 키 미저장" if data["dirty"] else "작업본 미저장" if data["file_dirty"] else "저장됨"
             r.text(f"{data['active']} · {data['frame']} / {data['start']}–{data['end']} · {status}", 272, 724,
                    "small", colors["warning"] if self.session.busy or data["dirty"] or data["file_dirty"] else colors["muted"], max_width=640)
@@ -230,9 +297,7 @@ class PosePanel(Panel):
                 r.text("목표가 가동 범위를 벗어남", 928, 726, "small", colors["warning"])
         else:
             r.text("모델 준비 중" if self.session else "모델 또는 도형 샘플을 연다.", 416, 400, "body", colors["muted"])
-        r.text("손잡이를 끌어 이동", 40, 710, "small", colors["muted"])
-        r.text("회전은 오른쪽 X / Y / Z", 40, 730, "small", colors["muted"])
-        r.text("팔꿈치·무릎: 관절 위 손잡이로 굽힘 방향 조절", 272, 704, "small", colors["muted"], max_width=640)
+        pose_controls.draw(self)
         if data:
             r.text("작업본: "+data["work"], 40, 762, "small", colors["muted"], max_width=1168)
         self.draw_choices()

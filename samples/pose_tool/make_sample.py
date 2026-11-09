@@ -25,11 +25,21 @@ def create_sample():
             (f"ShoulderWingLower.{side}", (0, sign*.35, 2.4), (0, sign*.55, 2.4), "Chest"),
             (f"UpperArm.{side}", (0, sign*.55, 2.4), (.10, sign*.85, 1.95), f"ShoulderWingLower.{side}"),
             (f"Forearm.{side}", (.10, sign*.85, 1.95), (.0, sign*1.0, 1.5), f"UpperArm.{side}"),
-            (f"Hand.{side}", (.0, sign*1.0, 1.5), (.0, sign*1.08, 1.3), f"Forearm.{side}"),
+            (f"WristSwivel.{side}", (.0, sign*1.0, 1.5), (.0, sign*1.02, 1.45), f"Forearm.{side}"),
+            (f"Hand.{side}", (.0, sign*1.0, 1.5), (.0, sign*1.08, 1.3), f"WristSwivel.{side}"),
             (f"Thigh.{side}", (0, sign*.25, 1.5), (.13, sign*.27, .85), "Pelvis"),
             (f"Shin.{side}", (.13, sign*.27, .85), (0, sign*.27, .15), f"Thigh.{side}"),
             (f"Foot.{side}", (0, sign*.27, .15), (.3, sign*.27, .1), f"Shin.{side}"),
         ])
+        for index, finger in enumerate(("Thumb", "Index", "Middle", "Ring", "Little")):
+            parent = f"Hand.{side}"
+            for joint in range(3):
+                suffix = ("Base", "01", "02")[joint] if finger == "Thumb" else f"{joint+1:02}"
+                name = f"{finger}{suffix}.{side}"
+                x = (index-2)*.045
+                definitions.append((name, (x, sign*1.08, 1.32-joint*.07),
+                                    (x, sign*1.09, 1.25-joint*.07), parent))
+                parent = name
     for name, head, tail, parent in definitions:
         bone = data.edit_bones.new(name)
         bone.head, bone.tail = head, tail
@@ -42,6 +52,10 @@ def create_sample():
         obj = bpy.context.object
         obj.name = "Sample_" + name
         width = .22 if name.startswith(("Thigh", "Shin")) else .17
+        if name.startswith(("Thumb", "Index", "Middle", "Ring", "Little")):
+            width = .025
+        elif name.startswith("WristSwivel"):
+            width = .09
         if name == "Chest":
             width = .6
         obj.scale = (width, width, (b-a).length*.9)
@@ -77,6 +91,29 @@ def create_sample():
     equipment["sword_stowed"] = 1.0
     equipment["gun_stowed"] = 1.0
     equipment.hide_select = True
+    def box(name, parent, location, size, color):
+        bpy.ops.mesh.primitive_cube_add(size=1)
+        obj = bpy.context.object
+        obj.name, obj.parent, obj.location, obj.scale = name, parent, location, size
+        mat = bpy.data.materials.new(name+"_Color")
+        mat.diffuse_color = (*color, 1)
+        obj.data.materials.append(mat)
+    roots = {}
+    for name, location in (("Gun", (.55, -.45, 1.9)), ("Sword", (.65, .48, 1.8)), ("Scabbard", (-.4, .48, 1.8))):
+        obj = bpy.data.objects.new(name, None)
+        bpy.context.collection.objects.link(obj)
+        obj.location = location
+        roots[name] = obj
+    box("SampleGun", roots["Gun"], (0, 0, 0), (.42, .16, .2), (.3, .4, .45))
+    box("SampleGunGrip", roots["Gun"], (-.12, 0, -.15), (.1, .1, .16), (.18, .25, .28))
+    box("SampleBlade", roots["Sword"], (0, 0, -.34), (.07, .025, .68), (.5, .7, .8))
+    box("SampleGuard", roots["Sword"], (0, 0, 0), (.22, .1, .05), (.3, .45, .5))
+    box("SampleGrip", roots["Sword"], (0, 0, .1), (.07, .07, .16), (.25, .3, .35))
+    for sign in (-1, 1):
+        box("SampleSheathWall"+str(sign), roots["Scabbard"], (0, sign*.045, -.36), (.12, .045, .75), (.55, .42, .24))
+    anchor = bpy.data.objects.new("Sword_StowAnchor", None)
+    bpy.context.collection.objects.link(anchor)
+    anchor.location = roots["Scabbard"].location
     scene = bpy.context.scene
     scene.frame_start, scene.frame_end, scene.render.fps = 1, 84, 12
     scene.frame_set(1)

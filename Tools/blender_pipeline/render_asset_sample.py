@@ -39,9 +39,10 @@ def cube(name, position, size, surface, parent):
 
 
 def add_key_light(config):
-    bpy.ops.object.light_add(type='AREA', location=config['light']['position'])
-    light = bpy.context.object
-    light.name = 'FDriveKeyLight'
+    light_data = bpy.data.lights.new('FDriveKeyLight', 'AREA')
+    light = bpy.data.objects.new('FDriveKeyLight', light_data)
+    bpy.context.scene.collection.objects.link(light)
+    light.location = config['light']['position']
     light.rotation_euler = (-light.location).to_track_quat('-Z', 'Y').to_euler()
     light.data.energy, light.data.shape, light.data.size = config['light']['energy'], 'DISK', config['light']['size']
     print('ASSET_LIGHT ' + json.dumps({'position': list(light.location), 'energy': light.data.energy}), flush=True)
@@ -116,6 +117,25 @@ def prepare_saved_scene(config):
         and obj.type not in {'CAMERA', 'LIGHT'}]
     if not objects:
         raise ValueError('렌더할 모델이 없다.')
+    extras = config.get('extra_root_objects', [])
+    if not isinstance(extras, list) or any(not isinstance(name, str) for name in extras):
+        raise ValueError('추가 출력 파츠는 객체 이름 목록으로 지정한다.')
+    for name in extras:
+        obj = bpy.data.objects.get(name)
+        if obj is None or obj is root or obj is floor or obj.type in {'CAMERA', 'LIGHT'}:
+            raise ValueError(f'추가 출력 파츠가 없거나 모델 객체가 아니다: {name}')
+        if obj not in objects:
+            objects.append(obj)
+    # 본체 아래의 자식과 독립 파츠가 함께 지정되어도 중복 부모 변환을 하지 않는다.
+    roots = set(objects)
+    def under_selected_parent(obj):
+        parent = obj.parent
+        while parent:
+            if parent in roots:
+                return True
+            parent = parent.parent
+        return False
+    objects = [obj for obj in objects if not under_selected_parent(obj)]
     for obj in objects:
         world = obj.matrix_world.copy()
         obj.parent = root
@@ -123,13 +143,15 @@ def prepare_saved_scene(config):
     if not any(obj.type == 'MESH' for obj in root.children_recursive):
         raise ValueError('모델 루트 아래에 메시가 필요하다.')
     if floor is None:
-        bpy.ops.mesh.primitive_plane_add(size=200)
-        floor = bpy.context.object
-        floor.name = 'ShadowCatcher'
+        mesh = bpy.data.meshes.new('ShadowCatcher')
+        mesh.from_pydata([(-100, -100, 0), (100, -100, 0), (100, 100, 0), (-100, 100, 0)], [], [(0, 1, 2, 3)])
+        floor = bpy.data.objects.new('ShadowCatcher', mesh)
+        scene.collection.objects.link(floor)
     floor.is_shadow_catcher = True
     if not config.get('use_scene_camera', True) or scene.camera is None:
-        bpy.ops.object.camera_add(location=config['camera']['position'])
-        camera = bpy.context.object
+        camera = bpy.data.objects.new('FDriveCamera', bpy.data.cameras.new('FDriveCamera'))
+        scene.collection.objects.link(camera)
+        camera.location = config['camera']['position']
         camera.rotation_euler = (Vector(config['camera']['target']) - camera.location).to_track_quat('-Z', 'Y').to_euler()
         camera.data.type, camera.data.ortho_scale = 'ORTHO', config['camera']['ortho_scale']
         scene.camera = camera

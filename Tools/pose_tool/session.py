@@ -51,7 +51,7 @@ class PoseSession:
         if self.process is None or self.process.poll() is not None:
             raise RuntimeError("포즈 작업자가 종료됐다.")
         item = {"command": command, **fields}
-        if command in ("move", "bend") and self.queue and self.queue[-1]["command"] == command and self.queue[-1].get("control") == fields.get("control"):
+        if command in ("move", "bend") and self.queue and self.queue[-1]["command"] == command and self.queue[-1].get("control") == fields.get("control") and self.queue[-1].get("gesture") == fields.get("gesture"):
             self.queue[-1] = item
         else:
             self.queue.append(item)

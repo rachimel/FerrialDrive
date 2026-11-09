@@ -4,6 +4,7 @@ import argparse
 import json
 import math
 import os
+import subprocess
 from pathlib import Path
 import sys
 import time
@@ -16,6 +17,8 @@ from mathutils import Matrix, Vector
 from bpy_extras.object_utils import world_to_camera_view
 from Tools.pose_tool import scene as engine
 from Tools.pose_tool.profile import load_profile
+from Tools.pose_tool.part_editing import PartEditing
+from Tools.pose_tool.history import PoseHistory
 
 
 def write_json(path, data):
@@ -52,6 +55,8 @@ class PoseWorker:
             engine.activate_clip(config["clip"])
         if self.work.exists() and self.work != source:
             raise FileExistsError(self.work)
+        self.parts = PartEditing()
+        self.history = PoseHistory(self.parts)
         engine.save_work(self.work)
         self.configure_camera()
 
@@ -98,16 +103,32 @@ class PoseWorker:
 
     def execute(self, request):
         command = request["command"]
-        ctrls = engine.controls()
+        if command == "undo":
+            self.history.undo(self)
+            return
+        changes_pose = command in {"move", "rotate", "bend", "translate", "fingers", "align_sword",
+                                   "copy_previous", "mirror", "support", "equipment"}
+        before = self.history.capture(self) if changes_pose else None
+        try:
+            self._execute(request)
+        except Exception:
+            if before:
+                self.history.restore(self, before)
+                self.dirty, self.file_dirty = before["dirty"], before["file_dirty"]
+                self.exported = before["exported"]
+                self.history.discard(before)
+            raise
+        if before:
+            self.history.push(before, request.get("gesture"))
+
+    def _execute(self, request):
+        command = request["command"]
         if command in ("move", "rotate", "bend"):
-            obj = ctrls[request["control"]]
-            if obj.constraints.get(engine.PREFIX + "Support"):
-                raise ValueError("보조손 고정을 해제하거나 주 손을 움직인다.")
             if command in ("move", "bend"):
                 location = request["world"]
                 if len(location) != 3 or not all(math.isfinite(v) for v in location):
                     raise ValueError("유한한 목표 위치가 필요하다.")
-                matrix = obj.matrix_world.copy()
+                matrix = self.parts.world(request["control"])
                 if command == "bend":
                     limb = engine.state()["profile"]["limbs"][request["control"].removeprefix("pole.")]
                     rig, _ = engine.rig_objects()
@@ -124,14 +145,43 @@ class PoseWorker:
                     matrix.translation = origin + Matrix.Rotation(angle, 3, axis) @ (matrix.translation-origin)
                 else:
                     matrix.translation = Vector(location)
-                obj.matrix_world = matrix
+                self.parts.set_world(request["control"], matrix, moving=command == "move")
             else:
                 axis, degrees = request["axis"], float(request["degrees"])
                 if axis not in "XYZ" or not math.isfinite(degrees) or abs(degrees) > 180:
                     raise ValueError("회전축/회전각 오류")
-                matrix = obj.matrix_world.copy()
-                rotation = Matrix.Rotation(math.radians(degrees), 4, axis)
-                obj.matrix_world = Matrix.Translation(matrix.translation) @ rotation @ Matrix.Translation(-matrix.translation) @ matrix
+                if request["control"].startswith("pole."):
+                    limb = engine.state()["profile"]["limbs"][request["control"].removeprefix("pole.")]
+                    pivot = engine.world_bones(self.parts.rig)[limb["lower"]].translation
+                    matrix = self.parts.world(request["control"])
+                    matrix.translation = pivot + Matrix.Rotation(math.radians(degrees), 3, axis) @ (matrix.translation-pivot)
+                    self.parts.set_world(request["control"], matrix)
+                else:
+                    self.parts.rotate(request["control"], axis, degrees)
+            self.dirty = self.file_dirty = True
+        elif command == "translate":
+            axis, amount = request["axis"], float(request["amount"])
+            if axis not in ("X", "Y", "Z") or not math.isfinite(amount):
+                raise ValueError("월드 이동축/이동량 오류")
+            delta = Vector((0, 0, 0))
+            delta["XYZ".index(axis)] = amount
+            if request["control"].startswith("pole."):
+                joint = Vector(self.snapshot()["points"][request["control"]]["world"])
+                self._execute({"command": "bend", "control": request["control"], "world": list(joint+delta)})
+            else:
+                self.parts.translate(request["control"], delta)
+            self.dirty = self.file_dirty = True
+        elif command == "fingers":
+            degrees = float(request["degrees"])
+            if not math.isfinite(degrees) or abs(degrees) > 180 or request["side"] not in ("L", "R"):
+                raise ValueError("손가락 회전 입력 오류")
+            self.parts.curl_fingers(request["side"], request.get("finger", "all"), degrees, request.get("joint", "all"))
+            self.dirty = self.file_dirty = True
+        elif command == "align_sword":
+            self.parts.align_sword()
+            self.dirty = self.file_dirty = True
+        elif command == "copy_previous":
+            self.parts.copy_previous(request["control"])
             self.dirty = self.file_dirty = True
         elif command == "frame":
             self.require_key()
@@ -147,9 +197,11 @@ class PoseWorker:
             self.file_dirty = True
         elif command == "key":
             engine.key_pose()
+            self.parts.key_current()
             self.dirty, self.file_dirty = False, True
         elif command == "save":
             engine.key_pose()
+            self.parts.key_current()
             engine.save_work(self.work)
             self.dirty = self.file_dirty = False
         elif command == "mirror":
@@ -173,19 +225,19 @@ class PoseWorker:
             self.camera.data.ortho_scale = max(.2, min(self.scale*5, self.camera.data.ortho_scale*float(request["factor"])))
         elif command == "export":
             engine.key_pose()
+            self.parts.key_current()
             engine.save_work(self.work)
             destination = self.work.parent / ("export_" + str(request["seq"]))
             manifest = engine.export_clip(destination)
-            from Tools.blender_pipeline.animation_pipeline import bake
-            try:
-                bake(manifest, destination / "baked")
-            finally:
-                bpy.ops.wm.open_mainfile(filepath=str(self.work))
-                self.configure_camera()
+            subprocess.run([bpy.app.binary_path, "--background", "--factory-startup", "--python-exit-code", "1",
+                            "--python", str(ROOT/"Tools/blender_pipeline/animation_pipeline.py"), "--",
+                            "--manifest", str(manifest), "--output", str(destination/"baked")],
+                           check=True, cwd=ROOT, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             self.exported = str(destination / "baked/export_configs" / (engine.state()["active"] + ".json"))
             preset_path = Path(self.exported)
             preset = json.loads(preset_path.read_text(encoding="utf-8"))
             preset["frame_size_pixels"] = [240, 240]
+            preset["extra_root_objects"] = engine.state().get("independent_parts", [])
             preset_path.write_text(json.dumps(preset, ensure_ascii=False, indent=2), encoding="utf-8")
             self.dirty = self.file_dirty = False
         elif command == "refresh":
@@ -200,8 +252,9 @@ class PoseWorker:
         rig, proxy = engine.rig_objects()
         worlds = engine.world_bones(rig)
         points = {}
-        for key, obj in engine.controls().items():
-            point = obj.matrix_world.translation
+        entries = self.parts.entries()
+        for key in entries:
+            point = self.parts.world(key).translation
             if key.startswith("pole."):
                 limb = data["profile"]["limbs"][key.removeprefix("pole.")]
                 joint = worlds[limb["lower"]].translation
@@ -223,6 +276,7 @@ class PoseWorker:
                 "up": list(camera_up), "scale": vertical_span,
                 "dirty": self.dirty, "file_dirty": self.file_dirty, "errors": errors,
                 "equipment": {p: eq[p] for p in equipment.get("properties", []) if eq and p in eq},
+                "parts": entries, "undo_count": len(self.history.entries),
                 "support": any(o.constraints.get(engine.PREFIX+"Support") for o in engine.controls().values()),
                 "exported": self.exported}
 
@@ -235,6 +289,7 @@ class PoseWorker:
         # 파일은 작업본 저장 명령에서만 갱신한다.
         if self.dirty:
             engine.key_pose()
+            self.parts.key_current()
         bpy.ops.render.render(write_still=True)
         for attempt in range(50):
             try:

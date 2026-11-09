@@ -86,6 +86,8 @@ class RenderPanel(Panel):
         if self.render_preset:
             for key in ("position", "target"):
                 config["camera"][key] = self.render_preset["camera"][key]
+            if self.render_preset.get("extra_root_objects"):
+                config["extra_root_objects"] = list(self.render_preset["extra_root_objects"])
         self.app.start_render(source, config)
         self.close()
 
