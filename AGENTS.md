@@ -32,6 +32,12 @@
 - 기능별 입력·표현·애니메이션과 선택 후보는 해당 명세를 따른다. UI의 현재 기준은 `docs/unit-tests/ui_unit_test.md`다.
 - 도구의 색상·글꼴·간격은 `docs/theme_reference.md`와 `Tools/theme_reference/theme.json`을 따른다. 새 도구는 공통 역할을 재사용한다. 게임 UI 설정을 도구 모듈에 의존시키지 않는다.
 
+## 에셋 도구 자동화
+
+- AI의 Asset Tool 작업 진입점은 `Tools/asset_loader/asset_pipeline.py`다. 인자 없이 실행해 지원 작업·필드를 조회하고 `--request 요청.json` 또는 `--request -`로 JSON 요청을 전달한다.
+- GUI는 사용자 조작용으로 유지한다. 자동화는 기존 조립·검증·메카 출력 모듈을 재사용하며 GUI 좌표 조작이나 임시 구현 스크립트 대신 이 진입점을 우선 사용한다.
+- 요청·결과·경로 해석·GUI 작업본 교환은 `docs/tool-usage/asset_tool_automation.md`를 따른다.
+
 ## Unit Test의 의미와 구조
 
 - 이 프로젝트에서 사용자가 말하는 **Unit Test는 독립 실행할 수 있고 게임에 쉽게 연결될 수 있는 테스트 프로그램**을 뜻한다. 이 정의를 특정 검증 방식으로 한정하지 않는다.

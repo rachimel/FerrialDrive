@@ -35,6 +35,17 @@ python Tools/asset_loader/run.py samples/asset_loader/bundle.json --debug
 
 UI 사용법과 런타임 연결은 [도구 안내](../../Tools/asset_loader/README.md)를 따른다.
 
+## AI·자동화 시연
+
+동일한 Python 환경에서 GUI 없이 샘플을 조회한다. 요청 파일 안의 경로는 요청 파일 기준으로 해석한다.
+
+```text
+python Tools/asset_loader/asset_pipeline.py --request samples/asset_loader/requests/inspect_bundle.json
+python Tools/asset_loader/asset_pipeline.py --request samples/asset_loader/requests/create_plan.json
+```
+
+첫 요청은 8방향·4프레임/FPS·피봇과 본체/그림자 이미지 정보를 JSON으로 출력한다. 둘째 요청은 공개 샘플을 참조하는 작업본을 `Tools/asset_loader/workspace/ai_demo/plan.json`에 생성하며 같은 파일이 있으면 거절한다. 원본 샘플은 변경하지 않는다. 후속 파츠 편집·정합 검사·분리 출력은 [AI 진입점 안내](../../docs/tool-usage/asset_tool_automation.md)를 따른다.
+
 ## 3D 리그 샘플
 
 `make_rig_sample.py`는 Blender에서 큐브·단일 본·스키닝·1/3/5프레임 키프레임을 생성한다. 실제 게임 모델과 별개이며 모델 자동 리깅 기능이 아니다.

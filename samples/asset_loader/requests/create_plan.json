@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "operation": "plan.create",
+  "source": "../bundle.json",
+  "asset_id": "ai_demo",
+  "output": "../../../Tools/asset_loader/workspace/ai_demo/plan.json"
+}

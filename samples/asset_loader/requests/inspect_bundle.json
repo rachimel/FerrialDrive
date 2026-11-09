@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "operation": "asset.inspect",
+  "source": "../bundle.json",
+  "include_frames": true
+}
