@@ -25,6 +25,12 @@ def render(config_path, motion):
     scene = bpy.context.scene
     rig = bpy.data.objects[cfg['rig']]
     scene.frame_set(cfg.get('base_frame', 1))
+    grip = None
+    if motion == 'sword_draw':
+        hand = rig.pose.bones[cfg['draw_hand']]
+        anchor = bpy.data.objects[cfg['draw_anchor']]
+        idle_weapon = anchor.matrix_world.copy()
+        grip = idle_weapon.inverted()@(rig.matrix_world@hand.matrix)
     for obj in bpy.data.objects:
         if obj.animation_data:
             obj.animation_data.action = None
@@ -45,7 +51,17 @@ def render(config_path, motion):
     base = {b.name: b.matrix_basis.copy() for b in rig.pose.bones}
     feet = {leg['end']: rig.matrix_world@rig.pose.bones[leg['end']].matrix for leg in cfg['legs']}
     max_foot_error = 0.0
+    max_draw_error = 0.0
+    max_draw_swing = 0.0
     view_frames = cfg['view_frames']
+    free_hand = (rig.matrix_world@rig.pose.bones[cfg['draw_hand']].matrix).copy() if grip is not None else None
+
+    def blend(a, b, t):
+        t = max(0, min(1, t))
+        t = t*t*(3-2*t)
+        la, qa, sa = a.decompose()
+        lb, qb, sb = b.decompose()
+        return Matrix.LocRotScale(la.lerp(lb, t), qa.slerp(qb, t), sa.lerp(sb, t))
 
     def rotate_world(name, radians):
         bone = rig.pose.bones[name]
@@ -67,7 +83,53 @@ def render(config_path, motion):
         else:
             amount = 1-(phase-.58)/.32
         amount = amount*amount*(3-2*amount)
-        if motion == 'arm_raise':
+        if motion == 'sword_draw':
+            from pose_refinement import repair_arm
+            mount = bpy.data.objects[cfg['draw_mount']].matrix_world.copy()
+            out = mount.copy()
+            out.translation -= mount.to_3x3().col[2].normalized()*cfg['draw_length']
+            raised = Matrix.Identity(4)
+            raised.translation = Vector(cfg['raised_grip'])
+            if phase < .12:
+                target, yaw, lean, held = free_hand.copy(), 0, 0, False
+            elif phase < .30:
+                t = (phase-.12)/.18
+                target = blend(free_hand, mount@grip, t)
+                yaw, lean, held = -80*t, 25*t, False
+            elif phase < .56:
+                t = (phase-.30)/.26
+                target = blend(mount, out, t)@grip
+                yaw, lean, held = -80+40*t, 25+45*t, True
+            elif phase < .72:
+                t = (phase-.56)/.16
+                target = blend(out, raised, t)@grip
+                yaw, lean, held = -40*(1-t), 70*(1-t), True
+            elif phase < .84:
+                t = (phase-.72)/.12
+                target = blend(raised, idle_weapon, t)@grip
+                yaw, lean, held = 0, 0, True
+            else:
+                target, yaw, lean, held = idle_weapon@grip, 0, 0, True
+            chest = rig.pose.bones[cfg['draw_chest']]
+            world = rig.matrix_world@chest.matrix
+            rotation = Matrix.Rotation(math.radians(yaw), 4, 'Z')@Matrix.Rotation(math.radians(lean), 4, 'Y')
+            chest.matrix = rig.matrix_world.inverted()@Matrix.Translation(world.translation)@rotation@Matrix.Translation(-world.translation)@world
+            bpy.context.view_layer.update()
+            metric = repair_arm(rig, *cfg['draw_chain'], target, 55, False)
+            max_draw_error = max(max_draw_error, metric['shift'])
+            max_draw_swing = max(max_draw_swing, metric['swing_degrees'])
+            hand_world = rig.matrix_world@rig.pose.bones[cfg['draw_hand']].matrix
+            apply_operations([dict(op='attach_world', object=cfg['draw_anchor'], parent=rig.name,
+                bone=cfg['draw_hand'], matrix_world=[list(row) for row in hand_world@grip.inverted()])])
+            control = bpy.data.objects[cfg['draw_control']]
+            control[cfg['draw_property']] = 0 if held else 1
+            control.update_tag()
+            control.keyframe_insert('["'+cfg['draw_property']+'"]', frame=frame)
+            anchor = bpy.data.objects[cfg['draw_anchor']]
+            anchor.rotation_mode = 'QUATERNION'
+            for channel in ('location', 'rotation_quaternion', 'scale'):
+                anchor.keyframe_insert(channel, frame=frame)
+        elif motion == 'arm_raise':
             for name in cfg['upper_arms']:
                 rotate_world(name, math.radians(-cfg['arm_degrees']*amount))
         elif motion == 'knee_bend':
@@ -95,6 +157,11 @@ def render(config_path, motion):
     for curve in curves(rig.animation_data.action):
         for point in curve.keyframe_points:
             point.interpolation = 'CONSTANT'
+    if grip is not None:
+        for name in (cfg['draw_anchor'], cfg['draw_control']):
+            for curve in curves(bpy.data.objects[name].animation_data.action):
+                for point in curve.keyframe_points:
+                    point.interpolation = 'CONSTANT'
     scene.frame_start, scene.frame_end = 1, view_frames*2
     scene.render.fps, scene.render.fps_base = cfg['fps'], 1
     scene.render.engine = 'BLENDER_WORKBENCH'
@@ -138,6 +205,9 @@ def render(config_path, motion):
               'seconds': view_frames*2/cfg['fps'], 'front_then_side': True,
               'foot_target_error': max_foot_error if motion == 'pelvis_lower' else None,
               'rig_modified': False, 'new_ik_controls': False,
+              'draw_max_target_error': max_draw_error if grip is not None else None,
+              'draw_max_wrist_swing': max_draw_swing if grip is not None else None,
+              'draw_clearance_validated': False if grip is not None else None,
               'video': str(video), 'bytes': video.stat().st_size if video.exists() else 0}
     (output/(motion+'.json')).write_text(json.dumps(result, indent=2), encoding='utf-8')
     return result
