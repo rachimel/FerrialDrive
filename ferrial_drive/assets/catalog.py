@@ -9,9 +9,10 @@ import tempfile
 
 from .sprites import SpriteBundle, SpriteSheet
 from .mech import MechBundle
+from .maps import MapBundle
 
 
-KINDS = {"image", "sheet", "bundle", "mech"}
+KINDS = {"image", "sheet", "bundle", "mech", "map"}
 
 
 @dataclass(frozen=True)
@@ -90,6 +91,7 @@ class AssetDocument:
     suggested_id: str | None = None
     default_clip: str | None = None
     mech: MechBundle | None = None
+    map_bundle: MapBundle | None = None
 
 
 def detect_kind(source):
@@ -99,6 +101,8 @@ def detect_kind(source):
             raise ValueError("PNG/JPG/BMP 이미지 또는 시트·번들 JSON을 선택한다.")
         return "image"
     data = json.loads(source.read_text(encoding="utf-8-sig"))
+    if isinstance(data, dict) and data.get("type") == "map":
+        return "map"
     if isinstance(data, dict) and data.get("type") == "mech":
         return "mech"
     if isinstance(data, dict) and all(key in data for key in ("body", "shadow", "directions")):
@@ -121,6 +125,10 @@ def _read_document(definition):
         mech = MechBundle.load(source)
         return AssetDocument(definition, mech.sheets, (source, *mech.dependencies),
                              mech.asset_id, next(iter(mech.clips)), mech)
+    if definition.kind == "map":
+        bundle = MapBundle.load(source)
+        return AssetDocument(definition, bundle.sheets, (source, *dict.fromkeys(bundle.paths.values())),
+                             bundle.data['asset_id'], 'composite', map_bundle=bundle)
     bundle = SpriteBundle.load(source)
     data = json.loads(source.read_text(encoding="utf-8-sig"))
     paths = (source, (source.parent / data["body"]).resolve(),

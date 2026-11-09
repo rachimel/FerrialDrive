@@ -29,6 +29,10 @@ OPERATIONS = {
                          "fields": {"source": "path", "asset_id": "string", "catalog?": "path", "kind?": "string"}},
     "sprite.assemble": {"summary": "프레임 순서·FPS·피봇 편집 후 새 폴더에 저장",
                         "fields": {"source": "path", "asset_id": "string", "output": "path", "edits": "array"}},
+    "map.import": {"summary": "맵 번들과 실제 이미지를 검증하여 편집 데이터 조회. 선택 output에 복사",
+                   "fields": {"source": "path", "output?": "path"}},
+    "map.export": {"summary": "맵 원본 또는 data와 배경·바닥·합성 결과를 새 번들로 출력",
+                   "fields": {"source?": "path", "data?": "any", "output": "path"}},
     "plan.create": {"summary": "GUI와 같은 메카 작업본 생성. 기존 파일은 거절",
                     "fields": {"source": "path", "asset_id": "string", "output?": "path", "preset?": "string"}},
     "plan.read": {"summary": "GUI 작업본 전체 조회", "fields": {"plan": "path"}},
@@ -52,7 +56,7 @@ EDIT_FIELDS = {
     "order.copy_all": {"motion": "string", "direction": "string", "frame?": "integer"},
     "mapping.apply": {"preset": "string"},
 }
-SPRITE_FIELDS = {"source_clip": "string", "name": "string", "order": "array", "fps": "number",
+SPRITE_FIELDS = {"source_clip": "string", "name": "string", "order": "array", "fps?": "number", "durations_ms?": "array",
                  "pivot?": "array|null", "all_directions?": "boolean"}
 
 
@@ -125,8 +129,8 @@ def image_sizes(document):
 def inspect_asset(definition, *, include_frames=False):
     document = read_document(definition)
     sizes = image_sizes(document)
-    clips = document.mech.clips if document.mech else document.sheets.get("body")
-    if clips is not None and not document.mech:
+    clips = document.map_bundle.clips if document.map_bundle else document.mech.clips if document.mech else document.sheets.get("body")
+    if clips is not None and not document.mech and not document.map_bundle:
         clips = clips.clips
     rows = {}
     if definition.kind == "image":
@@ -135,9 +139,10 @@ def inspect_asset(definition, *, include_frames=False):
         if include_frames:
             rows["image"]["frames"] = [{"rect": [0, 0, width, height], "pivot": [width / 2, 0]}]
     for name, clip in (clips or {}).items():
-        rows[name] = {"fps": clip.fps, "frame_count": len(clip.frames)}
+        rows[name] = {"fps": clip.fps, "frame_count": len(clip.frames), "duration_ms": clip.duration_ms}
         if include_frames:
-            rows[name]["frames"] = [{"rect": list(frame.rect), "pivot": list(frame.pivot)} for frame in clip.frames]
+            rows[name]["frames"] = [{"rect": list(frame.rect), "pivot": list(frame.pivot), "duration_ms": duration}
+                                    for frame, duration in zip(clip.frames, clip.durations_ms)]
     return {"asset_id": document.suggested_id or definition.asset_id, "kind": definition.kind,
             "source": str(definition.source), "default_clip": document.default_clip or next(iter(rows), None),
             "dependencies": [str(path) for path in document.dependencies], "clips": rows,
@@ -217,6 +222,26 @@ def execute(request, *, base_dir=None):
                                                  for row in catalog.definitions.values()]}
     if operation == "asset.inspect":
         return inspect_asset(source_definition(), include_frames=request.get("include_frames", False))
+    if operation in ('map.import', 'map.export'):
+        from ferrial_drive.assets.maps import MapBundle
+        from .map_export import export_map
+        if operation == 'map.export' and ('source' in request) == ('data' in request):
+            raise ValueError('source 또는 data 중 하나를 지정한다.')
+        if 'source' in request:
+            source = resolve(request['source'])
+            bundle = MapBundle.load(source)
+            inspect_asset(AssetDefinition(bundle.data['asset_id'], 'map', source))
+            data, base_dir = bundle.data, source.parent
+        else:
+            data, base_dir = request['data'], base
+            bundle = MapBundle.from_data(data, base_dir)
+        if 'output' in request:
+            source = export_map(data, resolve(request['output']), base_dir=base_dir)
+            bundle = MapBundle.load(source)
+        editable = deepcopy(bundle.data)
+        for key, path in bundle.paths.items():
+            editable[key] = str(path)
+        return {'source': str(source), 'data': editable, 'type': 'map'}
     if operation == "catalog.register":
         path = resolve(request["catalog"]) if "catalog" in request else DEFAULT_CATALOG
         if ROOT / "samples" in path.parents:
@@ -233,7 +258,7 @@ def execute(request, *, base_dir=None):
         return {"catalog": str(path), "asset_id": definition.asset_id, "source": str(definition.source)}
     if operation == "sprite.assemble":
         definition = source_definition()
-        if definition.kind == "mech":
+        if definition.kind in ("mech", "map"):
             raise ValueError("분리 메카는 plan 작업으로 편집한다.")
         document = read_document(definition)
         sizes = image_sizes(document)
@@ -242,8 +267,10 @@ def execute(request, *, base_dir=None):
             raise ValueError("조립할 편집 항목을 하나 이상 지정한다.")
         for edit in request["edits"]:
             check_fields(edit, SPRITE_FIELDS, discriminator=())
-            assembly.apply(edit["source_clip"], edit["name"], edit["order"], edit["fps"], edit.get("pivot"),
-                           all_directions=edit.get("all_directions", True))
+            if 'fps' not in edit and 'durations_ms' not in edit:
+                raise ValueError('출력 프레임별 durations_ms가 필요하다.')
+            assembly.apply(edit["source_clip"], edit["name"], edit["order"], edit.get("fps"), edit.get("pivot"),
+                           all_directions=edit.get("all_directions", True), durations_ms=edit.get('durations_ms'))
         output = assembly.save(resolve(request["output"]), asset_id=definition.asset_id)
         return {"source": str(output), "clips": assembly.names}
     if operation == "plan.create":

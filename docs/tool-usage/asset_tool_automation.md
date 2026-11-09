@@ -33,9 +33,11 @@ python Tools/asset_loader/asset_pipeline.py --request -
 |---|---|---|
 | `describe` | 없음 | 지원 작업·입력 형식·편집 예제 |
 | `catalog.list` | 없음 | `catalog`의 ID·종류·원본 목록. 생략 시 기본 카탈로그 |
-| `asset.inspect` | `source` | 종류·의존 파일·실제 이미지 크기·클립/FPS/프레임 수. `include_frames: true`면 영역·피봇 포함 |
+| `asset.inspect` | `source` | 종류·의존 파일·실제 이미지 크기·클립/FPS/전체 시간/프레임 수. `include_frames: true`면 영역·피봇·`duration_ms` 포함 |
 | `catalog.register` | `source`, `asset_id` | 실제 이미지/메타데이터 검증 후 등록. 선택 `catalog`, `kind` |
 | `sprite.assemble` | `source`, `asset_id`, `output`, `edits` | 일반 이미지·시트·본체/그림자 번들 조립 후 새 폴더에 출력 |
+| `map.import` | `source` | 맵·실제 이미지 검증 후 편집 데이터 반환. 선택 `output`으로 새 폴더에 복사 |
+| `map.export` | `output`, `source` 또는 `data` | 배경·바닥·합성 PNG·이동 구역을 새 맵 번들로 출력 |
 | `plan.create` | `source`, `asset_id` | GUI 작업본 생성. 선택 `output`, 매핑 `preset`. 원본 `.blend`는 읽기 대상 식별에만 사용 |
 | `plan.read` | `plan` | GUI와 교환할 작업본 전체 `data` |
 | `plan.update` | `plan`, `edits` | 편집 목록을 메모리에서 적용·구조 검증 후 저장. 선택 `output`으로 새 작업본 저장 |
@@ -81,7 +83,9 @@ python Tools/asset_loader/asset_pipeline.py --request samples/asset_loader/reque
 
 ## 스프라이트 조립과 렌더
 
-`sprite.assemble.edits`의 각 항목은 `source_clip`, 출력 동작 `name`, 0부터 시작하는 프레임 인덱스 `order`, `fps`를 포함한다. `pivot`은 `[x,y]` 또는 `null`/생략으로 원본 유지, `all_directions`의 기본값은 `true`다. 번들은 본체/그림자를 함께 편집한다. 예: `{"source_clip":"idle/s","name":"reverse","order":[3,2,1,0],"fps":8}`.
+`sprite.assemble.edits`의 각 항목은 `source_clip`, 출력 동작 `name`, 0부터 시작하는 프레임 인덱스 `order`, 출력 프레임별 `durations_ms`를 포함한다. 기존 `fps` 요청도 읽는다. `pivot`은 `[x,y]` 또는 `null`/생략으로 원본 유지, `all_directions`의 기본값은 `true`다. 번들은 본체/그림자를 함께 편집한다. 예: `{"source_clip":"idle/s","name":"reverse","order":[3,2,1,0],"durations_ms":[100,40,60,180]}`.
+
+맵 형식·GUI 조작·경로 해석은 [맵 번들·프레임 시간](asset_maps_timing.md)을 따른다.
 
 `render.run.config`는 GUI에서 사용하는 `animation_name`을 포함한 출력 설정 JSON이다. 모델은 설정의 `source_blend` 또는 요청의 `source_blend`로 지정한다. 모델 없이 기본 도형을 렌더할 때는 `sample: true`를 명시한다. 기본 제한 시간은 300초, 기본 출력은 `output/asset_loader/renders/`다. 결과는 완료된 번들 경로와 실제 이미지 완료 수이며 Blender 로그는 결과 폴더에 남는다. 실패·시간 초과·중단 시 소유 Blender 작업을 정리한다.
 

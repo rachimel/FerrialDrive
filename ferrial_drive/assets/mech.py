@@ -123,7 +123,8 @@ class MechBundle:
                     if sheet_key is None:
                         continue
                     candidate = self.sheets[sheet_key].clips.get(clip)
-                    layout = lambda value: [(frame.rect[2:], frame.pivot) for frame in value.frames]
+                    layout = lambda value: [(frame.rect[2:], frame.pivot, duration)
+                                             for frame, duration in zip(value.frames, value.durations_ms)]
                     if candidate is None or candidate.fps != reference.fps or layout(candidate) != layout(reference):
                         raise ValueError(f"파츠 상태의 동작·FPS·프레임·기준점 불일치: {owner}/{state}")
                 self._checked.add(identity)

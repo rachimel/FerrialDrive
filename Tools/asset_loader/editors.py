@@ -3,7 +3,7 @@
 from math import isfinite
 from pathlib import Path
 
-from ferrial_drive.assets.sprites import SpriteFrame
+from ferrial_drive.assets.sprites import SpriteFrame, SpriteClip
 from ferrial_drive.ui.components import Rect
 from .assembly import SpriteAssembly
 from .file_panel import FilePanel
@@ -132,11 +132,12 @@ class AssemblyPanel(Panel):
         self.elapsed = 0.0
         self.playing, self.together = True, self.assembly.bundle is not None
         self.labels = []
-        for index, (name, label) in enumerate((("name", "동작 이름"), ("fps", "FPS"), ("px", "피봇 X"), ("py", "피봇 Y"))):
+        for index, (name, label) in enumerate((("name", "동작 이름"), ("duration_ms", "유지 시간 ms"), ("px", "피봇 X"), ("py", "피봇 Y"))):
             y = 154 + index * 50
             self.labels.append((label, 344, y + 9))
             self.add_field(name, "", Rect(452, y, 308, 36))
         self.button("동작 적용", Rect(344, 660, 140, 36), self.apply)
+        self.button("전체 시간 적용", Rect(500, 410, 200, 32), lambda: self.set_duration(all_frames=True))
         self.button("스프라이트 저장", Rect(1020, 660, 180, 36), self.submit)
         self.button("취소", Rect(888, 660, 120, 36), self.close)
         self.load_clip(self.source_name)
@@ -146,8 +147,9 @@ class AssemblyPanel(Panel):
         row = self.assembly.row(name)
         self.frames = row["frames"]
         self.order = list(range(len(self.frames)))
+        self.durations_ms = [frame.get('duration_ms', 1000 / row.get('fps', 1)) for frame in self.frames]
         pivots = {tuple(frame["pivot"]) for frame in self.frames}
-        values = {"name": name.rsplit("/", 1)[0], "fps": f'{row["fps"]:g}',
+        values = {"name": name.rsplit("/", 1)[0], "duration_ms": f'{self.durations_ms[0]:g}',
                   "px": str(self.frames[0]["pivot"][0]) if len(pivots) == 1 else "",
                   "py": str(self.frames[0]["pivot"][1]) if len(pivots) == 1 else ""}
         for key, value in values.items():
@@ -156,10 +158,40 @@ class AssemblyPanel(Panel):
         self.offset = self.selected = 0
         self.elapsed = 0.0
 
+    def set_duration(self, *, all_frames=False):
+        duration = float(self.value('duration_ms'))
+        if not isfinite(duration) or duration <= 0:
+            raise ValueError('유지 시간은 0보다 큰 밀리초다.')
+        if self.order:
+            if all_frames:
+                self.durations_ms = [duration] * len(self.order)
+            else:
+                self.durations_ms[self.selected] = duration
+
+    def select_frame(self, index):
+        self.set_duration()
+        self.selected = index
+        field = self.fields['duration_ms']
+        field.text = f'{self.durations_ms[index]:g}'
+        field.cursor = len(field.text)
+
+    def preview_clip(self):
+        durations = list(self.durations_ms)
+        try:
+            value = float(self.value('duration_ms'))
+            if isfinite(value) and value > 0:
+                durations[self.selected] = value
+        except ValueError:
+            pass
+        return SpriteClip(1, tuple(SpriteFrame(tuple(self.frames[source]['rect']),
+                          tuple(self.frames[source]['pivot']), duration)
+                          for source, duration in zip(self.order, durations)))
+
     def apply(self):
+        self.set_duration()
         pivot = None if not self.value("px") and not self.value("py") else (float(self.value("px")), float(self.value("py")))
         current = self.assembly.apply(self.source_name, self.value("name"), self.order,
-                                      float(self.value("fps")), pivot, all_directions=self.together)
+                                      None, pivot, all_directions=self.together, durations_ms=self.durations_ms)
         self.load_clip(current)
 
     def submit(self):
@@ -190,25 +222,36 @@ class AssemblyPanel(Panel):
             elif self.timeline.contains(event.x, event.y):
                 index = self.offset + int((event.x - self.timeline.x) // 104)
                 if index < len(self.order):
+                    self.attempt(lambda: self.select_frame(index))
+                    if self.error:
+                        return
                     self.selected, self.dragging, self.playing = index, index, False
         elif event.type == pico.SDL_MOUSEBUTTONUP and event.button == pico.SDL_BUTTON_LEFT and self.dragging is not None:
             if self.timeline.contains(event.x, event.y) and self.order:
                 target = min(len(self.order) - 1, self.offset + int((event.x - self.timeline.x) // 104))
                 self.order.insert(target, self.order.pop(self.dragging))
+                self.durations_ms.insert(target, self.durations_ms.pop(self.dragging))
                 self.selected = target
             self.dragging = None
         elif event.type == pico.SDL_KEYDOWN and self.order:
             if event.key == pico.SDLK_DELETE:
                 self.order.pop(self.selected)
+                self.durations_ms.pop(self.selected)
                 self.selected = max(0, min(self.selected, len(self.order) - 1))
                 self.offset = min(self.offset, max(0, len(self.order) - 8))
+                if self.order:
+                    self.fields['duration_ms'].text = f'{self.durations_ms[self.selected]:g}'
             elif event.key == pico.SDLK_d and getattr(event, "mod", 0) & pico.KMOD_CTRL:
+                self.attempt(self.set_duration)
+                if self.error:
+                    return
                 self.order.insert(self.selected + 1, self.order[self.selected])
+                self.durations_ms.insert(self.selected + 1, self.durations_ms[self.selected])
                 self.selected += 1
             elif event.key == pico.SDLK_SPACE:
                 self.playing = not self.playing
             elif event.key in (pico.SDLK_LEFT, pico.SDLK_RIGHT):
-                self.selected = (self.selected + (-1 if event.key == pico.SDLK_LEFT else 1)) % len(self.order)
+                self.attempt(lambda: self.select_frame((self.selected + (-1 if event.key == pico.SDLK_LEFT else 1)) % len(self.order)))
                 self.playing = False
 
     def update(self, delta_seconds):
@@ -251,16 +294,12 @@ class AssemblyPanel(Panel):
         self.check(self.playing_rect, "재생", self.playing)
         r.rect(self.preview, colors["input"])
         if self.order:
-            try:
-                rate = float(self.value("fps"))
-                rate = rate if isfinite(rate) and 0.1 <= rate <= 240 else 8
-            except ValueError:
-                rate = 8
-            index = int(self.elapsed * rate) % len(self.order) if self.playing else self.selected
+            index = self.preview_clip().frame_at(self.elapsed) if self.playing else self.selected
             self.draw_frame(self.order[index], self.preview, pivot_override=True)
         for index, source in enumerate(self.order[self.offset:self.offset + 8]):
             slot = Rect(self.timeline.x + index * 104, self.timeline.y, 98, 112)
             r.rect(slot, colors["selected"] if self.offset + index == self.selected else colors["input"])
             self.draw_frame(source, Rect(slot.x, slot.y, slot.width, 84))
-            r.text(str(source + 1), slot.x + 8, slot.y + 88, "small", colors["text"])
+            duration = f'{self.durations_ms[self.offset + index]:.1f}'.rstrip('0').rstrip('.')
+            r.text(f'{source + 1}: {duration}ms', slot.x + 4, slot.y + 88, "small", colors["text"], max_width=90)
         r.text("드래그 순서 변경 · Delete 제외 · Ctrl+D 반복", 344, 476, "small", colors["muted"])

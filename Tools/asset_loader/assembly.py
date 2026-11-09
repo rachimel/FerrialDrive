@@ -44,15 +44,18 @@ class SpriteAssembly:
     def row(self, name):
         return deepcopy(next(row for row in self.layers["body"]["animations"] if row["name"] == name))
 
-    def apply(self, source_name, name, order, fps, pivot, *, all_directions=True):
+    def apply(self, source_name, name, order, fps=None, pivot=None, *, all_directions=True, durations_ms=None):
         if not name.strip() or any(separator in name for separator in ("/", "\\")):
             raise ValueError("동작 이름은 경로 구분자 없이 작성한다.")
         order = tuple(order)
-        fps = float(fps)
+        fps = float(fps) if fps is not None else 1.0
         if not isfinite(fps) or not 0.1 <= fps <= 240:
             raise ValueError("FPS는 0.1~240 범위여야 한다.")
         if not order or any(type(index) is not int for index in order):
             raise ValueError("프레임을 하나 이상 지정한다.")
+        if durations_ms is not None and (len(durations_ms) != len(order) or any(
+                type(value) not in (int, float) or not isfinite(value) or value <= 0 for value in durations_ms)):
+            raise ValueError("출력 프레임마다 0보다 큰 duration_ms를 지정한다.")
         if pivot is not None and (len(pivot) != 2 or any(not isfinite(value) for value in pivot)):
             raise ValueError("피봇은 유한한 X·Y 좌표여야 한다.")
         suffix = source_name.rsplit("/", 1)
@@ -68,7 +71,9 @@ class SpriteAssembly:
                 if any(index < 0 or index >= len(row["frames"]) for index in order):
                     raise ValueError("프레임 순서가 원본 범위를 벗어났다.")
                 row["frames"] = [deepcopy(row["frames"][index]) for index in order]
-                for frame in row["frames"]:
+                for index, frame in enumerate(row["frames"]):
+                    if durations_ms is not None:
+                        frame["duration_ms"] = durations_ms[index]
                     if pivot is not None:
                         if not 0 <= pivot[0] <= frame["rect"][2] or not 0 <= pivot[1] <= frame["rect"][3]:
                             raise ValueError("피봇이 프레임 영역을 벗어났다.")
@@ -106,7 +111,7 @@ class SpriteAssembly:
             entry = "body.json"
             if self.bundle is not None:
                 data = deepcopy(self.bundle)
-                data.update(asset_id=asset_id, body="body.json", shadow="shadow.json")
+                data.update(type="character", asset_id=asset_id, body="body.json", shadow="shadow.json")
                 (temporary / "bundle.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
                 SpriteBundle.load(temporary / "bundle.json")
                 entry = "bundle.json"

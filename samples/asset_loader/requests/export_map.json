@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "operation": "map.export",
+  "source": "../map/bundle.json",
+  "output": "../../../output/asset_loader/map_demo"
+}

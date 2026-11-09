@@ -66,6 +66,7 @@ class AssetLoaderApp:
             ("메카 설정", "mech", Rect(412, 10, 120, 30)),
             ("애니메이션 조립", "compose", Rect(540, 10, 152, 30)),
             ("3D 렌더", "render", Rect(700, 10, 112, 30)),
+            ("맵 작업", "map", Rect(820, 10, 112, 30)),
             ("맞춤", "fit", Rect(276, 716, 88, 30)),
             ("1:1", "actual", Rect(372, 716, 56, 30)),
             ("재생 / 정지", "play", Rect(456, 716, 112, 30)),
@@ -143,7 +144,7 @@ class AssetLoaderApp:
 
     @property
     def frame_index(self):
-        return int(self.elapsed * self.clip.fps + 1e-9) % len(self.clip.frames) if self.clip else 0
+        return self.clip.frame_at(self.elapsed) if self.clip else 0
 
     def fit(self):
         if self.clip:
@@ -244,6 +245,8 @@ class AssetLoaderApp:
         from .editors import AssemblyPanel
         if self.handle is None:
             raise ValueError("먼저 에셋을 선택한다.")
+        if self.handle.resource.definition.kind == "map":
+            raise ValueError("맵은 맵 작업에서 레이어·이동 구역을 편집한다.")
         if self.handle.resource.definition.kind == "mech":
             raise ValueError("분리 메카는 메카 설정에서 순서·조립 미리보기를 편집한다.")
         if self.build and self.build.process is not None:
@@ -280,18 +283,23 @@ class AssetLoaderApp:
                 self.zoom = 1.0
             elif action == "render":
                 self.configure_render()
+            elif action == "map":
+                from .map_panel import MapPanel
+                self.set_panel(MapPanel(self))
             elif action == "compose":
                 self.compose()
             elif action == "mech":
                 from .mech_panel import MechPanel
                 if self.handle is None:
                     raise ValueError("먼저 에셋을 선택한다.")
+                if self.handle.resource.definition.kind == 'map':
+                    raise ValueError('맵 작업에서 레이어와 이동 구역을 편집한다.')
                 self.set_panel(MechPanel(self))
             elif action == "play":
                 self.paused = not self.paused
             elif action in ("previous", "next") and self.clip:
                 self.paused = True
-                self.elapsed = ((self.frame_index + (-1 if action == "previous" else 1)) % len(self.clip.frames)) / self.clip.fps
+                self.elapsed = self.clip.frame_start_seconds(self.frame_index + (-1 if action == "previous" else 1))
             elif action == "body":
                 self.show_body = not self.show_body
             elif action == "shadow":
@@ -332,7 +340,7 @@ class AssetLoaderApp:
                 self.change_clip(-1 if key == pico.SDLK_LEFT else 1)
             elif key == pico.SDLK_PERIOD and self.clip:
                 self.paused = True
-                self.elapsed = (self.frame_index + 1) / self.clip.fps
+                self.elapsed = self.clip.frame_start_seconds(self.frame_index + 1)
             elif key in (pico.SDLK_PAGEUP, pico.SDLK_PAGEDOWN):
                 count = len(self.catalog.definitions)
                 self.list_offset = max(0, min(max(0, count - CATALOG_PAGE), self.list_offset + (-CATALOG_PAGE if key == pico.SDLK_PAGEUP else CATALOG_PAGE)))
@@ -419,7 +427,7 @@ class AssetLoaderApp:
         details = [(f"ID  {self.asset_id or '-'}", 28, 300),
                    (f"원본  {self.source.name if self.source else '-'}", 350, 360),
                    (f"동작  {self.clip_name or '-'}", 734, 250),
-                   (f"{self.frame_index + 1}/{len(self.clip.frames)} 프레임 · {self.clip.fps:g} FPS" if self.clip else "프레임 -", 1010, 242)]
+                   (f"{self.frame_index + 1}/{len(self.clip.frames)} · {self.clip.durations_ms[self.frame_index]:g} ms" if self.clip else "프레임 -", 1010, 242)]
         for text, x, width in details:
             r.text(text, x, 57, "small", c["text"], max_width=width)
         r.rect(PRODUCTION_MENU, c["input"])
@@ -434,6 +442,8 @@ class AssetLoaderApp:
                 label = "재생" if self.paused else "정지"
             elif action == "details":
                 label = "상세 정보"
+            if resource and resource.definition.kind == 'map':
+                label = {'body': '배경', 'shadow': '바닥'}.get(action, label)
             r.text(label, rect.x + 10, rect.y + 7, "small", c["text"])
             if action == "details":
                 x, y = rect.x + rect.width - 18, rect.y + 14
@@ -456,7 +466,7 @@ class AssetLoaderApp:
                 r.line(x - 10, ui_y, x + 10, ui_y, c["accent"])
                 r.line(x, ui_y - 10, x, ui_y + 10, c["accent"])
         r.text("시트·번들 탐색기", 28, 102, "section", c["text"])
-        r.text("애니메이션 탐색기", 1000, 102, "section", c["text"])
+        r.text("맵 레이어" if resource and resource.definition.kind == 'map' else "애니메이션 탐색기", 1000, 102, "section", c["text"])
         r.rect(FILTER_RECT, c["input"])
         current_filter = self.handle.resource.filtering.title() if self.handle else '-'
         r.text(f"필터: {current_filter}", FILTER_RECT.x + 10, FILTER_RECT.y + 6, "small", c["text"])
@@ -471,7 +481,11 @@ class AssetLoaderApp:
             for index, name in enumerate(names[self.clip_offset:self.clip_offset + ANIMATION_PAGE]):
                 y = ANIMATION_RECT.y + index * 28
                 r.rect(Rect(ANIMATION_RECT.x, y, ANIMATION_RECT.width, 26), c["selected"] if name == self.clip_name else c["background"])
-                r.text(name, ANIMATION_RECT.x + 8, y + 6, "small", c["text"], max_width=248)
+                label = name
+                if resource.definition.kind == 'map':
+                    from .map_panel import VIEWS
+                    label = dict(VIEWS).get(name, name)
+                r.text(label, ANIMATION_RECT.x + 8, y + 6, "small", c["text"], max_width=248)
         else:
             r.text("시트·번들을 선택한다.", 1000, 144, "small", c["muted"])
         r.text(f"배율 {self.zoom:.2f}×", 688, 724, "small", c["muted"])

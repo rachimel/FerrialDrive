@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "type": "map",
+  "asset_id": "sample_map",
+  "coordinates": "bottom-left",
+  "size": [
+    320,
+    180
+  ],
+  "background": "background.png",
+  "ground": "ground.png",
+  "walkable": [
+    [
+      [
+        20,
+        12
+      ],
+      [
+        300,
+        12
+      ],
+      [
+        300,
+        96
+      ],
+      [
+        200,
+        96
+      ],
+      [
+        180,
+        70
+      ],
+      [
+        20,
+        70
+      ]
+    ]
+  ]
+}

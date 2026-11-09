@@ -20,12 +20,35 @@ def numbers(value, length, *, integer=False, positive=False):
 class SpriteFrame:
     rect: tuple[int, int, int, int]
     pivot: tuple[float, float]
+    duration_ms: float | None = None
 
 
 @dataclass(frozen=True)
 class SpriteClip:
     fps: float
     frames: tuple[SpriteFrame, ...]
+
+    @property
+    def durations_ms(self):
+        return tuple(frame.duration_ms if frame.duration_ms is not None else 1000 / self.fps
+                     for frame in self.frames)
+
+    @property
+    def duration_ms(self):
+        return sum(self.durations_ms)
+
+    def frame_at(self, elapsed_seconds):
+        if not isfinite(elapsed_seconds) or elapsed_seconds < 0:
+            raise ValueError('재생 시간은 0 이상의 유한한 초 단위다.')
+        remaining = (elapsed_seconds * 1000) % self.duration_ms
+        for index, duration in enumerate(self.durations_ms):
+            if remaining + 1e-7 < duration:
+                return index
+            remaining -= duration
+        return 0
+
+    def frame_start_seconds(self, index):
+        return sum(self.durations_ms[:index % len(self.frames)]) / 1000
 
 
 @dataclass(frozen=True)
@@ -50,7 +73,7 @@ class SpriteSheet:
             raise FileNotFoundError(image_path)
         clips = {}
         for row in data['animations']:
-            name, fps = row['name'], row['fps']
+            name, fps = row['name'], row.get('fps', 1)
             if (not isinstance(name, str) or not name or name in clips or type(fps) not in (int, float)
                     or not isfinite(fps) or not 0 < fps <= 240 or not row['frames']):
                 raise ValueError('동작 이름·FPS·프레임 목록 오류')
@@ -64,7 +87,13 @@ class SpriteSheet:
                         or y + height > image['size'][1] or not 0 <= pivot[0] <= width
                         or not 0 <= pivot[1] <= height):
                     raise ValueError('프레임·피봇이 이미지 범위를 벗어났다.')
-                frames.append(SpriteFrame(tuple(rect), tuple(pivot)))
+                duration = entry.get('duration_ms')
+                if ('duration_ms' in entry and (type(duration) not in (int, float)
+                        or not isfinite(duration) or duration <= 0)):
+                    raise ValueError('프레임 duration_ms는 0보다 큰 유한한 밀리초다.')
+                if 'fps' not in row and duration is None:
+                    raise ValueError('각 프레임에 duration_ms가 필요하다.')
+                frames.append(SpriteFrame(tuple(rect), tuple(pivot), duration))
             clips[name] = SpriteClip(float(fps), tuple(frames))
         if not clips:
             raise ValueError('시트에 동작이 필요하다.')
@@ -114,7 +143,7 @@ class SpritePlayback:
 
     @property
     def frame_index(self):
-        return int(self.elapsed_seconds * self.clip.fps + 1e-9) % len(self.clip.frames)
+        return self.clip.frame_at(self.elapsed_seconds)
 
     def update(self, delta_seconds):
         if not isfinite(delta_seconds) or delta_seconds < 0:
@@ -129,4 +158,4 @@ class SpritePlayback:
 
     def step(self):
         self.paused = True
-        self.elapsed_seconds = (self.frame_index + 1) / self.clip.fps
+        self.elapsed_seconds = self.clip.frame_start_seconds(self.frame_index + 1)

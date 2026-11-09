@@ -17,6 +17,8 @@ from ferrial_drive.ui.standalone import _events, run_preview
 from Tools.asset_loader.app import AssetLoaderApp
 from Tools.asset_loader.editors import AssemblyPanel, RenderPanel
 from Tools.asset_loader.file_panel import FilePanel, IdPanel
+from Tools.asset_loader.map_panel import MapPanel
+from samples.asset_loader.map.make_sample import write_sample as write_map
 
 
 class AssetPanelTests(unittest.TestCase):
@@ -167,7 +169,7 @@ class AssetPanelTests(unittest.TestCase):
         self.assertIsNone(self.app.panel)
         self.assertEqual(self.app.asset_id, "edited_id")
 
-    def test_assembly_drag_repeat_fps_and_save_share_the_existing_renderer(self):
+    def test_assembly_drag_repeat_duration_and_save_share_the_existing_renderer(self):
         self.app.action("compose")
         panel = self.app.panel
         self.click(panel.timeline)
@@ -175,7 +177,7 @@ class AssetPanelTests(unittest.TestCase):
         self.click(target, up=True)
         self.assertEqual(panel.order, [1, 2, 0, 3])
         panel.fields["name"].text = "attack"
-        panel.fields["fps"].text = "12"
+        panel.fields["duration_ms"].text = "80"
         self.key(self.pico.SDLK_d, self.pico.KMOD_CTRL)
         self.assertEqual(len(panel.order), 5)
         self.key(self.pico.SDLK_DELETE)
@@ -186,8 +188,61 @@ class AssetPanelTests(unittest.TestCase):
         self.assertIsNone(self.app.panel)
         self.assertEqual(self.app.clip_name, "attack/e")
         bundle = SpriteBundle.load(self.app.source)
-        self.assertEqual(bundle.body.clips["attack/e"].fps, 12)
+        self.assertEqual(bundle.body.clips["attack/e"].durations_ms[2], 80)
         self.assertEqual(bundle.body.clips["attack/e"], bundle.shadow.clips["attack/e"])
+
+    def test_map_layers_polygon_edit_export_and_reopen_use_same_coordinates(self):
+        source = write_map(self.root / 'map')
+        self.assertTrue(self.app.open_source(source))
+        self.assertEqual(self.app.clip_name, 'composite')
+        for name in ('background', 'ground', 'composite', 'walkable'):
+            self.app.select_clip(name)
+            self.app.draw()
+        self.app.action('map')
+        panel = self.app.panel
+        self.assertIsInstance(panel, MapPanel)
+        self.app.draw()
+        expected = [[40, 30], [100, 30], [70, 60]]
+        for x, y in expected:
+            self.app.handle_event(SimpleNamespace(type=self.pico.SDL_MOUSEBUTTONDOWN,
+                button=self.pico.SDL_BUTTON_LEFT, x=panel.origin[0] + x * panel.scale,
+                y=800 - panel.origin[1] - y * panel.scale))
+        self.assertEqual(panel.pending, expected)
+        panel.commit_polygon()
+        self.assertEqual(panel.polygons[-1], expected)
+        panel.put('output', self.root / 'export-map')
+        panel.submit()
+        self.assertIsNone(self.app.panel)
+        self.app.action('map')
+        reopened = self.app.panel
+        self.assertEqual(reopened.polygons[-1], expected)
+        self.assertEqual(reopened.resource.map_bundle.size, (320, 180))
+        for view in ('background', 'ground', 'composite', 'walkable'):
+            reopened.view = view
+            self.app.draw()
+        resource = reopened.resource
+        reopened.close()
+        self.assertTrue(resource.closed)
+
+    def test_variable_times_drive_preview_and_main_frame_stepping(self):
+        self.app.action('compose')
+        panel = self.app.panel
+        for index, duration in enumerate((50, 150, 75, 225)):
+            panel.select_frame(index)
+            panel.fields['duration_ms'].text = str(duration)
+            panel.set_duration()
+        panel.elapsed = .05
+        self.assertEqual(panel.preview_clip().frame_at(panel.elapsed), 1)
+        with patch('Tools.asset_loader.editors.asset_directory', return_value=self.root / 'timed'):
+            panel.submit()
+        self.app.elapsed = .05
+        self.assertEqual(self.app.frame_index, 1)
+        self.app.action('next')
+        self.assertAlmostEqual(self.app.elapsed, .2)
+        self.assertEqual(self.app.frame_index, 2)
+        self.app.action('previous')
+        self.assertAlmostEqual(self.app.elapsed, .05)
+        self.assertEqual(self.app.frame_index, 1)
 
     def test_sdl_adapter_forwards_utf8_and_modifiers_only_when_requested(self):
         list(_events(self.pico, accept_text=True))

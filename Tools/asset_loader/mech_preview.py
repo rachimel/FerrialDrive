@@ -24,7 +24,7 @@ def draw_preview(panel, rect):
                 r.text("선택 동작/방향의 시트가 없다.", rect.x + 12, rect.y + 12, "small", c["muted"])
                 return
             clip = panel.preview_resource.clips[name]
-            index = int(panel.preview_time * clip.fps) % len(clip.frames)
+            index = clip.frame_at(panel.preview_time)
             frame = clip.frames[index]
             scale = min((rect.width - 24) / frame.rect[2], (rect.height - 24) / frame.rect[3])
             x = rect.x + rect.width / 2 + (frame.pivot[0] - frame.rect[2] / 2) * scale

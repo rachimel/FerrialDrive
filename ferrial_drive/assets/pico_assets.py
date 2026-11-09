@@ -32,6 +32,7 @@ class PicoAssetResource:
         self.clips = {}
         self.sampler = None
         self.mech = document.mech
+        self.map_bundle = document.map_bundle
         try:
             layers = ({"body": document.definition.source} if not document.sheets
                       else {layer: sheet.image_path for layer, sheet in document.sheets.items()})
@@ -54,7 +55,8 @@ class PicoAssetResource:
                 if document.sheets and size != document.sheets[layer].size:
                     raise ValueError(f"PNG 실제 크기와 시트 메타데이터 불일치: {path}")
             if document.sheets:
-                self.clips = self.mech.clips if self.mech else document.sheets["body"].clips
+                self.clips = (self.map_bundle.clips if self.map_bundle else
+                              self.mech.clips if self.mech else document.sheets["body"].clips)
             else:
                 width, height = self.sizes["body"]
                 self.clips = {"image": SpriteClip(1.0, (SpriteFrame((0, 0, width, height), (width / 2, 0)),))}
@@ -82,6 +84,9 @@ class PicoAssetResource:
              shadow_opacity=DEFAULT_SHADOW_OPACITY, layer_order=None, part_states=None, part_visibility=None):
         if self.closed:
             raise RuntimeError("해제한 에셋이다.")
+        if self.map_bundle:
+            self.draw_map(clip_name, x, y, scale, background=body, ground=shadow)
+            return
         if self.mech:
             if body and scale > 0:
                 order = self.mech.order(clip_name, frame_index) if layer_order is None else layer_order
@@ -94,6 +99,37 @@ class PicoAssetResource:
             return
         self.draw_frame(self.clips[clip_name].frames[frame_index], x, y,
                         scale=scale, body=body, shadow=shadow, shadow_opacity=shadow_opacity)
+
+    def draw_map(self, view, x, y, scale, *, background=True, ground=True):
+        if scale <= 0:
+            return
+        frame = next(iter(self.clips.values())).frames[0]
+        layers = ('body',) if view == 'background' else ('ground',) if view == 'ground' else ('body', 'ground')
+        with self.render_batch():
+            for layer in layers:
+                if (layer == 'body' and background) or (layer == 'ground' and ground):
+                    self._draw_sheet(layer, frame, x, y, scale)
+        if view == 'walkable':
+            pico = self.pico
+            pico.SDL_SetRenderDrawBlendMode(pico.renderer, pico.SDL_BLENDMODE_BLEND)
+            pico.SDL_SetRenderDrawColor(pico.renderer, 70, 220, 130, 95)
+            # 화면 픽셀 단위 스캔라인. 오목한 다각형도 같은 좌표로 표시한다.
+            canvas_height = pico.get_canvas_height()
+            canvas_width = pico.get_canvas_width()
+            for polygon in self.map_bundle.data['walkable']:
+                points = [(x + px * scale, canvas_height - y - py * scale) for px, py in polygon]
+                for row in range(max(0, int(min(py for _, py in points))),
+                                 min(canvas_height, int(max(py for _, py in points)) + 1)):
+                    crossings = []
+                    sample = row + 0.5
+                    for a, b in zip(points, points[1:] + points[:1]):
+                        if (a[1] > sample) != (b[1] > sample):
+                            crossings.append(a[0] + (sample - a[1]) * (b[0] - a[0]) / (b[1] - a[1]))
+                    crossings.sort()
+                    for left, right in zip(crossings[::2], crossings[1::2]):
+                        left, right = max(0, round(left)), min(canvas_width - 1, round(right))
+                        if left <= right:
+                            pico.SDL_RenderDrawLine(pico.renderer, left, row, right, row)
 
     def draw_frame(self, frame, x, y, *, scale=1.0, body=True, shadow=True,
                    shadow_opacity=DEFAULT_SHADOW_OPACITY):

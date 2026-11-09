@@ -48,6 +48,10 @@ def store_asset(definition, *, image_size=None, root=LIBRARY_ROOT):
     if all(root in path.parents for path in document.dependencies):
         return definition
     destination = asset_directory(definition.asset_id, root=root / "prerender")
+    if definition.kind == "map":
+        from .map_export import export_map
+        target = export_map(document.map_bundle.data, destination, base_dir=definition.source.parent)
+        return AssetDefinition(definition.asset_id, "map", target)
     if definition.kind == "mech":
         from .mech_export import copy_mech
         target = copy_mech(document.mech, destination, asset_id=definition.asset_id)
