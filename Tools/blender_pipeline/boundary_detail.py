@@ -20,15 +20,21 @@ def generate_boundary_texture(config):
         raise ValueError('독립된 메시 데이터만 지원한다.')
     uv_name = config.get('uv_layer', 'UV_Boundary')
     attribute_name = config.get('attribute', 'boundary_detail_enabled')
+    for name in config.get('disable_objects',[]):
+        if name in names:
+            raise ValueError('적용/해제 대상이 겹친다.')
+        disabled = bpy.data.objects[name].data.attributes.get(attribute_name)
+        if disabled:
+            disabled.data.foreach_set('value',np.zeros(len(disabled.data),dtype=np.float32))
     previous = {obj.name: (obj.data.uv_layers.active_index,
                 next((uv.name for uv in obj.data.uv_layers if uv.active_render), None)) for obj in objects}
     if bpy.context.object and bpy.context.object.mode != 'OBJECT':
         bpy.ops.object.mode_set(mode='OBJECT')
     bpy.ops.object.select_all(action='DESELECT')
     for obj in objects:
-        if obj.data.uv_layers.get(uv_name) or obj.data.attributes.get(attribute_name):
+        if (obj.data.uv_layers.get(uv_name) or obj.data.attributes.get(attribute_name)) and not config.get('overwrite',False):
             raise ValueError('기존 경계 UV/속성을 임의로 덮어쓰지 않는다.')
-        layer = obj.data.uv_layers.new(name=uv_name)
+        layer = obj.data.uv_layers.get(uv_name) or obj.data.uv_layers.new(name=uv_name)
         obj.data.uv_layers.active = layer
         obj.select_set(True)
     bpy.context.view_layer.objects.active = objects[0]
@@ -44,11 +50,28 @@ def generate_boundary_texture(config):
     minimum_uv_faces = 0
     cosine = math.cos(math.radians(angle))
     for obj in objects:
+        line_width = config.get('width_overrides',{}).get(obj.name,width)
+        if not math.isfinite(line_width) or line_width <= 0:
+            raise ValueError('개별 선 폭은 양수여야 한다.')
         mesh = obj.data
         layer = mesh.uv_layers[uv_name]
         vertex = np.array([obj.matrix_world @ v.co for v in mesh.vertices], dtype=np.float64)
         normal_matrix = obj.matrix_world.to_3x3().inverted().transposed()
         normals = [(normal_matrix @ p.normal).normalized() for p in mesh.polygons]
+        face_filter = config.get('face_filters',{}).get(obj.name,{})
+        bounds_low, bounds_high = vertex.min(axis=0), vertex.max(axis=0)
+        def accepted(polygon):
+            axis = face_filter.get('normal_axis')
+            if axis is not None and abs(normals[polygon.index][axis]) < face_filter.get('min_abs_normal',0):
+                return False
+            position_axis = face_filter.get('position_axis')
+            if position_axis is not None:
+                extent = max(bounds_high[position_axis]-bounds_low[position_axis],1e-8)
+                fraction = (vertex[list(polygon.vertices),position_axis].mean()-bounds_low[position_axis])/extent
+                outer = face_filter.get('outer_fraction',.25)
+                if outer < fraction < 1-outer:
+                    return False
+            return True
         edge_faces = {}
         for polygon in mesh.polygons:
             for key in polygon.edge_keys:
@@ -68,7 +91,7 @@ def generate_boundary_texture(config):
                 minimum_uv_faces += 1
         for triangle in mesh.loop_triangles:
             polygon = mesh.polygons[triangle.polygon_index]
-            borders = [key for key in polygon.edge_keys if tuple(sorted(key)) in sharp]
+            borders = [key for key in polygon.edge_keys if tuple(sorted(key)) in sharp] if accepted(polygon) else []
             tex = np.array([layer.data[i].uv[:] for i in triangle.loops])*resolution
             a, b, c = tex
             determinant = (b[1]-c[1])*(a[0]-c[0])+(c[0]-b[0])*(a[1]-c[1])
@@ -97,10 +120,12 @@ def generate_boundary_texture(config):
                     continue
                 parameter = np.clip(np.sum((p-start)*delta, axis=-1)/length_squared, 0, 1)
                 distance = np.minimum(distance, np.linalg.norm(p-start-parameter[..., None]*delta, axis=-1))
-            line = 1-np.clip((distance-width*.60)/(width*.40), 0, 1)
+            line = 1-np.clip((distance-line_width*.60)/(line_width*.40), 0, 1)
             current = mask_image[region]
             current[inside] = np.maximum(current[inside], line[inside])
-        attribute = mesh.attributes.new(attribute_name, 'FLOAT', 'CORNER')
+        attribute = mesh.attributes.get(attribute_name) or mesh.attributes.new(attribute_name, 'FLOAT', 'CORNER')
+        if attribute.domain != 'CORNER' or attribute.data_type != 'FLOAT':
+            raise ValueError('경계 적용 속성 형식이 다르다.')
         attribute.data.foreach_set('value', np.ones(len(mesh.loops), dtype=np.float32))
         active, render = previous[obj.name]
         mesh.uv_layers.active_index = active
@@ -124,12 +149,18 @@ def generate_boundary_texture(config):
     rgba[...,:3] = pixels[...,None]
     path = Path(config['output']).resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
-    image = bpy.data.images.new(path.stem, width=size, height=size, alpha=False)
+    image = next((im for im in bpy.data.images if im.filepath and Path(bpy.path.abspath(im.filepath)).resolve()==path),None)
+    if image is None:
+        image = bpy.data.images.new(path.stem, width=size, height=size, alpha=False)
+    elif list(image.size) != [size,size]:
+        image.scale(size,size)
     image.colorspace_settings.name = 'Non-Color'
     image.pixels.foreach_set(rgba.ravel())
     image.filepath_raw = str(path)
     image.file_format = 'PNG'
     image.save()
+    if image.packed_file:
+        image.pack()
     print('BOUNDARY_MASK', edge_counts, 'minimum_uv_faces', minimum_uv_faces, flush=True)
 
 

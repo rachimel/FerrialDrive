@@ -79,6 +79,28 @@ def main():
     apply_operations([dict(op='generate_boundary_texture',objects=[obj.name],output=boundary_path,width=.015)])
     assert fingerprint(obj, excluded_uv=('UV_Boundary',)) == boundary_before
     assert next(layer.name for layer in obj.data.uv_layers if layer.active_render) == 'UVMap'
+    apply_operations([dict(op='generate_boundary_texture',objects=[obj.name],output=boundary_path,width=.015,
+                           overwrite=True,width_overrides={obj.name:.01})])
+    assert len([layer for layer in obj.data.uv_layers if layer.name=='UV_Boundary']) == 1
+    assert fingerprint(obj, excluded_uv=('UV_Boundary',)) == boundary_before
+    apply_operations([dict(op='create_box',name='DisabledBox',size=[1,1,1],location=[-2,0,0],material='Coating')])
+    apply_operations([dict(op='generate_boundary_texture',objects=[obj.name,'DisabledBox'],output=boundary_path,width=.015,overwrite=True)])
+    apply_operations([dict(op='generate_boundary_texture',objects=[obj.name],disable_objects=['DisabledBox'],output=boundary_path,
+        width=.015,overwrite=True,face_filters={obj.name:dict(normal_axis=0,min_abs_normal=.9,position_axis=0,outer_fraction=.28)})])
+    assert all(v.value==0 for v in bpy.data.objects['DisabledBox'].data.attributes['boundary_detail_enabled'].data)
+    mask_images=[im for im in bpy.data.images if im.filepath and Path(bpy.path.abspath(im.filepath)).resolve()==Path(boundary_path)]
+    assert len(mask_images)==1,'마스크 갱신 시 이미지 중복'
+    mask=np.array(mask_images[0].pixels).reshape(1024,1024,4)
+    boundary_uv=obj.data.uv_layers['UV_Boundary']
+    for polygon in obj.data.polygons:
+        points=[boundary_uv.data[i].uv for i in polygon.loop_indices]
+        center=sum(points[1:],points[0].copy())/len(points)
+        edge=(points[0]+points[1])*.5
+        pixel=edge*.995+center*.005
+        x,y=np.clip(np.floor(np.array(pixel)*1024).astype(int),0,1023)
+        value=float(mask[y,x,0])
+        assert value>.1 if abs(polygon.normal.x)>.9 else value<.1,'지정하지 않은 방향에 선 표시'
+    assert fingerprint(obj, excluded_uv=('UV_Boundary',))==boundary_before
     apply_operations([dict(op='create_box',name='UnmarkedBox',size=[1,1,1],location=[2,0,0],material='Coating')])
     assert bpy.data.objects['UnmarkedBox'].data.attributes.get('boundary_detail_enabled') is None
     normal_link = shader.inputs['Normal'].links[0].from_node.name
