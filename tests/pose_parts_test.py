@@ -50,7 +50,7 @@ class PartsTestApp(AssetLoaderApp):
             self.gun_before = data["points"]["object:Gun"]["world"]
             self.pending = "parts.png"
         elif self.stage == 1:
-            self.click(1170, 312)
+            self.click(992, 326)
         elif self.stage == 2:
             moved = data["points"]["object:Gun"]["world"]
             assert abs(moved[0]-self.gun_before[0]-.05) < .0001
@@ -60,7 +60,7 @@ class PartsTestApp(AssetLoaderApp):
             assert max(abs(a-b) for a, b in zip(restored, self.gun_before)) < .0001
             panel.select("hand.R")
             panel.change_mode("rotate")
-            self.click(1170, 352)
+            self.click(1096, 326)
         elif self.stage == 4:
             panel.select("bone:Index01.R")
             panel.choose_finger("Index")
@@ -71,7 +71,7 @@ class PartsTestApp(AssetLoaderApp):
         elif self.stage == 6:
             panel.select("object:Scabbard")
             panel.change_mode("translate")
-            self.click(1170, 312)
+            self.click(992, 326)
         elif self.stage == 7:
             self.click(1030, 546)
         elif self.stage == 8:

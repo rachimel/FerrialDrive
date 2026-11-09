@@ -1,6 +1,6 @@
 """포즈 편집의 파츠 목록과 월드 축 화살표 표시. 창·작업자를 소유하지 않는다."""
 
-from math import atan2, cos, hypot, sin, pi
+from math import atan2, cos, hypot, sin
 from ferrial_drive.ui.components import Rect
 
 
@@ -39,8 +39,8 @@ def rebuild(panel):
         panel.button(label, Rect(928+index*156, 196, 148, 28), lambda m=mode: panel.change_mode(m),
                      style="selected" if mode == panel.transform_mode else "input")
     for index, axis in enumerate("XYZ"):
-        for sign, x in ((-1, 964), (1, 1104)):
-            panel.button("", Rect(x, 296+index*40, 132, 32), lambda a=axis, s=sign: panel.axis_step(a, s))
+        for sign, shift in ((-1, 0), (1, 44)):
+            panel.button("", Rect(928+index*104+shift, 312, 40, 28), lambda a=axis, s=sign: panel.axis_step(a, s))
     panel.button("이전 프레임 파츠 복제", Rect(928, 420, 308, 30), lambda: panel.send("copy_previous", control=panel.selected))
     entry = panel.data.get("parts", {}).get(panel.selected, {}) if panel.data else {}
     if panel.selected in ("hand.L", "hand.R") or entry.get("category") == "fingers":
@@ -59,11 +59,21 @@ def rebuild(panel):
         panel.focus = None
 
 
-def arrow(renderer, start, end, color, size=7):
-    renderer.line(*start, *end, color)
+def thick_line(renderer, start, end, color, width):
+    length = hypot(end[0]-start[0], end[1]-start[1])
+    if length < .001:
+        return
+    nx, ny = -(end[1]-start[1])/length, (end[0]-start[0])/length
+    for index in range(width):
+        offset = index-(width-1)/2
+        renderer.line(start[0]+nx*offset, start[1]+ny*offset, end[0]+nx*offset, end[1]+ny*offset, color)
+
+
+def arrow(renderer, start, end, color, size=7, width=1):
+    thick_line(renderer, start, end, color, width)
     angle = atan2(end[1]-start[1], end[0]-start[0])
     for offset in (-.55, .55):
-        renderer.line(*end, end[0]-cos(angle+offset)*size, end[1]-sin(angle+offset)*size, color)
+        thick_line(renderer, end, (end[0]-cos(angle+offset)*size, end[1]-sin(angle+offset)*size), color, width)
 
 
 def axis_handles(panel):
@@ -90,19 +100,14 @@ def draw(panel):
     r.text("이동량", 928, 236, "small", colors["muted"])
     r.text("회전각 (도)", 1084, 236, "small", colors["muted"])
     for index, axis in enumerate("XYZ"):
-        y = 312+index*40
         color = AXIS_COLORS[axis]
-        r.text(axis, 936, y-6, "small", color)
-        for sign, x in ((-1, 1030), (1, 1170)):
-            if panel.transform_mode == "translate":
-                arrow(r, (x-22*sign, y), (x+22*sign, y), color)
-            else:
-                points = [(x+cos(t*pi/12)*11, y+sin(t*pi/12)*11) for t in range(2, 21)]
-                if sign < 0:
-                    points.reverse()
-                for a, b in zip(points, points[1:-1]):
-                    r.line(*a, *b, color)
-                arrow(r, points[-2], points[-1], color, 5)
+        base = 928+index*104
+        r.text(axis, base+42, 290, "small", color, align="center")
+        for sign, shift in ((-1, 0), (1, 44)):
+            x, y = base+shift+20, 326
+            thick_line(r, (x-5, y), (x+5, y), color, 2)
+            if sign > 0:
+                thick_line(r, (x, y-5), (x, y+5), color, 2)
     if data:
         if panel.list_tab == "motions":
             rows = [(clip["name"], clip["label"]) for clip in data["clips"]]
@@ -119,7 +124,7 @@ def draw(panel):
             for handle in axis_handles(panel):
                 origin, point = handle["origin"], handle["point"]
                 color = AXIS_COLORS[handle["axis"]]
-                arrow(r, origin, point, color)
+                arrow(r, origin, point, color, size=10, width=3)
                 r.text(("−" if handle["sign"] < 0 else "+")+handle["axis"], point[0]+5, point[1]-8, "small", color)
     if panel.selected in ("hand.L", "hand.R") or entries.get(panel.selected, {}).get("category") == "fingers":
         r.text("손가락: 선택한 손 기준", 928, 444, "small", colors["muted"], max_width=308)
