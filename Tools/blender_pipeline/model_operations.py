@@ -63,6 +63,39 @@ def apply_operations(operations):
             delta = world.to_3x3().col[1].normalized().rotation_difference(desired.normalized())
             world = Matrix.Translation(world.translation) @ delta.to_matrix().to_4x4() @ Matrix.Translation(-world.translation) @ world
             bone.matrix = obj.matrix_world.inverted() @ world
+        elif kind == 'pose_limb':
+            from mathutils import Matrix, Quaternion
+            obj = bpy.data.objects[operation['object']]
+            upper, lower, end = [obj.pose.bones[operation[k]] for k in ('upper', 'lower', 'end')]
+            root = obj.matrix_world @ upper.head
+            target = Vector(vector(operation['target_world']))
+            delta = target - root
+            distance = delta.length
+            length_a = (obj.matrix_world.to_3x3() @ (upper.tail - upper.head)).length
+            length_b = (obj.matrix_world.to_3x3() @ (lower.tail - lower.head)).length
+            if not abs(length_a - length_b) + 1e-6 < distance < length_a + length_b - 1e-6:
+                raise ValueError('두 관절의 도달 범위 밖이다.')
+            axis = delta.normalized()
+            bend = Vector(vector(operation['bend_world'])) - root
+            bend -= axis * bend.dot(axis)
+            if bend.length < 1e-6:
+                raise ValueError('굽힘 기준이 목표축과 겹친다.')
+            along = (length_a**2 - length_b**2 + distance**2) / (2 * distance)
+            elbow = root + axis * along + bend.normalized() * math.sqrt(max(0, length_a**2 - along**2))
+            for bone, direction in ((upper, elbow - root), (lower, target - elbow)):
+                apply_operations([{'op': 'aim_bone', 'object': obj.name, 'bone': bone.name,
+                                   'world_direction': list(direction)}])
+            if 'end_rotation_world' in operation:
+                values = operation['end_rotation_world']
+                if len(values) != 4 or not all(math.isfinite(v) for v in values) or sum(v*v for v in values) < 1e-12:
+                    raise ValueError('유한한 비영 쿼터니언이 필요하다.')
+                world = obj.matrix_world @ end.matrix
+                rotation = Quaternion(values).normalized().to_matrix().to_4x4()
+                world = Matrix.Translation(world.translation) @ rotation @ Matrix.Diagonal((*world.to_scale(), 1))
+                end.matrix = obj.matrix_world.inverted() @ world
+                bpy.context.view_layer.update()
+            if (obj.matrix_world @ end.head - target).length > 1e-4:
+                raise ValueError('연결 체인 또는 제약 때문에 말단이 목표에 도달하지 못했다.')
         elif kind == 'attach_world':
             from mathutils import Matrix
             from model_geometry import set_world_matrix_from_parent_frame

@@ -79,6 +79,30 @@ class ModelPipelineTests(unittest.TestCase):
         apply_operations([{'op': 'set_properties', 'object': 'Control', 'values': {'stowed': 1.0}}])
         self.assertAlmostEqual(bpy.data.objects['Prop'].matrix_world.translation.x, -2)
 
+    def test_limb_pose_reaches_without_stretching(self):
+        from model_operations import apply_operations
+        from mathutils import Vector
+        bpy.ops.object.armature_add()
+        rig = bpy.context.object
+        bpy.ops.object.mode_set(mode='EDIT')
+        upper = rig.data.edit_bones[0]
+        upper.name = 'Upper'
+        lower = rig.data.edit_bones.new('Lower')
+        lower.head, lower.tail = (0, 0, 1), (0, 0, 2)
+        lower.parent, lower.use_connect = upper, True
+        end = rig.data.edit_bones.new('End')
+        end.head, end.tail = (0, 0, 2), (0, 0, 2.3)
+        end.parent, end.use_connect = lower, True
+        bpy.ops.object.mode_set(mode='OBJECT')
+        op = dict(op='pose_limb', object=rig.name, upper='Upper', lower='Lower', end='End',
+                  target_world=[1, 0, 1], bend_world=[0, -1, 0], end_rotation_world=[1, 0, 0, 0])
+        apply_operations([op])
+        self.assertLess((rig.pose.bones['End'].head - Vector((1, 0, 1))).length, 1e-5)
+        self.assertAlmostEqual(rig.pose.bones['Upper'].length, 1, places=6)
+        self.assertAlmostEqual(rig.pose.bones['Lower'].length, 1, places=6)
+        with self.assertRaisesRegex(ValueError, '도달 범위'):
+            apply_operations([{**op, 'target_world': [10, 0, 0]}])
+
     def test_collision_is_failure_not_just_console_message(self):
         self.spec['operations'][2]['location'] = [.1, .1, 1.2]
         result = self.run_build()

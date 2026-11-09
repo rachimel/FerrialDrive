@@ -54,6 +54,7 @@
 | `pack_images` | 파일/생성 이미지를 현재 후보에 패킹 |
 | `set_frame` / `freeze_pose` | 검토 프레임 선택 / 후보 Armature의 Action·NLA를 멈추고 현재 포즈 유지. 드라이버는 유지 |
 | `aim_bone` | object, bone, world_direction. 본 길이와 연결을 유지하며 후보 포즈 방향 조정 |
+| `pose_limb` | object, upper/lower/end, target_world, bend_world, 선택적 end_rotation_world. 본 길이를 유지하는 두 관절 포즈. 도달 불가 목표는 실패 처리 |
 | `attach_world` | object, parent, 선택적 bone, matrix_world. 평가된 부모 프레임에서 명시한 월드 배치 유지 |
 | `attachment_switch` | control/property, stowed_target, held_target. 동일 오브젝트의 수납/파지 앵커 전환. 연속 발도 동작은 별도 |
 
