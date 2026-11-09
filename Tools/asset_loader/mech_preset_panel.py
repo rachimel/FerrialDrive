@@ -6,7 +6,7 @@ from .widgets import Panel
 
 
 class MechPresetPanel(Panel):
-    title = "출력 매핑 프리셋 저장"
+    title = "파츠 구성 프리셋 저장"
     rect = Rect(340, 252, 600, 280)
 
     def __init__(self, parent):

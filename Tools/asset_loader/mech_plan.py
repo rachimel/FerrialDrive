@@ -7,6 +7,7 @@ from math import isfinite
 from pathlib import Path
 
 from .production import WORKSPACE, frame_numbers
+from .part_model import part_defaults, state_defaults, valid_id
 
 
 LAYERS = (
@@ -59,18 +60,26 @@ def default_energy_mask():
 
 
 def with_energy_defaults(data):
-    """기존 v1 입력을 보존하며 신규 선택 항목만 채운다."""
+    """v1을 동적 파츠 v2로 보완한다. 원본 파일은 변경하지 않는다."""
     data = deepcopy(data)
-    for key, _, _ in LAYERS:
-        if key in ("side_slot_l", "side_slot_r") and key not in data["layers"]:
-            anchor = next(anchor for layer, _, anchor in LAYERS if layer == key)
-            data["layers"][key] = {"objects": "", "anchor": anchor, "empty_hand": ""}
-            for motion in data["motions"].values():
-                for order in [*motion["orders"].values(), *(row["order"] for row in motion["overrides"])]:
-                    order.insert(order.index("body"), key)
-        data["layers"][key].setdefault("energy_mask", default_energy_mask())
-        data["layers"][key].setdefault("sheet", "")
-        data["layers"][key].setdefault("energy_sheet", "")
+    if data["version"] == 1:
+        for key, _, anchor in LAYERS:
+            if key in ("side_slot_l", "side_slot_r") and key not in data["layers"]:
+                data["layers"][key] = part_defaults(key, anchor)
+                for motion in data["motions"].values():
+                    for order in [*motion["orders"].values(), *(row["order"] for row in motion["overrides"])]:
+                        order.insert(order.index("body"), key)
+        data["version"] = 2
+    labels = {key: name for key, name, _ in LAYERS}
+    for key, row in data["layers"].items():
+        defaults = part_defaults(labels.get(key, key))
+        for field, value in defaults.items():
+            row.setdefault(field, value)
+        for state_key, state in row["states"].items():
+            for field, value in state_defaults(state_key).items():
+                state.setdefault(field, value)
+    for motion in data["motions"].values():
+        motion.setdefault("part_states", {})
     for key, _ in ENERGY_CHECKS:
         data["checks"].setdefault(key, "미확인")
     return data
@@ -84,14 +93,12 @@ def default_plan(asset_id, source):
                              + (hands + ["body"] if direction in ("n", "ne", "nw") else ["body"] + hands)
                              + ["detached_sword", "detached_gun"])
     return {
-        "version": 1, "asset_id": asset_id, "source": str(Path(source).resolve()),
+        "version": 2, "asset_id": asset_id, "source": str(Path(source).resolve()),
         "render": {"camera": "", "frames": "1,3,5,7", "fps": "8", "width": "240",
                    "height": "240", "scale": "4.5", "pivot": "120,0", "purpose": "combat"},
-        "layers": {key: {"objects": "", "anchor": anchor, "empty_hand": "", "energy_mask": default_energy_mask(),
-                         "sheet": "", "energy_sheet": ""}
-                   for key, _, anchor in LAYERS},
+        "layers": {key: part_defaults(name, anchor) for key, name, anchor in LAYERS},
         "motions": {key: {"clip": key, "frames": "", "reuse": "", "notes": "",
-                          "events": [], "orders": deepcopy(orders), "overrides": [],
+                          "events": [], "orders": deepcopy(orders), "overrides": [], "part_states": {},
                           "occlusion": {direction: "미정" for direction in DIRECTIONS}}
                     for key, _ in MOTIONS},
         "checks": {key: "미확인" for key, _ in CHECKS},
@@ -106,7 +113,7 @@ def plan_path(asset_id, source):
 
 
 def validate_plan(data, *, asset_id, source):
-    if (data["version"] != 1 or data["asset_id"] != asset_id
+    if (data["version"] not in (1, 2) or data["asset_id"] != asset_id
             or Path(data["source"]).resolve() != Path(source).resolve()):
         raise ValueError("다른 에셋 또는 지원하지 않는 메카 작업본이다.")
     render = data["render"]
@@ -125,8 +132,29 @@ def validate_plan(data, *, asset_id, source):
         raise ValueError("공통 기준점은 이미지 안의 X,Y 값이어야 한다.")
     if render["purpose"] not in ("combat", "preview"):
         raise ValueError("출력 용도 오류")
-    keys = {key for key, _, _ in LAYERS}
+    keys = set(data["layers"])
+    if "body" not in keys or any(not valid_id(key) for key in keys) or len({key.casefold() for key in keys}) != len(keys):
+        raise ValueError("본체 파츠와 유효한 파츠 ID가 필요하다.")
     for key in keys:
+        row = data["layers"][key]
+        if data["version"] == 2:
+            if (not isinstance(row["name"], str) or not row["name"].strip() or type(row["enabled"]) is not bool
+                    or row["default_state"] != "base" and row["default_state"] not in row["states"]):
+                raise ValueError("파츠 이름·표시 여부·기본 상태 오류")
+            for state_key, state in row["states"].items():
+                if not valid_id(state_key) or state_key.casefold() == "base":
+                    raise ValueError("파츠 상태 ID 오류")
+                if not isinstance(state["name"], str) or not state["name"].strip() or type(state["enabled"]) is not bool:
+                    raise ValueError("파츠 상태 이름·표시 여부 오류")
+            if len({state.casefold() for state in row["states"]}) != len(row["states"]):
+                raise ValueError("대소문자만 다른 상태 ID는 사용할 수 없다.")
+            for value in [row, *row["states"].values()]:
+                for field in ("objects", "clip", "sheet", "energy_sheet"):
+                    if not isinstance(value[field], str):
+                        raise ValueError("파츠 상태의 입력·시트 경로 오류")
+                mask = value["energy_mask"]
+                if not isinstance(mask, dict) or mask.get("mode") not in dict(ENERGY_MODES) or not isinstance(mask.get("source"), str):
+                    raise ValueError("에너지 마스크의 분리 방식·입력 이름 오류")
         for field in ("objects", "anchor", "empty_hand"):
             if not isinstance(data["layers"][key][field], str):
                 raise ValueError("레이어 오브젝트·부착점은 문자열이어야 한다.")
@@ -139,6 +167,9 @@ def validate_plan(data, *, asset_id, source):
             raise ValueError("에너지 마스크의 분리 방식·입력 이름 오류")
     for key, _ in MOTIONS:
         motion = data["motions"][key]
+        for owner, state in motion.get("part_states", {}).items():
+            if owner not in keys or state != "base" and state not in data["layers"][owner].get("states", {}):
+                raise ValueError("동작의 파츠 상태 참조 오류")
         frames = frame_numbers(motion["frames"] or render["frames"])
         for field in ("clip", "reuse", "notes"):
             if not isinstance(motion[field], str):

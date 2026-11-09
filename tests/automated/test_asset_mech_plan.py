@@ -247,7 +247,9 @@ class MechPanelTests(unittest.TestCase):
 
     def test_folded_settings_and_multiple_layer_rows_keep_their_values(self):
         self.panel.switch(tab=1)
+        self.panel.select_part("left_hand")
         self.panel.fields["left_hand.objects"].text = "LeftHand,Sword"
+        self.panel.select_part("right_hand")
         self.panel.fields["right_hand.objects"].text = "RightHand,Gun"
         self.panel.switch(tab=0)
         self.panel.toggle("advanced")
@@ -259,26 +261,33 @@ class MechPanelTests(unittest.TestCase):
         self.panel.toggle("advanced")
         self.assertEqual(self.panel.value("scale"), "6.5")
         self.panel.switch(tab=1)
+        self.panel.select_part("left_hand")
         self.assertEqual(self.panel.value("left_hand.objects"), "LeftHand,Sword")
+        self.panel.select_part("right_hand")
         self.assertEqual(self.panel.value("right_hand.objects"), "RightHand,Gun")
 
     def test_color_and_energy_views_keep_owner_mapping_and_saved_masks(self):
         self.panel.switch(tab=1)
+        self.panel.select_part("left_hand")
         self.panel.fields["left_hand.objects"].text = "LeftHand,Sword"
         self.panel.select_layer_view("energy")
         mask = self.panel.data["layers"]["left_hand"]["energy_mask"]
         self.panel.choose(mask, "mode", "material")
         self.panel.fields["left_hand.energy_source"].text = "Hand_Mask,Sword_Mask"
+        self.panel.select_part("sheath")
         sheath = self.panel.data["layers"]["sheath"]["energy_mask"]
         self.panel.choose(sheath, "mode", "objects")
         self.panel.fields["sheath.energy_source"].text = "Sheath_Light"
         self.app.draw()
         self.panel.select_layer_view("color")
+        self.panel.select_part("left_hand")
         self.assertEqual(self.panel.value("left_hand.objects"), "LeftHand,Sword")
         self.panel.submit()
         self.panel.reload()
         self.panel.select_layer_view("energy")
+        self.panel.select_part("left_hand")
         self.assertEqual(self.panel.value("left_hand.energy_source"), "Hand_Mask,Sword_Mask")
+        self.panel.select_part("sheath")
         self.assertEqual(self.panel.value("sheath.energy_source"), "Sheath_Light")
         self.assertEqual(self.panel.current_motion["orders"]["s"].count("left_hand"), 1)
 
@@ -307,6 +316,57 @@ class MechPanelTests(unittest.TestCase):
         self.app.action("mech")
         self.assertEqual(self.app.panel.tab, 5)
         self.assertIsNotNone(self.app.panel.preview_resource)
+        self.app.draw()
+
+    def test_part_dialog_thruster_template_clone_and_state_editing(self):
+        self.panel.switch(tab=1)
+        self.panel.part_dialog()
+        dialog = self.app.panel
+        dialog.select_template("thrusters")
+        dialog.submit()
+        self.assertIs(self.app.panel, self.panel)
+        self.assertEqual(self.panel.part_key, "back_thrusters")
+        self.assertEqual(set(self.panel.current_part["states"]), {"vertical", "horizontal", "to_horizontal", "to_vertical"})
+        self.panel.fields["part_name"].text = "NPC 등 장식 겸 스러스터"
+        self.panel.select_state("horizontal")
+        self.panel.fields["state_name"].text = "전진 자세"
+        self.panel.select_layer_view("sheets")
+        self.panel.fields["back_thrusters.clip"].text = "thruster_forward"
+        self.panel.submit()
+        self.panel.reload()
+        self.assertEqual(self.panel.current_part["name"], "NPC 등 장식 겸 스러스터")
+        self.assertEqual(self.panel.current_part["states"]["horizontal"]["clip"], "thruster_forward")
+        self.assertEqual(self.panel.current_motion["part_states"]["back_thrusters"], "horizontal")
+        self.panel.part_dialog(duplicate=True)
+        dialog = self.app.panel
+        dialog.fields["id"].text = "npc_decoration"
+        dialog.fields["name"].text = "NPC 장식"
+        dialog.submit()
+        self.assertEqual(self.panel.part_key, "npc_decoration")
+        self.assertEqual(self.panel.current_part["states"]["horizontal"]["name"], "전진 자세")
+        self.panel.delete_state()
+        self.assertNotIn("horizontal", self.panel.current_part["states"])
+        self.assertIn("horizontal", self.panel.data["layers"]["back_thrusters"]["states"])
+        self.panel.delete_part()
+        self.assertNotIn("npc_decoration", self.panel.data["layers"])
+        self.app.draw()
+
+    def test_dynamic_part_and_order_lists_scroll_without_losing_text(self):
+        from Tools.asset_loader.part_model import add_part
+        self.panel.switch(tab=1)
+        for index in range(20):
+            add_part(self.panel.data, "npc_decor_" + str(index), "장식 " + str(index))
+        self.panel.rebuild()
+        self.panel.fields["part_name"].text = "본체 이름 보존"
+        self.app.mouse = (280, 180)
+        self.panel.content_event(SimpleNamespace(type=self.pico.SDL_MOUSEWHEEL, y=-4))
+        self.assertGreater(self.panel.part_offset, 0)
+        self.assertEqual(self.panel.data["layers"]["body"]["name"], "본체 이름 보존")
+        self.app.draw()
+        self.panel.switch(tab=2)
+        self.app.mouse = (800, 260)
+        self.panel.content_event(SimpleNamespace(type=self.pico.SDL_MOUSEWHEEL, y=-4))
+        self.assertGreater(self.panel.order_offset, 0)
         self.app.draw()
 
 

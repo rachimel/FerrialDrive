@@ -79,17 +79,18 @@ class PicoAssetResource:
         return self.sampler.batch() if self.filtering == 'bicubic' else nullcontext()
 
     def draw(self, clip_name, frame_index, x, y, *, scale=1.0, body=True, shadow=True,
-             shadow_opacity=DEFAULT_SHADOW_OPACITY, layer_order=None):
+             shadow_opacity=DEFAULT_SHADOW_OPACITY, layer_order=None, part_states=None, part_visibility=None):
         if self.closed:
             raise RuntimeError("해제한 에셋이다.")
         if self.mech:
             if body and scale > 0:
-                source = self.mech.rows[clip_name]["source_clip"]
                 order = self.mech.order(clip_name, frame_index) if layer_order is None else layer_order
+                selection = self.mech.selection(clip_name, part_states, part_visibility)
                 with self.render_batch():
                     for layer in order:
-                        if layer in self.mech.sheet_paths and layer not in self.mech.masks.values():
-                            self._draw_sheet(layer, self.mech.sheets[layer].clips[source].frames[frame_index], x, y, scale)
+                        if layer in selection:
+                            key, source = selection[layer]
+                            self._draw_sheet(key, self.mech.sheets[key].clips[source].frames[frame_index], x, y, scale)
             return
         self.draw_frame(self.clips[clip_name].frames[frame_index], x, y,
                         scale=scale, body=body, shadow=shadow, shadow_opacity=shadow_opacity)

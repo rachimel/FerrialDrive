@@ -3,15 +3,16 @@
 from copy import deepcopy
 
 from ferrial_drive.ui.components import Rect
-from .mech_plan import (CHECKS, DIRECTIONS, ENERGY_MODES, EVENTS, LAYERS, MOTIONS, OCCLUSION, STATUSES,
+from .mech_plan import (CHECKS, DIRECTIONS, ENERGY_MODES, EVENTS, MOTIONS, OCCLUSION, STATUSES,
                         default_plan, load_plan, plan_path, save_plan, with_energy_defaults)
 from .production import frame_numbers
 from .widgets import Panel
 from .mech_presets import ORDER_PRESETS, apply_all_directions, apply_mapping, apply_order_preset, mapping_options
 from .mech_preview import draw_preview
+from .part_model import remove_part, remove_state
 
 
-TABS = ("공통 렌더", "출력 단위", "동작·순서", "전환 시점", "무기 조건·검수", "조립 미리보기")
+TABS = ("공통 렌더", "출력 파츠", "동작·순서", "전환 시점", "무기 조건·검수", "조립 미리보기")
 EVENT_HINTS = ("손이 손잡이를 잡는 시점", "수납 부착점 → 손목", "칼집·장착부를 완전히 벗어남",
                "손목 → 수납 부착점", "빈손으로 전환", "수납 부착점 → 독립 위치·회전")
 
@@ -34,6 +35,8 @@ class MechPanel(Panel):
         self.labels = []
         self.advanced = self.help_open = self.frame_options = False
         self.layer_view = "color"
+        self.part_key, self.part_state = "body", "base"
+        self.part_offset = self.order_offset = 0
         self.preview_resource, self.preview_time = None, 0.0
         self.preview_is_sample = False
         self.sample_paths = None
@@ -76,6 +79,14 @@ class MechPanel(Panel):
                         if (row["direction"], row["frame"]) == (direction, self.order_frame))
         return self.current_motion["orders"][direction]
 
+    @property
+    def current_part(self):
+        return self.data["layers"][self.part_key]
+
+    @property
+    def current_variant(self):
+        return self.current_part if self.part_state == "base" else self.current_part["states"][self.part_state]
+
     def field(self, name, label, value, x, y, width=300):
         self.labels.append((label, x, y - 20))
         self.add_field(name, value, Rect(x, y, width, 30))
@@ -86,14 +97,21 @@ class MechPanel(Panel):
                 if key in self.fields:
                     self.data["render"][key] = self.value(key)
         elif self.tab == 1:
-            for layer, _, _ in LAYERS:
-                for key in ("objects", "anchor", "empty_hand", "sheet", "energy_sheet"):
-                    name = f"{layer}.{key}"
-                    if name in self.fields:
-                        self.data["layers"][layer][key] = self.value(name)
-                name = f"{layer}.energy_source"
+            for field in ("anchor", "empty_hand"):
+                name = f"{self.part_key}.{field}"
                 if name in self.fields:
-                    self.data["layers"][layer]["energy_mask"]["source"] = self.value(name)
+                    self.current_part[field] = self.value(name)
+            for field in ("objects", "clip", "sheet", "energy_sheet"):
+                name = f"{self.part_key}.{field}"
+                if name in self.fields:
+                    self.current_variant[field] = self.value(name)
+            if "part_name" in self.fields:
+                self.current_part["name"] = self.value("part_name")
+            if "state_name" in self.fields:
+                self.current_variant["name"] = self.value("state_name")
+            name = f"{self.part_key}.energy_source"
+            if name in self.fields:
+                self.current_variant["energy_mask"]["source"] = self.value(name)
         elif self.tab == 2:
             for key in ("clip", "frames", "reuse", "notes"):
                 self.current_motion[key] = self.value(key)
@@ -123,6 +141,10 @@ class MechPanel(Panel):
                 setattr(self, key, value)
         if motion is not None or direction is not None:
             self.order_frame = None
+        if layer is not None:
+            self.part_key = list(self.data["layers"])[layer]
+        if layer is not None or motion is not None:
+            self.part_state = self.current_motion["part_states"].get(self.part_key, self.current_part["default_state"])
         self.saved = False
         self.rebuild()
         if self.preview_is_sample and motion is not None:
@@ -143,10 +165,49 @@ class MechPanel(Panel):
         self.remember()
         mapping[key], self.saved = value, False
         self.rebuild()
+        if key == "enabled" and self.preview_resource and not self.preview_is_sample:
+            self.attempt(self.refresh_preview)
 
     def select_layer_view(self, value):
         self.remember()
         self.layer_view = value
+        self.rebuild()
+
+    def select_part(self, key):
+        self.remember()
+        self.part_key = key
+        self.part_state = self.current_motion["part_states"].get(key, self.current_part["default_state"])
+        self.rebuild()
+
+    def select_state(self, state):
+        self.remember()
+        self.part_state = state
+        self.current_motion["part_states"][self.part_key] = state
+        self.saved = False
+        self.rebuild()
+
+    def part_dialog(self, *, duplicate=False, state=False):
+        from .part_panel import PartPanel
+        self.remember()
+        self.app.set_panel(PartPanel(self, duplicate=duplicate, state=state))
+
+    def delete_part(self):
+        self.remember()
+        remove_part(self.data, self.part_key)
+        self.part_key, self.part_state, self.saved = "body", "base", False
+        self.order_index = min(self.order_index, len(self.current_order) - 1)
+        self.rebuild()
+
+    def delete_state(self):
+        self.remember()
+        remove_state(self.data, self.part_key, self.part_state)
+        self.part_state, self.saved = "base", False
+        self.rebuild()
+
+    def default_state(self):
+        self.remember()
+        self.current_part["default_state"] = self.part_state
+        self.saved = False
         self.rebuild()
 
     def use_mapping(self, preset):
@@ -175,12 +236,13 @@ class MechPanel(Panel):
     def browse_sheet(self, layer, key):
         from .file_panel import FilePanel
         self.remember()
+        target = self.current_variant
         def selected(path):
-            self.data["layers"][layer][key] = str(path)
+            target[key] = str(path)
             self.saved = False
             self.rebuild()
         self.app.set_panel(FilePanel(self.app, selected, extensions={".json"},
-            initial=self.data["layers"][layer][key] or self.app.source.parent, parent=self))
+            initial=target[key] or self.app.source.parent, parent=self))
 
     def refresh_preview(self):
         from ferrial_drive.assets.pico_assets import PicoAssetBackend
@@ -225,6 +287,10 @@ class MechPanel(Panel):
         self.close()
 
     def rebuild(self):
+        if self.part_key not in self.data["layers"]:
+            self.part_key = "body"
+        if self.part_state != "base" and self.part_state not in self.current_part["states"]:
+            self.part_state = self.current_part["default_state"]
         self.fields, self.buttons, self.labels, self.focus = {}, [], [], None
         self.button_styles, self.button_markers, self.choice_popup = {}, {}, None
         for index, label in enumerate(TABS):
@@ -250,28 +316,47 @@ class MechPanel(Panel):
                 self.field("scale", "정사영 범위", self.data["render"]["scale"], 264, 390, 300)
                 self.field("pivot", "기준점 X,Y · bottom-left", self.data["render"]["pivot"], 596, 390, 300)
         elif self.tab == 1:
-            for value, label, x in (("color", "색상·부착", 264), ("energy", "에너지 마스크", 424), ("sheets", "분리 시트", 584)):
-                self.button(label, Rect(x, 92, 148, 30), lambda selected=value: self.select_layer_view(selected),
+            self.button("추가", Rect(264, 92, 88, 30), self.part_dialog)
+            self.button("복제", Rect(360, 92, 76, 30), lambda: self.part_dialog(duplicate=True))
+            self.button("삭제", Rect(444, 92, 76, 30), self.delete_part)
+            self.choice("구성 프리셋", mapping_options(), Rect(744, 92, 292, 30), self.use_mapping)
+            self.button("프리셋 저장", Rect(1048, 92, 168, 30), self.save_mapping)
+            keys = list(self.data["layers"])
+            self.part_offset = min(self.part_offset, max(0, len(keys) - 15))
+            for index, key in enumerate(keys[self.part_offset:self.part_offset + 15]):
+                self.button(self.data["layers"][key]["name"], Rect(264, 150 + index * 34, 252, 32),
+                            lambda value=key: self.select_part(value), style="selected" if key == self.part_key else "input")
+            for value, label, x in (("color", "부착·오브젝트", 536), ("energy", "에너지 마스크", 768), ("sheets", "분리 시트", 1000)):
+                self.button(label, Rect(x, 138, 216, 30), lambda selected=value: self.select_layer_view(selected),
                             style="selected" if self.layer_view == value else "input")
-            self.choice("매핑 프리셋", mapping_options(), Rect(760, 92, 280, 30), self.use_mapping)
-            self.button("매핑 저장", Rect(1052, 92, 164, 30), self.save_mapping)
-            for index, (layer, _, _) in enumerate(LAYERS):
-                y, row = 170 + index * 38, self.data["layers"][layer]
-                if self.layer_view == "sheets":
-                    for key, x, width, button_x in (("sheet", 432, 296, 736), ("energy_sheet", 792, 372, 1172)):
-                        self.add_field(f"{layer}.{key}", row[key], Rect(x, y, width, 30))
-                        self.button("…", Rect(button_x, y, 44, 30), lambda current=layer, field=key: self.browse_sheet(current, field))
-                elif self.layer_view == "energy":
-                    mask = row["energy_mask"]
-                    self.choice(dict(ENERGY_MODES)[mask["mode"]], ENERGY_MODES, Rect(432, y, 240, 30),
-                                lambda value, current=mask: self.choose(current, "mode", value))
-                    if mask["mode"] != "none":
-                        self.add_field(f"{layer}.energy_source", mask["source"], Rect(688, y, 528, 30))
-                else:
-                    self.add_field(f"{layer}.objects", row["objects"], Rect(432, y, 348, 30))
-                    self.add_field(f"{layer}.anchor", row["anchor"], Rect(796, y, 188, 30))
-                    if layer in ("left_hand", "right_hand"):
-                        self.add_field(f"{layer}.empty_hand", row["empty_hand"], Rect(1000, y, 216, 30))
+            part, variant, key = self.current_part, self.current_variant, self.part_key
+            self.field("part_name", "파츠 이름", part["name"], 536, 210, 400)
+            self.button("표시 ON" if part["enabled"] else "표시 OFF", Rect(948, 210, 268, 30),
+                        lambda: self.choose(part, "enabled", not part["enabled"]))
+            options = [("base", "기본")] + [(state, row["name"]) for state, row in part["states"].items()]
+            label = dict(options)[self.part_state]
+            self.choice("상태: " + label, options, Rect(536, 284, 320, 30), self.select_state)
+            self.button("상태 추가", Rect(868, 284, 160, 30), lambda: self.part_dialog(state=True))
+            self.button("상태 삭제", Rect(1040, 284, 176, 30), self.delete_state)
+            if self.part_state != "base":
+                self.field("state_name", "상태 이름", variant["name"], 536, 366, 400)
+                self.button("상태 표시 ON" if variant["enabled"] else "상태 표시 OFF", Rect(948, 366, 268, 30),
+                            lambda: self.choose(variant, "enabled", not variant["enabled"]))
+            if self.layer_view == "color":
+                self.field(f"{key}.anchor", "공통 부착점", part["anchor"], 536, 430, 680)
+                self.field(f"{key}.objects", "오브젝트 · 쉼표 구분", variant["objects"], 536, 494, 680)
+                self.field(f"{key}.empty_hand", "대체 오브젝트 · 빈손 등 (선택)", part["empty_hand"], 536, 558, 680)
+            elif self.layer_view == "energy":
+                mask = variant["energy_mask"]
+                self.choice(dict(ENERGY_MODES)[mask["mode"]], ENERGY_MODES, Rect(536, 430, 320, 30),
+                            lambda value: self.choose(mask, "mode", value))
+                self.field(f"{key}.energy_source", "마스크 입력 · 재질/노드 또는 오브젝트", mask["source"], 536, 494, 680)
+            else:
+                for field, label, y in (("sheet", "색상 시트 JSON", 430), ("energy_sheet", "에너지 마스크 시트 JSON", 494)):
+                    self.field(f"{key}.{field}", label, variant[field], 536, y, 624)
+                    self.button("…", Rect(1172, y, 44, 30), lambda value=field: self.browse_sheet(key, value))
+                self.field(f"{key}.clip", "상태 클립 접두사 · 비우면 본체 동작과 동일", variant["clip"], 536, 558, 680)
+            self.button("이 상태를 기본으로", Rect(536, 620, 216, 30), self.default_state)
         elif self.tab in (2, 3, 5):
             self.choice("동작: " + MOTIONS[self.motion][1], [(i, label) for i, (_, label) in enumerate(MOTIONS)],
                         Rect(264, 98, 320, 32), lambda value: self.switch(motion=value))
@@ -286,9 +371,11 @@ class MechPanel(Panel):
                             Rect(900, 98, 316, 32), lambda value: self.choose(self.current_motion["occlusion"], direction, value))
                 self.choice("순서 프리셋", ORDER_PRESETS, Rect(744, 142, 224, 30), self.order_preset)
                 self.button("현재 동작 전체 방향 적용", Rect(980, 142, 236, 30), self.all_directions)
-                for index, key in enumerate(self.current_order):
-                    self.button(f"{index + 1}. {dict((k, v) for k, v, _ in LAYERS)[key]}",
-                                Rect(744, 196 + index * 24, 472, 23), lambda i=index: self.select_order(i),
+                self.order_offset = min(self.order_offset, max(0, len(self.current_order) - 10))
+                for slot, key in enumerate(self.current_order[self.order_offset:self.order_offset + 10]):
+                    index = self.order_offset + slot
+                    self.button(f"{index + 1}. {self.data['layers'][key]['name']}",
+                                Rect(744, 196 + slot * 24, 472, 23), lambda i=index: self.select_order(i),
                                 style="selected" if index == self.order_index else "input")
                 self.button("↑ 뒤로", Rect(744, 454, 112, 30), lambda: self.move_order(-1))
                 self.button("↓ 앞으로", Rect(868, 454, 112, 30), lambda: self.move_order(1))
@@ -337,6 +424,7 @@ class MechPanel(Panel):
         target = max(0, min(len(order) - 1, self.order_index + delta))
         order.insert(target, order.pop(self.order_index))
         self.order_index = target
+        self.order_offset = min(max(self.order_offset, target - 9), target)
         self.saved = False
         self.rebuild()
 
@@ -400,6 +488,18 @@ class MechPanel(Panel):
         if self.preview_playing:
             self.preview_time += delta_seconds
 
+    def content_event(self, event):
+        if event.type != self.app.pico.SDL_MOUSEWHEEL:
+            return
+        if self.tab == 1 and Rect(264, 150, 252, 510).contains(*self.app.mouse):
+            self.remember()
+            self.part_offset = max(0, min(max(0, len(self.data["layers"]) - 15), self.part_offset - event.y * 3))
+            self.rebuild()
+        elif self.tab == 2 and Rect(744, 196, 472, 240).contains(*self.app.mouse):
+            self.remember()
+            self.order_offset = max(0, min(max(0, len(self.current_order) - 10), self.order_offset - event.y * 3))
+            self.rebuild()
+
     def handle_event(self, event):
         if self.focus is not None and event.type in (self.app.pico.SDL_TEXTINPUT, self.app.pico.SDL_KEYDOWN):
             self.saved = False
@@ -421,20 +521,16 @@ class MechPanel(Panel):
             r.text("출력 용도", 900, 234, "small", c["muted"])
             r.text("모든 레이어에 같은 카메라·크기·기준점 적용", 264, 452, "small", c["muted"])
         elif self.tab == 1:
-            if self.layer_view == "sheets":
-                headers = (("출력 단위", 264), ("색상 시트 JSON", 432), ("에너지 마스크 시트 JSON", 792))
+            r.text(f"파츠 {len(self.data['layers'])} · 휠 이동", 264, 130, "small", c["muted"])
+            r.text("ID: " + self.part_key, 536, 244, "small", c["muted"], max_width=680)
+            r.text("현재 동작의 상태 · " + MOTIONS[self.motion][1], 536, 264, "small", c["muted"], max_width=680)
+            if self.part_state == "base":
+                r.text("기본 상태 · 파츠의 공통 입력 사용", 536, 354, "small", c["muted"])
             else:
-                headers = (("출력 단위", 264), ("분리 방식", 432), ("마스크 입력 · 재질/노드 또는 오브젝트 이름", 688)) if self.layer_view == "energy" else (
-                    ("출력 단위", 264), ("오브젝트 · 쉼표 구분", 432), ("부착 기준", 796), ("빈손 오브젝트", 1000))
-            for label, x in headers:
-                r.text(label, x, 142, "small", c["muted"])
-            for index, (_, label, _) in enumerate(LAYERS):
-                r.text(label, 264, 178 + index * 38, "small", c["text"], max_width=156)
+                r.text("상태 ID: " + self.part_state, 536, 326, "small", c["muted"], max_width=680)
             if self.layer_view == "energy":
-                r.text("색상은 발광 없이 · 마스크는 선형 흑백 데이터", 264, 558, "small", c["muted"])
-                r.text("각 마스크는 소유 출력 단위의 프레임·기준점·가림·부착 전환을 함께 따름", 264, 584, "small", c["muted"])
-            else:
-                r.text("손·무기·칼집은 독립 유지 · 손+무기는 출력 시 묶음", 264, 558, "small", c["muted"])
+                r.text("색상은 발광 없이 · 마스크는 선형 데이터", 536, 550, "small", c["muted"])
+            r.text("기본 상태: " + self.current_part["default_state"], 768, 628, "small", c["muted"], max_width=448)
         elif self.tab in (2, 3, 5):
             if self.tab == 2:
                 r.text("그리기 순서 · 위에서 아래로 뒤 → 앞", 744, 176, "small", c["muted"])
@@ -464,8 +560,8 @@ class MechPanel(Panel):
             explanations = (
                 ("한 장면에서 모든 레이어를 출력한다. 레이어별 자동 맞춤은 사용하지 않는다.",
                  "세부 설정에서 정사영 범위와 기준점을 조정한다. 동작별 프레임은 비우면 공통 값을 사용한다."),
-                ("색상·부착과 에너지 마스크를 출력 단위별로 연결한다. 마스크 색·밝기는 게임 합성에서 제어한다.",
-                 "칼집 마스크는 검과 독립 유지한다. 손 마스크는 빈손/파지 상태의 실제 손·무기 구성을 따른다."),
+                ("파츠를 추가·복제·삭제하고 선택한 파츠의 부착점·시트·상태를 편집한다. 이름을 바꿔도 ID는 유지한다.",
+                 "상태 시트가 비어 있으면 기본 시트를 사용한다. 새 색상 시트를 지정한 상태의 마스크는 따로 연결한다."),
                 ("기본 순서와 프레임별 예외는 독립적이다. 프레임별 순서를 펼쳐 특정 프레임을 편집한다.",
                  "몸 앞뒤를 동시에 가로지르는 무기는 가림 방식에서 추가 분할 또는 가림 처리를 지정한다."),
                 ("재생 인덱스가 아닌 Blender 원본 프레임을 입력한다.",

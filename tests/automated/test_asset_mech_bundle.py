@@ -16,6 +16,7 @@ from Tools.asset_loader.mech_export import build_mech, copy_mech, import_mech
 from Tools.asset_loader.mech_plan import default_plan, load_plan
 from Tools.asset_loader.mech_presets import apply_all_directions, apply_mapping, apply_order_preset, save_mapping
 from samples.mech_asset.make_sample import write_sample
+from Tools.asset_loader.part_model import add_part, add_state, all_orders, remove_part, remove_state
 
 
 class MechBundleTests(unittest.TestCase):
@@ -143,6 +144,7 @@ class MechBundleTests(unittest.TestCase):
 
     def test_old_eight_layer_plan_gains_slots_without_reordering_existing_parts(self):
         legacy = deepcopy(self.plan)
+        legacy["version"] = 1
         added = {"side_slot_l", "side_slot_r"}
         for key in added:
             legacy["layers"].pop(key)
@@ -165,6 +167,115 @@ class MechBundleTests(unittest.TestCase):
         self.assertTrue(all(path.is_relative_to(self.folder / "library") for path in loaded.dependencies))
         for key, sheet in build_mech(self.plan).sheets.items():
             self.assertEqual(sheet.image_path.read_bytes(), loaded.sheets[key].image_path.read_bytes())
+
+    def test_part_clone_delete_and_name_changes_preserve_ids_and_references(self):
+        motion = self.plan["motions"]["equipped_idle"]
+        motion["overrides"] = [{"direction": "s", "frame": 3, "order": list(motion["orders"]["s"])}]
+        add_part(self.plan, "npc_decoration", "NPC 장식")
+        add_state(self.plan, "npc_decoration", "wind", "바람")
+        motion["part_states"]["npc_decoration"] = "wind"
+        add_part(self.plan, "decoration_copy", "장식 복제", duplicate="npc_decoration")
+        self.plan["layers"]["npc_decoration"]["name"] = "이름 변경"
+        self.assertEqual(motion["part_states"]["decoration_copy"], "wind")
+        self.assertTrue(all("npc_decoration" in order and "decoration_copy" in order for order in all_orders(self.plan)))
+        remove_state(self.plan, "npc_decoration", "wind")
+        self.assertNotIn("npc_decoration", motion["part_states"])
+        self.assertIn("wind", self.plan["layers"]["decoration_copy"]["states"])
+        remove_part(self.plan, "npc_decoration")
+        self.assertTrue(all("npc_decoration" not in order for order in all_orders(self.plan)))
+        before = deepcopy(self.plan)
+        with self.assertRaises(ValueError):
+            remove_part(self.plan, "body")
+        self.assertEqual(before, self.plan)
+
+    def test_npc_preset_and_v2_roundtrip_do_not_reinsert_fixed_mech_parts(self):
+        from Tools.asset_loader.mech_plan import save_plan
+        apply_mapping(self.plan, "npc")
+        add_part(self.plan, "npc_ribbon", "NPC 장식")
+        self.plan["layers"]["npc_ribbon"]["sheet"] = self.paths["left_hand"]["sheet"]
+        path = self.folder / "npc.json"
+        save_plan(path, self.plan)
+        loaded = load_plan(path, asset_id=self.plan["asset_id"], source=self.plan["source"])
+        self.assertEqual(loaded["version"], 2)
+        self.assertEqual(set(loaded["layers"]), {"body", "npc_ribbon"})
+        self.assertEqual(set(build_mech(loaded).layer_rows), {"body", "npc_ribbon"})
+
+    def test_state_selection_changes_actual_pixels_and_survives_split_export(self):
+        from Tools.asset_loader.mech_export import mech_document
+        add_part(self.plan, "npc_ribbon", "NPC 장식")
+        part = self.plan["layers"]["npc_ribbon"]
+        part.update(sheet=self.paths["left_hand"]["sheet"], energy_sheet=self.paths["body"]["energy_sheet"])
+        add_state(self.plan, "npc_ribbon", "horizontal", "수평")
+        part["states"]["horizontal"]["sheet"] = self.paths["right_hand"]["sheet"]
+        add_state(self.plan, "npc_ribbon", "hidden", "숨김")
+        part["states"]["hidden"]["enabled"] = False
+        resource = PicoAssetBackend("nearest").load(mech_document(self.plan))
+        def pixel(state):
+            self.pico.SDL_SetRenderDrawColor(self.pico.renderer, 0, 0, 0, 255)
+            self.pico.SDL_RenderClear(self.pico.renderer)
+            resource.draw("equipped_idle/s", 0, 48, 10, part_states={"npc_ribbon": state})
+            rect, data = self.pico.SDL_Rect(45, 754, 1, 1), (c_ubyte * 4)()
+            self.assertEqual(self.pico.SDL_RenderReadPixels(self.pico.renderer, rect, self.pico.SDL_PIXELFORMAT_RGBA32, data, 4), 0)
+            return tuple(data[:3])
+        try:
+            self.assertNotEqual(pixel("base"), pixel("horizontal"))
+            self.assertNotIn("npc_ribbon", resource.mech.selection("equipped_idle/s", {"npc_ribbon": "hidden"}))
+        finally:
+            resource.close()
+        self.plan["motions"]["equipped_idle"]["part_states"]["npc_ribbon"] = "horizontal"
+        mech = build_mech(self.plan)
+        exported = copy_mech(mech, self.folder / "states")
+        loaded = MechBundle.load(exported)
+        self.assertEqual(loaded.selection("equipped_idle/s")["npc_ribbon"][0], "npc_ribbon:horizontal")
+        self.assertIn("npc_ribbon", loaded.masks)
+        self.assertNotIn("npc_ribbon:horizontal", loaded.masks)
+        restored = import_mech(default_plan("test_mech", exported), loaded)
+        self.assertEqual(build_mech(restored).rows, mech.rows)
+        for key, sheet in mech.sheets.items():
+            self.assertEqual(sheet.image_path.read_bytes(), loaded.sheets[key].image_path.read_bytes())
+
+    def test_state_clip_alias_and_alignment_are_checked_when_selected(self):
+        add_part(self.plan, "back_thrusters", "등 스러스터", template="thrusters")
+        part = self.plan["layers"]["back_thrusters"]
+        part["sheet"] = self.paths["left_hand"]["sheet"]
+        state = part["states"]["to_horizontal"]
+        data = json.loads(Path(self.paths["right_hand"]["sheet"]).read_text())
+        data["image"]["path"] = str(Path(self.paths["right_hand"]["sheet"]).with_suffix(".png"))
+        for row in data["animations"]:
+            row["name"] = row["name"].replace("equipped_idle/", "turn/")
+        path = self.folder / "turn.json"
+        path.write_text(json.dumps(data))
+        state.update(sheet=str(path), clip="turn")
+        self.plan["motions"]["equipped_idle"]["part_states"]["back_thrusters"] = "to_horizontal"
+        mech = build_mech(self.plan)
+        self.assertEqual(mech.selection("equipped_idle/s")["back_thrusters"][1], "turn/s")
+        data["animations"][0]["frames"][0]["pivot"] = [47, 10]
+        path.write_text(json.dumps(data))
+        with self.assertRaises(ValueError):
+            build_mech(self.plan)
+
+    def test_dynamic_preset_restores_parts_states_and_preserves_matching_sheet_paths(self):
+        add_part(self.plan, "npc_cape", "NPC 망토")
+        add_state(self.plan, "npc_cape", "moving", "이동")
+        self.plan["layers"]["npc_cape"]["sheet"] = self.paths["left_hand"]["sheet"]
+        self.plan["layers"]["npc_cape"]["states"]["moving"]["sheet"] = self.paths["right_hand"]["sheet"]
+        preset = save_mapping("NPC 파츠 구성", self.plan, root=self.folder)
+        before = deepcopy(self.plan["layers"]["npc_cape"])
+        self.plan["layers"]["npc_cape"]["name"] = "변경"
+        apply_mapping(self.plan, str(preset))
+        self.assertEqual(self.plan["layers"]["npc_cape"], before)
+        apply_order_preset(self.plan, "equipped_idle", "s", "front")
+        self.assertEqual(self.plan["motions"]["equipped_idle"]["orders"]["s"][-1], "npc_cape")
+        remove_part(self.plan, "npc_cape")
+        apply_mapping(self.plan, str(preset))
+        self.assertIn("moving", self.plan["layers"]["npc_cape"]["states"])
+
+    def test_unsafe_or_case_colliding_part_ids_are_rejected_without_changes(self):
+        before = deepcopy(self.plan)
+        for key in ("../decor", "CON", "Body", "body", "1_part"):
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                add_part(self.plan, key, "장식")
+        self.assertEqual(before, self.plan)
 
 
 if __name__ == "__main__":
