@@ -4,7 +4,7 @@ import json
 import math
 
 
-def fingerprint(obj):
+def fingerprint(obj, excluded_uv=()):
     """국소 수정 범위 확인용. Blender 데이터 전체의 동등성 증명은 아니다."""
     data = {'type': obj.type, 'parent': obj.parent.name if obj.parent else None,
             'parent_type': obj.parent_type, 'parent_vertices': list(obj.parent_vertices),
@@ -18,7 +18,7 @@ def fingerprint(obj):
     if obj.type == 'MESH':
         data.update(vertices=[list(v.co) for v in obj.data.vertices],
                     polygons=[(list(p.vertices), p.material_index, p.use_smooth) for p in obj.data.polygons],
-                    uv={u.name: [list(l.uv) for l in u.data] for u in obj.data.uv_layers},
+                    uv={u.name: [list(l.uv) for l in u.data] for u in obj.data.uv_layers if u.name not in excluded_uv},
                     weights=[[(obj.vertex_groups[g.group].name, g.weight) for g in v.groups] for v in obj.data.vertices],
                     materials=[m.name if m else None for m in obj.data.materials],
                     keys={k.name: [list(v.co) for v in k.data] for k in obj.data.shape_keys.key_blocks}

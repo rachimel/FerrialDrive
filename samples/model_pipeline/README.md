@@ -26,3 +26,13 @@
 ```
 
 이 마지막 명령은 도구 개발용 회귀 테스트다. 실제 에셋 제작에서 품질 검사를 한 파일로 묶어 실행하는 경로가 아니다. 새 에셋에는 manifest의 source/해시/역할별 객체명/operations와 별도 검사 설정만 바꾼다.
+
+## PBR 표면과 UV 패널
+
+실제 게임 에셋이나 외부 다운로드 없이 기본 상자와 직접 생성한 명도 맵으로 실행한다. Blender 내장 NumPy를 사용한다. 새 출력 폴더를 지정한다.
+
+```powershell
+& $blender_exe -b --factory-startup --disable-autoexec --python-exit-code 1 --python samples/model_pipeline/pbr_surface_demo.py -- --output output/model_pipeline/pbr_demo
+```
+
+PBR 맵·UV 패널 도안과 `sample.blend`를 출력한다. 형상/UV 보존, 발광 연결 보존, 반복 적용 시 노드 중복 방지, 저장·재로딩을 확인한다. 시각적 품질 승인이나 실제 메카의 패널 왜곡 검증을 대신하지 않는다.

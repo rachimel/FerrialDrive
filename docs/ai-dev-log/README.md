@@ -1,5 +1,7 @@
 # AI 개발 로그
 
+- [2026-11-09 플레이어 메카 PBR·가슴 패널](2026-11-09-player-mech-pbr-chest-panels.md): 무료 1K 재질·가슴만 확대 패널·전용 UV·다른 부위 모서리 효과
+
 - [2026-11-09 Pose Tool 내부 통합](2026-11-09-pose-tool-integration.md): Asset Tool 직접 편집·비표시 Blender·손바닥 손잡이·키/저장/출력/렌더 전달
 
 - [2026-11-09 반대편 슬롯 무기 수납](2026-11-09-cross-body-weapon-storage.md): 오른손→메카 왼쪽·왼손→메카 오른쪽·사용 손 기준

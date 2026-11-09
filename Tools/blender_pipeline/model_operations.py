@@ -193,6 +193,15 @@ def apply_operations(operations):
             if slot < 0 or slot >= len(obj.data.materials):
                 raise ValueError('기존 재질 슬롯만 변경한다.')
             obj.data.materials[slot] = material
+        elif kind == 'project_panel_uv':
+            from panel_detail import project_panel_uv
+            project_panel_uv(operation)
+        elif kind == 'generate_panel_detail':
+            from panel_detail import generate_panel_detail
+            generate_panel_detail(operation)
+        elif kind == 'apply_pbr_surface':
+            from material_surface import apply_pbr_surface
+            apply_pbr_surface(operation)
         elif kind == 'pack_images':
             for image in bpy.data.images:
                 if image.source in ('FILE', 'GENERATED'):
