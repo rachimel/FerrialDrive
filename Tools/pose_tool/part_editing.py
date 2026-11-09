@@ -177,7 +177,7 @@ class PartEditing:
         bones = self.finger_bones(side, finger, joint)
         if not bones:
             raise ValueError("선택한 손가락 관절이 없다.")
-        # 마디별 rest roll이 달라도 뿌리 관절과 같은 방향으로 굽힌다.
+        # 네 손가락은 손바닥 기준의 공통 축을 각 마디 좌표로 변환한다.
         for bone in bones:
             bone.rotation_mode = "QUATERNION"
             bone.rotation_quaternion = bone.rotation_quaternion @ Matrix.Rotation(math.radians(degrees), 3, self.finger_axis(bone)).to_quaternion()
@@ -185,8 +185,26 @@ class PartEditing:
 
     def finger_axis(self, bone):
         finger = next(name for name in FINGERS if bone.name.startswith(name))
-        root = self.proxy.data.bones[finger+("Base" if finger == "Thumb" else "01")+bone.name[-2:]]
-        axis = root.matrix_local.to_3x3().col[2]
+        if finger == "Thumb":
+            root = self.proxy.data.bones["ThumbBase"+bone.name[-2:]]
+            axis = root.matrix_local.to_3x3().col[2]
+        else:
+            side = bone.name[-1]
+            names = ("Index", "Middle", "Ring", "Little")
+            roots = [self.proxy.data.bones.get(name+"01."+side) for name in names]
+            roots = [root for root in roots if root]
+            hand_name = engine.state()["profile"]["limbs"]["hand."+side]["end"]
+            hand = self.proxy.data.bones[hand_name]
+            forward = sum((root.matrix_local.to_3x3().col[1] for root in roots), Vector()).normalized()
+            axis = roots[-1].head_local-roots[0].head_local if len(roots) > 1 else hand.matrix_local.to_3x3().col[0]
+            axis -= forward*axis.dot(forward)
+            if axis.length < 1e-6:
+                raise ValueError("네 손가락의 공통 굽힘 축을 정할 수 없다.")
+            axis.normalize()
+            # 기존 무기 파지 좌표계에서 손바닥 면은 Hand 로컬 -Z다.
+            palm_normal = -hand.matrix_local.to_3x3().col[2]
+            if axis.cross(forward).dot(palm_normal) < 0:
+                axis.negate()
         return (bone.bone.matrix_local.to_3x3().inverted() @ axis).normalized()
 
     def hand_pose(self, side, pose):
