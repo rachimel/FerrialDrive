@@ -47,6 +47,48 @@ class ModelPipelineTests(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             self.run_build()
 
+    def test_animation_can_mute_only_named_carry_constraint(self):
+        from model_operations import apply_operations
+        bpy.ops.object.armature_add()
+        rig = bpy.context.object
+        bone = rig.pose.bones[0]
+        carry = bone.constraints.new('COPY_ROTATION')
+        carry.name = 'Carry'
+        other = bone.constraints.new('LIMIT_ROTATION')
+        apply_operations([{'op': 'set_constraint_mute', 'object': rig.name,
+                           'bone': bone.name, 'constraint': 'Carry', 'muted': True}])
+        self.assertTrue(carry.mute)
+        self.assertFalse(other.mute)
+        with self.assertRaises(KeyError):
+            apply_operations([{'op': 'set_constraint_mute', 'object': rig.name,
+                               'bone': bone.name, 'constraint': 'Missing', 'muted': True}])
+
+    def test_animation_setup_survives_saved_reload_without_changing_source(self):
+        from animation_pipeline import bake
+        bpy.ops.object.armature_add()
+        rig = bpy.context.object
+        bone = rig.pose.bones[0]
+        carry = bone.constraints.new('COPY_ROTATION')
+        carry.name = 'Carry'
+        source = self.directory / 'source.blend'
+        bpy.ops.wm.save_as_mainfile(filepath=str(source))
+        digest = hashlib.sha256(source.read_bytes()).hexdigest()
+        manifest = self.directory / 'animation.json'
+        manifest.write_text(json.dumps({'version': 1, 'fps': 8, 'asset_id': 'setup_test',
+            'render_settings': {'ortho_scale': 7.2, 'camera_target': [0, 0, 1.25]},
+            'source': str(source), 'source_sha256': digest, 'rig': rig.name, 'root': rig.name,
+            'setup_operations': [{'op': 'set_constraint_mute', 'object': rig.name,
+                                  'bone': bone.name, 'constraint': 'Carry', 'muted': True}],
+            'clips': [{'name': 'idle', 'samples': [{'frame': 1, 'bones': {
+                bone.name: [list(row) for row in Matrix.Identity(4)]}}]}]}), encoding='utf-8')
+        rig_name, bone_name = rig.name, bone.name
+        bake(manifest, self.directory / 'animation')
+        self.assertTrue(bpy.data.objects[rig_name].pose.bones[bone_name].constraints['Carry'].mute)
+        self.assertEqual(hashlib.sha256(source.read_bytes()).hexdigest(), digest)
+        config = json.loads((self.directory / 'animation/export_configs/idle.json').read_text())
+        self.assertEqual(config['camera']['ortho_scale'], 7.2)
+        self.assertEqual(config['camera']['target'], [0, 0, 1.25])
+
     def test_bone_attachment_preserves_world_and_follows_pose(self):
         from model_operations import apply_operations
         from mathutils import Vector

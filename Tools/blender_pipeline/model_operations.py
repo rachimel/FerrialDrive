@@ -52,6 +52,10 @@ def apply_operations(operations):
                     track.mute = True
             for name, matrix in matrices.items():
                 obj.pose.bones[name].matrix_basis = matrix
+        elif kind == 'set_constraint_mute':
+            obj = bpy.data.objects[operation['object']]
+            owner = obj.pose.bones[operation['bone']] if operation.get('bone') else obj
+            owner.constraints[operation['constraint']].mute = bool(operation['muted'])
         elif kind == 'aim_bone':
             from mathutils import Matrix
             obj = bpy.data.objects[operation['object']]

@@ -53,6 +53,10 @@ def bake(manifest, destination):
     if destination.exists():
         raise FileExistsError('새 출력 폴더가 필요하다.')
     bpy.ops.wm.open_mainfile(filepath=str(source))
+    if data.get('setup_operations'):
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from model_operations import apply_operations
+        apply_operations(data['setup_operations'])
     rig = bpy.data.objects[data['rig']]
     animated = {rig.name}
     for clip in data['clips']:
@@ -126,12 +130,13 @@ def bake(manifest, destination):
     configs = destination / 'export_configs'
     configs.mkdir()
     index = []
+    render_settings = data.get('render_settings', {})
     for clip in data['clips']:
         frames = [s['frame'] for s in clip['samples']]
         config = render_config(asset_id=data['asset_id'], animation_name=clip['name'], frames=','.join(map(str, frames)),
-                               fps=data['fps'], width=192, height=192, ortho_scale=5.8, samples=16,
+                               fps=data['fps'], width=192, height=192, ortho_scale=render_settings.get('ortho_scale', 5.8), samples=16,
                                root_object=data['root'], auto_fit=False)
-        config['camera'].update(position=[0,-8,6], target=[0,0,1.5])
+        config['camera'].update(position=[0,-8,6], target=render_settings.get('camera_target', [0,0,1.5]))
         config['source_blend'] = '../animations.blend'
         (configs / (clip['name']+'.json')).write_text(json.dumps(config, indent=2), encoding='utf-8')
         events = [dict(event, frame=frames[event['frame']], clip_frame=event['frame']) for event in clip.get('events', [])]
