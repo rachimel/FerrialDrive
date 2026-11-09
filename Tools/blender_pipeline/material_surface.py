@@ -3,6 +3,34 @@ import math
 from pathlib import Path
 
 
+def set_surface_finish(config):
+    """공통 PBR 표면의 반사만 조정한다. 유리와 발광 전용 재질은 선택하지 않는다."""
+    import bpy
+
+    low, high = config.get('roughness_range', [.60, .80])
+    specular = config.get('specular', .30)
+    edge_roughness = config.get('edge_roughness', .60)
+    if not all(isinstance(v, (int,float)) and math.isfinite(v) and 0 <= v <= 1
+               for v in (low,high,specular,edge_roughness)) or low > high:
+        raise ValueError('거칠기와 반사 값은 유한한 0~1 범위여야 한다.')
+    materials = ([bpy.data.materials[name] for name in config['materials']] if config.get('materials')
+                 else [m for m in bpy.data.materials if m.node_tree and m.node_tree.nodes.get('SurfacePBR::거칠기 범위')])
+    for material in materials:
+        nodes = material.node_tree.nodes
+        roughness = nodes.get('SurfacePBR::거칠기 범위')
+        if roughness is None:
+            raise ValueError('공통 PBR 표면만 조정한다: '+material.name)
+        roughness.inputs['To Min'].default_value = low
+        roughness.inputs['To Max'].default_value = high
+        worn = nodes.get('SurfacePBR::마찰면 거칠기')
+        if worn:
+            worn.inputs[2].default_value = (edge_roughness,)*3+(1,)
+        for node in nodes:
+            if node.type == 'BSDF_PRINCIPLED':
+                node.inputs['Specular IOR Level'].default_value = specular
+                node.inputs['Coat Weight'].default_value = 0
+
+
 def apply_pbr_surface(config):
     import bpy
 

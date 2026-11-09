@@ -198,6 +198,15 @@ def apply_operations(operations):
             if slot < 0 or slot >= len(obj.data.materials):
                 raise ValueError('기존 재질 슬롯만 변경한다.')
             obj.data.materials[slot] = material
+        elif kind == 'set_surface_finish':
+            from material_surface import set_surface_finish
+            set_surface_finish(operation)
+        elif kind == 'generate_boundary_texture':
+            from boundary_detail import generate_boundary_texture
+            generate_boundary_texture(operation)
+        elif kind == 'apply_boundary_texture':
+            from boundary_detail import apply_boundary_texture
+            apply_boundary_texture(operation)
         elif kind == 'project_panel_uv':
             from panel_detail import project_panel_uv
             project_panel_uv(operation)

@@ -74,6 +74,24 @@ def main():
     names = [n.name for n in material.node_tree.nodes if n.name.startswith('SurfacePBR::')]
     assert all(not name.endswith('.001') for name in names), '반복 적용 노드 중복'
     assert any(n.type == 'BUMP' and n.label == '새 패널 이음 깊이' for n in material.node_tree.nodes)
+    boundary_before = fingerprint(obj)
+    boundary_path = str(output/'boundary_mask.png')
+    apply_operations([dict(op='generate_boundary_texture',objects=[obj.name],output=boundary_path,width=.015)])
+    assert fingerprint(obj, excluded_uv=('UV_Boundary',)) == boundary_before
+    assert next(layer.name for layer in obj.data.uv_layers if layer.active_render) == 'UVMap'
+    apply_operations([dict(op='create_box',name='UnmarkedBox',size=[1,1,1],location=[2,0,0],material='Coating')])
+    assert bpy.data.objects['UnmarkedBox'].data.attributes.get('boundary_detail_enabled') is None
+    normal_link = shader.inputs['Normal'].links[0].from_node.name
+    for _ in range(2):
+        apply_operations([dict(op='apply_boundary_texture',material='Coating',image=boundary_path)])
+        assert shader.inputs['Normal'].links[0].from_node.name == normal_link
+        assert shader.inputs['Emission Color'].links[0].from_node == emission
+    assert material.node_tree.nodes.get('BoundaryDetail::지정 외장만 적용').attribute_name == 'boundary_detail_enabled'
+    assert all(not n.name.endswith('.001') for n in material.node_tree.nodes if n.name.startswith('BoundaryDetail::'))
+    apply_operations([dict(op='set_surface_finish',roughness_range=[.60,.80],specular=.28,edge_roughness=.60)])
+    assert abs(material.node_tree.nodes['SurfacePBR::거칠기 범위'].inputs['To Min'].default_value-.60)<1e-6
+    assert abs(shader.inputs['Specular IOR Level'].default_value-.28)<1e-6
+    before = fingerprint(obj)
     bpy.context.preferences.filepaths.save_version = 0
     bpy.context.preferences.filepaths.file_preview_type = 'NONE'
     apply_operations([dict(op='pack_images')])
@@ -84,6 +102,7 @@ def main():
     assert fingerprint(bpy.data.objects[object_name]) == before
     glass = bpy.data.materials['ClearCover'].node_tree.nodes.get('Principled BSDF')
     assert glass.inputs['Transmission Weight'].default_value == 1
+    assert abs(glass.inputs['Roughness'].default_value-.045) < 1e-5
     assert abs(glass.inputs['IOR'].default_value-1.45) < 1e-5
     print('PBR_SURFACE_DEMO passed: UV/geometry, emission, repeat apply, save/reload', flush=True)
 
