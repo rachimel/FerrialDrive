@@ -22,6 +22,21 @@ def main():
     apply_operations([{'op': 'create_material', 'name': 'Coating'},
                       {'op': 'create_box', 'name': 'PanelBox', 'size': [1, 1, 1], 'material': 'Coating'}])
     obj = bpy.data.objects['PanelBox']
+    folded_mesh = bpy.data.meshes.new('FoldedPanelMesh')
+    folded_mesh.from_pydata([(1,-1,-1),(1,0,-1),(1,0,1),(1,-1,1),(-1,1,-1),(-1,1,1)], [], [(0,1,2,3),(1,4,5,2)])
+    folded_mesh.update()
+    folded = bpy.data.objects.new('FoldedPanel', folded_mesh)
+    bpy.context.scene.collection.objects.link(folded)
+    region_map = {key: [.02+i*.15,.1,.14+i*.15,.9] for i,key in enumerate(('+X','-X','+Y','-Y','+Z','-Z'))}
+    apply_operations([dict(op='project_panel_uv',uv_layer='UV_Fold',objects=[dict(name=folded.name,regions=region_map,projection_axis=0)])])
+    layer = folded_mesh.uv_layers['UV_Fold']
+    for vertex in (1, 2):
+        coordinates = [tuple(layer.data[loop.index].uv) for loop in folded_mesh.loops if loop.vertex_index==vertex]
+        assert len(set(coordinates)) == 1, '접힌 면의 UV가 방향 경계에서 끊김'
+    apply_operations([dict(op='project_panel_uv',uv_layer='UV_Fold',overwrite=True,objects=[dict(name=folded.name,regions=region_map,projection_axis=0)])])
+    assert len(folded_mesh.uv_layers) == 1, 'UV 갱신 시 중복 레이어 생성'
+    apply_operations([dict(op='create_material',name='ClearCover',transmission=1,ior=1.45,roughness=.045)])
+    folded_mesh.materials.append(bpy.data.materials['ClearCover'])
     material = bpy.data.materials['Coating']
     shader = next(n for n in material.node_tree.nodes if n.type == 'BSDF_PRINCIPLED')
     emission = material.node_tree.nodes.new('ShaderNodeRGB')
@@ -67,6 +82,9 @@ def main():
     bpy.ops.wm.save_as_mainfile(filepath=str(target))
     bpy.ops.wm.open_mainfile(filepath=str(target))
     assert fingerprint(bpy.data.objects[object_name]) == before
+    glass = bpy.data.materials['ClearCover'].node_tree.nodes.get('Principled BSDF')
+    assert glass.inputs['Transmission Weight'].default_value == 1
+    assert abs(glass.inputs['IOR'].default_value-1.45) < 1e-5
     print('PBR_SURFACE_DEMO passed: UV/geometry, emission, repeat apply, save/reload', flush=True)
 
 

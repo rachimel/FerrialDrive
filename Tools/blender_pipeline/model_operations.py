@@ -138,11 +138,16 @@ def apply_operations(operations):
             material.use_nodes = True
             node = material.node_tree.nodes.get('Principled BSDF')
             node.inputs['Base Color'].default_value = (*vector(operation.get('color', [.3, .3, .3])), 1)
-            for field, socket, default in [('roughness', 'Roughness', .5), ('metallic', 'Metallic', 0)]:
+            for field, socket, default in [('roughness', 'Roughness', .5), ('metallic', 'Metallic', 0),
+                                           ('transmission', 'Transmission Weight', 0), ('coat', 'Coat Weight', 0)]:
                 value = operation.get(field, default)
                 if not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 <= value <= 1:
                     raise ValueError(f'{field}는 0~1이어야 한다.')
                 node.inputs[socket].default_value = value
+            ior = operation.get('ior', 1.5)
+            if not isinstance(ior, (int, float)) or not math.isfinite(ior) or not 1 <= ior <= 4:
+                raise ValueError('굴절률은 1~4여야 한다.')
+            node.inputs['IOR'].default_value = ior
             if operation.get('energy_control'):
                 control = bpy.data.objects[operation['energy_control']]
                 for index, key in enumerate(('energy_color_r', 'energy_color_g', 'energy_color_b')):

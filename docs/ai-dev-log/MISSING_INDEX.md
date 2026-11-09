@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [플레이어 메카 어두운 도장·굴곡 UV](2026-11-09-player-mech-dark-paint-uv.md): 2개, TIME(scope)·REASON(U2). 기존 합계와 구분한 신규 기록이다.
+
 - [플레이어 메카 PBR·가슴 패널](2026-11-09-player-mech-pbr-chest-panels.md): 2개, TIME(scope)·REASON(U1). 기존 합계와 구분한 신규 기록이다.
 
 - [Pose Tool 내부 통합](2026-11-09-pose-tool-integration.md): 1개, TIME(scope). 기존 합계와 구분한 신규 기록이다.

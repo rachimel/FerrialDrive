@@ -66,16 +66,19 @@ def project_panel_uv(config):
     name = config.get('uv_layer', 'UV_Panel')
     for entry in config['objects']:
         mesh = bpy.data.objects[entry['name']].data
-        if mesh.uv_layers.get(name):
+        if mesh.uv_layers.get(name) and not config.get('overwrite', False):
             raise ValueError(f'이미 존재하는 UV: {entry["name"]}/{name}')
         active = mesh.uv_layers.active_index
         render = next((x.name for x in mesh.uv_layers if x.active_render), None)
-        layer = mesh.uv_layers.new(name=name, do_init=False)
+        layer = mesh.uv_layers.get(name) or mesh.uv_layers.new(name=name, do_init=False)
         vertices = np.array([v.co[:] for v in mesh.vertices])
         low, high = vertices.min(axis=0), vertices.max(axis=0)
         extent = np.maximum(high-low, 1e-8)
         for polygon in mesh.polygons:
             axis = int(np.argmax(np.abs(polygon.normal[:])))
+            projection_axis = entry.get('projection_axis')
+            if projection_axis is not None and abs(polygon.normal[projection_axis]) > entry.get('projection_epsilon', .001):
+                axis = projection_axis
             key = ('+' if polygon.normal[axis] >= 0 else '-')+'XYZ'[axis]
             x0, y0, x1, y1 = entry['regions'][key]
             if not (0 <= x0 < x1 <= 1 and 0 <= y0 < y1 <= 1):

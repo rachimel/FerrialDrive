@@ -35,4 +35,4 @@
 & $blender_exe -b --factory-startup --disable-autoexec --python-exit-code 1 --python samples/model_pipeline/pbr_surface_demo.py -- --output output/model_pipeline/pbr_demo
 ```
 
-PBR 맵·UV 패널 도안과 `sample.blend`를 출력한다. 형상/UV 보존, 발광 연결 보존, 반복 적용 시 노드 중복 방지, 저장·재로딩을 확인한다. 시각적 품질 승인이나 실제 메카의 패널 왜곡 검증을 대신하지 않는다.
+PBR 맵·UV 패널 도안과 `sample.blend`를 출력한다. 형상/기존 UV 보존, 발광 연결 보존, 반복 적용 시 노드 중복 방지, 저장·재로딩을 확인한다. 접힌 두 면의 연속 UV, 기존 전용 UV 갱신, 유리 투과/굴절률 저장도 확인한다. 시각적 품질 승인이나 실제 메카의 패널 왜곡 검증을 대신하지 않는다.

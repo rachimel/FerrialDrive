@@ -1,5 +1,7 @@
 # AI 개발 로그
 
+- [2026-11-09 플레이어 메카 어두운 도장·굴곡 UV](2026-11-09-player-mech-dark-paint-uv.md): 연속 투영·목 패널 제거·공통 외장·검정 얼굴 안쪽·팬 유리
+
 - [2026-11-09 플레이어 메카 PBR·가슴 패널](2026-11-09-player-mech-pbr-chest-panels.md): 무료 1K 재질·가슴만 확대 패널·전용 UV·다른 부위 모서리 효과
 
 - [2026-11-09 Pose Tool 내부 통합](2026-11-09-pose-tool-integration.md): Asset Tool 직접 편집·비표시 Blender·손바닥 손잡이·키/저장/출력/렌더 전달
