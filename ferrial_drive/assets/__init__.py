@@ -3,5 +3,6 @@
 from .sprites import SpriteBundle, SpritePlayback
 from .catalog import AssetCatalog, AssetDefinition, detect_kind
 from .manager import AssetManager
+from .mech import MechBundle
 
-__all__ = ['SpriteBundle', 'SpritePlayback', 'AssetCatalog', 'AssetDefinition', 'AssetManager', 'detect_kind']
+__all__ = ['SpriteBundle', 'SpritePlayback', 'MechBundle', 'AssetCatalog', 'AssetDefinition', 'AssetManager', 'detect_kind']

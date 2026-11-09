@@ -79,6 +79,8 @@ class AssetLoaderApp:
         self.theme = load_theme()
         paths = {role: ROOT / "data/fonts" / entry["path"] for role, entry in self.theme["fonts"].items()}
         sizes = {role: entry["size"] for role, entry in self.theme["fonts"].items()}
+        paths["section"] = ROOT / "data/fonts/s_core_dream/SCDream6.otf"
+        sizes["section"] = sizes["small"]
         self.renderer = PicoRenderer(paths, sizes)
         if self.catalog_path == DEFAULT_CATALOG:
             try:
@@ -224,6 +226,8 @@ class AssetLoaderApp:
         from .editors import AssemblyPanel
         if self.handle is None:
             raise ValueError("먼저 에셋을 선택한다.")
+        if self.handle.resource.definition.kind == "mech":
+            raise ValueError("분리 메카는 메카 설정에서 순서·조립 미리보기를 편집한다.")
         if self.build and self.build.process is not None:
             raise ValueError("렌더 완료 후 조립한다.")
         self.set_panel(AssemblyPanel(self))
@@ -478,6 +482,11 @@ class AssetLoaderApp:
 
     def exit(self):
         try:
+            current = self.panel
+            while current is not None:
+                if hasattr(current, "close_resources"):
+                    current.close_resources()
+                current = getattr(current, "parent", None)
             self.set_panel(None)
             if self.build:
                 self.build.close()

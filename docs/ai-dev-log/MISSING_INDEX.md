@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [메카 합성·프리셋·분리 내보내기](2026-11-09-mech-composition-presets-export.md): 1개, TIME(scope). 기존 합계와 구분한 신규 기록이다.
+
 - [에셋 로더 화면 재정렬](2026-11-09-asset-loader-compact-layout.md): 1개, TIME(scope). 기존 합계와 구분한 신규 기록이다.
 
 - [에셋 로더 메카 분리 UI](2026-11-09-asset-loader-mech-workspace.md): 1개, TIME(scope). 기존 합계와 구분한 신규 기록이다.

@@ -153,7 +153,7 @@ class MechPanelTests(unittest.TestCase):
 
     def test_all_tabs_draw_in_existing_window_and_invalid_event_keeps_input(self):
         window = self.pico.window
-        for tab in range(5):
+        for tab in range(6):
             self.panel.switch(tab=tab)
             self.app.draw()
             self.assertIs(self.pico.window, window)
@@ -281,6 +281,33 @@ class MechPanelTests(unittest.TestCase):
         self.assertEqual(self.panel.value("left_hand.energy_source"), "Hand_Mask,Sword_Mask")
         self.assertEqual(self.panel.value("sheath.energy_source"), "Sheath_Light")
         self.assertEqual(self.panel.current_motion["orders"]["s"].count("left_hand"), 1)
+
+    def test_demo_preview_preserves_draft_and_actual_split_export_reopens_as_mech(self):
+        from samples.mech_asset.make_sample import write_sample
+        before = deepcopy(self.panel.data)
+        self.panel.sample_preview()
+        self.assertEqual(self.panel.data, before)
+        demo = self.panel.preview_resource
+        self.panel.switch(tab=5)
+        self.app.draw()
+        self.panel.close_resources()
+        self.assertTrue(demo.closed)
+        for key, row in write_sample(self.root / "parts").items():
+            self.panel.data["layers"][key].update(row)
+        self.panel.switch(tab=5, motion=3)
+        self.panel.refresh_preview()
+        self.app.draw()
+        resource = self.panel.preview_resource
+        with patch("Tools.asset_loader.library.asset_directory", return_value=self.root / "export"):
+            self.panel.export()
+        self.assertIsNone(self.app.panel)
+        self.assertTrue(resource.closed)
+        self.assertEqual(self.app.handle.resource.definition.kind, "mech")
+        self.app.draw()
+        self.app.action("mech")
+        self.assertEqual(self.app.panel.tab, 5)
+        self.assertIsNotNone(self.app.panel.preview_resource)
+        self.app.draw()
 
 
 if __name__ == "__main__":

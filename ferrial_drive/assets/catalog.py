@@ -8,9 +8,10 @@ import re
 import tempfile
 
 from .sprites import SpriteBundle, SpriteSheet
+from .mech import MechBundle
 
 
-KINDS = {"image", "sheet", "bundle"}
+KINDS = {"image", "sheet", "bundle", "mech"}
 
 
 @dataclass(frozen=True)
@@ -88,6 +89,7 @@ class AssetDocument:
     dependencies: tuple
     suggested_id: str | None = None
     default_clip: str | None = None
+    mech: MechBundle | None = None
 
 
 def detect_kind(source):
@@ -97,6 +99,8 @@ def detect_kind(source):
             raise ValueError("PNG/JPG/BMP 이미지 또는 시트·번들 JSON을 선택한다.")
         return "image"
     data = json.loads(source.read_text(encoding="utf-8-sig"))
+    if isinstance(data, dict) and data.get("type") == "mech":
+        return "mech"
     if isinstance(data, dict) and all(key in data for key in ("body", "shadow", "directions")):
         return "bundle"
     if isinstance(data, dict) and all(key in data for key in ("image", "animations")):
@@ -113,6 +117,10 @@ def _read_document(definition):
     if definition.kind == "sheet":
         sheet = SpriteSheet.load(source)
         return AssetDocument(definition, {"body": sheet}, (source, sheet.image_path))
+    if definition.kind == "mech":
+        mech = MechBundle.load(source)
+        return AssetDocument(definition, mech.sheets, (source, *mech.dependencies),
+                             mech.asset_id, next(iter(mech.clips)), mech)
     bundle = SpriteBundle.load(source)
     data = json.loads(source.read_text(encoding="utf-8-sig"))
     paths = (source, (source.parent / data["body"]).resolve(),

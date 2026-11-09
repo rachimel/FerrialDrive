@@ -48,6 +48,10 @@ def store_asset(definition, *, image_size=None, root=LIBRARY_ROOT):
     if all(root in path.parents for path in document.dependencies):
         return definition
     destination = asset_directory(definition.asset_id, root=root / "prerender")
+    if definition.kind == "mech":
+        from .mech_export import copy_mech
+        target = copy_mech(document.mech, destination, asset_id=definition.asset_id)
+        return AssetDefinition(definition.asset_id, "mech", target)
     if definition.kind == "image":
         destination.mkdir(parents=True)
         target = destination / ("image" + definition.source.suffix.lower())

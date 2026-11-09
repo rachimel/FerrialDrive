@@ -31,6 +31,7 @@ class PicoAssetResource:
         self.closed = False
         self.clips = {}
         self.sampler = None
+        self.mech = document.mech
         try:
             layers = ({"body": document.definition.source} if not document.sheets
                       else {layer: sheet.image_path for layer, sheet in document.sheets.items()})
@@ -53,7 +54,7 @@ class PicoAssetResource:
                 if document.sheets and size != document.sheets[layer].size:
                     raise ValueError(f"PNG 실제 크기와 시트 메타데이터 불일치: {path}")
             if document.sheets:
-                self.clips = document.sheets["body"].clips
+                self.clips = self.mech.clips if self.mech else document.sheets["body"].clips
             else:
                 width, height = self.sizes["body"]
                 self.clips = {"image": SpriteClip(1.0, (SpriteFrame((0, 0, width, height), (width / 2, 0)),))}
@@ -78,9 +79,18 @@ class PicoAssetResource:
         return self.sampler.batch() if self.filtering == 'bicubic' else nullcontext()
 
     def draw(self, clip_name, frame_index, x, y, *, scale=1.0, body=True, shadow=True,
-             shadow_opacity=DEFAULT_SHADOW_OPACITY):
+             shadow_opacity=DEFAULT_SHADOW_OPACITY, layer_order=None):
         if self.closed:
             raise RuntimeError("해제한 에셋이다.")
+        if self.mech:
+            if body and scale > 0:
+                source = self.mech.rows[clip_name]["source_clip"]
+                order = self.mech.order(clip_name, frame_index) if layer_order is None else layer_order
+                with self.render_batch():
+                    for layer in order:
+                        if layer in self.mech.sheet_paths and layer not in self.mech.masks.values():
+                            self._draw_sheet(layer, self.mech.sheets[layer].clips[source].frames[frame_index], x, y, scale)
+            return
         self.draw_frame(self.clips[clip_name].frames[frame_index], x, y,
                         scale=scale, body=body, shadow=shadow, shadow_opacity=shadow_opacity)
 
@@ -113,6 +123,13 @@ class PicoAssetResource:
             self.sampler.draw(self.textures[layer], self.sizes[layer], source, target)
         else:
             self.pico.SDL_RenderCopy(self.pico.renderer, self.textures[layer], source, target)
+
+    def _draw_sheet(self, layer, frame, x, y, scale):
+        left, bottom, width, height = frame.rect
+        source = self.pico.SDL_Rect(left, self.sizes[layer][1] - bottom - height, width, height)
+        target = self.pico.to_sdl_rect(x - frame.pivot[0] * scale, y - frame.pivot[1] * scale,
+                                      width * scale, height * scale)
+        self._copy(layer, source, target)
 
     def close(self):
         if not self.closed:

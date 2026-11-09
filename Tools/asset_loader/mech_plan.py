@@ -16,6 +16,8 @@ LAYERS = (
     ("stowed_sword", "수납 검", "sword_mount"),
     ("stowed_gun", "수납 총", "waist_mount"),
     ("sheath", "칼집 + 부착부", "sword_mount"),
+    ("side_slot_l", "왼쪽 사이드 슬롯", "side_mount_l"),
+    ("side_slot_r", "오른쪽 사이드 슬롯", "side_mount_r"),
     ("detached_sword", "분리된 검", "world"),
     ("detached_gun", "분리된 총", "world"),
 )
@@ -60,7 +62,15 @@ def with_energy_defaults(data):
     """기존 v1 입력을 보존하며 신규 선택 항목만 채운다."""
     data = deepcopy(data)
     for key, _, _ in LAYERS:
+        if key in ("side_slot_l", "side_slot_r") and key not in data["layers"]:
+            anchor = next(anchor for layer, _, anchor in LAYERS if layer == key)
+            data["layers"][key] = {"objects": "", "anchor": anchor, "empty_hand": ""}
+            for motion in data["motions"].values():
+                for order in [*motion["orders"].values(), *(row["order"] for row in motion["overrides"])]:
+                    order.insert(order.index("body"), key)
         data["layers"][key].setdefault("energy_mask", default_energy_mask())
+        data["layers"][key].setdefault("sheet", "")
+        data["layers"][key].setdefault("energy_sheet", "")
     for key, _ in ENERGY_CHECKS:
         data["checks"].setdefault(key, "미확인")
     return data
@@ -70,14 +80,15 @@ def default_plan(asset_id, source):
     orders = {}
     for direction in DIRECTIONS:
         hands = ["left_hand", "right_hand"]
-        orders[direction] = (["sheath", "stowed_sword", "stowed_gun"]
+        orders[direction] = (["sheath", "side_slot_l", "side_slot_r", "stowed_sword", "stowed_gun"]
                              + (hands + ["body"] if direction in ("n", "ne", "nw") else ["body"] + hands)
                              + ["detached_sword", "detached_gun"])
     return {
         "version": 1, "asset_id": asset_id, "source": str(Path(source).resolve()),
         "render": {"camera": "", "frames": "1,3,5,7", "fps": "8", "width": "240",
                    "height": "240", "scale": "4.5", "pivot": "120,0", "purpose": "combat"},
-        "layers": {key: {"objects": "", "anchor": anchor, "empty_hand": "", "energy_mask": default_energy_mask()}
+        "layers": {key: {"objects": "", "anchor": anchor, "empty_hand": "", "energy_mask": default_energy_mask(),
+                         "sheet": "", "energy_sheet": ""}
                    for key, _, anchor in LAYERS},
         "motions": {key: {"clip": key, "frames": "", "reuse": "", "notes": "",
                           "events": [], "orders": deepcopy(orders), "overrides": [],
@@ -119,6 +130,9 @@ def validate_plan(data, *, asset_id, source):
         for field in ("objects", "anchor", "empty_hand"):
             if not isinstance(data["layers"][key][field], str):
                 raise ValueError("레이어 오브젝트·부착점은 문자열이어야 한다.")
+        for field in ("sheet", "energy_sheet"):
+            if not isinstance(data["layers"][key].get(field, ""), str):
+                raise ValueError("분리 시트 경로는 문자열이어야 한다.")
         mask = data["layers"][key].get("energy_mask", default_energy_mask())
         if (not isinstance(mask, dict) or mask.get("mode") not in dict(ENERGY_MODES)
                 or not isinstance(mask.get("source"), str)):

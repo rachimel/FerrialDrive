@@ -7,9 +7,11 @@ from .mech_plan import (CHECKS, DIRECTIONS, ENERGY_MODES, EVENTS, LAYERS, MOTION
                         default_plan, load_plan, plan_path, save_plan, with_energy_defaults)
 from .production import frame_numbers
 from .widgets import Panel
+from .mech_presets import ORDER_PRESETS, apply_all_directions, apply_mapping, apply_order_preset, mapping_options
+from .mech_preview import draw_preview
 
 
-TABS = ("공통 렌더", "출력 단위", "동작·순서", "전환 시점", "무기 조건·검수")
+TABS = ("공통 렌더", "출력 단위", "동작·순서", "전환 시점", "무기 조건·검수", "조립 미리보기")
 EVENT_HINTS = ("손이 손잡이를 잡는 시점", "수납 부착점 → 손목", "칼집·장착부를 완전히 벗어남",
                "손목 → 수납 부착점", "빈손으로 전환", "수납 부착점 → 독립 위치·회전")
 
@@ -32,9 +34,31 @@ class MechPanel(Panel):
         self.labels = []
         self.advanced = self.help_open = self.frame_options = False
         self.layer_view = "color"
+        self.preview_resource, self.preview_time = None, 0.0
+        self.preview_is_sample = False
+        self.sample_paths = None
+        self.preview_playing = True
         self.rebuild()
         if str(self.path) not in app.mech_drafts and self.path.exists():
             self.attempt(self.reload)
+        mech = getattr(app.handle.resource, "mech", None)
+        if mech and not any(row["sheet"] for row in self.data["layers"].values()):
+            from .mech_export import import_mech
+            import_mech(self.data, mech)
+            first = next(iter(mech.clips)).split("/", 1)[0]
+            self.motion = next((i for i, (key, _) in enumerate(MOTIONS) if key == first), 0)
+            self.tab = 5
+            self.rebuild()
+        if any(row["sheet"] for row in self.data["layers"].values()):
+            self.attempt(self.refresh_preview)
+
+    @property
+    def motion_key(self):
+        return MOTIONS[self.motion][0]
+
+    @property
+    def direction_name(self):
+        return DIRECTIONS[self.direction]
 
     @property
     def current_motion(self):
@@ -63,7 +87,7 @@ class MechPanel(Panel):
                     self.data["render"][key] = self.value(key)
         elif self.tab == 1:
             for layer, _, _ in LAYERS:
-                for key in ("objects", "anchor", "empty_hand"):
+                for key in ("objects", "anchor", "empty_hand", "sheet", "energy_sheet"):
                     name = f"{layer}.{key}"
                     if name in self.fields:
                         self.data["layers"][layer][key] = self.value(name)
@@ -101,6 +125,8 @@ class MechPanel(Panel):
             self.order_frame = None
         self.saved = False
         self.rebuild()
+        if self.preview_is_sample and motion is not None:
+            self.load_sample_preview()
 
     def cycle(self, mapping, key, choices):
         self.remember()
@@ -123,15 +149,91 @@ class MechPanel(Panel):
         self.layer_view = value
         self.rebuild()
 
+    def use_mapping(self, preset):
+        self.remember()
+        apply_mapping(self.data, preset)
+        self.saved = False
+        self.rebuild()
+
+    def save_mapping(self):
+        from .mech_preset_panel import MechPresetPanel
+        self.remember()
+        self.app.set_panel(MechPresetPanel(self))
+
+    def order_preset(self, preset):
+        self.remember()
+        apply_order_preset(self.data, self.motion_key, self.direction_name, preset, self.order_frame)
+        self.saved = False
+        self.rebuild()
+
+    def all_directions(self):
+        self.remember()
+        apply_all_directions(self.data, self.motion_key, self.direction_name, self.order_frame)
+        self.saved = False
+        self.rebuild()
+
+    def browse_sheet(self, layer, key):
+        from .file_panel import FilePanel
+        self.remember()
+        def selected(path):
+            self.data["layers"][layer][key] = str(path)
+            self.saved = False
+            self.rebuild()
+        self.app.set_panel(FilePanel(self.app, selected, extensions={".json"},
+            initial=self.data["layers"][layer][key] or self.app.source.parent, parent=self))
+
+    def refresh_preview(self):
+        from ferrial_drive.assets.pico_assets import PicoAssetBackend
+        from .mech_export import mech_document
+        self.remember()
+        candidate = PicoAssetBackend(self.app.filtering).load(mech_document(self.data))
+        if self.preview_resource:
+            self.preview_resource.close()
+        self.preview_resource, self.preview_time = candidate, 0.0
+        self.preview_is_sample = False
+
+    def sample_preview(self):
+        from samples.mech_asset.make_sample import write_sample
+        from .production import ROOT
+        self.remember()
+        self.sample_paths = write_sample(ROOT / "output/asset_loader/mech_sample")
+        self.load_sample_preview()
+
+    def load_sample_preview(self):
+        from ferrial_drive.assets.pico_assets import PicoAssetBackend
+        from .mech_export import mech_document
+        data = default_plan(self.app.asset_id, self.app.source)
+        for layer, row in self.sample_paths.items():
+            data["layers"][layer].update(row)
+        for motion in data["motions"].values():
+            motion["clip"] = ""
+        data["motions"][self.motion_key]["clip"] = "equipped_idle"
+        candidate = PicoAssetBackend(self.app.filtering).load(mech_document(data))
+        if self.preview_resource:
+            self.preview_resource.close()
+        self.preview_resource, self.preview_time = candidate, 0.0
+        self.preview_is_sample = True
+
+    def export(self):
+        from .mech_export import copy_mech
+        from .library import asset_directory
+        self.refresh_preview()
+        result = copy_mech(self.preview_resource.mech, asset_directory(self.app.asset_id))
+        if not self.app.open_source(result, kind="mech", asset_id=self.app.asset_id):
+            raise ValueError(self.app.message)
+        self.app.message = f"분리 시트 내보내기 완료: {result}"
+        self.close()
+
     def rebuild(self):
         self.fields, self.buttons, self.labels, self.focus = {}, [], [], None
         self.button_styles, self.button_markers, self.choice_popup = {}, {}, None
         for index, label in enumerate(TABS):
-            y = (116, 154, 240, 278, 364)[index]
+            y = (116, 154, 240, 278, 404, 316)[index]
             self.button(label, Rect(32, y, 192, 32), lambda i=index: self.switch(tab=i),
                         style="selected" if index == self.tab else "input")
         self.button("저장", Rect(1144, 736, 96, 32), self.submit, style="button")
         self.button("저장본 불러오기", Rect(964, 736, 168, 32), self.reload)
+        self.button("분리 시트 내보내기", Rect(772, 736, 180, 32), self.export)
         self.button("미리보기로", Rect(32, 736, 192, 32), self.close)
         self.disclosure("도움말", Rect(32, 684, 192, 30), lambda: self.toggle("help_open"), expanded=self.help_open)
         if self.tab == 0:
@@ -148,12 +250,18 @@ class MechPanel(Panel):
                 self.field("scale", "정사영 범위", self.data["render"]["scale"], 264, 390, 300)
                 self.field("pivot", "기준점 X,Y · bottom-left", self.data["render"]["pivot"], 596, 390, 300)
         elif self.tab == 1:
-            for value, label, x in (("color", "색상·부착", 264), ("energy", "에너지 마스크", 424)):
+            for value, label, x in (("color", "색상·부착", 264), ("energy", "에너지 마스크", 424), ("sheets", "분리 시트", 584)):
                 self.button(label, Rect(x, 92, 148, 30), lambda selected=value: self.select_layer_view(selected),
                             style="selected" if self.layer_view == value else "input")
+            self.choice("매핑 프리셋", mapping_options(), Rect(760, 92, 280, 30), self.use_mapping)
+            self.button("매핑 저장", Rect(1052, 92, 164, 30), self.save_mapping)
             for index, (layer, _, _) in enumerate(LAYERS):
-                y, row = 170 + index * 46, self.data["layers"][layer]
-                if self.layer_view == "energy":
+                y, row = 170 + index * 38, self.data["layers"][layer]
+                if self.layer_view == "sheets":
+                    for key, x, width, button_x in (("sheet", 432, 296, 736), ("energy_sheet", 792, 372, 1172)):
+                        self.add_field(f"{layer}.{key}", row[key], Rect(x, y, width, 30))
+                        self.button("…", Rect(button_x, y, 44, 30), lambda current=layer, field=key: self.browse_sheet(current, field))
+                elif self.layer_view == "energy":
                     mask = row["energy_mask"]
                     self.choice(dict(ENERGY_MODES)[mask["mode"]], ENERGY_MODES, Rect(432, y, 240, 30),
                                 lambda value, current=mask: self.choose(current, "mode", value))
@@ -164,7 +272,7 @@ class MechPanel(Panel):
                     self.add_field(f"{layer}.anchor", row["anchor"], Rect(796, y, 188, 30))
                     if layer in ("left_hand", "right_hand"):
                         self.add_field(f"{layer}.empty_hand", row["empty_hand"], Rect(1000, y, 216, 30))
-        elif self.tab in (2, 3):
+        elif self.tab in (2, 3, 5):
             self.choice("동작: " + MOTIONS[self.motion][1], [(i, label) for i, (_, label) in enumerate(MOTIONS)],
                         Rect(264, 98, 320, 32), lambda value: self.switch(motion=value))
             if self.tab == 2:
@@ -176,12 +284,15 @@ class MechPanel(Panel):
                             lambda value: self.switch(direction=value))
                 self.choice("가림: " + self.current_motion["occlusion"][direction], [(value, value) for value in OCCLUSION],
                             Rect(900, 98, 316, 32), lambda value: self.choose(self.current_motion["occlusion"], direction, value))
+                self.choice("순서 프리셋", ORDER_PRESETS, Rect(744, 142, 224, 30), self.order_preset)
+                self.button("현재 동작 전체 방향 적용", Rect(980, 142, 236, 30), self.all_directions)
                 for index, key in enumerate(self.current_order):
                     self.button(f"{index + 1}. {dict((k, v) for k, v, _ in LAYERS)[key]}",
-                                Rect(744, 188 + index * 32, 472, 30), lambda i=index: self.select_order(i),
+                                Rect(744, 196 + index * 24, 472, 23), lambda i=index: self.select_order(i),
                                 style="selected" if index == self.order_index else "input")
                 self.button("↑ 뒤로", Rect(744, 454, 112, 30), lambda: self.move_order(-1))
                 self.button("↓ 앞으로", Rect(868, 454, 112, 30), lambda: self.move_order(1))
+                self.button("도형 예제", Rect(568, 434, 128, 30), self.sample_preview)
                 self.disclosure("프레임별 순서", Rect(744, 504, 224, 30),
                                 lambda: self.toggle("frame_options"), expanded=self.frame_options)
                 if self.frame_options:
@@ -190,6 +301,12 @@ class MechPanel(Panel):
                     self.button("기본 순서", Rect(1076, 568, 140, 30), self.base_order)
                     if self.order_frame is not None:
                         self.button("현재 예외 삭제", Rect(744, 610, 180, 30), self.clear_override)
+            elif self.tab == 5:
+                self.choice("방향: " + self.direction_name, [(i, value) for i, value in enumerate(DIRECTIONS)],
+                            Rect(600, 98, 144, 32), lambda value: self.switch(direction=value))
+                self.button("재생/정지", Rect(760, 98, 136, 32), lambda: self.toggle("preview_playing"))
+                self.button("시트 갱신", Rect(908, 98, 148, 32), self.refresh_preview)
+                self.button("도형 예제", Rect(1068, 98, 148, 32), self.sample_preview)
             else:
                 for side, label, x in (("left", "왼손", 616), ("right", "오른손", 708)):
                     self.button(label, Rect(x, 98, 84, 32), lambda value=side: self.switch(side=value),
@@ -254,6 +371,8 @@ class MechPanel(Panel):
         self.data, self.saved = candidate, True
         self.order_frame = None
         self.rebuild()
+        if self.preview_resource:
+            self.attempt(self.refresh_preview)
 
     def submit(self):
         self.remember()
@@ -269,7 +388,17 @@ class MechPanel(Panel):
             self.error = str(problem)
             return
         self.app.mech_drafts[str(self.path)] = deepcopy(self.data)
+        self.close_resources()
         super().close()
+
+    def close_resources(self):
+        if self.preview_resource:
+            self.preview_resource.close()
+            self.preview_resource = None
+
+    def update(self, delta_seconds):
+        if self.preview_playing:
+            self.preview_time += delta_seconds
 
     def handle_event(self, event):
         if self.focus is not None and event.type in (self.app.pico.SDL_TEXTINPUT, self.app.pico.SDL_KEYDOWN):
@@ -282,8 +411,8 @@ class MechPanel(Panel):
         r.line(240, 80, 240, 768, c["line"])
         r.text(TABS[self.tab], 264, 36, "body", c["text"])
         r.text(self.app.asset_id, 620, 40, "small", c["muted"], max_width=540)
-        for label, y in (("모델·출력", 92), ("애니메이션", 216), ("확인", 340)):
-            r.text(label, 40, y, "small", c["muted"])
+        for label, y in (("모델·출력", 92), ("애니메이션", 216), ("확인", 380)):
+            r.text(label, 40, y, "section", c["text"])
         for label, x, y in self.labels:
             r.text(label, x, y, "small", c["muted"])
         if self.tab == 0:
@@ -292,25 +421,32 @@ class MechPanel(Panel):
             r.text("출력 용도", 900, 234, "small", c["muted"])
             r.text("모든 레이어에 같은 카메라·크기·기준점 적용", 264, 452, "small", c["muted"])
         elif self.tab == 1:
-            headers = (("출력 단위", 264), ("분리 방식", 432), ("마스크 입력 · 재질/노드 또는 오브젝트 이름", 688)) if self.layer_view == "energy" else (
-                ("출력 단위", 264), ("오브젝트 · 쉼표 구분", 432), ("부착 기준", 796), ("빈손 오브젝트", 1000))
+            if self.layer_view == "sheets":
+                headers = (("출력 단위", 264), ("색상 시트 JSON", 432), ("에너지 마스크 시트 JSON", 792))
+            else:
+                headers = (("출력 단위", 264), ("분리 방식", 432), ("마스크 입력 · 재질/노드 또는 오브젝트 이름", 688)) if self.layer_view == "energy" else (
+                    ("출력 단위", 264), ("오브젝트 · 쉼표 구분", 432), ("부착 기준", 796), ("빈손 오브젝트", 1000))
             for label, x in headers:
                 r.text(label, x, 142, "small", c["muted"])
             for index, (_, label, _) in enumerate(LAYERS):
-                r.text(label, 264, 178 + index * 46, "small", c["text"], max_width=156)
+                r.text(label, 264, 178 + index * 38, "small", c["text"], max_width=156)
             if self.layer_view == "energy":
                 r.text("색상은 발광 없이 · 마스크는 선형 흑백 데이터", 264, 558, "small", c["muted"])
                 r.text("각 마스크는 소유 출력 단위의 프레임·기준점·가림·부착 전환을 함께 따름", 264, 584, "small", c["muted"])
             else:
                 r.text("손·무기·칼집은 독립 유지 · 손+무기는 출력 시 묶음", 264, 558, "small", c["muted"])
-        elif self.tab in (2, 3):
+        elif self.tab in (2, 3, 5):
             if self.tab == 2:
-                r.text("그리기 순서 · 위에서 아래로 뒤 → 앞", 744, 160, "small", c["muted"])
+                r.text("그리기 순서 · 위에서 아래로 뒤 → 앞", 744, 176, "small", c["muted"])
                 rows = [str(row["frame"]) for row in self.current_motion["overrides"]
                         if row["direction"] == DIRECTIONS[self.direction]]
-                r.text("프레임 예외: " + (", ".join(rows) or "없음"), 264, 504, "small", c["muted"], max_width=432)
+                r.text("프레임 예외: " + (", ".join(rows) or "없음"), 264, 690, "small", c["muted"], max_width=432)
                 r.text("편집: " + (f"프레임 {self.order_frame}" if self.order_frame is not None else "기본 순서"),
                        1000, 462, "small", c["accent"])
+                r.text("조립 미리보기", 264, 442, "section", c["text"])
+                draw_preview(self, Rect(264, 474, 432, 208))
+            elif self.tab == 5:
+                draw_preview(self, Rect(264, 150, 952, 530))
             else:
                 for label, x in (("전환", 264), ("프레임", 504), ("부착·상태 변화", 648)):
                     r.text(label, x, 160, "small", c["muted"])
@@ -336,11 +472,13 @@ class MechPanel(Panel):
                  "부착 전후의 위치·회전 연속성과 무기 중복/누락은 실제 동작에서 확인한다."),
                 ("검 길이 복귀 시작은 수납 동작에 포함된 프레임으로 지정한다.",
                  "손·팔 수납과 에임 보정기 접기는 미정이다. 검수 상태는 자동 검증 결과가 아니다."),
+                ("연결한 분리 시트를 게임 공통 재생부로 합성한다. 시트 갱신으로 파일 변경을 다시 읽는다.",
+                 "내보내기는 합쳐진 PNG를 만들지 않고 색상·마스크 시트와 합성 메타데이터를 보관한다."),
             )
             r.rect(Rect(264, 654, 952, 44), c["input"])
             for index, line in enumerate(explanations[self.tab]):
                 r.text(line, 274, 660 + index * 18, "small", c["muted"], max_width=930)
         r.line(264, 726, 1240, 726, c["line"])
         if not self.error:
-            r.text("저장 완료" if self.saved else "설정 작업본 · 분리 출력 미연결", 264, 746, "small", c["muted"])
+            r.text("저장 완료" if self.saved else "작업본 · Blender 분리 렌더 미연결", 264, 746, "small", c["muted"])
         self.draw_choices()
