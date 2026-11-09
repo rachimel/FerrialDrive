@@ -7,7 +7,7 @@ from ferrial_drive.assets.sprites import SpriteFrame
 from ferrial_drive.ui.components import Rect
 from .assembly import SpriteAssembly
 from .file_panel import FilePanel
-from .production import WORKSPACE, render_config
+from .production import ROOT, render_config
 from .library import asset_directory
 from .widgets import Panel
 
@@ -46,7 +46,7 @@ class RenderPanel(Panel):
             field = self.fields["source"]
             field.text, field.cursor = str(path), len(str(path))
         self.app.set_panel(FilePanel(self.app, selected, extensions={".blend"},
-                                    initial=self.value("source") or WORKSPACE, parent=self))
+                                    initial=self.value("source") or ROOT / "data/models", parent=self))
 
     def submit(self):
         source = None if self.sample else Path(self.value("source").strip('"')).expanduser().resolve()
