@@ -12,6 +12,7 @@ from ferrial_drive.ui.components import Rect
 from ferrial_drive.ui.pico_renderer import PicoRenderer
 from Tools.theme_reference import load_theme
 from .library import DEFAULT_CATALOG, SAMPLE, prepare_library, store_asset
+from .frame_strip import ANIMATION_VIEW, FRAME_STRIP, FrameStrip
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -52,6 +53,7 @@ class AssetLoaderApp:
         self.error = False
         self.list_offset = 0
         self.clip_offset = 0
+        self.frame_strip = FrameStrip()
         self.first_draw = True
         self.build = None
         self.menu_open = False
@@ -126,6 +128,7 @@ class AssetLoaderApp:
         hint = handle.resource.suggested_id
         self.asset_id = asset_id or re.sub(r"[^A-Za-z0-9_.-]", "_", str(hint)).strip("_.-") or "asset"
         self.clip_name = handle.resource.default_clip
+        self.frame_strip.reset()
         self.clip_offset = 0
         self.ensure_clip_visible()
         self.elapsed = 0.0
@@ -146,11 +149,28 @@ class AssetLoaderApp:
     def frame_index(self):
         return self.clip.frame_at(self.elapsed) if self.clip else 0
 
+    @property
+    def show_frame_strip(self):
+        return self.handle is not None and self.handle.resource.definition.kind != 'map'
+
+    @property
+    def preview_rect(self):
+        return ANIMATION_VIEW if self.show_frame_strip else VIEW
+
+    def seek_frame(self, index):
+        if self.clip:
+            index %= len(self.clip.frames)
+            self.paused = True
+            self.elapsed = self.clip.frame_start_seconds(index)
+            self.frame_strip.follow_playback = True
+            self.frame_strip.reveal(index, len(self.clip.frames))
+
     def fit(self):
         if self.clip:
             maximum_width = max(frame.rect[2] for frame in self.clip.frames)
             maximum_height = max(frame.rect[3] for frame in self.clip.frames)
-            self.zoom = min(4.0, (VIEW.width - 60) / maximum_width, (VIEW.height - 60) / maximum_height)
+            view = self.preview_rect
+            self.zoom = min(4.0, (view.width - 60) / maximum_width, (view.height - 60) / maximum_height)
 
     def change_clip(self, offset):
         if self.handle:
@@ -160,6 +180,7 @@ class AssetLoaderApp:
     def select_clip(self, name):
         if self.handle and name in self.handle.resource.clips:
             self.clip_name, self.elapsed = name, 0.0
+            self.frame_strip.reset()
             self.ensure_clip_visible()
 
     def ensure_clip_visible(self):
@@ -297,9 +318,9 @@ class AssetLoaderApp:
                 self.set_panel(MechPanel(self))
             elif action == "play":
                 self.paused = not self.paused
+                self.frame_strip.follow_playback = True
             elif action in ("previous", "next") and self.clip:
-                self.paused = True
-                self.elapsed = self.clip.frame_start_seconds(self.frame_index + (-1 if action == "previous" else 1))
+                self.seek_frame(self.frame_index + (-1 if action == "previous" else 1))
             elif action == "body":
                 self.show_body = not self.show_body
             elif action == "shadow":
@@ -335,12 +356,11 @@ class AssetLoaderApp:
                 else:
                     self.running = False
             elif key == pico.SDLK_SPACE:
-                self.paused = not self.paused
+                self.action('play')
             elif key in (pico.SDLK_LEFT, pico.SDLK_RIGHT):
                 self.change_clip(-1 if key == pico.SDLK_LEFT else 1)
             elif key == pico.SDLK_PERIOD and self.clip:
-                self.paused = True
-                self.elapsed = self.clip.frame_start_seconds(self.frame_index + 1)
+                self.seek_frame(self.frame_index + 1)
             elif key in (pico.SDLK_PAGEUP, pico.SDLK_PAGEDOWN):
                 count = len(self.catalog.definitions)
                 self.list_offset = max(0, min(max(0, count - CATALOG_PAGE), self.list_offset + (-CATALOG_PAGE if key == pico.SDLK_PAGEUP else CATALOG_PAGE)))
@@ -368,6 +388,11 @@ class AssetLoaderApp:
                 if rect.contains(event.x, event.y):
                     self.action(action)
                     return
+            if self.show_frame_strip and FRAME_STRIP.contains(event.x, event.y):
+                index = self.frame_strip.hit(event.x, event.y, len(self.clip.frames))
+                if index is not None:
+                    self.seek_frame(index)
+                return
             if CATALOG_RECT.contains(event.x, event.y):
                 index = self.list_offset + int((event.y - CATALOG_RECT.y) // 34)
                 definitions = list(self.catalog.definitions.values())
@@ -384,7 +409,9 @@ class AssetLoaderApp:
                 self.list_offset = max(0, min(max(0, len(self.catalog.definitions) - CATALOG_PAGE), self.list_offset - event.y))
             elif ANIMATION_RECT.contains(*self.mouse) and self.handle:
                 self.clip_offset = max(0, min(max(0, len(self.handle.resource.clips) - ANIMATION_PAGE), self.clip_offset - event.y * 3))
-            elif VIEW.contains(*self.mouse):
+            elif self.show_frame_strip and FRAME_STRIP.contains(*self.mouse):
+                self.frame_strip.scroll(event.y, len(self.clip.frames))
+            elif self.preview_rect.contains(*self.mouse):
                 self.zoom = max(0.01, min(16.0, self.zoom * 1.2 ** event.y))
 
     def apply_reload(self, events):
@@ -451,20 +478,23 @@ class AssetLoaderApp:
                     (x - 2, y - 4, x + 2, y), (x + 2, y, x - 2, y + 4))
                 for x1, y1, x2, y2 in points:
                     r.line(x1, y1, x2, y2, c["muted"])
-        with r.clip(VIEW):
-            for row in range(int(VIEW.height // 64) + 1):
-                for column in range(int(VIEW.width // 64) + 1):
-                    r.rect(Rect(VIEW.x + column * 64, VIEW.y + row * 64, 64, 64),
+        view = self.preview_rect
+        with r.clip(view):
+            for row in range(int(view.height // 64) + 1):
+                for column in range(int(view.width // 64) + 1):
+                    r.rect(Rect(view.x + column * 64, view.y + row * 64, 64, 64),
                            c["panel"] if (row + column) % 2 else c["panel_surface"])
             if self.clip:
                 frame = self.clip.frames[self.frame_index]
-                x = VIEW.x + VIEW.width / 2 + (frame.pivot[0] - frame.rect[2] / 2) * self.zoom
-                y = WINDOW["height"] - (VIEW.y + VIEW.height / 2) + (frame.pivot[1] - frame.rect[3] / 2) * self.zoom
+                x = view.x + view.width / 2 + (frame.pivot[0] - frame.rect[2] / 2) * self.zoom
+                y = WINDOW["height"] - (view.y + view.height / 2) + (frame.pivot[1] - frame.rect[3] / 2) * self.zoom
                 self.handle.resource.draw(self.clip_name, self.frame_index, x, y, scale=self.zoom,
                                           body=self.show_body, shadow=self.show_shadow)
                 ui_y = WINDOW["height"] - y
                 r.line(x - 10, ui_y, x + 10, ui_y, c["accent"])
                 r.line(x, ui_y - 10, x, ui_y + 10, c["accent"])
+        if self.show_frame_strip:
+            self.frame_strip.draw(self)
         r.text("시트·번들 탐색기", 28, 102, "section", c["text"])
         r.text("맵 레이어" if resource and resource.definition.kind == 'map' else "애니메이션 탐색기", 1000, 102, "section", c["text"])
         r.rect(FILTER_RECT, c["input"])

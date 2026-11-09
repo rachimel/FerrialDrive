@@ -2,6 +2,7 @@
 
 import builtins
 from ctypes import byref
+from dataclasses import replace
 import os
 from pathlib import Path
 import tempfile
@@ -22,6 +23,68 @@ from samples.asset_loader.map.make_sample import write_sample as write_map
 
 
 class AssetPanelTests(unittest.TestCase):
+    def test_thumbnail_click_seeks_variable_time_and_pauses_without_reloading(self):
+        from ferrial_drive.assets.sprites import SpriteClip
+        resource = self.app.handle.resource
+        frames = tuple(replace(frame, duration_ms=duration) for frame, duration
+                       in zip(self.app.clip.frames, (50, 150, 75, 225)))
+        resource.clips[self.app.clip_name] = SpriteClip(1, frames)
+        self.app.draw()
+        zoom, name = self.app.zoom, self.app.clip_name
+        index, rect = list(self.app.frame_strip.slots(4))[2]
+        self.click(rect)
+        self.assertEqual(index, 2)
+        self.assertTrue(self.app.paused)
+        self.assertAlmostEqual(self.app.elapsed, .2)
+        self.assertEqual(self.app.frame_index, 2)
+        self.app.update(2)
+        self.assertEqual(self.app.frame_index, 2)
+        self.assertIs(self.app.handle.resource, resource)
+        self.assertEqual((self.app.zoom, self.app.clip_name), (zoom, name))
+
+    def test_thumbnail_scroll_is_bounded_and_does_not_zoom_or_select_clip(self):
+        from ferrial_drive.assets.sprites import SpriteClip
+        from Tools.asset_loader.frame_strip import FRAME_STRIP, FRAME_PAGE
+        resource = self.app.handle.resource
+        resource.clips[self.app.clip_name] = SpriteClip(8, self.app.clip.frames * 6)
+        self.app.draw()
+        zoom, name = self.app.zoom, self.app.clip_name
+        self.app.mouse = (FRAME_STRIP.x + 8, FRAME_STRIP.y + 8)
+        self.app.handle_event(SimpleNamespace(type=self.pico.SDL_MOUSEWHEEL, y=-999))
+        self.app.draw()
+        self.assertEqual(self.app.frame_strip.offset, len(self.app.clip.frames) - FRAME_PAGE)
+        self.assertEqual((self.app.zoom, self.app.clip_name), (zoom, name))
+        index, rect = list(self.app.frame_strip.slots(len(self.app.clip.frames)))[-1]
+        self.click(rect)
+        self.assertEqual(self.app.frame_index, index)
+        self.assertTrue(self.app.paused)
+        self.app.action('play')
+        self.app.update(.125)
+        self.app.draw()
+        self.assertEqual(self.app.frame_index, 0)
+        self.assertEqual(self.app.frame_strip.offset, 0)
+        self.app.select_clip(list(resource.clips)[1])
+        self.assertEqual(self.app.frame_strip.offset, 0)
+
+    def test_thumbnail_draw_reuses_visible_frames_and_map_keeps_full_preview(self):
+        from ferrial_drive.assets.sprites import SpriteClip
+        from Tools.asset_loader.app import VIEW
+        from Tools.asset_loader.frame_strip import FRAME_PAGE
+        resource = self.app.handle.resource
+        resource.clips[self.app.clip_name] = SpriteClip(8, self.app.clip.frames * 16)
+        with patch.object(resource, 'draw', wraps=resource.draw) as draw:
+            self.app.draw()
+        self.assertEqual(draw.call_count, 1 + FRAME_PAGE)
+        self.app.frame_strip.scroll(-999, len(self.app.clip.frames))
+        resource.clips[self.app.clip_name] = SpriteClip(8, self.app.clip.frames[:1])
+        self.app.draw()
+        self.assertEqual(self.app.frame_strip.offset, 0)
+        source = write_map(self.root / 'map')
+        self.assertTrue(self.app.open_source(source))
+        self.assertFalse(self.app.show_frame_strip)
+        self.assertEqual(self.app.preview_rect, VIEW)
+        self.app.draw()
+
     def test_animation_explorer_selection_and_scroll_keep_asset_and_zoom(self):
         from Tools.asset_loader.app import ANIMATION_RECT, ANIMATION_PAGE, CATALOG_RECT
         resource, source = self.app.handle.resource, self.app.source
