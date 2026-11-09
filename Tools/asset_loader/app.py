@@ -16,13 +16,16 @@ from .library import DEFAULT_CATALOG, SAMPLE, prepare_library, store_asset
 
 ROOT = Path(__file__).resolve().parents[2]
 WINDOW = {"width": 1280, "height": 800, "title": "FDrive | Asset Loader"}
-VIEW = Rect(16, 88, 916, 616)
+VIEW = Rect(276, 88, 696, 616)
 PRODUCTION_MENU = Rect(1152, 10, 112, 30)
 PRODUCTION_ITEMS = [("ID 변경", "id"), ("카탈로그 열기", "catalog"),
                     ("핫 로드 전환", "debug"), ("새로고침", "reload"), ("렌더 취소", "cancel_render")]
-FILTER_RECT = Rect(964, 472, 288, 28)
-CATALOG_RECT = Rect(956, 124, 304, 272)
-FILTER_OPTIONS_Y = 504
+FILTER_RECT = Rect(992, 664, 264, 28)
+CATALOG_RECT = Rect(24, 132, 232, 442)
+ANIMATION_RECT = Rect(992, 132, 264, 476)
+CATALOG_PAGE = 13
+ANIMATION_PAGE = 17
+FILTER_OPTIONS_Y = 696
 FILTERS = ('nearest', 'linear', 'bicubic')
 
 
@@ -48,6 +51,7 @@ class AssetLoaderApp:
         self.message = "에셋을 선택한다."
         self.error = False
         self.list_offset = 0
+        self.clip_offset = 0
         self.first_draw = True
         self.build = None
         self.menu_open = False
@@ -62,14 +66,14 @@ class AssetLoaderApp:
             ("메카 설정", "mech", Rect(412, 10, 120, 30)),
             ("애니메이션 조립", "compose", Rect(540, 10, 152, 30)),
             ("3D 렌더", "render", Rect(700, 10, 112, 30)),
-            ("맞춤", "fit", Rect(16, 716, 88, 30)),
-            ("1:1", "actual", Rect(112, 716, 56, 30)),
-            ("재생 / 정지", "play", Rect(196, 716, 120, 30)),
-            ("◀", "previous", Rect(324, 716, 40, 30)),
-            ("▶", "next", Rect(372, 716, 40, 30)),
-            ("본체", "body", Rect(964, 432, 136, 28)),
-            ("그림자", "shadow", Rect(1112, 432, 140, 28)),
-            ("상세 정보 ▸", "details", Rect(964, 516, 288, 28)),
+            ("맞춤", "fit", Rect(276, 716, 88, 30)),
+            ("1:1", "actual", Rect(372, 716, 56, 30)),
+            ("재생 / 정지", "play", Rect(456, 716, 112, 30)),
+            ("◀", "previous", Rect(576, 716, 40, 30)),
+            ("▶", "next", Rect(624, 716, 40, 30)),
+            ("본체", "body", Rect(992, 624, 124, 28)),
+            ("그림자", "shadow", Rect(1128, 624, 128, 28)),
+            ("상세 정보", "details", Rect(24, 584, 232, 28)),
         ]
 
     def enter(self):
@@ -121,6 +125,8 @@ class AssetLoaderApp:
         hint = handle.resource.suggested_id
         self.asset_id = asset_id or re.sub(r"[^A-Za-z0-9_.-]", "_", str(hint)).strip("_.-") or "asset"
         self.clip_name = handle.resource.default_clip
+        self.clip_offset = 0
+        self.ensure_clip_visible()
         self.elapsed = 0.0
         self.fit()
         self.message, self.error = "", False
@@ -148,8 +154,20 @@ class AssetLoaderApp:
     def change_clip(self, offset):
         if self.handle:
             names = list(self.handle.resource.clips)
-            self.clip_name = names[(names.index(self.clip_name) + offset) % len(names)]
-            self.elapsed = 0.0
+            self.select_clip(names[(names.index(self.clip_name) + offset) % len(names)])
+
+    def select_clip(self, name):
+        if self.handle and name in self.handle.resource.clips:
+            self.clip_name, self.elapsed = name, 0.0
+            self.ensure_clip_visible()
+
+    def ensure_clip_visible(self):
+        if self.handle:
+            names = list(self.handle.resource.clips)
+            if self.clip_name in names:
+                index = names.index(self.clip_name)
+                self.clip_offset = min(max(self.clip_offset, index - ANIMATION_PAGE + 1), index)
+            self.clip_offset = max(0, min(max(0, len(names) - ANIMATION_PAGE), self.clip_offset))
 
     def register(self):
         if self.handle is None:
@@ -317,7 +335,7 @@ class AssetLoaderApp:
                 self.elapsed = (self.frame_index + 1) / self.clip.fps
             elif key in (pico.SDLK_PAGEUP, pico.SDLK_PAGEDOWN):
                 count = len(self.catalog.definitions)
-                self.list_offset = max(0, min(max(0, count - 8), self.list_offset + (-8 if key == pico.SDLK_PAGEUP else 8)))
+                self.list_offset = max(0, min(max(0, count - CATALOG_PAGE), self.list_offset + (-CATALOG_PAGE if key == pico.SDLK_PAGEUP else CATALOG_PAGE)))
         elif event.type == pico.SDL_MOUSEBUTTONDOWN and event.button == pico.SDL_BUTTON_LEFT:
             if FILTER_RECT.contains(event.x, event.y) and self.handle:
                 self.filter_popup, self.menu_open = not self.filter_popup, False
@@ -348,9 +366,16 @@ class AssetLoaderApp:
                 if index < len(definitions):
                     definition = definitions[index]
                     self.open_source(definition.source, kind=definition.kind, asset_id=definition.asset_id)
+            elif ANIMATION_RECT.contains(event.x, event.y) and self.handle:
+                index = self.clip_offset + int((event.y - ANIMATION_RECT.y) // 28)
+                names = list(self.handle.resource.clips)
+                if index < len(names):
+                    self.select_clip(names[index])
         elif event.type == pico.SDL_MOUSEWHEEL:
             if CATALOG_RECT.contains(*self.mouse):
-                self.list_offset = max(0, min(max(0, len(self.catalog.definitions) - 8), self.list_offset - event.y))
+                self.list_offset = max(0, min(max(0, len(self.catalog.definitions) - CATALOG_PAGE), self.list_offset - event.y))
+            elif ANIMATION_RECT.contains(*self.mouse) and self.handle:
+                self.clip_offset = max(0, min(max(0, len(self.handle.resource.clips) - ANIMATION_PAGE), self.clip_offset - event.y * 3))
             elif VIEW.contains(*self.mouse):
                 self.zoom = max(0.01, min(16.0, self.zoom * 1.2 ** event.y))
 
@@ -359,6 +384,8 @@ class AssetLoaderApp:
             self.message = ("핫 로드 완료" if event.success else "핫 로드 실패 · 이전 정상 자원 유지") + ": " + event.message
             self.error = not event.success
         self.clip
+        if events:
+            self.ensure_clip_visible()
 
     def update(self, delta_seconds):
         if not isfinite(delta_seconds) or delta_seconds < 0:
@@ -382,6 +409,8 @@ class AssetLoaderApp:
     def draw(self):
         r, c = self.renderer, self.theme["colors"]
         r.clear(c["background"])
+        r.rect(Rect(16, 88, 248, 658), c["panel"])
+        r.rect(Rect(984, 88, 280, 658), c["panel"])
         # 공통 본문 글꼴로 영문과 한글의 시각적 간격을 맞춘다.
         r.text("FDrive 에셋 로더", 16, 16, "body", c["text"])
         r.line(398, 14, 398, 36, c["line"])
@@ -426,27 +455,33 @@ class AssetLoaderApp:
                 ui_y = WINDOW["height"] - y
                 r.line(x - 10, ui_y, x + 10, ui_y, c["accent"])
                 r.line(x, ui_y - 10, x, ui_y + 10, c["accent"])
-        # 사이드바 배경은 조작 버튼 뒤를 덮지 않도록 목록 영역에만 그린다.
-        r.rect(Rect(948, 88, 316, 316), c["panel"])
+        r.text("시트·번들 탐색기", 28, 102, "section", c["text"])
+        r.text("애니메이션 탐색기", 1000, 102, "section", c["text"])
         r.rect(FILTER_RECT, c["input"])
         current_filter = self.handle.resource.filtering.title() if self.handle else '-'
         r.text(f"필터: {current_filter}", FILTER_RECT.x + 10, FILTER_RECT.y + 6, "small", c["text"])
-        r.line(1230, 483, 1234, 487, c["muted"])
-        r.line(1234, 487, 1238, 483, c["muted"])
-        r.text(f"에셋 목록  {len(self.catalog.definitions)}", 964, 100, "small", c["muted"])
-        for index, definition in enumerate(list(self.catalog.definitions.values())[self.list_offset:self.list_offset + 8]):
+        r.line(1230, 675, 1234, 679, c["muted"])
+        r.line(1234, 679, 1238, 675, c["muted"])
+        for index, definition in enumerate(list(self.catalog.definitions.values())[self.list_offset:self.list_offset + CATALOG_PAGE]):
             y = CATALOG_RECT.y + index * 34
             r.rect(Rect(CATALOG_RECT.x, y, CATALOG_RECT.width, 32), c["selected"] if definition.asset_id == self.asset_id else c["background"])
-            r.text(definition.asset_id, CATALOG_RECT.x + 8, y + 8, "small", c["text"], max_width=288)
-        r.text("표시", 964, 410, "small", c["muted"])
-        r.text(f"배율 {self.zoom:.2f}×", 436, 724, "small", c["muted"])
-        r.text("← → 동작/방향 · 휠 확대", 584, 724, "small", c["muted"])
+            r.text(definition.asset_id, CATALOG_RECT.x + 8, y + 8, "small", c["text"], max_width=216)
+        if resource:
+            names = list(resource.clips)
+            for index, name in enumerate(names[self.clip_offset:self.clip_offset + ANIMATION_PAGE]):
+                y = ANIMATION_RECT.y + index * 28
+                r.rect(Rect(ANIMATION_RECT.x, y, ANIMATION_RECT.width, 26), c["selected"] if name == self.clip_name else c["background"])
+                r.text(name, ANIMATION_RECT.x + 8, y + 6, "small", c["text"], max_width=248)
+        else:
+            r.text("시트·번들을 선택한다.", 1000, 144, "small", c["muted"])
+        r.text(f"배율 {self.zoom:.2f}×", 688, 724, "small", c["muted"])
+        r.text("휠 확대", 836, 724, "small", c["muted"])
         if self.show_details:
             lines = [f"종류: {resource.definition.kind if resource else '-'}",
                      f"RGBA8 추정: {resource.estimated_bytes / 1048576:.2f} MiB" if resource else "RGBA8 추정: -",
                      f"핫 로드: {'ON' if self.debug else 'OFF'}", "카탈로그:", self.catalog_path.as_posix()]
             for index, line in enumerate(lines):
-                r.text(line, 964, 556 + index * 26, "small", c["muted"], max_width=288)
+                r.text(line, 28, 624 + index * 22, "small", c["muted"], max_width=224)
         r.line(16, 756, 1264, 756, c["line"])
         r.text(self.message or "에셋을 열고 미리보기하거나 상단에서 작업을 선택한다.", 16, 768, "small",
                c["error"] if self.error else c["muted"], max_width=1248)

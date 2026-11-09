@@ -20,6 +20,36 @@ from Tools.asset_loader.file_panel import FilePanel, IdPanel
 
 
 class AssetPanelTests(unittest.TestCase):
+    def test_animation_explorer_selection_and_scroll_keep_asset_and_zoom(self):
+        from Tools.asset_loader.app import ANIMATION_RECT, ANIMATION_PAGE, CATALOG_RECT
+        resource, source = self.app.handle.resource, self.app.source
+        self.app.elapsed = 0.25
+        names = list(resource.clips)
+        self.click(SimpleNamespace(x=ANIMATION_RECT.x, y=ANIMATION_RECT.y + 28))
+        self.assertEqual(self.app.clip_name, names[1])
+        self.assertEqual(self.app.elapsed, 0)
+        self.assertEqual(self.app.source, source)
+        self.assertIs(self.app.handle.resource, resource)
+        sample = next(iter(resource.clips.values()))
+        resource.clips.update({f"extra_{index}": sample for index in range(30)})
+        zoom = self.app.zoom
+        self.app.mouse = (ANIMATION_RECT.x + 8, ANIMATION_RECT.y + 8)
+        self.app.handle_event(SimpleNamespace(type=self.pico.SDL_MOUSEWHEEL, y=-1))
+        offset = self.app.clip_offset
+        self.assertGreater(offset, 0)
+        self.app.update(0)
+        self.assertEqual(self.app.clip_offset, offset)
+        self.assertEqual(self.app.zoom, zoom)
+        self.app.select_clip("extra_29")
+        self.assertLess(list(resource.clips).index("extra_29"), self.app.clip_offset + ANIMATION_PAGE)
+        self.app.mouse = (CATALOG_RECT.x + 8, CATALOG_RECT.y + 8)
+        self.app.handle_event(SimpleNamespace(type=self.pico.SDL_MOUSEWHEEL, y=-1))
+        self.assertEqual(self.app.zoom, zoom)
+        self.app.draw()
+        self.app.open_source(self.root / "image.png")
+        self.assertEqual(self.app.clip_offset, 0)
+        self.assertEqual(list(self.app.handle.resource.clips), ["image"])
+
     @classmethod
     def setUpClass(cls):
         import pico2d.pico2d as pico

@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [에셋 도구 3열 배치](2026-11-09-asset-tool-three-panels.md): 1개, TIME(scope). 기존 합계와 구분한 신규 기록이다.
+
 - [사용자 출력 파츠](2026-11-09-custom-output-parts.md): 1개, TIME(scope). 기존 합계와 구분한 신규 기록이다.
 
 - [메카 합성·프리셋·분리 내보내기](2026-11-09-mech-composition-presets-export.md): 1개, TIME(scope). 기존 합계와 구분한 신규 기록이다.
