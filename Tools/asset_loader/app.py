@@ -37,6 +37,7 @@ class AssetLoaderApp:
                  pose=False, pose_sample=False):
         self.running = True
         self.initial_source = Path(source).resolve() if source else SAMPLE
+        self.model_source = self.initial_source if self.initial_source.suffix.lower() == ".blend" else None
         self.catalog_path = Path(catalog).resolve()
         self.debug = debug
         self.timings = timings
@@ -111,8 +112,8 @@ class AssetLoaderApp:
             self.open_source(self.initial_source)
         if self.startup_pose:
             self.configure_pose()
-            if self.pose_sample or self.initial_source.suffix.lower() == ".blend":
-                self.pose_editor.attempt(lambda: self.pose_editor.open_model(sample=self.pose_sample))
+            if self.pose_sample:
+                self.pose_editor.attempt(lambda: self.pose_editor.open_model(sample=True))
 
     def report(self, error):
         self.message, self.error = str(error), True
@@ -233,16 +234,20 @@ class AssetLoaderApp:
         from .editors import RenderPanel
         if self.build and self.build.process is not None:
             raise ValueError("렌더 작업이 진행 중이다.")
-        self.set_panel(RenderPanel(self, source))
+        if source:
+            self.model_source = Path(source).expanduser().resolve()
+        self.set_panel(RenderPanel(self, source or self.model_source))
 
     def configure_pose(self, source=None):
         from .pose_panel import PosePanel
+        incoming = source or self.model_source
         if self.pose_editor is None:
-            incoming = source or (self.initial_source if self.initial_source.suffix.lower() == ".blend" else None)
             self.pose_editor = PosePanel(self, incoming)
-        elif source and self.pose_editor.session is None:
-            self.pose_editor.fields["source"].text = str(source)
         self.set_panel(self.pose_editor)
+        if source:
+            self.pose_editor.attempt(lambda: self.pose_editor.load_source(source))
+        elif incoming and self.pose_editor.loaded_source != Path(incoming).expanduser().resolve():
+            self.pose_editor.attempt(lambda: self.pose_editor.load_source(incoming))
 
     def set_panel(self, panel):
         self.panel, self.menu_open = panel, False

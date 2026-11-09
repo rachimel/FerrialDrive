@@ -42,6 +42,7 @@ class PoseWorker:
         else:
             source = Path(config["source"]).resolve()
             bpy.ops.wm.open_mainfile(filepath=str(source))
+        self.opened_source = str(source)
         if engine.STATE not in bpy.context.scene:
             metadata = source.parent / "clips.json"
             engine.prepare(load_profile(config.get("profile")), source,
@@ -98,16 +99,31 @@ class PoseWorker:
     def execute(self, request):
         command = request["command"]
         ctrls = engine.controls()
-        if command in ("move", "rotate"):
+        if command in ("move", "rotate", "bend"):
             obj = ctrls[request["control"]]
             if obj.constraints.get(engine.PREFIX + "Support"):
                 raise ValueError("보조손 고정을 해제하거나 주 손을 움직인다.")
-            if command == "move":
+            if command in ("move", "bend"):
                 location = request["world"]
                 if len(location) != 3 or not all(math.isfinite(v) for v in location):
                     raise ValueError("유한한 목표 위치가 필요하다.")
                 matrix = obj.matrix_world.copy()
-                matrix.translation = Vector(location)
+                if command == "bend":
+                    limb = engine.state()["profile"]["limbs"][request["control"].removeprefix("pole.")]
+                    rig, _ = engine.rig_objects()
+                    worlds = engine.world_bones(rig)
+                    origin = worlds[limb["upper"]].translation
+                    axis = (worlds[limb["end"]].translation-origin).normalized()
+                    current = worlds[limb["lower"]].translation-origin
+                    desired = Vector(location)-origin
+                    current -= axis*current.dot(axis)
+                    desired -= axis*desired.dot(axis)
+                    if current.length < 1e-5 or desired.length < 1e-5:
+                        raise ValueError("관절이 완전히 펴졌다. 골반·손·발 위치로 먼저 굽힘을 만든다.")
+                    angle = math.atan2(axis.dot(current.cross(desired)), current.dot(desired))
+                    matrix.translation = origin + Matrix.Rotation(angle, 3, axis) @ (matrix.translation-origin)
+                else:
+                    matrix.translation = Vector(location)
                 obj.matrix_world = matrix
             else:
                 axis, degrees = request["axis"], float(request["degrees"])
@@ -185,7 +201,14 @@ class PoseWorker:
         worlds = engine.world_bones(rig)
         points = {}
         for key, obj in engine.controls().items():
-            points[key] = {"world": list(obj.matrix_world.translation), "uv": project(obj.matrix_world.translation)}
+            point = obj.matrix_world.translation
+            if key.startswith("pole."):
+                limb = data["profile"]["limbs"][key.removeprefix("pole.")]
+                joint = worlds[limb["lower"]].translation
+                points[key] = {"world": list(joint), "uv": project(joint),
+                               "pole_world": list(point), "pole_uv": project(point)}
+            else:
+                points[key] = {"world": list(point), "uv": project(point)}
         equipment = data["profile"].get("equipment", {})
         eq = bpy.data.objects.get(equipment.get("object", ""))
         errors = {}
@@ -194,7 +217,7 @@ class PoseWorker:
             errors[key] = (worlds[limb["end"]].translation-target.matrix_world.translation).length
         camera_up = self.camera.matrix_world.to_3x3().col[1]
         vertical_span = 1 / abs(project(self.center+camera_up)[1]-project(self.center)[1])
-        return {"work": str(self.work), "clips": data["clips"], "active": data["active"],
+        return {"source": self.opened_source, "work": str(self.work), "clips": data["clips"], "active": data["active"],
                 "frame": scene.frame_current, "start": scene.frame_start, "end": scene.frame_end,
                 "points": points, "right": list(self.camera.matrix_world.to_3x3().col[0]),
                 "up": list(camera_up), "scale": vertical_span,

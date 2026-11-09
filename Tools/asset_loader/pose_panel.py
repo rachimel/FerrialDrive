@@ -30,6 +30,8 @@ class PosePanel(Panel):
         super().__init__(app)
         self.session = self.resource = None
         self.loaded_revision = -1
+        self.loaded_source = None
+        self.is_sample = False
         self.selected = "hand.R"
         self.clip_offset = 0
         self.drag = None
@@ -68,11 +70,15 @@ class PosePanel(Panel):
         return self.session.state if self.session and self.session.state else None
 
     def browse(self):
-        def selected(path):
-            self.fields["source"].text = str(path)
-            self.fields["source"].cursor = len(str(path))
-        self.app.set_panel(FilePanel(self.app, selected, extensions={".blend"},
+        self.app.set_panel(FilePanel(self.app, self.load_source, extensions={".blend"},
                                     initial=self.value("source") or Path(__file__).resolve().parents[2] / "data/models", parent=self))
+
+    def load_source(self, path):
+        path = Path(path).expanduser().resolve()
+        self.fields["source"].text = str(path)
+        self.fields["source"].cursor = len(str(path))
+        if self.loaded_source != path or self.session is None or getattr(self.session, "error", None):
+            self.open_model()
 
     def open_model(self, *, sample=False):
         if self.session and self.data and (self.data["dirty"] or self.data["file_dirty"] or self.session.busy):
@@ -83,6 +89,11 @@ class PosePanel(Panel):
         self.close_resources()
         self.loaded_revision = -1
         self.session = PoseSession(source, sample=sample, clip=self.app.clip_name or None)
+        self.loaded_source = source
+        self.is_sample = sample
+        self.app.model_source = source
+        if sample:
+            self.fields["source"].text = ""
         self.clip_offset = 0
 
     def send(self, command, **fields):
@@ -129,9 +140,6 @@ class PosePanel(Panel):
         if self.session.error:
             self.error = self.session.error
         elif self.loaded_revision != self.session.revision and self.session.state:
-            if self.loaded_revision < 0 and self.focus != "source":
-                self.fields["source"].text = self.data["work"]
-                self.fields["source"].cursor = len(self.data["work"])
             definition = AssetDefinition("pose_preview", "image", self.session.directory / "preview.png")
             candidate = PicoAssetBackend("linear").load(read_document(definition))
             if self.resource:
@@ -163,7 +171,8 @@ class PosePanel(Panel):
             x, y, world, right, up, scale = self.drag
             dx, dy = (event.x-x)/self.preview.height*scale, (event.y-y)/self.preview.height*scale
             target = [world[i]+right[i]*dx-up[i]*dy for i in range(3)]
-            self.attempt(lambda: self.send("move", control=self.selected, world=target))
+            command = "bend" if self.selected.startswith("pole.") else "move"
+            self.attempt(lambda: self.send(command, control=self.selected, world=target))
         elif event.type == pico.SDL_MOUSEBUTTONUP and event.button == pico.SDL_BUTTON_LEFT:
             self.drag = None
 
@@ -174,6 +183,7 @@ class PosePanel(Panel):
                 yield key, self.preview.x+x*self.preview.width, self.preview.y+(1-y)*self.preview.height
 
     def draw(self):
+        self.title = "포즈 편집" + (" · "+self.loaded_source.name if self.loaded_source else " · 도형 샘플" if self.is_sample else "")
         for index, key in enumerate(LABELS):
             self.button_styles[(928+(index % 2)*156, 168+(index//2)*32)] = "selected" if key == self.selected else "input"
         super().draw()
@@ -196,8 +206,21 @@ class PosePanel(Panel):
                 for key, x, y in self.projected_points():
                     color = colors["button_hover"] if key == self.selected else colors["accent"]
                     size = 6 if key == self.selected else 4
+                    if key.startswith("pole."):
+                        pole_uv = data["points"][key].get("pole_uv")
+                        if pole_uv:
+                            dx = (pole_uv[0]*self.preview.width+self.preview.x)-x
+                            dy = (self.preview.y+(1-pole_uv[1])*self.preview.height)-y
+                            distance = hypot(dx, dy)
+                            if distance > 1:
+                                r.line(x, y, x+dx/distance*22, y+dy/distance*22, colors["muted"])
                     r.rect(Rect(x-size-1, y-size-1, size*2+2, size*2+2), colors["background"])
-                    r.rect(Rect(x-size, y-size, size*2, size*2), color, filled=key == self.selected)
+                    if key.startswith("pole."):
+                        for a, b in (((x, y-size), (x+size, y)), ((x+size, y), (x, y+size)),
+                                     ((x, y+size), (x-size, y)), ((x-size, y), (x, y-size))):
+                            r.line(*a, *b, color)
+                    else:
+                        r.rect(Rect(x-size, y-size, size*2, size*2), color, filled=key == self.selected)
                     if key == self.selected:
                         r.text(LABELS.get(key, key), x+10, y-20, "small", colors["text"])
             status = "계산·미리보기 갱신 중" if self.session.busy else "포즈 키 미저장" if data["dirty"] else "작업본 미저장" if data["file_dirty"] else "저장됨"
@@ -209,6 +232,9 @@ class PosePanel(Panel):
             r.text("모델 준비 중" if self.session else "모델 또는 도형 샘플을 연다.", 416, 400, "body", colors["muted"])
         r.text("손잡이를 끌어 이동", 40, 710, "small", colors["muted"])
         r.text("회전은 오른쪽 X / Y / Z", 40, 730, "small", colors["muted"])
+        r.text("팔꿈치·무릎: 관절 위 손잡이로 굽힘 방향 조절", 272, 704, "small", colors["muted"], max_width=640)
+        if data:
+            r.text("작업본: "+data["work"], 40, 762, "small", colors["muted"], max_width=1168)
         self.draw_choices()
 
     def close_resources(self):

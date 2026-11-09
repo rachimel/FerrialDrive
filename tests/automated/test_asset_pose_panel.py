@@ -3,7 +3,8 @@
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
+import tempfile
 
 from Tools.asset_loader.app import AssetLoaderApp
 from Tools.asset_loader.pose_panel import PosePanel
@@ -49,6 +50,71 @@ class PosePanelTests(unittest.TestCase):
         self.panel.content_event(SimpleNamespace(type=1, button=1, x=592, y=440))
         self.assertIsNone(self.panel.drag)
 
+    def test_new_render_source_replaces_cached_pose_session(self):
+        with tempfile.TemporaryDirectory() as directory:
+            old, new = Path(directory)/"old.blend", Path(directory)/"chosen.blend"
+            old.touch()
+            new.touch()
+            self.panel.loaded_source = old.resolve()
+            self.panel.session.close = Mock()
+            self.app.pose_editor = self.panel
+            replacement = SimpleNamespace(state=None)
+            with patch("Tools.asset_loader.pose_panel.PoseSession", return_value=replacement) as start:
+                self.app.configure_render(new)
+                self.app.action("pose")
+            start.assert_called_once_with(new.resolve(), sample=False, clip=None)
+            self.assertIs(self.panel.session, replacement)
+            self.assertEqual(self.panel.value("source"), str(new.resolve()))
+
+    def test_file_picker_open_loads_exact_selected_file(self):
+        self.panel.open_model = Mock()
+        self.panel.load_source("chosen.blend")
+        self.panel.open_model.assert_called_once()
+        self.assertEqual(self.panel.value("source"), str(Path("chosen.blend").resolve()))
+
+    def test_sample_reopen_does_not_restore_an_older_model(self):
+        self.app.model_source = Path("old.blend").resolve()
+        self.panel.session.close = Mock()
+        replacement = SimpleNamespace(state=None)
+        self.app.pose_editor = self.panel
+        with patch("Tools.asset_loader.pose_panel.PoseSession", return_value=replacement) as start:
+            self.panel.open_model(sample=True)
+            self.app.action("pose")
+        start.assert_called_once_with(None, sample=True, clip=None)
+        self.assertIsNone(self.app.model_source)
+        self.assertEqual(self.panel.value("source"), "")
+
+    def test_unsaved_session_is_preserved_when_another_file_is_requested(self):
+        self.panel.session.state["dirty"] = True
+        self.panel.open_model = Mock(wraps=self.panel.open_model)
+        previous = self.panel.session
+        self.app.pose_editor = self.panel
+        self.app.configure_pose("new.blend")
+        self.assertIs(self.panel.session, previous)
+        self.assertIn("저장", self.panel.error)
+
+    def test_preview_update_never_replaces_source_field_with_work_path(self):
+        self.panel.fields["source"].text = "selected_model.blend"
+        self.panel.session.poll = Mock()
+        self.panel.session.error = None
+        self.panel.session.revision = 0
+        self.panel.session.directory = Path("preview")
+        self.panel.session.state["work"] = "generated_work.blend"
+        self.panel.session.state["frame"] = 2
+        resource = Mock()
+        with patch("Tools.asset_loader.pose_panel.read_document"), patch("Tools.asset_loader.pose_panel.PicoAssetBackend") as backend:
+            backend.return_value.load.return_value = resource
+            self.panel.update(0)
+        self.assertEqual(self.panel.value("source"), "selected_model.blend")
+
+    def test_knee_drag_uses_joint_direction_command(self):
+        self.panel.session.state["points"] = {"pole.foot.R": {
+            "world": [0, 0, 1], "uv": [.5, .5, 1], "pole_world": [-1, 0, 1]}}
+        x, y = 592, 440
+        self.panel.content_event(SimpleNamespace(type=1, button=1, x=x, y=y))
+        self.panel.content_event(SimpleNamespace(type=2, x=x+14, y=y))
+        self.panel.session.send.assert_called_with("bend", control="pole.foot.R", world=[.1, 0, 1])
+
     def test_rotation_and_equipment_use_explicit_commands(self):
         self.panel.rotate("Z", -1)
         self.panel.session.send.assert_called_with("rotate", control="hand.R", axis="Z", degrees=-5)
@@ -75,6 +141,17 @@ class PosePanelTests(unittest.TestCase):
         session.send("move", control="hand.R", world=[3, 4, 5])
         self.assertEqual([row["command"] for row in session.queue], ["move", "key", "move"])
         self.assertEqual(session.queue[0]["world"], [2, 3, 4])
+
+    def test_knee_drag_requests_are_coalesced(self):
+        session = PoseSession.__new__(PoseSession)
+        from collections import deque
+        session.queue = deque()
+        session.inflight = True
+        session.process = SimpleNamespace(poll=lambda: None)
+        for index in range(30):
+            session.send("bend", control="pole.foot.R", world=[index, 0, 1])
+        self.assertEqual(len(session.queue), 1)
+        self.assertEqual(session.queue[0]["world"], [29, 0, 1])
 
 
 if __name__ == "__main__":

@@ -21,13 +21,15 @@ from ferrial_drive.runtime import run_application
 
 
 class PoseTestApp(AssetLoaderApp):
-    def __init__(self, source=None, check=None):
+    def __init__(self, source=None, check=None, control="hand.R"):
         super().__init__(source=source, pose=True, pose_sample=source is None)
         self.check_directory = Path(check).resolve() if check else None
         self.stage = 0
         self.started = time.monotonic()
         self.check_error = None
         self.capture_pending = None
+        self.check_control = control
+        self.check_source = Path(source).resolve() if source else None
 
     def click(self, x, y):
         self.handle_event(SimpleNamespace(type=self.pico.SDL_MOUSEBUTTONDOWN,
@@ -46,13 +48,16 @@ class PoseTestApp(AssetLoaderApp):
             return
         data = panel.data
         if self.stage == 0:
+            if self.check_source:
+                assert Path(data["source"]) == self.check_source
+                assert Path(panel.value("source")) == self.check_source
             self.capture_pending = "initial.png"
             self.stage = 1
         elif self.stage == 1:
-            x, y, _ = data["points"]["hand.R"]["uv"]
+            x, y, _ = data["points"][self.check_control]["uv"]
             x, y = panel.preview.x+x*640, panel.preview.y+(1-y)*560
             self.click(x, y)
-            assert panel.selected == "hand.R", panel.selected
+            assert panel.selected == self.check_control, panel.selected
             self.handle_event(SimpleNamespace(type=self.pico.SDL_MOUSEMOTION, x=x+20, y=y-12))
             self.handle_event(SimpleNamespace(type=self.pico.SDL_MOUSEBUTTONUP,
                               button=self.pico.SDL_BUTTON_LEFT, x=x+20, y=y-12))
@@ -83,6 +88,7 @@ class PoseTestApp(AssetLoaderApp):
             self.check_directory.mkdir(parents=True, exist_ok=True)
             (self.check_directory / "verification.json").write_text(json.dumps({
                 "work": data["work"], "exported": data["exported"], "drag_key_save_export_render": True,
+                "source": data["source"], "control": self.check_control,
                 "elapsed_seconds": time.monotonic()-self.started}, indent=2), encoding="utf-8")
 
     def draw(self):
@@ -100,8 +106,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("source", type=Path, nargs="?")
     parser.add_argument("--check", type=Path, help="실제 창에서 드래그·저장·출력을 검사하고 캡처한다.")
+    parser.add_argument("--control", default="hand.R", help="화면 검사에서 끌 컨트롤")
     args = parser.parse_args()
-    app = PoseTestApp(args.source, args.check)
+    app = PoseTestApp(args.source, args.check, args.control)
     run_application(app, **WINDOW)
     if args.check:
         print("POSE_PANEL_CHECK_PASSED", args.check)
