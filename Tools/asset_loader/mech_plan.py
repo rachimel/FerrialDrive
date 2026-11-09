@@ -32,6 +32,12 @@ EVENTS = (
     ("clear_mount", "칼집·장착부 이탈"), ("attach_mount", "수납 위치 고정"),
     ("release", "손 놓기"), ("detach", "사출 · 독립 이동"),
 )
+ENERGY_CHECKS = (
+    ("energy_base", "색상 출력에 발광 미포함 · 에너지 마스크 별도 출력"),
+    ("energy_alignment", "마스크의 프레임·기준점·가림이 소유 레이어와 일치"),
+)
+ENERGY_MODES = (("unassigned", "미지정"), ("material", "재질 EnergyMask"),
+                ("objects", "별도 마스크 오브젝트"), ("none", "에너지 없음"))
 CHECKS = (
     ("grip_overlap", "손가락 안쪽 경미 겹침만 허용 · 손등 관통/돌출 수정"),
     ("continuity", "부착 전후 위치·회전 연속 · 무기 중복/누락 없음"),
@@ -41,9 +47,23 @@ CHECKS = (
     ("sheath_energy", "칼집 에너지는 검 표시와 독립적으로 유지"),
     ("gun_alignment", "기관단총 파지·팔 결합부 위치 동시 정렬"),
     ("gun_occlusion", "손목을 넘는 팔 결합부와 팔 장갑 가림 확인"),
-)
+) + ENERGY_CHECKS
 STATUSES = ("미확인", "확인", "해당 없음")
 OCCLUSION = ("미정", "순서만 사용", "추가 분할 필요", "가림 처리 필요")
+
+
+def default_energy_mask():
+    return {"mode": "unassigned", "source": ""}
+
+
+def with_energy_defaults(data):
+    """기존 v1 입력을 보존하며 신규 선택 항목만 채운다."""
+    data = deepcopy(data)
+    for key, _, _ in LAYERS:
+        data["layers"][key].setdefault("energy_mask", default_energy_mask())
+    for key, _ in ENERGY_CHECKS:
+        data["checks"].setdefault(key, "미확인")
+    return data
 
 
 def default_plan(asset_id, source):
@@ -57,7 +77,7 @@ def default_plan(asset_id, source):
         "version": 1, "asset_id": asset_id, "source": str(Path(source).resolve()),
         "render": {"camera": "", "frames": "1,3,5,7", "fps": "8", "width": "240",
                    "height": "240", "scale": "4.5", "pivot": "120,0", "purpose": "combat"},
-        "layers": {key: {"objects": "", "anchor": anchor, "empty_hand": ""}
+        "layers": {key: {"objects": "", "anchor": anchor, "empty_hand": "", "energy_mask": default_energy_mask()}
                    for key, _, anchor in LAYERS},
         "motions": {key: {"clip": key, "frames": "", "reuse": "", "notes": "",
                           "events": [], "orders": deepcopy(orders), "overrides": [],
@@ -99,6 +119,10 @@ def validate_plan(data, *, asset_id, source):
         for field in ("objects", "anchor", "empty_hand"):
             if not isinstance(data["layers"][key][field], str):
                 raise ValueError("레이어 오브젝트·부착점은 문자열이어야 한다.")
+        mask = data["layers"][key].get("energy_mask", default_energy_mask())
+        if (not isinstance(mask, dict) or mask.get("mode") not in dict(ENERGY_MODES)
+                or not isinstance(mask.get("source"), str)):
+            raise ValueError("에너지 마스크의 분리 방식·입력 이름 오류")
     for key, _ in MOTIONS:
         motion = data["motions"][key]
         frames = frame_numbers(motion["frames"] or render["frames"])
@@ -129,13 +153,14 @@ def validate_plan(data, *, asset_id, source):
     if data["sword_reset_frame"] and int(data["sword_reset_frame"]) not in frame_numbers(data["motions"]["stow"]["frames"] or render["frames"]):
         raise ValueError("검 길이 복귀 시작은 수납 동작 프레임에서 지정한다.")
     for key, _ in CHECKS:
-        if data["checks"][key] not in STATUSES:
+        status = data["checks"].get(key, "미확인") if key in dict(ENERGY_CHECKS) else data["checks"][key]
+        if status not in STATUSES:
             raise ValueError("확인 상태 오류")
 
 
 def load_plan(path, *, asset_id, source):
     try:
-        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        data = with_energy_defaults(json.loads(Path(path).read_text(encoding="utf-8")))
         validate_plan(data, asset_id=asset_id, source=source)
     except (KeyError, TypeError, AttributeError, OverflowError) as error:
         raise ValueError("메카 작업본의 필수 항목·자료형 오류") from error
@@ -143,6 +168,7 @@ def load_plan(path, *, asset_id, source):
 
 
 def save_plan(path, data):
+    data = with_energy_defaults(data)
     validate_plan(data, asset_id=data["asset_id"], source=data["source"])
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)

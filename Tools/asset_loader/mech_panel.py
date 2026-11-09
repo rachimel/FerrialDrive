@@ -3,8 +3,8 @@
 from copy import deepcopy
 
 from ferrial_drive.ui.components import Rect
-from .mech_plan import (CHECKS, DIRECTIONS, EVENTS, LAYERS, MOTIONS, OCCLUSION, STATUSES,
-                        default_plan, load_plan, plan_path, save_plan)
+from .mech_plan import (CHECKS, DIRECTIONS, ENERGY_MODES, EVENTS, LAYERS, MOTIONS, OCCLUSION, STATUSES,
+                        default_plan, load_plan, plan_path, save_plan, with_energy_defaults)
 from .production import frame_numbers
 from .widgets import Panel
 
@@ -24,13 +24,14 @@ class MechPanel(Panel):
     def __init__(self, app):
         super().__init__(app)
         self.path = plan_path(app.asset_id, app.source)
-        self.data = deepcopy(app.mech_drafts.get(str(self.path), default_plan(app.asset_id, app.source)))
+        self.data = with_energy_defaults(app.mech_drafts.get(str(self.path), default_plan(app.asset_id, app.source)))
         self.tab = self.layer = self.motion = self.direction = self.order_index = 0
         self.order_frame = None
         self.side, self.weapon = "left", "sword"
         self.saved = False
         self.labels = []
         self.advanced = self.help_open = self.frame_options = False
+        self.layer_view = "color"
         self.rebuild()
         if str(self.path) not in app.mech_drafts and self.path.exists():
             self.attempt(self.reload)
@@ -66,6 +67,9 @@ class MechPanel(Panel):
                     name = f"{layer}.{key}"
                     if name in self.fields:
                         self.data["layers"][layer][key] = self.value(name)
+                name = f"{layer}.energy_source"
+                if name in self.fields:
+                    self.data["layers"][layer]["energy_mask"]["source"] = self.value(name)
         elif self.tab == 2:
             for key in ("clip", "frames", "reuse", "notes"):
                 self.current_motion[key] = self.value(key)
@@ -114,6 +118,11 @@ class MechPanel(Panel):
         mapping[key], self.saved = value, False
         self.rebuild()
 
+    def select_layer_view(self, value):
+        self.remember()
+        self.layer_view = value
+        self.rebuild()
+
     def rebuild(self):
         self.fields, self.buttons, self.labels, self.focus = {}, [], [], None
         self.button_styles, self.button_markers, self.choice_popup = {}, {}, None
@@ -139,12 +148,22 @@ class MechPanel(Panel):
                 self.field("scale", "정사영 범위", self.data["render"]["scale"], 264, 390, 300)
                 self.field("pivot", "기준점 X,Y · bottom-left", self.data["render"]["pivot"], 596, 390, 300)
         elif self.tab == 1:
+            for value, label, x in (("color", "색상·부착", 264), ("energy", "에너지 마스크", 424)):
+                self.button(label, Rect(x, 92, 148, 30), lambda selected=value: self.select_layer_view(selected),
+                            style="selected" if self.layer_view == value else "input")
             for index, (layer, _, _) in enumerate(LAYERS):
-                y, row = 150 + index * 46, self.data["layers"][layer]
-                self.add_field(f"{layer}.objects", row["objects"], Rect(432, y, 348, 30))
-                self.add_field(f"{layer}.anchor", row["anchor"], Rect(796, y, 188, 30))
-                if layer in ("left_hand", "right_hand"):
-                    self.add_field(f"{layer}.empty_hand", row["empty_hand"], Rect(1000, y, 216, 30))
+                y, row = 170 + index * 46, self.data["layers"][layer]
+                if self.layer_view == "energy":
+                    mask = row["energy_mask"]
+                    self.choice(dict(ENERGY_MODES)[mask["mode"]], ENERGY_MODES, Rect(432, y, 240, 30),
+                                lambda value, current=mask: self.choose(current, "mode", value))
+                    if mask["mode"] != "none":
+                        self.add_field(f"{layer}.energy_source", mask["source"], Rect(688, y, 528, 30))
+                else:
+                    self.add_field(f"{layer}.objects", row["objects"], Rect(432, y, 348, 30))
+                    self.add_field(f"{layer}.anchor", row["anchor"], Rect(796, y, 188, 30))
+                    if layer in ("left_hand", "right_hand"):
+                        self.add_field(f"{layer}.empty_hand", row["empty_hand"], Rect(1000, y, 216, 30))
         elif self.tab in (2, 3):
             self.choice("동작: " + MOTIONS[self.motion][1], [(i, label) for i, (_, label) in enumerate(MOTIONS)],
                         Rect(264, 98, 320, 32), lambda value: self.switch(motion=value))
@@ -184,7 +203,7 @@ class MechPanel(Panel):
                     self.add_field(key, events.get(key, ""), Rect(504, 188 + index * 52, 112, 30))
         else:
             for index, (key, label) in enumerate(CHECKS):
-                self.choice(self.data["checks"][key], [(value, value) for value in STATUSES], Rect(264, 150 + index * 42, 96, 30),
+                self.choice(self.data["checks"][key], [(value, value) for value in STATUSES], Rect(264, 150 + index * 38, 96, 30),
                             lambda value, k=key: self.choose(self.data["checks"], k, value))
             for index, (key, label) in enumerate((("sword_reset_frame", "검 길이 복귀 · 수납 프레임 / 빈칸은 미정"),
                                                  ("gun_storage", "총 수납 위치"), ("deferred", "미확정 사항"), ("notes", "검수 메모"))):
@@ -273,11 +292,17 @@ class MechPanel(Panel):
             r.text("출력 용도", 900, 234, "small", c["muted"])
             r.text("모든 레이어에 같은 카메라·크기·기준점 적용", 264, 452, "small", c["muted"])
         elif self.tab == 1:
-            for label, x in (("출력 단위", 264), ("오브젝트 · 쉼표 구분", 432), ("부착 기준", 796), ("빈손 오브젝트", 1000)):
-                r.text(label, x, 118, "small", c["muted"])
+            headers = (("출력 단위", 264), ("분리 방식", 432), ("마스크 입력 · 재질/노드 또는 오브젝트 이름", 688)) if self.layer_view == "energy" else (
+                ("출력 단위", 264), ("오브젝트 · 쉼표 구분", 432), ("부착 기준", 796), ("빈손 오브젝트", 1000))
+            for label, x in headers:
+                r.text(label, x, 142, "small", c["muted"])
             for index, (_, label, _) in enumerate(LAYERS):
-                r.text(label, 264, 158 + index * 46, "small", c["text"], max_width=156)
-            r.text("손·무기·칼집은 독립 유지 · 손+무기는 출력 시 묶음", 264, 548, "small", c["muted"])
+                r.text(label, 264, 178 + index * 46, "small", c["text"], max_width=156)
+            if self.layer_view == "energy":
+                r.text("색상은 발광 없이 · 마스크는 선형 흑백 데이터", 264, 558, "small", c["muted"])
+                r.text("각 마스크는 소유 출력 단위의 프레임·기준점·가림·부착 전환을 함께 따름", 264, 584, "small", c["muted"])
+            else:
+                r.text("손·무기·칼집은 독립 유지 · 손+무기는 출력 시 묶음", 264, 558, "small", c["muted"])
         elif self.tab in (2, 3):
             if self.tab == 2:
                 r.text("그리기 순서 · 위에서 아래로 뒤 → 앞", 744, 160, "small", c["muted"])
@@ -297,14 +322,14 @@ class MechPanel(Panel):
             r.text("검수 상태", 264, 96, "body", c["text"])
             r.text("무기 설정", 904, 96, "body", c["text"])
             for index, (_, label) in enumerate(CHECKS):
-                r.text(label, 376, 158 + index * 42, "small", c["text"], max_width=504)
-            r.text("실제 결과를 검수한 뒤 상태 지정", 264, 526, "small", c["muted"])
+                r.text(label, 376, 158 + index * 38, "small", c["text"], max_width=504)
+            r.text("실제 결과를 검수한 뒤 상태 지정", 264, 560, "small", c["muted"])
         if self.help_open:
             explanations = (
                 ("한 장면에서 모든 레이어를 출력한다. 레이어별 자동 맞춤은 사용하지 않는다.",
                  "세부 설정에서 정사영 범위와 기준점을 조정한다. 동작별 프레임은 비우면 공통 값을 사용한다."),
-                ("본체는 손목까지 포함한다. 좌우 손과 빈손을 별도로 지정한다.",
-                 "칼집은 본체에 남으며 분리된 무기는 독립 위치·회전으로 표시한다."),
+                ("색상·부착과 에너지 마스크를 출력 단위별로 연결한다. 마스크 색·밝기는 게임 합성에서 제어한다.",
+                 "칼집 마스크는 검과 독립 유지한다. 손 마스크는 빈손/파지 상태의 실제 손·무기 구성을 따른다."),
                 ("기본 순서와 프레임별 예외는 독립적이다. 프레임별 순서를 펼쳐 특정 프레임을 편집한다.",
                  "몸 앞뒤를 동시에 가로지르는 무기는 가림 방식에서 추가 분할 또는 가림 처리를 지정한다."),
                 ("재생 인덱스가 아닌 Blender 원본 프레임을 입력한다.",

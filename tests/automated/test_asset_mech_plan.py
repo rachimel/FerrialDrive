@@ -1,6 +1,7 @@
 """메카 작업본의 좌우 분리·프레임 검증·저장 실패 보존과 단일 창 편집 흐름."""
 
 from copy import deepcopy
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -87,6 +88,39 @@ class MechPlanTests(unittest.TestCase):
         self.data["motions"]["draw"]["frames"] = "1,3,5"
         with self.assertRaises(ValueError):
             self.validate(self.data)
+
+    def test_legacy_plan_load_adds_unassigned_masks_without_rewriting_original(self):
+        from Tools.asset_loader.mech_plan import ENERGY_CHECKS
+        legacy = deepcopy(self.data)
+        for layer in legacy["layers"].values():
+            layer.pop("energy_mask")
+        for key, _ in ENERGY_CHECKS:
+            legacy["checks"].pop(key)
+        legacy["layers"]["left_hand"]["empty_hand"] = "LeftHand"
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "legacy.json"
+            path.write_text(json.dumps(legacy), encoding="utf-8")
+            original = path.read_bytes()
+            loaded = load_plan(path, asset_id="sample_mech", source=self.source)
+            self.assertEqual(path.read_bytes(), original)
+            self.assertEqual(loaded["motions"], legacy["motions"])
+            self.assertEqual(loaded["layers"]["left_hand"]["empty_hand"], "LeftHand")
+            self.assertEqual(loaded["layers"]["body"]["energy_mask"], {"mode": "unassigned", "source": ""})
+            save_plan(path, loaded)
+            self.assertEqual(load_plan(path, asset_id="sample_mech", source=self.source), loaded)
+
+    def test_masks_are_owner_scoped_and_invalid_mode_preserves_saved_file(self):
+        self.data["layers"]["body"]["energy_mask"].update(mode="material", source="Core_EnergyMask")
+        self.data["layers"]["sheath"]["energy_mask"].update(mode="objects", source="Sheath_Energy")
+        self.assertEqual(self.data["layers"]["left_hand"]["energy_mask"]["mode"], "unassigned")
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "masks.json"
+            save_plan(path, self.data)
+            before = path.read_bytes()
+            self.data["layers"]["body"]["energy_mask"]["mode"] = "unknown"
+            with self.assertRaises(ValueError):
+                save_plan(path, self.data)
+            self.assertEqual(path.read_bytes(), before)
 
 
 class MechPanelTests(unittest.TestCase):
@@ -227,6 +261,26 @@ class MechPanelTests(unittest.TestCase):
         self.panel.switch(tab=1)
         self.assertEqual(self.panel.value("left_hand.objects"), "LeftHand,Sword")
         self.assertEqual(self.panel.value("right_hand.objects"), "RightHand,Gun")
+
+    def test_color_and_energy_views_keep_owner_mapping_and_saved_masks(self):
+        self.panel.switch(tab=1)
+        self.panel.fields["left_hand.objects"].text = "LeftHand,Sword"
+        self.panel.select_layer_view("energy")
+        mask = self.panel.data["layers"]["left_hand"]["energy_mask"]
+        self.panel.choose(mask, "mode", "material")
+        self.panel.fields["left_hand.energy_source"].text = "Hand_Mask,Sword_Mask"
+        sheath = self.panel.data["layers"]["sheath"]["energy_mask"]
+        self.panel.choose(sheath, "mode", "objects")
+        self.panel.fields["sheath.energy_source"].text = "Sheath_Light"
+        self.app.draw()
+        self.panel.select_layer_view("color")
+        self.assertEqual(self.panel.value("left_hand.objects"), "LeftHand,Sword")
+        self.panel.submit()
+        self.panel.reload()
+        self.panel.select_layer_view("energy")
+        self.assertEqual(self.panel.value("left_hand.energy_source"), "Hand_Mask,Sword_Mask")
+        self.assertEqual(self.panel.value("sheath.energy_source"), "Sheath_Light")
+        self.assertEqual(self.panel.current_motion["orders"]["s"].count("left_hand"), 1)
 
 
 if __name__ == "__main__":
