@@ -198,6 +198,9 @@ def apply_operations(operations):
             if slot < 0 or slot >= len(obj.data.materials):
                 raise ValueError('기존 재질 슬롯만 변경한다.')
             obj.data.materials[slot] = material
+        elif kind == 'set_boundary_enabled':
+            from boundary_detail import set_boundary_enabled
+            set_boundary_enabled(operation)
         elif kind == 'set_surface_finish':
             from material_surface import set_surface_finish
             set_surface_finish(operation)

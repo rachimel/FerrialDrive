@@ -156,6 +156,8 @@
 | SOURCE | 8 |
 | TIME | 83 |
 
+- [[FDLOG_MISSING_TIME:player-mech-skirt-pipeline-review:scope]] — `2026-11-09-player-mech-skirt-pipeline-review.md`: 개별 발언 시각. 검색 단서: python으로 작업하는 거 때문에, 보고서로 마무리, 스커트 구분선만 제거.
+
 - FDLOG-20261108-blender-model-pipeline-v1: request TIME 미확인. 현재 대화의 파이프라인 요약/모듈화/독립 검사/삭제 승인/1차 최종 플레이어 모델 승격/파일 통합 요청 시각으로 보완. 기록: 2026-11-08-blender-model-pipeline-v1.md
 
 - [[FDLOG_MISSING_TIME:2026-11-09-asset-map-bundle-frame-timing:scope]] — `2026-11-09-asset-map-bundle-frame-timing.md`: 개별 발언의 정확한 시각. 검색 단서: bundle에 type, 각 프레임을 유지하는 시간, 맵 export import 기능도 구현해주고.

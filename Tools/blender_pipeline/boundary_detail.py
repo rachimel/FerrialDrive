@@ -3,6 +3,22 @@ from pathlib import Path
 import math
 
 
+def set_boundary_enabled(config):
+    """공유 마스크·재질·UV를 보존하고 지정 메시의 구분선만 켜거나 끈다."""
+    import bpy
+    objects = [bpy.data.objects[name] for name in config['objects']]
+    attribute_name = config.get('attribute', 'boundary_detail_enabled')
+    attributes = []
+    for obj in objects:
+        attribute = obj.data.attributes.get(attribute_name) if obj.type == 'MESH' else None
+        if obj.type != 'MESH' or obj.data.users != 1 or attribute is None or attribute.domain != 'CORNER' or attribute.data_type != 'FLOAT':
+            raise ValueError('기존 구분선 속성이 있는 독립 메시만 변경한다.')
+        attributes.append(attribute)
+    value = 1.0 if config['enabled'] else 0.0
+    for attribute in attributes:
+        attribute.data.foreach_set('value', [value] * len(attribute.data))
+
+
 def generate_boundary_texture(config):
     import bpy
     import numpy as np

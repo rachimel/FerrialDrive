@@ -57,6 +57,7 @@
 | `project_panel_uv` | 면 방향별 명시 영역에 패널 전용 UV 추가/명시 갱신(overwrite). projection_axis로 경사면을 같은 투영에 연결. 기존 다른 UV와 활성 렌더 UV 유지 |
 | `generate_boundary_texture` | 실제 경계·급격한 꺾임을 1K 마스크로 생성. 다른 UV 보존. overwrite로 갱신, width_overrides로 부위별 선 폭, face_filters로 면 방향/위치 범위, disable_objects로 기존 대상 해제 |
 | `apply_boundary_texture` | 연결된 표면 색에 구분선 마스크를 합성. 적용 속성이 없는 메시에는 표시하지 않으며 공유 재질·노멀·발광 유지 |
+| `set_boundary_enabled` | objects, enabled. 기존 구분선 적용 속성만 켜거나 끈다. 공유 마스크·재질·모든 UV 보존 |
 | `set_surface_finish` | 공통 PBR 재질의 거칠기 범위·모서리 거칠기·반사 강도 조정. 기본 선택에서 유리/발광 전용 재질 제외 |
 | `set_frame` / `freeze_pose` | 검토 프레임 선택 / 후보 Armature의 Action·NLA를 멈추고 현재 포즈 유지. 드라이버는 유지 |
 | `aim_bone` | object, bone, world_direction. 본 길이와 연결을 유지하며 후보 포즈 방향 조정 |

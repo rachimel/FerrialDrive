@@ -110,6 +110,13 @@ def main():
         assert shader.inputs['Emission Color'].links[0].from_node == emission
     assert material.node_tree.nodes.get('BoundaryDetail::지정 외장만 적용').attribute_name == 'boundary_detail_enabled'
     assert all(not n.name.endswith('.001') for n in material.node_tree.nodes if n.name.startswith('BoundaryDetail::'))
+    untouched = fingerprint(obj)
+    image_bytes = Path(boundary_path).read_bytes()
+    apply_operations([dict(op='set_boundary_enabled',objects=[obj.name],enabled=False)])
+    assert all(v.value==0 for v in obj.data.attributes['boundary_detail_enabled'].data)
+    assert fingerprint(obj)==untouched and Path(boundary_path).read_bytes()==image_bytes
+    apply_operations([dict(op='set_boundary_enabled',objects=[obj.name],enabled=True)])
+    assert all(v.value==1 for v in obj.data.attributes['boundary_detail_enabled'].data)
     apply_operations([dict(op='set_surface_finish',roughness_range=[.60,.80],specular=.28,edge_roughness=.60)])
     assert abs(material.node_tree.nodes['SurfacePBR::거칠기 범위'].inputs['To Min'].default_value-.60)<1e-6
     assert abs(shader.inputs['Specular IOR Level'].default_value-.28)<1e-6
@@ -122,6 +129,7 @@ def main():
     bpy.ops.wm.save_as_mainfile(filepath=str(target))
     bpy.ops.wm.open_mainfile(filepath=str(target))
     assert fingerprint(bpy.data.objects[object_name]) == before
+    assert all(v.value==1 for v in bpy.data.objects[object_name].data.attributes['boundary_detail_enabled'].data)
     glass = bpy.data.materials['ClearCover'].node_tree.nodes.get('Principled BSDF')
     assert glass.inputs['Transmission Weight'].default_value == 1
     assert abs(glass.inputs['Roughness'].default_value-.045) < 1e-5
