@@ -66,6 +66,7 @@
 | `set_frame` / `freeze_pose` | 검토 프레임 선택 / 후보 Armature의 Action·NLA를 멈추고 현재 포즈 유지. 드라이버는 유지 |
 | `aim_bone` | object, bone, world_direction. 본 길이와 연결을 유지하며 후보 포즈 방향 조정 |
 | `pose_limb` | object, upper/lower/end, target_world, bend_world, 선택적 end_rotation_world. 본 길이를 유지하는 두 관절 포즈. 도달 불가 목표는 실패 처리 |
+| `repair_unweighted` | object, source, enabled=true. 가중치가 빠진 정점만 기준 메시의 가장 가까운 가중치 정점에서 보완한다. 기존 가중치·형상·본 계층은 보존한다. 기준과 대상은 동일한 모델 좌표 배치를 사용하며 보완 후 실제 변형을 별도 확인한다. |
 | `attach_world` | object, parent, 선택적 bone, matrix_world. 평가된 부모 프레임에서 명시한 월드 배치 유지 |
 | `attachment_switch` | control/property, stowed_target, held_target. 동일 오브젝트의 수납/파지 앵커 전환. 연속 발도 동작은 별도 |
 

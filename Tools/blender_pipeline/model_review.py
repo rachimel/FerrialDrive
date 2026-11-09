@@ -75,6 +75,8 @@ def capture_fixture(config):
 def render_review(config, directory, fixture=None):
     import bpy
     from mathutils import Vector
+    if bpy.context.object and bpy.context.object.mode != 'OBJECT':
+        bpy.ops.object.mode_set(mode='OBJECT')
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     fixture = fixture or capture_fixture(config)

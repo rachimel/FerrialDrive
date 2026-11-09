@@ -201,6 +201,11 @@ def apply_operations(operations):
         elif kind == 'set_boundary_enabled':
             from boundary_detail import set_boundary_enabled
             set_boundary_enabled(operation)
+        elif kind == 'repair_unweighted':
+            from model_weights import repair_unweighted
+            if operation.get('enabled') is not True:
+                raise ValueError('가중치 보완에는 enabled=true가 필요하다.')
+            repair_unweighted(bpy.data.objects[operation['source']], bpy.data.objects[operation['object']])
         elif kind == 'set_surface_finish':
             from material_surface import set_surface_finish
             set_surface_finish(operation)

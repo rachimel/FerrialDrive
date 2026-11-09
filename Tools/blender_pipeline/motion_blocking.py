@@ -45,24 +45,9 @@ class BlockingRig:
     def repair_unbound(self, spec):
         if not spec or spec.get('enabled') is not True:
             return 0
-        from mathutils.kdtree import KDTree
+        from model_weights import repair_unweighted
         source, target = [self.bpy.data.objects[spec[k]] for k in ['source', 'target']]
-        tree = KDTree(len(source.data.vertices))
-        for v in source.data.vertices:
-            tree.insert(source.matrix_world @ v.co, v.index)
-        tree.balance()
-        count = 0
-        for v in target.data.vertices:
-            if sum(g.weight for g in v.groups) > .001:
-                continue
-            _, index, _ = tree.find(target.matrix_world @ v.co)
-            groups = source.data.vertices[index].groups
-            for g in groups:
-                name = source.vertex_groups[g.group].name
-                group = target.vertex_groups.get(name) or target.vertex_groups.new(name=name)
-                group.add([v.index], g.weight, 'REPLACE')
-            count += 1
-        return count
+        return repair_unweighted(source, target)
 
     def update(self):
         self.bpy.context.view_layer.update()

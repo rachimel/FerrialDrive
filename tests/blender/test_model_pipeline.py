@@ -113,6 +113,30 @@ class ModelPipelineTests(unittest.TestCase):
         self.assertTrue(all(abs(sum(g.weight for g in vertex.groups)-1) < 1e-6
                             for vertex in target.data.vertices))
 
+    def test_missing_weights_preserve_existing_and_skip_empty_donors(self):
+        from model_operations import apply_operations
+        self.run_build()
+        source, target = bpy.data.objects['Plate'], bpy.data.objects['Joint']
+        source.vertex_groups.new(name='Waist').add([0], 1, 'REPLACE')
+        target.vertex_groups.new(name='Keep').add([0], .75, 'REPLACE')
+        operation = {'op': 'repair_unweighted', 'source': source.name, 'object': target.name}
+        with self.assertRaises(ValueError):
+            apply_operations([operation])
+        apply_operations([dict(operation, enabled=True)])
+        self.assertAlmostEqual(target.vertex_groups['Keep'].weight(0), .75)
+        self.assertTrue(all(abs(target.vertex_groups['Waist'].weight(v.index)-1) < 1e-6
+                            for v in target.data.vertices if v.index != 0))
+        # 같은 메시를 기준으로 다시 실행해도 이미 설정된 가중치를 덮어쓰지 않는다.
+        apply_operations([dict(operation, source=target.name, enabled=True)])
+        self.assertAlmostEqual(target.vertex_groups['Keep'].weight(0), .75)
+
+    def test_missing_weights_reject_source_without_weights(self):
+        from model_weights import repair_unweighted
+        self.run_build()
+        with self.assertRaises(ValueError):
+            repair_unweighted(bpy.data.objects['Plate'], bpy.data.objects['Joint'])
+        self.assertTrue(all(not v.groups for v in bpy.data.objects['Joint'].data.vertices))
+
     def test_review_fixture_stays_fixed_after_shape_changes(self):
         from model_review import capture_fixture, DEFAULT_VIEWS
         from model_operations import apply_operations
