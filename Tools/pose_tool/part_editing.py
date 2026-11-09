@@ -188,6 +188,8 @@ class PartEditing:
         if finger == "Thumb":
             root = self.proxy.data.bones["ThumbBase"+bone.name[-2:]]
             axis = root.matrix_local.to_3x3().col[2]
+            if bone.name.endswith(".L"):
+                axis = -axis
         else:
             side = bone.name[-1]
             names = ("Index", "Middle", "Ring", "Little")

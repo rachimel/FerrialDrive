@@ -1,6 +1,6 @@
 """주먹 굽힘 방향 검사
 
-양손 네 손가락의 실제 굽힘 방향·일관성·증분 조작·저장 복구를 검사한다.
+양손 네 손가락과 왼손 엄지의 굽힘 방향·증분 조작·저장 복구를 검사한다.
 --capture로 손바닥/측면 확대 이미지를 남긴다.
 """
 
@@ -31,10 +31,14 @@ def finger_geometry(parts, side):
         points = [inverse @ rig.matrix_world @ b.head for b in bones]
         points.append(inverse @ rig.matrix_world @ bones[-1].tail)
         result[finger] = {"points": points, "directions": [(b-a).normalized() for a, b in zip(points, points[1:])]}
+    thumb = [rig.pose.bones["Thumb"+joint+"."+side] for joint in ("Base", "01", "02")]
+    points = [inverse @ rig.matrix_world @ b.head for b in thumb]
+    points.append(inverse @ rig.matrix_world @ thumb[-1].tail)
+    result["Thumb"] = {"points": points}
     return result
 
 
-def check_shape(opened, closed):
+def check_shape(opened, closed, side):
     result = {}
     for finger in FINGERS:
         initial, bent = opened[finger], closed[finger]
@@ -48,6 +52,10 @@ def check_shape(opened, closed):
         closed_span = (bent["points"][-1]-bent["points"][0]).length
         assert closed_span < initial_span*.8, (finger, closed_span, initial_span)
         result[finger] = {"palm_depth": palm_depth, "direction_dots": dots, "tip_span_ratio": closed_span/initial_span}
+    if side == "L":
+        palm_depth = opened["Thumb"]["points"][1].z-closed["Thumb"]["points"][1].z
+        assert palm_depth > 0, ("Thumb.L", "엄지가 손등 쪽으로 말림", palm_depth)
+        result["Thumb"] = {"palm_depth": palm_depth}
     return result
 
 
@@ -136,15 +144,17 @@ def run(args):
                                                             "fist": {k: [list(p) for p in v["points"]] for k, v in closed.items()}}, indent=2), encoding="utf-8")
         if camera:
             capture(parts, side, "fist", output, camera, framing)
-        report[side] = check_shape(opened, closed)
+        report[side] = check_shape(opened, closed, side)
         edit("fist", side)
         repeated = finger_geometry(parts, side)
-        assert all((a-b).length < .00001 for finger in FINGERS
+        assert all((a-b).length < .00001 for finger in closed
                    for a, b in zip(closed[finger]["points"], repeated[finger]["points"]))
         edit("open", side)
         scene.fd_pose_angle = 25
         edit("fingers", side)
         bent = finger_geometry(parts, side)
+        if side == "L":
+            assert opened["Thumb"]["points"][1].z > bent["Thumb"]["points"][1].z
         for finger in FINGERS:
             assert opened[finger]["points"][1].z > bent[finger]["points"][1].z
             assert min(a.dot(b) for a, b in zip(bent[finger]["directions"], bent["Middle"]["directions"])) > .999
@@ -155,7 +165,7 @@ def run(args):
     parts = PartEditing(initialize=False)
     for side in ("L", "R"):
         restored = finger_geometry(parts, side)
-        assert all((a-b).length < .00001 for finger in FINGERS
+        assert all((a-b).length < .00001 for finger in saved[side]
                    for a, b in zip(saved[side][finger]["points"], restored[finger]["points"]))
     assert hashlib.sha256(source.read_bytes()).hexdigest() == digest
     report["source_preserved"] = True
