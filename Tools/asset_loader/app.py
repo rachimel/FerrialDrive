@@ -34,7 +34,7 @@ class AssetLoaderApp:
     accept_text = True
 
     def __init__(self, *, source=None, catalog=DEFAULT_CATALOG, debug=False, timings=None, capture=None,
-                 pose=False, pose_sample=False):
+                 pose=False, pose_sample=False, render_preset=None):
         self.running = True
         self.initial_source = Path(source).resolve() if source else SAMPLE
         self.model_source = self.initial_source if self.initial_source.suffix.lower() == ".blend" else None
@@ -58,6 +58,7 @@ class AssetLoaderApp:
         self.frame_strip = FrameStrip()
         self.first_draw = True
         self.startup_pose, self.pose_sample = pose or pose_sample, pose_sample
+        self.startup_render_preset = Path(render_preset).resolve() if render_preset else None
         self.build = None
         self.menu_open = False
         self.panel = None
@@ -111,9 +112,13 @@ class AssetLoaderApp:
         else:
             self.open_source(self.initial_source)
         if self.startup_pose:
-            self.configure_pose()
-            if self.pose_sample:
-                self.pose_editor.attempt(lambda: self.pose_editor.open_model(sample=True))
+            self.launch_pose(sample=self.pose_sample)
+        if self.startup_render_preset:
+            try:
+                self.configure_render()
+                self.panel.load_preset(self.startup_render_preset)
+            except (OSError, ValueError, KeyError) as error:
+                self.report(error)
 
     def report(self, error):
         self.message, self.error = str(error), True
@@ -238,7 +243,16 @@ class AssetLoaderApp:
             self.model_source = Path(source).expanduser().resolve()
         self.set_panel(RenderPanel(self, source or self.model_source))
 
+    def launch_pose(self, source=None, *, sample=False):
+        from Tools.pose_tool.run import launch_native
+        try:
+            launch_native(None if sample else source or self.model_source, sample=sample)
+            self.message, self.error = "Blender 포즈 편집 창을 연다.", False
+        except (OSError, ValueError) as error:
+            self.report(error)
+
     def configure_pose(self, source=None):
+        """이전 내장 편집 화면의 검사·호환 진입점."""
         from .pose_panel import PosePanel
         incoming = source or self.model_source
         if self.pose_editor is None:
@@ -327,7 +341,7 @@ class AssetLoaderApp:
             elif action == "render":
                 self.configure_render()
             elif action == "pose":
-                self.configure_pose()
+                self.launch_pose()
             elif action == "map":
                 from .map_panel import MapPanel
                 self.set_panel(MapPanel(self))

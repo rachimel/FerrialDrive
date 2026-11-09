@@ -20,10 +20,11 @@ def rows(matrix):
 
 
 class PartEditing:
-    def __init__(self):
+    def __init__(self, *, initialize=True):
         self.rig, self.proxy = engine.rig_objects()
-        self.link_wrists()
-        self.prepare_assemblies()
+        if initialize:
+            self.link_wrists()
+            self.prepare_assemblies()
 
     def link_wrists(self):
         controls = engine.controls()
@@ -176,11 +177,54 @@ class PartEditing:
         bones = self.finger_bones(side, finger, joint)
         if not bones:
             raise ValueError("선택한 손가락 관절이 없다.")
-        # 기존 파이프라인의 손가락 로컬 Z 굽힘 축을 사용한다.
+        # 마디별 rest roll이 달라도 뿌리 관절과 같은 방향으로 굽힌다.
         for bone in bones:
             bone.rotation_mode = "QUATERNION"
-            bone.rotation_quaternion = bone.rotation_quaternion @ Matrix.Rotation(math.radians(degrees), 3, "Z").to_quaternion()
+            bone.rotation_quaternion = bone.rotation_quaternion @ Matrix.Rotation(math.radians(degrees), 3, self.finger_axis(bone)).to_quaternion()
         engine.update()
+
+    def finger_axis(self, bone):
+        finger = next(name for name in FINGERS if bone.name.startswith(name))
+        root = self.proxy.data.bones[finger+("Base" if finger == "Thumb" else "01")+bone.name[-2:]]
+        axis = root.matrix_local.to_3x3().col[2]
+        return (bone.bone.matrix_local.to_3x3().inverted() @ axis).normalized()
+
+    def hand_pose(self, side, pose):
+        """관절의 로컬 회전을 절대값으로 설정한다. 반복 클릭해도 더 꺾이지 않는다."""
+        if side not in ("L", "R") or pose not in ("fist", "open"):
+            raise ValueError("손 / 손 모양 오류")
+        bones = self.finger_bones(side)
+        if not bones:
+            raise ValueError("손가락 본이 없다.")
+        angles = {"01": 70, "02": 90, "03": 65}
+        thumb = {"Base": 25, "01": 55, "02": 65}
+        for bone in bones:
+            stem = bone.name.split(".")[0]
+            table = thumb if stem.startswith("Thumb") else angles
+            angle = next((value for suffix, value in table.items() if stem.endswith(suffix)), 0)
+            bone.rotation_mode = "QUATERNION"
+            bone.rotation_quaternion = Matrix.Rotation(math.radians(angle if pose == "fist" else 0), 3, self.finger_axis(bone)).to_quaternion()
+        engine.update()
+
+    def joint_position(self, key):
+        limb = engine.state()["profile"]["limbs"][key.removeprefix("pole.")]
+        return engine.world_bones(self.rig)[limb["lower"]].translation
+
+    def bend_joint(self, key, location):
+        limb = engine.state()["profile"]["limbs"][key.removeprefix("pole.")]
+        worlds = engine.world_bones(self.rig)
+        origin = worlds[limb["upper"]].translation
+        axis = (worlds[limb["end"]].translation-origin).normalized()
+        current = worlds[limb["lower"]].translation-origin
+        desired = Vector(location)-origin
+        current -= axis*current.dot(axis)
+        desired -= axis*desired.dot(axis)
+        if current.length < 1e-5 or desired.length < 1e-5:
+            raise ValueError("관절이 완전히 펴졌다. 골반·손·발 위치로 먼저 굽힘을 만든다.")
+        angle = math.atan2(axis.dot(current.cross(desired)), current.dot(desired))
+        matrix = self.world(key)
+        matrix.translation = origin + Matrix.Rotation(angle, 3, axis) @ (matrix.translation-origin)
+        self.set_world(key, matrix)
 
     def align_sword(self):
         if not all(name in engine.state().get("independent_parts", []) for name in ("Sword", "Scabbard")):

@@ -27,13 +27,13 @@ class PosePanelTests(unittest.TestCase):
         self.panel = PosePanel(self.app)
         self.panel.session = SimpleNamespace(state=fake_state(), busy=False, send=Mock())
 
-    def test_toolbar_opens_same_pose_panel_and_preserves_session(self):
+    def test_toolbar_launches_native_blender_and_preserves_legacy_session(self):
         self.app.pose_editor = self.panel
         session = self.panel.session
-        self.app.action("pose")
-        self.assertIs(self.app.panel, self.panel)
-        self.panel.close()
-        self.app.action("pose")
+        with patch("Tools.pose_tool.run.launch_native") as launch:
+            self.app.action("pose")
+            launch.assert_called_once_with(self.app.model_source, sample=False)
+        self.assertIsNone(self.app.panel)
         self.assertIs(self.panel.session, session)
 
     def test_drag_uses_camera_plane_in_world_units(self):
@@ -61,7 +61,7 @@ class PosePanelTests(unittest.TestCase):
             replacement = SimpleNamespace(state=None)
             with patch("Tools.asset_loader.pose_panel.PoseSession", return_value=replacement) as start:
                 self.app.configure_render(new)
-                self.app.action("pose")
+                self.app.configure_pose()
             start.assert_called_once_with(new.resolve(), sample=False, clip=None)
             self.assertIs(self.panel.session, replacement)
             self.assertEqual(self.panel.value("source"), str(new.resolve()))
@@ -79,7 +79,7 @@ class PosePanelTests(unittest.TestCase):
         self.app.pose_editor = self.panel
         with patch("Tools.asset_loader.pose_panel.PoseSession", return_value=replacement) as start:
             self.panel.open_model(sample=True)
-            self.app.action("pose")
+            self.app.configure_pose()
         start.assert_called_once_with(None, sample=True, clip=None)
         self.assertIsNone(self.app.model_source)
         self.assertEqual(self.panel.value("source"), "")

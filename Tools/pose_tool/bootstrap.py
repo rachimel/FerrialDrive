@@ -19,7 +19,10 @@ def main():
     parser.add_argument("--profile", type=Path)
     parser.add_argument("--work", type=Path, required=True)
     parser.add_argument("--sample", action="store_true")
+    parser.add_argument("--tool-python", type=Path)
     args = parser.parse_args(sys.argv[sys.argv.index("--") + 1:])
+    args.work = args.work.resolve()
+    args.work.parent.mkdir(parents=True, exist_ok=True)
     addon.register()
     if args.sample:
         from samples.pose_tool.make_sample import create_sample
@@ -35,11 +38,15 @@ def main():
         metadata = json.loads(metadata_path.read_text(encoding="utf-8")) if metadata_path and metadata_path.is_file() else None
         scene.prepare(load_profile(args.profile), args.source, metadata)
     scene.upgrade_palm_handles()
-    bpy.context.scene.fd_pose_clip = scene.state()["active"]
+    addon.configure_scene()
+    if args.tool_python:
+        bpy.context.scene.fd_pose_python = str(args.tool_python.resolve())
     if args.work.exists() and args.work.resolve() != Path(bpy.data.filepath).resolve():
         raise FileExistsError(args.work)
     scene.save_work(args.work)
     if not bpy.app.background:
+        # 저장한 편집 장면을 Undo의 시작점으로 사용한다.
+        bpy.ops.wm.open_mainfile(filepath=str(args.work))
         def initialize_view():
             addon.configure_view()
             return None

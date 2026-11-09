@@ -4,7 +4,6 @@ import argparse
 import json
 import math
 import os
-import subprocess
 from pathlib import Path
 import sys
 import time
@@ -106,7 +105,7 @@ class PoseWorker:
         if command == "undo":
             self.history.undo(self)
             return
-        changes_pose = command in {"move", "rotate", "bend", "translate", "fingers", "align_sword",
+        changes_pose = command in {"move", "rotate", "bend", "translate", "fingers", "hand_pose", "align_sword",
                                    "copy_previous", "mirror", "support", "equipment"}
         before = self.history.capture(self) if changes_pose else None
         try:
@@ -177,6 +176,9 @@ class PoseWorker:
                 raise ValueError("손가락 회전 입력 오류")
             self.parts.curl_fingers(request["side"], request.get("finger", "all"), degrees, request.get("joint", "all"))
             self.dirty = self.file_dirty = True
+        elif command == "hand_pose":
+            self.parts.hand_pose(request["side"], request["pose"])
+            self.dirty = self.file_dirty = True
         elif command == "align_sword":
             self.parts.align_sword()
             self.dirty = self.file_dirty = True
@@ -228,17 +230,8 @@ class PoseWorker:
             self.parts.key_current()
             engine.save_work(self.work)
             destination = self.work.parent / ("export_" + str(request["seq"]))
-            manifest = engine.export_clip(destination)
-            subprocess.run([bpy.app.binary_path, "--background", "--factory-startup", "--python-exit-code", "1",
-                            "--python", str(ROOT/"Tools/blender_pipeline/animation_pipeline.py"), "--",
-                            "--manifest", str(manifest), "--output", str(destination/"baked")],
-                           check=True, cwd=ROOT, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-            self.exported = str(destination / "baked/export_configs" / (engine.state()["active"] + ".json"))
-            preset_path = Path(self.exported)
-            preset = json.loads(preset_path.read_text(encoding="utf-8"))
-            preset["frame_size_pixels"] = [240, 240]
-            preset["extra_root_objects"] = engine.state().get("independent_parts", [])
-            preset_path.write_text(json.dumps(preset, ensure_ascii=False, indent=2), encoding="utf-8")
+            from Tools.pose_tool.exporting import bake_clip
+            self.exported = str(bake_clip(destination))
             self.dirty = self.file_dirty = False
         elif command == "refresh":
             pass

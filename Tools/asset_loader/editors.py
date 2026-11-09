@@ -42,7 +42,7 @@ class RenderPanel(Panel):
         self.button("렌더 시작", Rect(924, 656, 140, 32), self.submit, style="button")
         self.button("취소", Rect(812, 656, 100, 32), self.close)
         self.button("출력 설정 불러오기", Rect(216, 656, 220, 32), self.browse_preset)
-        self.button("포즈 편집", Rect(448, 656, 136, 32), lambda: app.configure_pose(self.value("source")))
+        self.button("포즈 편집", Rect(448, 656, 136, 32), lambda: app.launch_pose(self.value("source")))
 
     def load_preset(self, path):
         data, source = load_render_preset(path)
