@@ -23,6 +23,8 @@ def main():
     parser.add_argument("source", type=Path, nargs="?")
     parser.add_argument("--catalog", type=Path, default=DEFAULT_CATALOG)
     parser.add_argument("--debug", action="store_true", help="파일 변경에 대한 핫 로드 활성화")
+    parser.add_argument("--pose", action="store_true", help="포즈 편집 화면 열기")
+    parser.add_argument("--pose-sample", action="store_true", help="포즈 편집의 독립 도형 샘플 열기")
     parser.add_argument("--frames", type=int)
     parser.add_argument("--capture", type=Path, help="화면 검증용 PNG 저장")
     parser.add_argument("--profile", type=Path, help="선택적 로딩 성능 기록 JSON")
@@ -32,7 +34,7 @@ def main():
         from ferrial_drive.diagnostics import TimingRecorder
         timings = TimingRecorder(enabled=True, session="asset_loader")
     app = AssetLoaderApp(source=args.source, catalog=args.catalog, debug=args.debug,
-                         timings=timings, capture=args.capture)
+                         timings=timings, capture=args.capture, pose=args.pose, pose_sample=args.pose_sample)
     try:
         run_application(app, **WINDOW, frame_limit=args.frames, timings=timings)
     finally:

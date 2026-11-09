@@ -33,7 +33,8 @@ FILTERS = ('nearest', 'linear', 'bicubic')
 class AssetLoaderApp:
     accept_text = True
 
-    def __init__(self, *, source=None, catalog=DEFAULT_CATALOG, debug=False, timings=None, capture=None):
+    def __init__(self, *, source=None, catalog=DEFAULT_CATALOG, debug=False, timings=None, capture=None,
+                 pose=False, pose_sample=False):
         self.running = True
         self.initial_source = Path(source).resolve() if source else SAMPLE
         self.catalog_path = Path(catalog).resolve()
@@ -55,9 +56,11 @@ class AssetLoaderApp:
         self.clip_offset = 0
         self.frame_strip = FrameStrip()
         self.first_draw = True
+        self.startup_pose, self.pose_sample = pose or pose_sample, pose_sample
         self.build = None
         self.menu_open = False
         self.panel = None
+        self.pose_editor = None
         self.mech_drafts = {}
         self.show_details = False
         self.mouse = (0, 0)
@@ -69,6 +72,7 @@ class AssetLoaderApp:
             ("애니메이션 조립", "compose", Rect(540, 10, 152, 30)),
             ("3D 렌더", "render", Rect(700, 10, 112, 30)),
             ("맵 작업", "map", Rect(820, 10, 112, 30)),
+            ("포즈 편집", "pose", Rect(940, 10, 112, 30)),
             ("맞춤", "fit", Rect(276, 716, 88, 30)),
             ("1:1", "actual", Rect(372, 716, 56, 30)),
             ("재생 / 정지", "play", Rect(456, 716, 112, 30)),
@@ -105,6 +109,10 @@ class AssetLoaderApp:
             self.configure_render(self.initial_source)
         else:
             self.open_source(self.initial_source)
+        if self.startup_pose:
+            self.configure_pose()
+            if self.pose_sample or self.initial_source.suffix.lower() == ".blend":
+                self.pose_editor.attempt(lambda: self.pose_editor.open_model(sample=self.pose_sample))
 
     def report(self, error):
         self.message, self.error = str(error), True
@@ -227,6 +235,15 @@ class AssetLoaderApp:
             raise ValueError("렌더 작업이 진행 중이다.")
         self.set_panel(RenderPanel(self, source))
 
+    def configure_pose(self, source=None):
+        from .pose_panel import PosePanel
+        if self.pose_editor is None:
+            incoming = source or (self.initial_source if self.initial_source.suffix.lower() == ".blend" else None)
+            self.pose_editor = PosePanel(self, incoming)
+        elif source and self.pose_editor.session is None:
+            self.pose_editor.fields["source"].text = str(source)
+        self.set_panel(self.pose_editor)
+
     def set_panel(self, panel):
         self.panel, self.menu_open = panel, False
         self.filter_popup = False
@@ -304,6 +321,8 @@ class AssetLoaderApp:
                 self.zoom = 1.0
             elif action == "render":
                 self.configure_render()
+            elif action == "pose":
+                self.configure_pose()
             elif action == "map":
                 from .map_panel import MapPanel
                 self.set_panel(MapPanel(self))
@@ -440,6 +459,8 @@ class AssetLoaderApp:
             self.elapsed += delta_seconds
         if self.panel is not None:
             self.panel.update(delta_seconds)
+        if self.pose_editor is not None and self.panel is not self.pose_editor:
+            self.pose_editor.update(delta_seconds)
 
     def draw(self):
         r, c = self.renderer, self.theme["colors"]
@@ -567,6 +588,8 @@ class AssetLoaderApp:
                     current.close_resources()
                 current = getattr(current, "parent", None)
             self.set_panel(None)
+            if self.pose_editor is not None:
+                self.pose_editor.close_resources()
             if self.build:
                 self.build.close()
             if self.manager:

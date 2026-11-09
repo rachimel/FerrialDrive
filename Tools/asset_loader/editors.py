@@ -42,26 +42,28 @@ class RenderPanel(Panel):
         self.button("렌더 시작", Rect(924, 656, 140, 32), self.submit, style="button")
         self.button("취소", Rect(812, 656, 100, 32), self.close)
         self.button("출력 설정 불러오기", Rect(216, 656, 220, 32), self.browse_preset)
+        self.button("포즈 편집", Rect(448, 656, 136, 32), lambda: app.configure_pose(self.value("source")))
+
+    def load_preset(self, path):
+        data, source = load_render_preset(path)
+        values = {"asset_id": data["asset_id"], "animation": data["animation_name"],
+                  "frames": ",".join(map(str, data["frames"])), "fps": data["fps"],
+                  "width": data["frame_size_pixels"][0], "height": data["frame_size_pixels"][1],
+                  "scale": data["camera"]["ortho_scale"], "samples": data["render"]["samples"],
+                  "root": data.get("root_object", "")}
+        if source:
+            values["source"] = str(source)
+        for key, value in values.items():
+            self.fields[key].text = str(value)
+            self.fields[key].cursor = len(str(value))
+        self.render_preset = data
+        self.sample = False
+        self.scene_camera = data.get("use_scene_camera", False)
+        self.auto_fit = data.get("auto_fit", True)
+        self.sharpen = data.get("postprocess", {}).get("sharpen", 0) > 0
 
     def browse_preset(self):
-        def selected(path):
-            data, source = load_render_preset(path)
-            values = {"asset_id": data["asset_id"], "animation": data["animation_name"],
-                      "frames": ",".join(map(str, data["frames"])), "fps": data["fps"],
-                      "width": data["frame_size_pixels"][0], "height": data["frame_size_pixels"][1],
-                      "scale": data["camera"]["ortho_scale"], "samples": data["render"]["samples"],
-                      "root": data.get("root_object", "")}
-            if source:
-                values["source"] = str(source)
-            for key, value in values.items():
-                self.fields[key].text = str(value)
-                self.fields[key].cursor = len(str(value))
-            self.render_preset = data
-            self.sample = False
-            self.scene_camera = data.get("use_scene_camera", False)
-            self.auto_fit = data.get("auto_fit", True)
-            self.sharpen = data.get("postprocess", {}).get("sharpen", 0) > 0
-        self.app.set_panel(FilePanel(self.app, selected, extensions={".json"},
+        self.app.set_panel(FilePanel(self.app, self.load_preset, extensions={".json"},
                                     initial=Path(self.value("source")).parent if self.value("source") else ROOT / "data/models",
                                     parent=self))
 

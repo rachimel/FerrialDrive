@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [Pose Tool 내부 통합](2026-11-09-pose-tool-integration.md): 1개, TIME(scope). 기존 합계와 구분한 신규 기록이다.
+
 - [반대편 슬롯 무기 수납](2026-11-09-cross-body-weapon-storage.md): 2개, TIME(scope)·REASON(U1). 기존 합계와 구분한 신규 기록이다.
 
 - [에셋 도구 AI 진입점](2026-11-09-asset-tool-ai-entry.md): 1개, TIME(scope). 기존 합계와 구분한 신규 기록이다.

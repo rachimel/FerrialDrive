@@ -1,6 +1,8 @@
 # FDrive 에셋 로더
 
-모델의 **3D 프리렌더·애니메이션 조립·맵 번들 import/export·미리보기·ID 등록·디버그 핫 로드**를 제공한다. 모델 렌더에는 Blender가 필요하며 이미지·시트·캐릭터·맵 번들은 Blender 없이 읽는다.
+모델의 **포즈 편집·3D 프리렌더·애니메이션 조립·맵 번들 import/export·미리보기·ID 등록·디버그 핫 로드**를 제공한다. 포즈 편집과 모델 렌더에는 Blender가 필요하며 이미지·시트·캐릭터·맵 번들은 Blender 없이 읽는다.
+
+**포즈 편집**은 같은 화면 안에서 모델·동작을 열고 손바닥/발 목표를 드래그한다. Blender 창은 열지 않는다. 현재 포즈 키 저장 → 작업본 저장 → 동작 출력 → 3D 렌더 전달을 지원한다. 사용법과 범위는 [Pose Tool](../pose_tool/README.md), 독립 샘플은 `python Tools/asset_loader/run.py --pose-sample`을 사용한다.
 
 AI·자동화는 [JSON 진입점](../../docs/tool-usage/asset_tool_automation.md)을 사용한다. `python Tools/asset_loader/asset_pipeline.py`로 지원 작업을 조회한다. 사용자용 GUI 실행은 아래와 같다.
 
