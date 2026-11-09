@@ -63,6 +63,34 @@ class ModelPipelineTests(unittest.TestCase):
             apply_operations([{'op': 'set_constraint_mute', 'object': rig.name,
                                'bone': bone.name, 'constraint': 'Missing', 'muted': True}])
 
+    def test_arm_refinement_limits_fold_without_stretching_bones(self):
+        from mathutils import Vector
+        from pose_refinement import repair_arm
+        bpy.ops.object.armature_add()
+        rig = bpy.context.object
+        bpy.ops.object.mode_set(mode='EDIT')
+        bones = rig.data.edit_bones
+        upper = bones[0]
+        upper.name = 'Upper'
+        upper.head, upper.tail = (0, 0, 0), (0, 1, 0)
+        lower = bones.new('Lower')
+        lower.head, lower.tail, lower.parent = (0, 1, 0), (1, 1, 0), upper
+        swivel = bones.new('Swivel')
+        swivel.head, swivel.tail, swivel.parent = (1, 1, 0), (1.1, 1, 0), lower
+        hand = bones.new('Hand')
+        hand.head, hand.tail, hand.parent = (1, 1, 0), (1.3, 1, 0), swivel
+        bpy.ops.object.mode_set(mode='OBJECT')
+        bpy.context.view_layer.update()
+        target = rig.matrix_world@rig.pose.bones['Hand'].matrix
+        target = Matrix.Translation(target.translation)@Matrix.Rotation(3.14159265, 4, 'Z')@Matrix.Translation(-target.translation)@target
+        result = repair_arm(rig, 'Upper', 'Lower', 'Swivel', 'Hand', target, 40)
+        self.assertLessEqual(result['swing_degrees'], 40.001)
+        self.assertLess(result['endpoint_error'], 1e-5)
+        for name in ('Upper', 'Lower'):
+            bone = rig.pose.bones[name]
+            self.assertAlmostEqual((bone.tail-bone.head).length, 1, places=5)
+        self.assertLess((rig.pose.bones['Hand'].matrix.to_quaternion()@Vector((0, 1, 0))).angle(target.to_quaternion()@Vector((0, 1, 0))), 1e-4)
+
     def test_animation_setup_survives_saved_reload_without_changing_source(self):
         from animation_pipeline import bake
         bpy.ops.object.armature_add()
