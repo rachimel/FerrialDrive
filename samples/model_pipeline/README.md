@@ -1,6 +1,6 @@
 # JSON 모델 제작 샘플
 
-에셋별 Python 파일 없이 두 기본 도형을 만들고 저장·재로딩·정면/후면/사선 512px·192px 검토 렌더를 출력한다. Blender 내장 Python만 필요하며 실제 메카/Pico2D는 필요 없다.
+에셋별 Python 파일 없이 두 기본 도형을 만들고 저장·재로딩·6면의 512px·192px 검토 렌더를 출력한다. Blender 내장 Python만 필요하며 실제 메카/Pico2D는 필요 없다. 이 기존 샘플은 192px을 명시하며 새 검토의 기본 표시는 240px이다.
 
 프로젝트 루트에서 `$blender_exe`를 설치된 Blender 실행 파일로 지정한다. 출력 폴더/검사 JSON은 기존 파일을 덮어쓰지 않으므로 매 실행 새 이름을 사용한다.
 
@@ -8,7 +8,19 @@
 & $blender_exe -b --factory-startup --python-exit-code 1 --python Tools/blender_pipeline/model_pipeline.py -- --manifest samples/model_pipeline/manifest.json --output output/model_pipeline/demo_run
 ```
 
-`candidate.blend`, `request.json`, `report.json`과 검토 PNG 6장이 생긴다. 보고서의 `candidate_unchecked`는 제작 후보이며 품질 검사/사용자 승인은 아직 수행하지 않았다는 뜻이다.
+`candidate.blend`, `request.json`, `report.json`, `review_fixture.json`, `visual_review.json`과 `after/`의 검토 PNG 12장이 생긴다. 보고서의 `candidate_unchecked`는 제작 후보이며 품질 검사/사용자 승인은 아직 수행하지 않았다는 뜻이다.
+
+## 6면 중간 검토
+
+다음 샘플은 원본 기본 도형에서 위쪽 판의 폭만 줄이고, 같은 촬영 조건의 전후 6면 × 512px/240px, 총 24장을 출력한다. 판의 높이/두께와 아래 관절은 보존 대상이다. 실제 게임 에셋은 사용하지 않는다.
+
+```powershell
+& $blender_exe -b --factory-startup --disable-autoexec --python-exit-code 1 --python samples/model_pipeline/review_demo.py -- --output output/model_pipeline/review_demo
+```
+
+`comparison/`의 before/after 이미지와 intent를 AI가 직접 대조한다. AI 판단은 별도 JSON으로 `python Tools/blender_pipeline/model_review.py --directory 출력/comparison --ai-review 판단.json`에 전달한다. 판단 형식과 상태는 [모델 제작 흐름](../../docs/ai-asset-pipeline/model_workflow.md#이미지-검토와-중간-확인)을 따른다. 렌더 성공으로 AI 검토나 사용자 OK를 자동 생성하지 않는다. 실제 이미지와 근거를 제시한 뒤 사용자 응답을 받아 기록한다.
+
+검토에 사용하는 frames는 의미 있는 포즈로 제한한다. 정지 6면 검토는 연속 동작의 파지·궤적·간섭 검증을 대체하지 않는다.
 
 필요한 검사를 각각 실행한다. 한 파일이 나머지 검사를 호출하지 않는다.
 

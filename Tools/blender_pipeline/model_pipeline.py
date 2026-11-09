@@ -4,6 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 import sys
+from time import perf_counter
 
 
 def sha256(path):
@@ -11,67 +12,15 @@ def sha256(path):
 
 
 def review(config, directory):
-    import bpy
-    from mathutils import Vector
-    scene = bpy.context.scene
-    root = bpy.data.objects[config['root_object']]
-    candidates = ([bpy.data.objects[name] for name in config['objects']] if config.get('objects')
-                  else [root, *root.children_recursive])
-    meshes = [o for o in candidates if o.type == 'MESH' and not o.hide_render]
-    points = []
-    for obj in meshes:
-        evaluated = obj.evaluated_get(bpy.context.evaluated_depsgraph_get())
-        points.extend(evaluated.matrix_world @ Vector(c) for c in evaluated.bound_box)
-    if not points:
-        raise ValueError('검토할 메시가 없다.')
-    low = Vector([min(p[i] for p in points) for i in range(3)])
-    high = Vector([max(p[i] for p in points) for i in range(3)])
-    center = (low + high) / 2
-    radius = max((p - center).length for p in points)
-    if radius <= 0:
-        raise ValueError('검토 범위가 0이다.')
-    # 후보 파일 저장/재로딩 뒤의 일회용 장면만 바꾼다.
-    for obj in scene.objects:
-        if obj.type == 'LIGHT' or (obj.type == 'MESH' and obj not in meshes):
-            obj.hide_render = True
-    scene.render.engine = 'CYCLES'
-    scene.cycles.samples = config.get('samples', 16)
-    scene.cycles.use_denoising = True
-    scene.render.film_transparent = True
-    scene.render.resolution_percentage = 100
-    scene.render.image_settings.file_format = 'PNG'
-    scene.render.image_settings.color_mode = 'RGBA'
-    scene.view_settings.view_transform = 'AgX'
-    if not scene.world:
-        scene.world = bpy.data.worlds.new('ReviewWorld')
-    scene.world.use_nodes = True
-    scene.world.node_tree.nodes['Background'].inputs['Strength'].default_value = .25
-    for direction, power in (((3, -4, 5), 500), ((-3, 2, 4), 350)):
-        bpy.ops.object.light_add(type='AREA', location=center + Vector(direction).normalized() * radius * 3)
-        light = bpy.context.object
-        light.data.energy = power * radius * radius
-        light.data.size = radius * 2
-        light.rotation_euler = (center - light.location).to_track_quat('-Z', 'Y').to_euler()
-    bpy.ops.object.camera_add()
-    camera = bpy.context.object
-    camera.data.type = 'ORTHO'
-    scene.camera = camera
-    output = []
-    for name, direction in config.get('views', [('front', (1, 0, .25)), ('rear', (-1, 0, .25)), ('oblique', (1, -1, .5))]):
-        camera.location = center + Vector(direction).normalized() * radius * 4
-        camera.rotation_euler = (center - camera.location).to_track_quat('-Z', 'Y').to_euler()
-        for label, size in [('detail', config.get('detail_size', 640)), ('game', config.get('game_size', 192))]:
-            camera.data.ortho_scale = radius * 2.2
-            scene.render.resolution_x = scene.render.resolution_y = size
-            path = directory / f'{name}_{label}.png'
-            scene.render.filepath = str(path)
-            bpy.ops.render.render(write_still=True)
-            output.append(path.name)
-    return output
+    from model_review import render_review
+    return [item['file'] for item in render_review(config, directory)]
 
 
 def build(manifest, output):
     import bpy
+    from model_review import capture_fixture, render_review, write_pending_review, require_stage_approval
+    started = perf_counter()
+    timings = {}
     from model_snapshot import fingerprint
     from model_operations import apply_operations
     manifest, output = Path(manifest).resolve(), Path(output).resolve()
@@ -85,6 +34,10 @@ def build(manifest, output):
     source = path(config['source']) if config.get('source') else None
     if source and sha256(source) != config.get('source_sha256'):
         raise ValueError('기준 파일 해시가 다르다. 기준 버전을 확인한다.')
+    if source and config.get('operations'):
+        if config.get('review_revision') and not config.get('review'):
+            raise ValueError('같은 단계의 재수정에도 중간 이미지 검토 설정이 필요하다.')
+        require_stage_approval(source, revision=config.get('review_revision', False))
     if 'recipe' in config:
         raise ValueError('버전별 Python recipe 대신 operations JSON을 사용한다.')
     if not isinstance(config.get('operations'), list):
@@ -94,22 +47,29 @@ def build(manifest, output):
               'source_sha256': sha256(source) if source else None,
               'manifest_sha256': sha256(manifest), 'blender_version': bpy.app.version_string,
               'visual_approval': False, 'game_exported': False, 'quality_checks_run': False,
+              'source': str(source) if source else None,
+              'review_checkpoint': 'not_requested',
               'scope_check_excludes': ['modifier settings', 'material node contents', 'driver expressions', 'actions']}
     report['tool_hashes'] = {name: sha256(Path(__file__).with_name(name)) for name in
-                            ('model_pipeline.py', 'model_operations.py', 'model_primitives.py',
-                             'model_geometry.py', 'model_snapshot.py')}
+                            tuple(p.name for p in sorted(Path(__file__).parent.glob('*.py')))}
     (output / 'request.json').write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding='utf-8')
     try:
+        stage_started = perf_counter()
         if source:
             bpy.ops.wm.open_mainfile(filepath=str(source))
         else:
             bpy.ops.wm.read_factory_settings(use_empty=True)
+        timings['load_seconds'] = perf_counter() - stage_started
+        # 촬영 조건은 수정 전에 고정하고, 렌더는 후보 저장 후 실행한다.
+        fixture = capture_fixture(config['review']) if source and config.get('review') else None
         before = {o.name: fingerprint(o) for o in bpy.data.objects}
         for operation in config['operations']:
             target = operation.get('object')
             if target in before and target not in config.get('change_objects', []):
                 raise ValueError(f'선언한 수정 범위 밖의 대상: {target}')
+        stage_started = perf_counter()
         apply_operations(config['operations'])
+        timings['operations_seconds'] = perf_counter() - stage_started
         bpy.context.view_layer.update()
         after = {o.name: fingerprint(o) for o in bpy.data.objects}
         changed = sorted(n for n in before if before[n] != after.get(n))
@@ -118,6 +78,7 @@ def build(manifest, output):
         unexpected = set(changed) - set(config.get('change_objects', []))
         if unexpected or (added and not config.get('allow_additions', False)):
             raise ValueError(f'선언한 수정 범위 밖의 변경: {sorted(unexpected)}; additions={added}')
+        stage_started = perf_counter()
         candidate = output / 'candidate.blend'
         bpy.context.preferences.filepaths.save_version = 0
         bpy.ops.wm.save_as_mainfile(filepath=str(candidate))
@@ -126,14 +87,33 @@ def build(manifest, output):
         if loaded != after:
             raise ValueError('저장/재로딩 뒤 구조가 달라졌다.')
         report['candidate_sha256'] = sha256(candidate)
+        timings['save_reload_seconds'] = perf_counter() - stage_started
         if config.get('review'):
-            report['previews'] = review(config['review'], output)
+            review_config = config['review']
+            fixture = fixture or capture_fixture(review_config)
+            (output / 'review_fixture.json').write_text(json.dumps(fixture, indent=2), encoding='utf-8')
+            evidence = []
+            stage_started = perf_counter()
+            if source and config['operations']:
+                bpy.ops.wm.open_mainfile(filepath=str(source))
+                for item in render_review(review_config, output / 'before', fixture):
+                    evidence.append(dict(item, file='before/' + item['file'], kind='before'))
+                bpy.ops.wm.open_mainfile(filepath=str(candidate))
+            for item in render_review(review_config, output / 'after', fixture):
+                evidence.append(dict(item, file='after/' + item['file'], kind='after'))
+            timings['review_seconds'] = perf_counter() - stage_started
+            report['previews'] = [item['file'] for item in evidence]
+            report['review_checkpoint'] = write_pending_review(
+                output, review_config.get('intent', {}), evidence, report['candidate_sha256'], fixture)
+            report['review_file'] = 'visual_review.json'
         report['status'] = 'candidate_unchecked'
         return report
     except Exception as error:
         report['error'] = str(error)
         raise
     finally:
+        timings['total_seconds'] = perf_counter() - started
+        report['timings'] = timings
         if source:
             report['source_unchanged'] = sha256(source) == report['source_sha256']
             if not report['source_unchanged']:

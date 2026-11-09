@@ -50,6 +50,8 @@ def bake(manifest, destination):
     source = (manifest.parent / data['source']).resolve()
     if hashlib.sha256(source.read_bytes()).hexdigest() != data['source_sha256']:
         raise ValueError('원본 해시 불일치')
+    from model_review import require_stage_approval
+    require_stage_approval(source)
     if destination.exists():
         raise FileExistsError('새 출력 폴더가 필요하다.')
     bpy.ops.wm.open_mainfile(filepath=str(source))

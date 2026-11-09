@@ -43,7 +43,7 @@ class BlockingRig:
         self.skirt_fixed = self.repair_unbound(cfg.get('weight_repair'))
 
     def repair_unbound(self, spec):
-        if not spec:
+        if not spec or spec.get('enabled') is not True:
             return 0
         from mathutils.kdtree import KDTree
         source, target = [self.bpy.data.objects[spec[k]] for k in ['source', 'target']]
@@ -196,6 +196,8 @@ def compile_motion(config_path, only=None):
     cfg=json.loads(Path(config_path).read_text(encoding='utf-8'))
     source=Path(cfg['source'])
     assert hashlib.sha256(source.read_bytes()).hexdigest()==cfg['source_sha256']
+    from model_review import require_stage_approval
+    require_stage_approval(source)
     bpy.ops.wm.open_mainfile(filepath=str(source))
     solver=BlockingRig(cfg)
     solver.bind(cfg['poses'])
@@ -253,7 +255,7 @@ def compile_motion(config_path, only=None):
     bpy.ops.wm.save_as_mainfile(filepath=str(prepared))
     manifest={'version':1,'asset_id':cfg['asset_id'],'source':str(prepared),'source_sha256':hashlib.sha256(prepared.read_bytes()).hexdigest(),'fps':12,'rig':cfg['rig'],'root':cfg['root'],'clips':clips,'render_settings':{'ortho_scale':5.4,'camera_target':[0,0,1.5]}}
     path=Path(config_path).with_name('motions.json');path.write_text(json.dumps(manifest),encoding='utf-8')
-    (output/'audit.json').write_text(json.dumps({'source_unchanged':hashlib.sha256(source.read_bytes()).hexdigest()==cfg['source_sha256'],'unbound_vertices_repaired':solver.skirt_fixed,'clips':audit},indent=2),encoding='utf-8')
+    (output/'audit.json').write_text(json.dumps({'source_unchanged':hashlib.sha256(source.read_bytes()).hexdigest()==cfg['source_sha256'],'weight_repair_enabled':cfg.get('weight_repair', {}).get('enabled', False),'unbound_vertices_repaired':solver.skirt_fixed,'clips':audit},indent=2),encoding='utf-8')
     from animation_pipeline import bake
     destination=Path(cfg['destination'])
     if destination.exists():
@@ -279,9 +281,11 @@ def render_clip(config_path, clip_name):
     index=json.loads((destination/'clips.json').read_text(encoding='utf-8'))
     clip=next(c for c in index['clips'] if c['name']==clip_name)
     s=bpy.context.scene
-    for o in bpy.data.objects:
-        for m in o.modifiers:
-            if m.type in {'BEVEL','BOOLEAN','WEIGHTED_NORMAL','SUBSURF','MULTIRES'}:m.show_render=False
+    # 최종 형상과 다른 간이 메시를 기본 검토 근거로 사용하지 않는다.
+    if cfg.get('simplified_preview', False):
+        for o in bpy.data.objects:
+            for m in o.modifiers:
+                if m.type in {'BEVEL','BOOLEAN','WEIGHTED_NORMAL','SUBSURF','MULTIRES'}:m.show_render=False
     s.render.engine='BLENDER_WORKBENCH';s.render.resolution_x=s.render.resolution_y=cfg.get('preview_size',320);s.render.resolution_percentage=100
     s.render.image_settings.media_type='IMAGE';s.render.image_settings.file_format='PNG';s.render.film_transparent=False
     s.display.shading.light='STUDIO';s.display.shading.color_type='MATERIAL';s.display.shading.show_cavity=True

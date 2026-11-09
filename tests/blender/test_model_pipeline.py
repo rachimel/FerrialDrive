@@ -83,13 +83,64 @@ class ModelPipelineTests(unittest.TestCase):
         bpy.context.view_layer.update()
         target = rig.matrix_world@rig.pose.bones['Hand'].matrix
         target = Matrix.Translation(target.translation)@Matrix.Rotation(3.14159265, 4, 'Z')@Matrix.Translation(-target.translation)@target
-        result = repair_arm(rig, 'Upper', 'Lower', 'Swivel', 'Hand', target, 40)
+        preserved = repair_arm(rig, 'Upper', 'Lower', 'Swivel', 'Hand', target, 40)
+        self.assertAlmostEqual(preserved['shift'], 0, places=6)
+        self.assertLess(preserved['endpoint_error'], 1e-5)
+        self.assertTrue(preserved['requires_strategy_change'])
+        result = repair_arm(rig, 'Upper', 'Lower', 'Swivel', 'Hand', target, 40, allow_shift=True)
         self.assertLessEqual(result['swing_degrees'], 40.001)
         self.assertLess(result['endpoint_error'], 1e-5)
         for name in ('Upper', 'Lower'):
             bone = rig.pose.bones[name]
             self.assertAlmostEqual((bone.tail-bone.head).length, 1, places=5)
         self.assertLess((rig.pose.bones['Hand'].matrix.to_quaternion()@Vector((0, 1, 0))).angle(target.to_quaternion()@Vector((0, 1, 0))), 1e-4)
+
+    def test_weight_repair_requires_explicit_enable(self):
+        from motion_blocking import BlockingRig
+        solver = object.__new__(BlockingRig)
+        self.assertEqual(solver.repair_unbound(None), 0)
+        self.assertEqual(solver.repair_unbound({'source': 'Missing', 'target': 'Missing'}), 0)
+        self.assertEqual(solver.repair_unbound({'enabled': False}), 0)
+        self.run_build()
+        solver.bpy = bpy
+        source, target = bpy.data.objects['Plate'], bpy.data.objects['Joint']
+        group = source.vertex_groups.new(name='RigidBone')
+        group.add(list(range(len(source.data.vertices))), 1, 'REPLACE')
+        spec = {'source': 'Plate', 'target': 'Joint'}
+        self.assertEqual(solver.repair_unbound(spec), 0)
+        self.assertTrue(all(not vertex.groups for vertex in target.data.vertices))
+        self.assertEqual(solver.repair_unbound(dict(spec, enabled=True)), len(target.data.vertices))
+        self.assertTrue(all(abs(sum(g.weight for g in vertex.groups)-1) < 1e-6
+                            for vertex in target.data.vertices))
+
+    def test_review_fixture_stays_fixed_after_shape_changes(self):
+        from model_review import capture_fixture, DEFAULT_VIEWS
+        from model_operations import apply_operations
+        self.run_build()
+        config = {'root_object': 'ActorRoot'}
+        fixture = capture_fixture(config)
+        self.assertEqual([name for name, _ in fixture['views']], [name for name, _ in DEFAULT_VIEWS])
+        self.assertEqual(fixture['sizes']['game'], 240)
+        apply_operations([{'op': 'transform_vertices', 'object': 'Plate', 'root': 'ActorRoot', 'scale': [1, 3, 1]}])
+        self.assertNotEqual(capture_fixture(config)['radius'], fixture['radius'])
+
+    def test_unreachable_hand_does_not_silently_move(self):
+        from pose_refinement import repair_arm
+        bpy.ops.object.armature_add()
+        rig = bpy.context.object
+        bpy.ops.object.mode_set(mode='EDIT')
+        upper = rig.data.edit_bones[0]
+        upper.name = 'Upper'
+        parent = upper
+        for name, start, end in [('Lower', (0, 1, 0), (0, 2, 0)),
+                                 ('Swivel', (0, 2, 0), (0, 2.1, 0)),
+                                 ('Hand', (0, 2.1, 0), (0, 2.3, 0))]:
+            bone = rig.data.edit_bones.new(name)
+            bone.head, bone.tail, bone.parent = start, end, parent
+            parent = bone
+        bpy.ops.object.mode_set(mode='OBJECT')
+        with self.assertRaisesRegex(ValueError, '손 위치'):
+            repair_arm(rig, 'Upper', 'Lower', 'Swivel', 'Hand', Matrix.Translation((20, 0, 0)))
 
     def test_animation_setup_survives_saved_reload_without_changing_source(self):
         from animation_pipeline import bake

@@ -163,3 +163,4 @@
 - [[FDLOG_MISSING_TIME:2026-11-09-asset-map-bundle-frame-timing:scope]] — `2026-11-09-asset-map-bundle-frame-timing.md`: 개별 발언의 정확한 시각. 검색 단서: bundle에 type, 각 프레임을 유지하는 시간, 맵 export import 기능도 구현해주고.
 
 - [[FDLOG_MISSING_TIME:2026-11-09-asset-preview-frame-strip:scope]] — `2026-11-09-asset-preview-frame-strip.md`: 요청·구현 안내의 정확한 발언 시각. 검색 단서: 미리보기 창 밑에 각 프레임 미리보기.
+- [[FDLOG_MISSING_TIME:FDLOG-20261109-pipeline-visual-review:scope]] — `2026-11-09-pipeline-visual-review.md`: 중간 이미지 검토/6면 확인 요구와 손 위치·웨이트 보수 선택 응답의 개별 시각. 검색 단서: 중간 이미지를 산출하고, 손 위치 유지가 기본, 웨이트 보수는 별도 지정.

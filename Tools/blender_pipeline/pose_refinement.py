@@ -3,7 +3,7 @@ import math
 
 
 def repair_arm(rig, upper_name, lower_name, swivel_name, hand_name,
-               target, max_swing_degrees=55.0, allow_shift=True):
+               target, max_swing_degrees=55.0, allow_shift=False):
     """파지 회전을 유지하며 손목 굽힘을 줄인다. 도달 보정량을 반환한다."""
     import bpy
     from mathutils import Matrix, Vector
@@ -26,7 +26,10 @@ def repair_arm(rig, upper_name, lower_name, swivel_name, hand_name,
 
     def solve(point):
         delta = point - shoulder
-        distance = max(abs(la-lb)+.005, min(la+lb-.005, delta.length))
+        if not allow_shift and not abs(la-lb)+1e-6 < delta.length < la+lb-1e-6:
+            raise ValueError('손 위치를 유지한 채 도달할 수 없다. 포즈 전략 변경 또는 명시적 이동 허용이 필요하다.')
+        distance = (max(abs(la-lb)+.005, min(la+lb-.005, delta.length))
+                    if allow_shift else delta.length)
         axis = delta.normalized()
         point = shoulder + axis * distance
         along = (la*la-lb*lb+distance*distance)/(2*distance)
@@ -63,9 +66,10 @@ def repair_arm(rig, upper_name, lower_name, swivel_name, hand_name,
     actual = rig.matrix_world @ hand.matrix
     hand.matrix = rig.matrix_world.inverted() @ Matrix.LocRotScale(actual.translation, target.to_quaternion(), actual.to_scale())
     bpy.context.view_layer.update()
+    endpoint_error = (rig.matrix_world@hand.head-point).length
     return {'shift': (point-original).length,
-            'swing_degrees': swing,
-            'endpoint_error': (rig.matrix_world@hand.head-point).length}
+            'swing_degrees': swing, 'endpoint_error': endpoint_error,
+            'requires_strategy_change': swing > max_swing_degrees+1e-3 or endpoint_error > 1e-4}
 
 
 def refine_manifest(manifest_path, settings_path, output_path):
@@ -83,6 +87,8 @@ def refine_manifest(manifest_path, settings_path, output_path):
     target_path = Path(output_path)
     if target_path.exists():
         raise FileExistsError(target_path)
+    from model_review import require_stage_approval
+    require_stage_approval(cfg['scene'])
     bpy.ops.wm.open_mainfile(filepath=cfg['scene'])
     rig = bpy.data.objects[data['rig']]
     for obj in bpy.data.objects:
@@ -164,7 +170,7 @@ def refine_manifest(manifest_path, settings_path, output_path):
                     rest = lower.bone.matrix_local.inverted()@hand.bone.matrix_local
                     target = Matrix.LocRotScale(target.translation, (rig.matrix_world@lower.matrix).to_quaternion()@rest.to_quaternion(), target.to_scale())
                 metric = repair_arm(rig, arm['upper'], arm['lower'], arm['swivel'], arm['hand'], target,
-                                    settings.get('max_swing', 55), settings.get('allow_shift', True))
+                                    settings.get('max_swing', 55), settings.get('allow_shift', False))
                 if free:
                     rig.pose.bones[arm['swivel']].matrix_basis = Matrix.Identity(4)
                     hand.matrix_basis = Matrix.Identity(4)
@@ -198,4 +204,5 @@ def refine_manifest(manifest_path, settings_path, output_path):
     return {'clips': len(result['clips']), 'samples': sum(len(c['samples']) for c in result['clips']),
             'max_swing': max(r['swing_degrees'] for r in report),
             'max_shift': max(r['shift'] for r in report),
-            'max_endpoint_error': max(r['endpoint_error'] for r in report)}
+            'max_endpoint_error': max(r['endpoint_error'] for r in report),
+            'unresolved_samples': sum(r['requires_strategy_change'] for r in report)}
