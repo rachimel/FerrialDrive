@@ -39,6 +39,7 @@
 AI 생성 이미지·모델과 가공 에셋은 로컬에 보관한다.
 
 - [이미지 제작 파이프라인](ai-asset-pipeline/image_pipeline.md): 현행 제작 흐름과 이전 LoRA 자료의 경계
+- [애니메이션 제작 흐름](ai-asset-pipeline/animation_workflow.md): AI 키포즈 후보·사용자 검수·AI 수정·키포즈 확정 후 사이 동작 연결·별도 동작 검수
 - [이미지 보정 체크리스트](ai-asset-pipeline/image_correction_checklist.md): 손·발·겹침·비율·조명 확인에 재사용하는 품질 기준
 - [로제 프롬프트 기록](ai-asset-pipeline/rose_art_prompts.md): 현재 기준 레퍼런스와 생성·편집 이력
 

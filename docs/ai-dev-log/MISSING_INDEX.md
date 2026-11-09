@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [키포즈 검수 후 사이 동작 연결](2026-11-09-animation-keypose-review-workflow.md): 1개, TIME(scope). 현재 대화의 후보 제시·수용·문서 반영 요청 발언 시각을 확인한다. 기존 합계와 구분한 신규 기록이다.
+
 - [플레이어 메카 구분선 범위·선폭](2026-11-09-player-mech-boundary-fine.md): 2개, TIME(scope)·REASON(U2). 기존 합계와 구분한 신규 기록이다.
 
 - [포즈 파츠 편집·Ctrl+Z](2026-11-09-pose-part-editing.md): 1개, TIME(scope). 기존 합계와 구분한 신규 기록이다.
