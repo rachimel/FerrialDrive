@@ -12,7 +12,7 @@ from ferrial_drive.assets import AssetDefinition, SpriteBundle
 from ferrial_drive.assets.sprites import SpriteSheet
 from samples.asset_loader.make_sample import write_samples
 from Tools.asset_loader.assembly import SpriteAssembly
-from Tools.asset_loader.production import frame_numbers, render_config
+from Tools.asset_loader.production import frame_numbers, render_config, load_render_preset
 
 
 class AssetProductionTests(unittest.TestCase):
@@ -24,6 +24,23 @@ class AssetProductionTests(unittest.TestCase):
 
     def tearDown(self):
         self.temporary.cleanup()
+
+    def test_render_preset_resolves_model_and_preserves_frame_contract(self):
+        config = render_config(asset_id="player", animation_name="sword_idle", frames="11,12,13",
+                               fps=8, width=192, height=192, ortho_scale=5.8, samples=16)
+        model = self.root / "animations.blend"
+        model.write_bytes(b"test path only")
+        config["source_blend"] = "animations.blend"
+        path = self.root / "preset.json"
+        path.write_text(json.dumps(config), encoding="utf-8")
+        loaded, source = load_render_preset(path)
+        self.assertEqual(source, model.resolve())
+        self.assertEqual(loaded["frames"], [11, 12, 13])
+        self.assertEqual(loaded["fps"], 8)
+        config["camera"]["target"] = [float("nan"), 0, 0]
+        path.write_text(json.dumps(config), encoding="utf-8")
+        with self.assertRaises(ValueError):
+            load_render_preset(path)
 
     def test_recipe_keeps_existing_rig_options_and_rejects_invalid_work(self):
         values = dict(asset_id="rig", animation_name="walk", frames="1,3", fps="24", width="128", height="128",

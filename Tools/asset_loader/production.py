@@ -13,6 +13,25 @@ DEFAULT_CONFIG = ROOT / "samples/asset_load_test/render_config.json"
 WORKSPACE = Path(__file__).with_name("workspace")
 
 
+def load_render_preset(path):
+    """출력 설정을 기존 입력 규칙으로 검증하고 모델 경로를 해석한다."""
+    path = Path(path).resolve()
+    data = json.loads(path.read_text(encoding="utf-8"))
+    for key in ("position", "target"):
+        vector = data["camera"][key]
+        if len(vector) != 3 or any(not isinstance(v, (int, float)) or not isfinite(v) for v in vector):
+            raise ValueError("카메라 위치·목표는 유한한 숫자 3개여야 한다.")
+    width, height = data["frame_size_pixels"]
+    render_config(asset_id=data["asset_id"], animation_name=data["animation_name"],
+                  frames=",".join(map(str, data["frames"])), fps=data["fps"],
+                  width=width, height=height, ortho_scale=data["camera"]["ortho_scale"],
+                  samples=data["render"]["samples"])
+    source = (path.parent / data["source_blend"]).resolve() if data.get("source_blend") else None
+    if source is not None and (not source.is_file() or source.suffix.lower() != ".blend"):
+        raise ValueError("설정에 연결된 모델 파일이 없다.")
+    return data, source
+
+
 def frame_numbers(text):
     try:
         frames = [int(value.strip()) for value in text.split(",")]

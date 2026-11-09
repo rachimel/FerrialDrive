@@ -7,7 +7,7 @@ from ferrial_drive.assets.sprites import SpriteFrame
 from ferrial_drive.ui.components import Rect
 from .assembly import SpriteAssembly
 from .file_panel import FilePanel
-from .production import ROOT, render_config
+from .production import ROOT, render_config, load_render_preset
 from .library import asset_directory
 from .widgets import Panel
 
@@ -26,6 +26,7 @@ class RenderPanel(Panel):
         self.labels = []
         self.sample, self.scene_camera, self.auto_fit = False, False, True
         self.sharpen = True
+        self.render_preset = None
         self.add_field("source", source or "", Rect(216, 174, 716, 32))
         self.button("찾기", Rect(944, 174, 120, 32), self.browse)
         definitions = [("asset_id", "에셋 ID", app.asset_id or "model", 216, 242, 400),
@@ -40,6 +41,29 @@ class RenderPanel(Panel):
         self.focus = "source"
         self.button("렌더 시작", Rect(924, 656, 140, 32), self.submit, style="button")
         self.button("취소", Rect(812, 656, 100, 32), self.close)
+        self.button("출력 설정 불러오기", Rect(216, 656, 220, 32), self.browse_preset)
+
+    def browse_preset(self):
+        def selected(path):
+            data, source = load_render_preset(path)
+            values = {"asset_id": data["asset_id"], "animation": data["animation_name"],
+                      "frames": ",".join(map(str, data["frames"])), "fps": data["fps"],
+                      "width": data["frame_size_pixels"][0], "height": data["frame_size_pixels"][1],
+                      "scale": data["camera"]["ortho_scale"], "samples": data["render"]["samples"],
+                      "root": data.get("root_object", "")}
+            if source:
+                values["source"] = str(source)
+            for key, value in values.items():
+                self.fields[key].text = str(value)
+                self.fields[key].cursor = len(str(value))
+            self.render_preset = data
+            self.sample = False
+            self.scene_camera = data.get("use_scene_camera", False)
+            self.auto_fit = data.get("auto_fit", True)
+            self.sharpen = data.get("postprocess", {}).get("sharpen", 0) > 0
+        self.app.set_panel(FilePanel(self.app, selected, extensions={".json"},
+                                    initial=Path(self.value("source")).parent if self.value("source") else ROOT / "data/models",
+                                    parent=self))
 
     def browse(self):
         def selected(path):
@@ -57,6 +81,9 @@ class RenderPanel(Panel):
             height=self.value("height"), ortho_scale=self.value("scale"), samples=self.value("samples"),
             root_object=self.value("root"), use_scene_camera=self.scene_camera, auto_fit=self.auto_fit,
             sharpen=0.35 if self.sharpen else 0)
+        if self.render_preset:
+            for key in ("position", "target"):
+                config["camera"][key] = self.render_preset["camera"][key]
         self.app.start_render(source, config)
         self.close()
 
