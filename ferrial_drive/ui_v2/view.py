@@ -54,6 +54,15 @@ class UiV2View(UiView):
         self.stroke((points[3], points[0], (x + width * 0.45, y)), self.ui_accent, opacity * 0.8, 1.5)
         self.stroke(((x + width * 0.55, y + height), points[2], points[1]), self.ui_accent, opacity * 0.5)
 
+    def ultimate_label(self, text, right, y, color, opacity, *, scale=1):
+        """필살기 문구와 작은 사선 패널을 같은 위치·투명도로 그린다."""
+        width, height = self.renderer.text_size(text, "hud_small")
+        padding_x, padding_y = self.style["ultimate_label_padding_pixels"]
+        width, height = (width + 0.15 * height) * scale, height * scale
+        self.panel((right - width - padding_x, y - padding_y,
+                    width + padding_x * 2, height + padding_y * 2), opacity, fill_opacity=0.98)
+        self.slanted_text(text, right, y, "hud_small", color, opacity, scale=scale, align="right")
+
     def buttons(self, scene, input_state, opacity, offset_x, buttons=None, *, offset_y=0):
         r, c = self.renderer, self.config.colors
         for index, button in enumerate(self.config.buttons[scene] if buttons is None else buttons):
@@ -207,10 +216,10 @@ class UiV2View(UiView):
         key_height = r.text_size(key, "hud_small")[1]
         gap = self.style["ultimate_label_gap_pixels"]
         label_right = cx - radius / 2 - gap
-        self.slanted_text(key, label_right, cy - radius / 2 - key_height - gap,
-                          "hud_small", c["text"], opacity, align="right")
-        self.slanted_text(level, label_right, cy + radius / 2 + gap,
-                          "hud_small", c["muted"], opacity, scale=0.85, align="right")
+        self.ultimate_label(key, label_right, cy - radius / 2 - key_height - gap,
+                            c["text"], opacity)
+        self.ultimate_label(level, label_right, cy + radius / 2 + gap,
+                            c["muted"], opacity, scale=0.85)
         x, y = self.layout["dash_label"]
         alpha = opacity * (1 if state.dash_ready else 0.25)
         self.stroke(((x + 16, y - 24), (x + 25, y - 43), (x + 32, y - 39), (x + 21, y - 18),
