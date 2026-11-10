@@ -43,27 +43,29 @@ class UiV2View(UiView):
         r.warped_text(text, 0, 0, role, color, plane.point, opacity, scale_x=scale, scale_y=scale)
 
     def panel(self, rect, opacity, offset_x=0, *, fill_opacity=None, corner_cut_ratio=None,
-              fill_color=None, draw_border=True):
+              fill_color=None, draw_border=True, slant_right=False):
         """v2 전용 비대칭 외곽. 기존 금속 사각 패널을 호출하지 않는다."""
         x, y, width, height = rect
         x += offset_x
         c = self.config.colors
         cut = min(self.style["panel_cut_pixels"], width / 5, height / 3)
-        points = ((x + cut, y), (x + width, y), (x + width - cut, y + height), (x, y + height))
+        points = (((x, y), (x + width - cut, y), (x + width, y + height), (x + cut, y + height))
+                  if slant_right else
+                  ((x + cut, y), (x + width, y), (x + width - cut, y + height), (x, y + height)))
         fill = self.style["surface_opacity"] if fill_opacity is None else fill_opacity
         self.polygon(points, c["panel"] if fill_color is None else fill_color, opacity * fill, filled=True)
         if draw_border:
             self.stroke((points[3], points[0], (x + width * 0.45, y)), self.ui_accent, opacity * 0.8, 1.5)
             self.stroke(((x + width * 0.55, y + height), points[2], points[1]), self.ui_accent, opacity * 0.5)
 
-    def ultimate_label(self, text, right, y, color, opacity, *, scale=1):
+    def ultimate_label(self, text, right, y, color, opacity, *, scale=1, slant_right=False):
         """필살기 문구와 작은 사선 패널을 같은 위치·투명도로 그린다."""
         width, height = self.renderer.text_size(text, "hud_small")
         padding_x, padding_y = self.style["ultimate_label_padding_pixels"]
         width, height = (width + 0.15 * height) * scale, height * scale
         self.panel((right - width - padding_x, y - padding_y,
                     width + padding_x * 2, height + padding_y * 2), opacity, fill_opacity=0.98,
-                   fill_color=self.config.colors["panel_surface"], draw_border=False)
+                   fill_color=self.config.colors["panel_surface"], draw_border=False, slant_right=slant_right)
         self.slanted_text(text, right, y, "hud_small", color, opacity, scale=scale, align="right")
 
     def buttons(self, scene, input_state, opacity, offset_x, buttons=None, *, offset_y=0):
@@ -197,9 +199,9 @@ class UiV2View(UiView):
         level_right = x + width + self.layout["energy_level_width_pixels"]
         level_text_right = level_right - 8
         self.slanted_text("LV", level_text_right, geometry.level_top + 4,
-                          "hud_small", c["muted"], opacity, scale=0.65, align="right")
+                          "hud_small", c["ui_accent"], opacity, scale=0.65, align="right")
         self.slanted_text(f"{state.energy_level:02}", level_text_right, geometry.level_top + 15,
-                          "v2_level", c["text"], opacity, scale=0.85, lean=0.1, align="right")
+                          "v2_level", c["muted"], opacity, scale=0.85, lean=0.1, align="right")
         cx, cy = geometry.icon_center
         radius = geometry.icon_radius
         diamond = ((cx, cy - radius), (cx + radius, cy), (cx, cy + radius), (cx - radius, cy))
@@ -222,7 +224,7 @@ class UiV2View(UiView):
         self.ultimate_label(key, label_right, cy - radius / 2 - key_height - gap,
                             c["text"], opacity)
         self.ultimate_label(level, label_right, cy + radius / 2 + gap,
-                            c["muted"], opacity, scale=0.85)
+                            c["muted"], opacity, scale=0.85, slant_right=True)
         x, y = self.layout["dash_label"]
         alpha = opacity * (1 if state.dash_ready else 0.25)
         self.stroke(((x + 16, y - 24), (x + 25, y - 43), (x + 32, y - 39), (x + 21, y - 18),
@@ -250,21 +252,23 @@ class UiV2View(UiView):
             active = kind == hud.active_weapon_kind
             alpha = opacity if active else opacity * 0.5
             left = x + (0 if active else 22)
-            shape = ((left + 18, top), (x + width, top + 5),
-                     (x + width - 10, top + height), (left - 4, top + height - 6))
-            self.polygon(shape, c["panel_surface"], alpha * 0.65, filled=True)
-            self.stroke((shape[0], (left - 8, top + height - 6), shape[2], shape[1]),
-                         self.ui_accent, alpha * 0.85)
-            self.stroke((shape[0], (left - 8, top + height - 6)), self.ui_accent,
-                         alpha * 0.95, self.style["weapon_outer_edge_pixels"])
-            self.stroke(((left + 28, top + 4), (x + width - 3, top + 8)), self.ui_accent, alpha * 0.3)
-            self.weapon_image(weapon, kind, Rect(left + 18, top + 11, width - 112, height - 39), alpha)
-            self.slanted_text("MELEE" if kind == "melee" else "RANGED", left + 17, top + height - 23,
-                              "weapon_name", c["text"], alpha)
-            if weapon.rounds is not None:
-                text = str(weapon.rounds)
-                self.slanted_text(text, x + width - r.text_size(text, "v2_ammo")[0] - 16,
-                                  top + 10, "v2_ammo", c["text"], alpha, lean=0.2)
+            amount = 1 if active else self.style["inactive_weapon_scale"]
+            with r.scaled(amount, (x + width, top + height / 2)):
+                shape = ((left + 18, top), (x + width, top + 5),
+                         (x + width - 10, top + height), (left - 4, top + height - 6))
+                self.polygon(shape, c["panel_surface"], alpha * 0.65, filled=True)
+                self.stroke((shape[0], (left - 8, top + height - 6), shape[2], shape[1]),
+                             self.ui_accent, alpha * 0.85)
+                self.stroke((shape[0], (left - 8, top + height - 6)), self.ui_accent,
+                             alpha * 0.95, self.style["weapon_outer_edge_pixels"])
+                self.stroke(((left + 28, top + 4), (x + width - 3, top + 8)), self.ui_accent, alpha * 0.3)
+                self.weapon_image(weapon, kind, Rect(left + 18, top + 11, width - 112, height - 39), alpha)
+                self.slanted_text("MELEE" if kind == "melee" else "RANGED", left + 17, top + height - 23,
+                                  "weapon_name", c["text"], alpha)
+                if weapon.rounds is not None:
+                    text = str(weapon.rounds)
+                    self.slanted_text(text, x + width - r.text_size(text, "v2_ammo")[0] - 16,
+                                      top + 10, "v2_ammo", c["text"], alpha, lean=0.2)
 
     def absorption(self, trails, opacity):
         r, color = self.renderer, self.config.colors["energy"]
@@ -281,10 +285,10 @@ class UiV2View(UiView):
                 self.stroke(segment, color, alpha * 0.5, 2)
                 self.stroke(segment, self.config.colors["text"], alpha)
 
-    def counter_base(self, plane, width, ink_bottom, opacity):
+    def counter_base(self, project, width, ink_bottom, opacity):
         thickness = self.style["counter_plaque_height_pixels"]
         slant = self.style["counter_plaque_slant_pixels"]
-        left, right = plane.point(-14, ink_bottom - 1), plane.point(width + 3, ink_bottom - 1)
+        left, right = project(-14, ink_bottom - 1), project(width + 3, ink_bottom - 1)
         color = self.config.colors["counter_plaque"]
         self.polygon(counter_plaque(left, right, thickness, slant), color, opacity, filled=True)
         distance = hypot(right[0] - left[0], right[1] - left[1])
@@ -303,20 +307,25 @@ class UiV2View(UiView):
         settings = self.style["counters"][label]
         spec = "," if label == "damage" else "d"
         old, new = format(visual.previous_value, spec), format(visual.value, spec)
+        if not visual.moving:
+            old = new
         slots = max(len(old), len(new))
         old, new = old.rjust(slots), new.rjust(slots)
         digit_width = max(r.text_size(str(digit), role)[0] for digit in range(10))
         comma_width = r.text_size(",", role)[0]
         widths = [comma_width if char == "," else digit_width for char in new]
-        scale = min(1, settings["max_width_pixels"] / sum(widths))
+        scale = settings["text_scale"]
         width, height = sum(widths) * scale, r.text_size("0", role)[1] * scale
         right = self.config.window["width"] - settings["right_margin_pixels"]
-        origin = right - width - height * settings["lean"] / 2 - 2
-        plane = PerspectivePlane(origin, y, width, height, settings["depth"], settings["lean"], settings["slope"])
-        shadow = lambda px, py: (plane.point(px, py)[0] + 2, plane.point(px, py)[1] + 3)
+        reference_width = settings["perspective_width_pixels"]
+        origin = right - reference_width - height * settings["lean"] / 2 - 2
+        plane = PerspectivePlane(origin, y, reference_width, height,
+                                 settings["depth"], settings["lean"], settings["slope"])
+        project = lambda px, py: plane.point(reference_width - width + px, py)
+        shadow = lambda px, py: (project(px, py)[0] + 2, project(px, py)[1] + 3)
         ink_bottom = r.digit_ink_bottom(role) * scale
         viewport = Rect(0, 0, width, ink_bottom)
-        self.counter_base(plane, width, ink_bottom, opacity)
+        self.counter_base(project, width, ink_bottom, opacity)
         x = 0
         for before, after, slot_width in zip(old, new, widths):
             moving = visual.moving and before != after and after != ","
@@ -326,8 +335,8 @@ class UiV2View(UiView):
                 if char == " ":
                     continue
                 left = x + (slot_width - r.text_size(char, role)[0]) * scale / 2
-                for project, color in ((shadow, c["counter_shadow"]), (plane.point, c["text"])):
-                    r.warped_text(char, left, top, role, color, project, opacity * alpha,
+                for projection, color in ((shadow, c["counter_shadow"]), (project, c["text"])):
+                    r.warped_text(char, left, top, role, color, projection, opacity * alpha,
                                   scale_x=scale, scale_y=scale, clip_rect=viewport)
             x += slot_width * scale
         label_text = self.config.labels[label]
@@ -335,7 +344,7 @@ class UiV2View(UiView):
         label_width = r.text_size(label_text, label_role)[0]
         r.warped_text(label_text, width - label_width - 6,
                       ink_bottom + self.style["counter_plaque_height_pixels"] + 5,
-                      label_role, c["muted"], plane.point, opacity)
+                      label_role, c["muted"], project, opacity)
 
     def combat(self, state, damage_visuals=(), opacity=1, offset_x=0, *,
                counter_visual=None, combo_visual=None, counters_opacity=1,

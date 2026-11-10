@@ -652,14 +652,16 @@
                     "depth": 0.16,
                     "lean": 0.14,
                     "slope": 0.055,
-                    "max_width_pixels": 240,
+                    "perspective_width_pixels": 240,
+                    "text_scale": 1,
                     "right_margin_pixels": 14
                 },
                 "damage": {
                     "depth": 0.16,
                     "lean": 0.14,
                     "slope": 0.055,
-                    "max_width_pixels": 300,
+                    "perspective_width_pixels": 300,
+                    "text_scale": 1,
                     "right_margin_pixels": 14
                 }
             },
@@ -677,6 +679,7 @@
             "weapon_outer_edge_pixels": 3,
             "map_scale": 0.9,
             "equipment_scale": 0.9,
+            "inactive_weapon_scale": 0.8,
             "resource_label_gap_pixels": 4,
             "ultimate_label_gap_pixels": 4,
             "ultimate_label_padding_pixels": [

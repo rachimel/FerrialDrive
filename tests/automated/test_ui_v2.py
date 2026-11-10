@@ -7,6 +7,7 @@ import subprocess
 import sys
 from types import SimpleNamespace
 import unittest
+from unittest.mock import Mock, patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -19,6 +20,8 @@ SPEC.loader.exec_module(SAMPLE)
 from ferrial_drive.ui_v2.effects import AbsorptionTrail, EnergyAbsorption
 from ferrial_drive.ui_v2.geometry import (PerspectivePlane, body_diamond, counter_plaque,
                                          resource_geometry, scaled_point, slanted_meter)
+from ferrial_drive.ui.counter import CounterVisual
+from ferrial_drive.ui_v2.view import UiV2View
 
 
 class UiV2Tests(unittest.TestCase):
@@ -179,6 +182,41 @@ class UiV2Tests(unittest.TestCase):
         a, b, c, d = counter_plaque((50, 90), (200, 100), 8, 6)
         self.assertEqual((b[0] - a[0], b[1] - a[1]), (c[0] - d[0], c[1] - d[1]))
         self.assertEqual((d[0] - a[0], d[1] - a[1]), (c[0] - b[0], c[1] - b[1]))
+
+    def test_counter_digit_growth_keeps_last_digit_size_and_right_edge(self):
+        renderer = SimpleNamespace(text_size=lambda text, role: (len(text) * 40, 60),
+                                   digit_ink_bottom=lambda role: 50, warped_text=Mock())
+        view = UiV2View(self.program.config, renderer)
+        for label, role in (("combo", "combo_number"), ("damage", "damage_total")):
+            previous_left = None
+            digit_bounds = right_edge = None
+            with patch.object(view, "polygon") as polygon:
+                for value in (9, 99, 999, 9999, 99999999):
+                    renderer.warped_text.reset_mock()
+                    polygon.reset_mock()
+                    view.perspective_counter(CounterVisual(value, value, 1, 1), role, label, 178, 1)
+                    digits = [call for call in renderer.warped_text.call_args_list
+                              if call.args[3] == role and call.args[4] == self.program.config.colors["text"]]
+                    last = digits[-1]
+                    _, x, y, _, _, project, _ = last.args
+                    width, height = renderer.text_size("9", role)
+                    bounds = (project(x, y), project(x + width, y + height))
+                    if digit_bounds is not None:
+                        for actual, expected in zip(sum(bounds, ()), sum(digit_bounds, ())):
+                            self.assertAlmostEqual(actual, expected)
+                    digit_bounds = bounds
+                    self.assertEqual(last.kwargs["scale_x"], 1)
+                    self.assertEqual(last.kwargs["scale_y"], 1)
+                    plate = polygon.call_args_list[0].args[0]
+                    if right_edge is not None:
+                        for actual, expected in zip(plate[1], right_edge):
+                            self.assertAlmostEqual(actual, expected)
+                        self.assertLess(plate[0][0], previous_left)
+                    right_edge, previous_left = plate[1], plate[0][0]
+                    fragments = [call.args[0] for call in polygon.call_args_list[1:]]
+                    self.assertEqual(len(fragments), 3)
+                    self.assertTrue(all(max(point[0] for point in fragment) < plate[0][0]
+                                        for fragment in fragments))
 
 
 if __name__ == "__main__":

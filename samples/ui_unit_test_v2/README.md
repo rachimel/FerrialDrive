@@ -17,11 +17,13 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 - `ui_config.json`의 `v2.layout`: 미니맵·록온·타겟 HP·플레이어 HP·에너지·필살기 아이콘·레벨·무장·카운터 배치.
 - `v2.layout.hp_bar`·`energy_bar`·`ultimate_center_x`·`ultimate_radius_pixels`: 바의 높이/오른쪽 끝과 아이콘 위치·크기. 두 바의 왼쪽 경계는 마름모 변에 맞춰 계산한다. HP 안쪽 여백은 없고 수치/HP는 바 위에 자동 정렬한다.
 - `v2.layout.energy_level_width_pixels`·`v2.style.level_curve_radius_pixels`: HP 옆에 붙는 레벨 영역의 폭과 곡선 강도. HP/에너지 공유 경계와 레벨 왼쪽 사선은 함께 계산한다.
-- `v2.style.counters`: HIT/DAMAGE의 원근 `depth`(0~1)·기울기 `lean`/`slope`·최대 폭·오른쪽 여백. 숫자 갱신도 같은 투영을 사용한다.
+- `v2.style.counters`: HIT/DAMAGE의 원근 `depth`(0~1)·기울기 `lean`/`slope`·고정 `text_scale`·원근 기준 폭 `perspective_width_pixels`·오른쪽 여백. 기준 폭은 최대 표시 폭이 아니다. 숫자를 축소하지 않고 받침판과 잔상 조각을 왼쪽으로 확장한다. 오른쪽 기준 투영은 자릿수와 무관하게 유지한다.
 - `v2.style.panel_cut_pixels`·`surface_opacity`: 사선 외곽과 면의 기본 표현. 기존 금속 사각 패널을 사용하지 않는다.
 - `v2.style.hud_scale`: 일반 전투 HUD 배율 0.81. `map_scale`·`equipment_scale`은 0.9로 미니맵·웨폰·로드아웃의 현재 크기를 유지한다. 레이더는 별도로 반경 144px와 표시 치수를 조정했다. 기체·메뉴는 조정 대상이 아니다.
+- `v2.style.inactive_weapon_scale`: 비활성 무기 카드를 오른쪽 중앙 기준으로 추가 축소하는 배율 0.8. 카드의 면·외곽·무기 그림·문구를 함께 줄이며 활성 카드는 기본 크기다.
 - `v2.style.resource_label_gap_pixels`·`ultimate_label_gap_pixels`: 바 위 HP 표기와 마름모 왼쪽 문구의 간격. 에너지 레벨은 오른쪽 정렬, V와 `LV. 01`은 각각 마름모 왼쪽 위/왼쪽 아래에 두고 오른쪽 끝을 맞춘다.
-- `v2.style.ultimate_label_padding_pixels`: 필살기 단축키·레벨 뒤 사선 패널의 가로/세로 안쪽 여백. 기본값은 4/2 논리 px이며 글자 크기에 맞춰 테두리 없이 면만 그린다. 패널과 글자는 위치·투명도를 공유한다.
+- `v2.style.ultimate_label_padding_pixels`: 필살기 단축키·레벨 뒤 사선 패널의 가로/세로 안쪽 여백. 기본값은 4/2 논리 px이며 글자 크기에 맞춰 테두리 없이 면만 그린다. 필살기 LV 패널은 아래쪽이 오른쪽으로 뻗는 ＼ 방향이며 패널과 글자는 위치·투명도를 공유한다.
+- 에너지 레벨 숫자는 `colors.muted`, 작은 LV 표기는 `colors.ui_accent`로 한 톤 어둡게 표시한다.
 - `colors.panel_surface`: 무기 행과 필살기 단축키·레벨 패널의 면 색상(`#22343F`). 일반 패널보다 한 단계 밝게 표시하며 기존 활성/비활성 투명도를 유지한다.
 - `v2.style.counter_plaque_height_pixels`·`counter_plaque_slant_pixels`: 숫자 아래 평행사변형 받침판의 두께와 사선. 색은 `colors.counter_plaque`다.
 - `v2.style.lock_body_scale`·`lock_thickness_pixels`·`lock_accent_pixels`: 몸통 대비 테두리 배율과 기본/강조선 두께.
@@ -55,12 +57,13 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 
 ## 검증
 
-- v2 자동 검사 16개, 기존 UI 포함 71개 통과: 기존 경계 검사와 함께 마름모 공통 접점·레벨/HP 비침범·몸통 비례·받침판 평행 조건을 확인했다.
+- v2 자동 검사 17개, 기존 UI 포함 72개 통과: 기존 경계 검사와 함께 마름모 공통 접점·레벨/HP 비침범·몸통 비례·받침판 평행 조건, 자릿수 증가 시 오른쪽 숫자의 크기·위치 유지와 받침판·잔상 이동을 확인했다.
 - Pico2D/SDL dummy에서 기본·긴 카운터·숫자 갱신·HP 감소·작은/큰 표적·자원/타겟 없음·흡수·일시정지·타이틀·도움말 11개 상태를 렌더링하고 자원을 해제했다. 주요 이미지를 열어 오른쪽 잘림·공유 경계·강조선/글자·무장 외곽을 확인했다. 기존 금속 패널 미생성과 배율/viewport/clip 복원도 확인했다.
 - 추가 축소 전후의 미니맵·웨폰 행·로드아웃 탭 이미지 영역이 픽셀 단위로 같은 것을 확인했다. HP 채움/외곽 일치와 큰 마름모 변의 접점도 자동 검사했다.
 - V/필살기 레벨의 후속 왼쪽 위/아래 정렬과 HP·에너지·대시 위치 복원은 자동 71개와 기본 화면 재렌더·이미지 열기로 확인했다. 하단 글자가 화면 안에 들어오는 것도 확인했다.
 - 필살기 문구 패널 추가 후 자동 71개와 기본 화면 재렌더·이미지 열기를 다시 확인했다. 패널·글자가 마름모를 침범하거나 화면 아래에서 잘리지 않는다.
 - 무기·필살기 문구 패널의 면 색상 변경 후 자동 71개와 기본 화면 재렌더·이미지 열기를 다시 확인했다.
 - 필살기 단축키·레벨 패널의 테두리 제거 후 자동 71개와 기본 화면 재렌더·이미지 열기를 다시 확인했다.
+- 고정 배율 카운터·필살기 LV 패널 사선·에너지 레벨 색상·비활성 무기 카드 80% 반영 후 자동 72개와 기본/1~4·8자리/자리 올림 중간/근접 무기 활성/0의 10개 상태 렌더를 확인했다. 기본·1자리·8자리·자리 올림 중간·근접 무기 활성 이미지를 열어 검토했고 중첩 배율·viewport·clip 복원을 확인했다. COUNTER는 사용자 지시에 따라 샘플 위치를 유지한다.
 - 실제 창 키·클릭 조작, Runner GUI 드롭, 애니메이션 사용감과 사용자 외관 승인은 미확인이다.
 - 진입점의 `--scene menu`·`--frames 2`·`--capture output/ui_unit_test_v2/combat.png`는 장면 선택·프레임 제한·재생성 가능한 화면 저장용이다.
