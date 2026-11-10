@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field, replace
 from heapq import heappop, heappush
-from math import acos, asin, ceil, cos, hypot, isfinite, radians, sin
+from math import acos, asin, ceil, cos, exp, expm1, floor, hypot, isfinite, log1p, radians, sin
 from random import Random
 
 from .config import Arena, CombatConfig
@@ -162,7 +162,8 @@ class CombatWorld:
         self.random = Random(self.seed)
         self.weapon_kind = "melee"
         self.ammo = c.magazine_rounds
-        self.reload_remaining_seconds = 0.0
+        self.last_shot_seconds = 0.0
+        self.ammo_recovery_fraction = 0.0
         self.shot_remaining_seconds = 0.0
         self.swap_remaining_seconds = 0.0
         self.combo_remaining_seconds = 0.0
@@ -201,12 +202,10 @@ class CombatWorld:
     def _step(self, seconds, inputs):
         c, player = self.config, self.player
         self.elapsed_seconds += seconds
-        for name in ("reload_remaining_seconds", "shot_remaining_seconds", "swap_remaining_seconds",
+        for name in ("shot_remaining_seconds", "swap_remaining_seconds",
                      "combo_remaining_seconds", "path_remaining_seconds"):
             previous = getattr(self, name)
             setattr(self, name, max(0, previous - seconds))
-            if name == "reload_remaining_seconds" and previous > 0 and getattr(self, name) == 0:
-                self.ammo = c.magazine_rounds
         for actor in (player, self.enemy):
             actor.hit_flash_seconds = max(0, actor.hit_flash_seconds - seconds)
         aim = inputs.aim.normalized(player.facing)
@@ -227,9 +226,10 @@ class CombatWorld:
             elif (not player.attack.dash_attack
                   and player.attack.duration_seconds - player.attack.elapsed_seconds <= c.combo_buffer_seconds):
                 self.queued_melee = True
-        if self.weapon_kind == "ranged" and inputs.fire_held and self.reload_remaining_seconds == 0:
+        if self.weapon_kind == "ranged" and inputs.fire_held:
             if self.shot_remaining_seconds == 0 and self.ammo > 0:
                 self._shoot(aim, inputs.aiming)
+        self._advance_ammo_recovery(seconds)
         if player.dash is not None:
             dash = player.dash
             remaining = c.dash_duration_seconds - dash.elapsed_seconds
@@ -272,8 +272,46 @@ class CombatWorld:
         self.bullets.append(Bullet(self.player.position, direction, c.bullet_range_units))
         self.ammo -= 1
         self.shot_remaining_seconds = c.shot_interval_seconds
-        if self.ammo == 0:
-            self.reload_remaining_seconds = c.reload_seconds
+        self.last_shot_seconds = self.elapsed_seconds
+        self.ammo_recovery_fraction = 0.0
+
+    @property
+    def ammo_recovery_wait_seconds(self):
+        if self.ammo >= self.config.magazine_rounds:
+            return 0.0
+        return max(0.0, self.config.ammo_recovery_delay_seconds
+                   - (self.elapsed_seconds - self.last_shot_seconds))
+
+    def _ammo_recovery_time(self, time_seconds):
+        c = self.config
+        # 빈 탄창 완충에 필요한 시간까지만 계산하여 장시간 대기 중 지수 발산을 막는다.
+        full_seconds = log1p(c.magazine_rounds * c.ammo_recovery_growth_per_second
+                            / c.ammo_recovery_initial_rounds_per_second) / c.ammo_recovery_growth_per_second
+        return min(full_seconds, max(0.0, time_seconds - self.last_shot_seconds - c.ammo_recovery_delay_seconds))
+
+    @property
+    def ammo_recovery_rate_rounds_per_second(self):
+        if self.ammo >= self.config.magazine_rounds or self.ammo_recovery_wait_seconds > 1e-9:
+            return 0.0
+        c = self.config
+        return c.ammo_recovery_initial_rounds_per_second * exp(
+            c.ammo_recovery_growth_per_second * self._ammo_recovery_time(self.elapsed_seconds))
+
+    def _advance_ammo_recovery(self, seconds):
+        c = self.config
+        if self.ammo >= c.magazine_rounds:
+            self.ammo_recovery_fraction = 0.0
+            return
+        before = self._ammo_recovery_time(self.elapsed_seconds - seconds)
+        after = self._ammo_recovery_time(self.elapsed_seconds)
+        # 회복 속도 r(t)=r0*exp(k*t)를 구간 적분한다. 부분 탄약도 다음 갱신으로 이월한다.
+        restored = (c.ammo_recovery_initial_rounds_per_second / c.ammo_recovery_growth_per_second
+                    * exp(c.ammo_recovery_growth_per_second * before)
+                    * expm1(c.ammo_recovery_growth_per_second * (after - before)))
+        progress = self.ammo_recovery_fraction + restored
+        rounds = min(c.magazine_rounds - self.ammo, floor(progress + 1e-9))
+        self.ammo += rounds
+        self.ammo_recovery_fraction = (max(0.0, progress - rounds) if self.ammo < c.magazine_rounds else 0.0)
 
     def _enemy_think(self, seconds):
         enemy, c = self.enemy, self.config

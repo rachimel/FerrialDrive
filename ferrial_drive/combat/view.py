@@ -133,9 +133,10 @@ class CombatView:
             angle += 1.1 - progress * 2.2
         elif attack.phase == "windup":
             angle -= 0.9
-        length = 66 if attack.phase == "active" else 42
+        blade_reach = max(0, attack.reach_units - 14)
+        length = blade_reach if attack.phase == "active" else blade_reach * 0.64
         if attack.combo_index == 2:
-            length = 36 + progress * 45
+            length = blade_reach * (0.45 + progress * 0.55)
         z = 24 + (1 - progress) * 30 if attack.combo_index == 0 else 28
         tip = base + Vec2(cos(angle), sin(angle)) * length
         start_screen = self.project(base, world.player.position, 28)
@@ -199,8 +200,11 @@ class CombatView:
         r.text("좌클릭 공격  ·  우클릭 총 조준  ·  Esc 일시정지  ·  R 재시작",
                32, height - 62, "small", c["muted"])
         status = f"HP {world.player.health}/{world.player.maximum_health}  ·  F10 종료"
-        if world.reload_remaining_seconds > 0:
-            status += f"  ·  재장전 {world.reload_remaining_seconds:.1f}초"
+        if world.ammo < world.config.magazine_rounds:
+            if world.ammo_recovery_wait_seconds > 1e-9:
+                status += f"  ·  탄약 회복 대기 {world.ammo_recovery_wait_seconds:.1f}초"
+            else:
+                status += f"  ·  탄약 회복 +{world.ammo_recovery_rate_rounds_per_second:.1f}/초"
         elif world.weapon_kind == "melee" and world.player.attack:
             status += f"  ·  검 {world.player.attack.combo_index + 1}타"
         r.text(status, 32, height - 36, "small", c["text"])

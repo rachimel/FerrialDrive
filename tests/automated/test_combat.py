@@ -38,7 +38,8 @@ class CombatTests(unittest.TestCase):
         self.assertEqual(len(arena.walls), 2)
         self.assertGreater(style["projection_y_scale"], 0)
         CombatWorld(config, arena)
-        for changes in ({"reload_seconds": 0}, {"sword_damage": 1.5}, {"walk_speed_units_per_second": float("nan")}):
+        for changes in ({"ammo_recovery_growth_per_second": 0}, {"sword_damage": 1.5},
+                        {"walk_speed_units_per_second": float("nan")}):
             with self.assertRaises(ValueError):
                 replace(config, **changes)
 
@@ -52,7 +53,7 @@ class CombatTests(unittest.TestCase):
             advance(world, 0.5)
             self.assertEqual(world.player.position, stopped)
         for x in positions:
-            self.assertAlmostEqual(x, 540)
+            self.assertAlmostEqual(x, 300 + CombatConfig().walk_speed_units_per_second)
 
     def test_diagonal_is_normalized_and_sprint_is_faster(self):
         world = quiet_world()
@@ -80,15 +81,21 @@ class CombatTests(unittest.TestCase):
         start = world.player.position
         world.advance(0.2, CombatInput(aim=Vec2(0, 1), dash_pressed=True))
         world.advance(0.2, CombatInput(aim=Vec2(1, 0), dash_pressed=True))
-        self.assertAlmostEqual(world.player.position.y - start.y, 210)
-        self.assertAlmostEqual(world.player.position.x - start.x, 210)
+        self.assertAlmostEqual(world.player.position.y - start.y, world.config.dash_distance_units)
+        self.assertAlmostEqual(world.player.position.x - start.x, world.config.dash_distance_units)
 
     def test_normal_attack_can_be_dash_cancelled_in_all_phases(self):
-        for time in (0.03, 0.14, 0.29):
+        config = CombatConfig()
+        phases = (("windup", config.sword_windup_seconds / 2),
+                  ("active", config.sword_windup_seconds + config.sword_active_seconds / 2),
+                  ("recovery", config.sword_windup_seconds + config.sword_active_seconds
+                   + config.sword_recovery_seconds / 2))
+        for phase, time in phases:
             with self.subTest(time=time):
                 world = quiet_world()
                 world.advance(time, CombatInput(attack_pressed=True))
                 self.assertIsNotNone(world.player.attack)
+                self.assertEqual(world.player.attack.phase, phase)
                 world.advance(0.01, CombatInput(dash_pressed=True, aim=Vec2(0, 1)))
                 self.assertIsNone(world.player.attack)
                 self.assertIsNotNone(world.player.dash)
@@ -121,9 +128,13 @@ class CombatTests(unittest.TestCase):
         world.advance(0.02, CombatInput(attack_pressed=True))
         for _ in range(4):
             indices.append(world.player.attack.combo_index)
-            world.advance(0.24, CombatInput())
-            world.advance(0.02, CombatInput(attack_pressed=True))
-            world.advance(0.16, CombatInput())
+            attack = world.player.attack
+            buffer = world.config.combo_buffer_seconds / 2
+            step = world.config.fixed_step_seconds
+            world.advance(attack.duration_seconds - attack.elapsed_seconds - buffer, CombatInput())
+            world.advance(step, CombatInput(attack_pressed=True))
+            remaining = attack.duration_seconds - attack.elapsed_seconds
+            world.advance(remaining + step, CombatInput())
         self.assertEqual(indices, [0, 1, 2, 3])
         self.assertEqual(world.player.attack.combo_index, 0)
 
@@ -173,17 +184,113 @@ class CombatTests(unittest.TestCase):
         world.advance(0.25, CombatInput(attack_pressed=True))
         self.assertEqual(world.enemy.health, world.config.enemy_health)
 
-    def test_ammo_auto_reload_continues_while_swapped(self):
-        world = quiet_world(magazine_rounds=1)
-        world.advance(0.02, CombatInput(swap_pressed=True, fire_held=True))
+    def test_ammo_recovery_waits_one_second_in_both_weapon_states(self):
+        recovered = []
+        for holstered in (False, True):
+            world = quiet_world()
+            world.weapon_kind = "ranged"
+            world.ammo = 10
+            world.advance(world.config.fixed_step_seconds, CombatInput(fire_held=True))
+            if holstered:
+                world.advance(world.config.fixed_step_seconds, CombatInput(swap_pressed=True))
+            else:
+                world.advance(world.config.fixed_step_seconds, CombatInput())
+            advance(world, 0.9)
+            self.assertEqual(world.ammo, 9)
+            self.assertEqual(world.ammo_recovery_fraction, 0)
+            self.assertGreater(world.ammo_recovery_wait_seconds, 0)
+            advance(world, 0.5)
+            self.assertGreater(world.ammo, 9)
+            recovered.append(world.ammo + world.ammo_recovery_fraction)
+        self.assertAlmostEqual(*recovered)
+
+    def test_ammo_recovery_accelerates_in_equal_time_intervals(self):
+        world = quiet_world()
+        world.ammo = 0
+        advance(world, 1)
         self.assertEqual(world.ammo, 0)
-        self.assertGreater(world.reload_remaining_seconds, 0)
-        advance(world, 0.3)
-        world.advance(0.02, CombatInput(swap_pressed=True))
-        self.assertEqual(world.weapon_kind, "melee")
-        advance(world, 1.1)
-        self.assertEqual(world.ammo, 1)
-        self.assertEqual(world.reload_remaining_seconds, 0)
+        self.assertAlmostEqual(world.ammo_recovery_fraction, 0)
+        increments = []
+        previous = 0
+        for _ in range(3):
+            advance(world, 0.5)
+            current = world.ammo + world.ammo_recovery_fraction
+            increments.append(current - previous)
+            previous = current
+        self.assertLess(increments[0], increments[1])
+        self.assertLess(increments[1], increments[2])
+        self.assertAlmostEqual(increments[1] / increments[0], increments[2] / increments[1])
+
+    def test_actual_shot_resets_recovery_wait_and_acceleration(self):
+        world = quiet_world()
+        world.weapon_kind = "ranged"
+        world.ammo = 10
+        advance(world, 2)
+        self.assertGreater(world.ammo_recovery_rate_rounds_per_second,
+                           world.config.ammo_recovery_initial_rounds_per_second)
+        before = world.ammo
+        world.advance(world.config.fixed_step_seconds, CombatInput(fire_held=True))
+        self.assertEqual(world.ammo, before - 1)
+        self.assertEqual(world.ammo_recovery_fraction, 0)
+        self.assertAlmostEqual(world.ammo_recovery_wait_seconds, 1)
+        self.assertEqual(world.ammo_recovery_rate_rounds_per_second, 0)
+        advance(world, 0.5)
+        self.assertEqual(world.ammo, before - 1)
+
+    def test_recovered_round_can_fire_without_waiting_for_full_magazine(self):
+        world = quiet_world()
+        world.weapon_kind = "ranged"
+        world.ammo = 0
+        advance(world, 1.5)
+        self.assertGreater(world.ammo, 0)
+        self.assertLess(world.ammo, world.config.magazine_rounds)
+        before = world.ammo
+        world.advance(world.config.fixed_step_seconds, CombatInput(fire_held=True))
+        self.assertEqual(world.ammo, before - 1)
+        self.assertEqual(world.last_shot_seconds, world.elapsed_seconds)
+
+    def test_recovery_is_consistent_at_30_60_and_144_fps(self):
+        results = []
+        for fps in (30, 60, 144):
+            world = quiet_world()
+            world.ammo = 0
+            advance(world, 2.5, fps=fps)
+            results.append(world.ammo + world.ammo_recovery_fraction)
+        self.assertGreater(results[0], 0)
+        for value in results[1:]:
+            self.assertAlmostEqual(value, results[0])
+
+    def test_recovery_caps_at_magazine_size_and_long_idle_is_finite(self):
+        world = quiet_world()
+        world.ammo = 0
+        advance(world, 6)
+        self.assertEqual(world.ammo, world.config.magazine_rounds)
+        self.assertEqual(world.ammo_recovery_fraction, 0)
+        self.assertEqual(world.ammo_recovery_rate_rounds_per_second, 0)
+        world.elapsed_seconds = 1e9
+        world.advance(0.1, CombatInput())
+        self.assertEqual(world.ammo, world.config.magazine_rounds)
+        world.reset()
+        self.assertEqual(world.last_shot_seconds, 0)
+        self.assertEqual(world.ammo_recovery_fraction, 0)
+
+    def test_empty_trigger_does_not_reset_last_actual_shot(self):
+        world = quiet_world()
+        world.weapon_kind = "ranged"
+        world.ammo = 0
+        advance(world, 0.9, CombatInput(fire_held=True))
+        self.assertEqual(world.last_shot_seconds, 0)
+        self.assertEqual(world.ammo, 0)
+        advance(world, 0.6, CombatInput(fire_held=True))
+        self.assertGreater(world.last_shot_seconds, 1)
+
+    def test_increased_sword_reach_hits_at_outer_edge(self):
+        world = quiet_world()
+        world.enemy.position = Vec2(438, 400)
+        before = world.enemy.health
+        world.advance(world.config.sword_windup_seconds + world.config.fixed_step_seconds,
+                      CombatInput(attack_pressed=True))
+        self.assertEqual(world.enemy.health, before - world.config.sword_damage)
 
     def test_switch_is_allowed_in_dash_and_blocked_during_melee(self):
         world = quiet_world()

@@ -96,6 +96,25 @@ class CombatApplicationTests(unittest.TestCase):
             self.assertAlmostEqual(recovered.x, expected.x)
             self.assertAlmostEqual(recovered.y, expected.y)
 
+    def test_ammo_recovery_pauses_and_restart_clears_recovery_state(self):
+        app, p = self.program, self.program.pico
+        self.start()
+        app.world.ammo = 10
+        app.update(0.2)
+        app.draw()
+        for _ in range(6):
+            app.update(0.2)
+        app.draw()
+        self.assertGreater(app.world.ammo_recovery_fraction, 0)
+        self.key(p.SDLK_ESCAPE)
+        before = (app.world.elapsed_seconds, app.world.ammo, app.world.ammo_recovery_fraction)
+        app.update(0.2)
+        self.assertEqual(before, (app.world.elapsed_seconds, app.world.ammo, app.world.ammo_recovery_fraction))
+        self.key(p.SDLK_r)
+        self.assertEqual(app.world.ammo, 45)
+        self.assertEqual(app.world.ammo_recovery_fraction, 0)
+        self.assertEqual(app.world.last_shot_seconds, 0)
+
     def test_repeat_key_does_not_retrigger_dash_and_close_is_local(self):
         app, p = self.program, self.program.pico
         self.start()
