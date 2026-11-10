@@ -50,10 +50,10 @@ class CombatConfig:
     actor_radius_units: float = 20
     player_health: int = 240
     enemy_health: int = 480
-    walk_speed_units_per_second: float = 300
-    sprint_speed_units_per_second: float = 480
+    walk_speed_units_per_second: float = 360
+    sprint_speed_units_per_second: float = 576
     enemy_speed_units_per_second: float = 220
-    dash_distance_units: float = 250
+    dash_distance_units: float = 300
     dash_duration_seconds: float = 0.20
     dash_attack_window_seconds: float = 0.08
     sword_windup_seconds: float = 0.07

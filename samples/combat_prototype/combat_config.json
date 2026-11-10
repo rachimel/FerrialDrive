@@ -2,10 +2,10 @@
   "combat": {
     "player_health": 240,
     "enemy_health": 480,
-    "walk_speed_units_per_second": 300,
-    "sprint_speed_units_per_second": 480,
+    "walk_speed_units_per_second": 360,
+    "sprint_speed_units_per_second": 576,
     "enemy_speed_units_per_second": 220,
-    "dash_distance_units": 250,
+    "dash_distance_units": 300,
     "dash_duration_seconds": 0.2,
     "dash_attack_window_seconds": 0.08,
     "sword_windup_seconds": 0.07,
