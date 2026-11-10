@@ -42,7 +42,8 @@ class UiV2View(UiView):
                                  depth=0, lean=lean, slope=slope)
         r.warped_text(text, 0, 0, role, color, plane.point, opacity, scale_x=scale, scale_y=scale)
 
-    def panel(self, rect, opacity, offset_x=0, *, fill_opacity=None, corner_cut_ratio=None, fill_color=None):
+    def panel(self, rect, opacity, offset_x=0, *, fill_opacity=None, corner_cut_ratio=None,
+              fill_color=None, draw_border=True):
         """v2 전용 비대칭 외곽. 기존 금속 사각 패널을 호출하지 않는다."""
         x, y, width, height = rect
         x += offset_x
@@ -51,8 +52,9 @@ class UiV2View(UiView):
         points = ((x + cut, y), (x + width, y), (x + width - cut, y + height), (x, y + height))
         fill = self.style["surface_opacity"] if fill_opacity is None else fill_opacity
         self.polygon(points, c["panel"] if fill_color is None else fill_color, opacity * fill, filled=True)
-        self.stroke((points[3], points[0], (x + width * 0.45, y)), self.ui_accent, opacity * 0.8, 1.5)
-        self.stroke(((x + width * 0.55, y + height), points[2], points[1]), self.ui_accent, opacity * 0.5)
+        if draw_border:
+            self.stroke((points[3], points[0], (x + width * 0.45, y)), self.ui_accent, opacity * 0.8, 1.5)
+            self.stroke(((x + width * 0.55, y + height), points[2], points[1]), self.ui_accent, opacity * 0.5)
 
     def ultimate_label(self, text, right, y, color, opacity, *, scale=1):
         """필살기 문구와 작은 사선 패널을 같은 위치·투명도로 그린다."""
@@ -61,7 +63,7 @@ class UiV2View(UiView):
         width, height = (width + 0.15 * height) * scale, height * scale
         self.panel((right - width - padding_x, y - padding_y,
                     width + padding_x * 2, height + padding_y * 2), opacity, fill_opacity=0.98,
-                   fill_color=self.config.colors["panel_surface"])
+                   fill_color=self.config.colors["panel_surface"], draw_border=False)
         self.slanted_text(text, right, y, "hud_small", color, opacity, scale=scale, align="right")
 
     def buttons(self, scene, input_state, opacity, offset_x, buttons=None, *, offset_y=0):

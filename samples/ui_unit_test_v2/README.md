@@ -21,7 +21,7 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 - `v2.style.panel_cut_pixels`·`surface_opacity`: 사선 외곽과 면의 기본 표현. 기존 금속 사각 패널을 사용하지 않는다.
 - `v2.style.hud_scale`: 일반 전투 HUD 배율 0.81. `map_scale`·`equipment_scale`은 0.9로 미니맵·웨폰·로드아웃의 현재 크기를 유지한다. 레이더는 별도로 반경 144px와 표시 치수를 조정했다. 기체·메뉴는 조정 대상이 아니다.
 - `v2.style.resource_label_gap_pixels`·`ultimate_label_gap_pixels`: 바 위 HP 표기와 마름모 왼쪽 문구의 간격. 에너지 레벨은 오른쪽 정렬, V와 `LV. 01`은 각각 마름모 왼쪽 위/왼쪽 아래에 두고 오른쪽 끝을 맞춘다.
-- `v2.style.ultimate_label_padding_pixels`: 필살기 단축키·레벨 뒤 사선 패널의 가로/세로 안쪽 여백. 기본값은 4/2 논리 px이며 글자 크기에 맞춰 패널을 그린다. 패널과 글자는 위치·투명도를 공유한다.
+- `v2.style.ultimate_label_padding_pixels`: 필살기 단축키·레벨 뒤 사선 패널의 가로/세로 안쪽 여백. 기본값은 4/2 논리 px이며 글자 크기에 맞춰 테두리 없이 면만 그린다. 패널과 글자는 위치·투명도를 공유한다.
 - `colors.panel_surface`: 무기 행과 필살기 단축키·레벨 패널의 면 색상(`#22343F`). 일반 패널보다 한 단계 밝게 표시하며 기존 활성/비활성 투명도를 유지한다.
 - `v2.style.counter_plaque_height_pixels`·`counter_plaque_slant_pixels`: 숫자 아래 평행사변형 받침판의 두께와 사선. 색은 `colors.counter_plaque`다.
 - `v2.style.lock_body_scale`·`lock_thickness_pixels`·`lock_accent_pixels`: 몸통 대비 테두리 배율과 기본/강조선 두께.
@@ -61,5 +61,6 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 - V/필살기 레벨의 후속 왼쪽 위/아래 정렬과 HP·에너지·대시 위치 복원은 자동 71개와 기본 화면 재렌더·이미지 열기로 확인했다. 하단 글자가 화면 안에 들어오는 것도 확인했다.
 - 필살기 문구 패널 추가 후 자동 71개와 기본 화면 재렌더·이미지 열기를 다시 확인했다. 패널·글자가 마름모를 침범하거나 화면 아래에서 잘리지 않는다.
 - 무기·필살기 문구 패널의 면 색상 변경 후 자동 71개와 기본 화면 재렌더·이미지 열기를 다시 확인했다.
+- 필살기 단축키·레벨 패널의 테두리 제거 후 자동 71개와 기본 화면 재렌더·이미지 열기를 다시 확인했다.
 - 실제 창 키·클릭 조작, Runner GUI 드롭, 애니메이션 사용감과 사용자 외관 승인은 미확인이다.
 - 진입점의 `--scene menu`·`--frames 2`·`--capture output/ui_unit_test_v2/combat.png`는 장면 선택·프레임 제한·재생성 가능한 화면 저장용이다.
