@@ -1,0 +1,48 @@
+{
+  "combat": {
+    "player_health": 240,
+    "enemy_health": 480,
+    "walk_speed_units_per_second": 240,
+    "sprint_speed_units_per_second": 390,
+    "enemy_speed_units_per_second": 185,
+    "dash_distance_units": 210,
+    "dash_duration_seconds": 0.2,
+    "dash_attack_window_seconds": 0.08,
+    "sword_windup_seconds": 0.1,
+    "sword_active_seconds": 0.11,
+    "sword_recovery_seconds": 0.2,
+    "sword_reach_units": 106,
+    "sword_damage": 40,
+    "enemy_windup_seconds": 0.3,
+    "enemy_active_seconds": 0.14,
+    "enemy_recovery_seconds": 0.5,
+    "enemy_reach_units": 100,
+    "enemy_damage": 32,
+    "magazine_rounds": 45,
+    "shot_interval_seconds": 0.085,
+    "reload_seconds": 1.35,
+    "bullet_damage": 9
+  },
+  "arena": {
+    "width_units": 1600,
+    "height_units": 1200,
+    "player_spawn": [560, 460],
+    "enemy_spawn": [980, 600],
+    "walls": [
+      {"x": 730, "y": 660, "width": 150, "height": 110},
+      {"x": 400, "y": 200, "width": 120, "height": 150}
+    ]
+  },
+  "presentation": {
+    "projection_y_scale": 0.72,
+    "grid_spacing_units": 80,
+    "mech_height_pixels": 52,
+    "mech_width_pixels": 36,
+    "wall_height_pixels": 56,
+    "background": "#091217",
+    "floor": "#14232B",
+    "wall_top": "#52626D",
+    "wall_front": "#303F49",
+    "wall_side": "#24323C"
+  }
+}
