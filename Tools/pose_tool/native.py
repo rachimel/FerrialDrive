@@ -57,6 +57,8 @@ def select_part(context, key):
             obj.select_set(False)
     context.view_layer.objects.active = None
     context.scene.fd_pose_joint = key if key.startswith("pole.") else ""
+    if key.startswith("upper."):
+        context.scene.fd_pose_transform = "rotate"
     parts.proxy.hide_set(not key.startswith("bone:"))
     if key.startswith("pole."):
         return
@@ -176,8 +178,11 @@ class PoseCommand(bpy.types.Operator):
                            else max(-179.9, min(179.9, parts.joint_angle(key)+context.scene.fd_pose_angle*self.direction)))
                 parts.set_joint_angle(key, degrees)
                 key_all(parts)
+            elif self.command == "joint_twist":
+                parts.twist_joint(key, context.scene.fd_pose_angle*self.direction)
+                key_all(parts)
             elif self.command == "axis":
-                if context.scene.fd_pose_transform == "translate":
+                if context.scene.fd_pose_transform == "translate" and not key.startswith("upper."):
                     delta = Vector((0, 0, 0))
                     delta["XYZ".index(self.axis)] = context.scene.fd_pose_distance*self.direction
                     if key.startswith("pole."):
@@ -342,9 +347,13 @@ class PosePanel(bpy.types.Panel):
         key = current_key(context)
         label = PartEditing(initialize=False).entries().get(key, {}).get("label", "파츠 선택")
         box.label(text=label, icon="RESTRICT_SELECT_OFF")
-        box.row(align=True).prop(scene, "fd_pose_transform", expand=True)
+        if key.startswith("upper."):
+            box.label(text="관절 원점 기준 회전 · 손·발이 함께 이동한다.")
+        else:
+            box.row(align=True).prop(scene, "fd_pose_transform", expand=True)
         row = box.row(align=True)
-        row.prop(scene, "fd_pose_distance", text="이동")
+        if not key.startswith("upper."):
+            row.prop(scene, "fd_pose_distance", text="이동")
         row.prop(scene, "fd_pose_angle", text="각도")
         row = box.row(align=True)
         for axis in "XYZ":
@@ -366,6 +375,11 @@ class PosePanel(bpy.types.Panel):
             command(row, "펴기 −", "joint_bend", key, direction=-1)
             command(row, "굽히기 +", "joint_bend", key)
             box.label(text="종아리와 발이 함께 회전한다." if knee else "하박과 손이 함께 회전한다.")
+            box.label(text="IK 비틀림 · 굽힘 방향")
+            row = box.row(align=True)
+            command(row, "방향 −", "joint_twist", key, direction=-1)
+            command(row, "방향 +", "joint_twist", key)
+            box.label(text="바깥 원 드래그 · 손·발 위치와 회전 유지")
         if key.startswith(("hand.", "bone:Thumb", "bone:Index", "bone:Middle", "bone:Ring", "bone:Little")):
             box = layout.box()
             box.label(text="손가락", icon="VIEW_PAN")
@@ -393,6 +407,7 @@ class PosePanel(bpy.types.Panel):
         layout.label(text="G 이동 · R 회전 · X/Y/Z 월드 축")
         layout.label(text="Ctrl+Z 되돌리기 · 자동 키 켜짐")
         layout.label(text="팔꿈치·무릎 원 좌우 드래그: 굽힘 각도")
+        layout.label(text="바깥 원: IK 방향 · 상박·허벅지 점: 선택 후 R")
 
 
 CLASSES = (PoseCommand, SavePoseWork, OpenPoseModel, ExportPoseClip, OpenPoseRender, PosePanel)

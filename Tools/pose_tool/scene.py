@@ -161,6 +161,93 @@ def upgrade_shoulders():
     return list(changes)
 
 
+def upgrade_upper_handles():
+    """방문한 동작의 월드 목표를 보존하고 팔다리 전체 회전 입력을 추가한다."""
+    data = state()
+    if data.get("upper_handles"):
+        return []
+    original, proxy = rig_objects()
+    active, frame = data["active"], bpy.context.scene.frame_current
+    ctrls = controls()
+    current = {key: obj.matrix_world.copy() for key, obj in ctrls.items()}
+    current_bases = {b.name: b.matrix_basis.copy() for b in proxy.pose.bones}
+    current_parts = {name: bpy.data.objects[name].matrix_world.copy() for name in data.get("independent_parts", [])}
+    equipment = bpy.data.objects.get(data["profile"].get("equipment", {}).get("object", ""))
+    current_properties = {prop: equipment[prop] for prop in data["profile"].get("equipment", {}).get("properties", [])
+                          if equipment and prop in equipment}
+    current_worlds = world_bones(original)
+    stash_session(data)
+    store(data)
+    samples = {}
+    with suspend_meshes():
+        for clip in data["clips"]:
+            if clip["name"] not in data["sessions"]:
+                continue
+            activate_clip(clip["name"])
+            samples[clip["name"]] = {}
+            for sample_frame in range(clip["start"], clip["end"]+1):
+                bpy.context.scene.frame_set(sample_frame)
+                samples[clip["name"]][sample_frame] = (
+                    world_bones(original), {k: obj.matrix_world.copy() for k, obj in ctrls.items()})
+        samples[active][frame] = (current_worlds, current)
+        data = state()
+        collection = bpy.data.collections[PREFIX+"Controls"]
+        body_by_bone = {bone: key for key, bone in data["profile"]["body"].items()}
+        for key, limb in data["profile"]["limbs"].items():
+            bone = original.pose.bones[limb["upper"]]
+            ancestor = bone.parent
+            while ancestor and ancestor.name not in body_by_bone:
+                ancestor = ancestor.parent
+            parent = ctrls[body_by_bone[ancestor.name]] if ancestor else bpy.data.objects[PREFIX+"Root"]
+            obj = create_control(collection, "upper."+key, current_worlds[bone.name], .10, "CIRCLE", parent)
+            obj.lock_location = obj.lock_scale = (True, True, True)
+            rest = original.matrix_world @ bone.bone.matrix_local
+            obj["fd_pose_rest"] = [v for row in rest for v in row]
+            for child_key in (key, "pole."+key):
+                ctrls[child_key].parent = obj
+            ctrls["upper."+key] = obj
+        # 변환 중에는 새 컨트롤의 Action이 없는 이전 세션도 열 수 있다.
+        for name, poses in samples.items():
+            activate_clip(name)
+            for sample_frame, (worlds, matrices) in poses.items():
+                bpy.context.scene.frame_set(sample_frame)
+                for key, limb in data["profile"]["limbs"].items():
+                    obj = ctrls["upper."+key]
+                    obj.matrix_world = worlds[limb["upper"]]
+                    update()
+                    key_transform(obj, sample_frame)
+                    for child_key in (key, "pole."+key):
+                        ctrls[child_key].matrix_world = matrices[child_key]
+                        update()
+                        key_transform(ctrls[child_key], sample_frame)
+            for key in data["profile"]["limbs"]:
+                linear_keys(ctrls["upper."+key].animation_data.action)
+            latest = state()
+            stash_session(latest)
+            store(latest)
+        activate_clip(active)
+        bpy.context.scene.frame_set(frame)
+        # 키를 찍기 전이던 현재 손가락·세부 자세도 보존한다.
+        for name, basis in current_bases.items():
+            proxy.pose.bones[name].matrix_basis = basis
+            key_transform(proxy.pose.bones[name], frame)
+        for key, matrix in current.items():
+            ctrls[key].matrix_world = matrix
+            update()
+            key_transform(ctrls[key], frame)
+        for name, matrix in current_parts.items():
+            bpy.data.objects[name].matrix_world = matrix
+            key_transform(bpy.data.objects[name], frame)
+        for prop, value in current_properties.items():
+            equipment[prop] = value
+        key_pose()
+        data = state()
+        data["upper_handles"] = True
+        stash_session(data)
+        store(data)
+    return ["upper."+key for key in data["profile"]["limbs"]]
+
+
 def update():
     bpy.context.view_layer.update()
 
@@ -491,7 +578,7 @@ def activate_clip(name):
     if cached:
         assign_action(proxy, cached["proxy"])
         for key, obj in ctrls.items():
-            assign_action(obj, cached["controls"][key])
+            assign_action(obj, cached["controls"].get(key))
         for key, limb in data["profile"]["limbs"].items():
             proxy.pose.bones[limb["lower"]].constraints[PREFIX + "IK"].pole_angle = cached["angles"][key]
     else:
@@ -516,6 +603,10 @@ def activate_clip(name):
                 update()
                 key_transform(ctrls[key], frame)
             for key, limb in data["profile"]["limbs"].items():
+                if "upper."+key in ctrls:
+                    ctrls["upper."+key].matrix_world = worlds[limb["upper"]]
+                    update()
+                    key_transform(ctrls["upper."+key], frame)
                 ctrls[key].matrix_world = target_matrix(worlds, original, key, limb)
                 ctrls["pole." + key].matrix_world = Matrix.Translation(pole_position(worlds, limb))
                 key_transform(ctrls[key], frame)

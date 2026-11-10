@@ -10,6 +10,8 @@ ASSEMBLIES = {"Gun": "총", "Sword": "칼", "Scabbard": "칼집"}
 FINGERS = {"Thumb": "엄지", "Index": "검지", "Middle": "중지", "Ring": "약지", "Little": "소지"}
 CORE_LABELS = {"pelvis": "골반", "waist": "허리", "chest": "몸통", "head": "머리",
                "shoulder.L": "왼쪽 어깨", "shoulder.R": "오른쪽 어깨",
+               "upper.hand.L": "왼쪽 상박", "upper.hand.R": "오른쪽 상박",
+               "upper.foot.L": "왼쪽 허벅지", "upper.foot.R": "오른쪽 허벅지",
                "hand.L": "왼손", "hand.R": "오른손", "foot.L": "왼발", "foot.R": "오른발",
                "pole.hand.L": "왼쪽 팔꿈치", "pole.hand.R": "오른쪽 팔꿈치",
                "pole.foot.L": "왼쪽 무릎", "pole.foot.R": "오른쪽 무릎"}
@@ -24,6 +26,7 @@ class PartEditing:
         self.rig, self.proxy = engine.rig_objects()
         if initialize:
             engine.upgrade_shoulders()
+            engine.upgrade_upper_handles()
             self.link_wrists()
             self.prepare_assemblies()
 
@@ -145,6 +148,14 @@ class PartEditing:
 
     def set_world(self, key, matrix, *, moving=False):
         target = self.target(key)
+        if key.startswith("upper."):
+            if moving:
+                raise ValueError("상박·허벅지는 회전으로 조절한다.")
+            # 다른 프레임의 파츠 복제도 현재 관절 원점과 크기를 유지한다.
+            matrix = Matrix.LocRotScale(target.matrix_world.translation, matrix.to_quaternion(), target.matrix_world.to_scale())
+            end = engine.controls()[key.removeprefix("upper.")]
+            if end.constraints.get(engine.PREFIX+"Support"):
+                engine.support_pin(False)
         if key.startswith("bone:"):
             if moving and target.bone.use_connect:
                 raise ValueError("연결된 손가락 관절은 회전으로 조절한다.")
@@ -357,6 +368,23 @@ class PartEditing:
         angle = math.atan2(axis.dot(current.cross(desired)), current.dot(desired))
         matrix = self.world(key)
         matrix.translation = origin + Matrix.Rotation(angle, 3, axis) @ (matrix.translation-origin)
+        self.set_world(key, matrix)
+
+    def twist_joint(self, key, degrees):
+        """손·발의 위치와 회전을 유지하고 IK 굽힘 면을 돌린다."""
+        if not key.startswith("pole.") or key.removeprefix("pole.") not in engine.state()["profile"]["limbs"]:
+            raise ValueError("팔꿈치 또는 무릎을 선택한다.")
+        if not math.isfinite(degrees):
+            raise ValueError("유한한 회전각을 입력한다.")
+        limb = engine.state()["profile"]["limbs"][key.removeprefix("pole.")]
+        worlds = engine.world_bones(self.rig)
+        origin = worlds[limb["upper"]].translation
+        axis = worlds[limb["end"]].translation-origin
+        upper = worlds[limb["lower"]].translation-origin
+        if axis.length < 1e-5 or upper.cross(axis.normalized()).length < 1e-4:
+            raise ValueError("편 자세에서는 먼저 관절을 조금 굽힌다.")
+        matrix = self.world(key)
+        matrix.translation = origin+Matrix.Rotation(math.radians(degrees), 3, axis.normalized())@(matrix.translation-origin)
         self.set_world(key, matrix)
 
     def align_sword(self):
