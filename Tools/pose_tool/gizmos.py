@@ -82,8 +82,8 @@ class JointHandles(bpy.types.GizmoGroup):
             gizmo.alpha = .85
             gizmo.color_highlight = (1, 1, .4)
             gizmo.alpha_highlight = 1
-            gizmo.line_width = 3
-            gizmo.scale_basis = .12
+            gizmo.line_width = 4
+            gizmo.scale_basis = .18
             gizmo.use_draw_modal = True
             gizmo.target_set_operator("fdpose.joint_drag").target = key
             self.handles[key] = gizmo
@@ -91,7 +91,7 @@ class JointHandles(bpy.types.GizmoGroup):
             twist.draw_style = "RING_2D"
             twist.color, twist.color_highlight = (.68, .52, .95), (1, 1, .4)
             twist.alpha, twist.alpha_highlight = .8, 1
-            twist.line_width, twist.scale_basis = 2, .19
+            twist.line_width, twist.scale_basis = 3, .36
             twist.use_draw_modal = True
             twist.target_set_operator("fdpose.twist_drag").target = key
             self.twists[key] = twist
