@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [Pose Tool 선택 파일명 유지](2026-11-10-pose-tool-file-names.md): 1개, TIME(scope). 현재 대화의 고정 pose_work.blend 표시 제보와 파일명만 같다는 확인 응답의 정확한 시각을 확인한다.
+
 - [Pose Tool 상박·허벅지와 IK 방향](2026-11-10-pose-tool-upper-twist.md): 1개, TIME(scope). 현재 대화의 제어점 추가·손발 추종/손가락 제외·IK 비틀림과 굽힘 요청 발언의 정확한 시각을 확인한다.
 
 - [키포즈 검수 후 사이 동작 연결](2026-11-09-animation-keypose-review-workflow.md): 1개, TIME(scope). 현재 대화의 후보 제시·수용·문서 반영 요청 발언 시각을 확인한다. 기존 합계와 구분한 신규 기록이다.

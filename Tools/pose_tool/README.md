@@ -4,7 +4,7 @@ Blender 안에서 기존 모델의 포즈를 직접 편집한다. 프로젝트 �
 
 ## 시작
 
-기본 입력은 `data/models/basic_weapons/base_pose.blend`다. 지정한 파일이 없으면 오류를 표시하며 다른 동작 파일이나 샘플로 바꾸지 않는다. 원본을 보존하고 `Tools/pose_tool/workspace/<실행시각>/pose_work.blend`를 만든다. 루트 바로가기는 로컬 전용이며 Git에 포함하지 않는다.
+기본 입력은 `data/models/basic_weapons/base_pose.blend`다. 지정한 파일이 없으면 오류를 표시하며 다른 동작 파일이나 샘플로 바꾸지 않는다. 원본을 보존하고 `Tools/pose_tool/workspace/<실행시각>/<선택한 파일명>.blend`를 만든다. 예를 들어 `base_pose.blend`를 열면 작업본 이름도 `base_pose.blend`다. 도형 샘플의 작업본은 `sample_pose.blend`이며 `--work`로 지정한 이름은 그대로 사용한다. 루트 바로가기는 로컬 전용이며 Git에 포함하지 않는다.
 
 ```powershell
 Tools/pose_tool/run_pose_tool.cmd

@@ -27,7 +27,8 @@ def launch_command(source=None, *, sample=False, profile=None, blender=None, wor
     if source and sample:
         raise ValueError("모델 파일과 도형 샘플 중 하나만 지정한다.")
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    work = Path(work).resolve() if work else ROOT / "Tools/pose_tool/workspace" / stamp / "pose_work.blend"
+    work_name = source.name if source else "sample_pose.blend"
+    work = Path(work).resolve() if work else ROOT / "Tools/pose_tool/workspace" / stamp / work_name
     if work.exists() and source != work:
         raise FileExistsError("기존 작업본을 덮어쓸 수 없다. 재개하려면 해당 작업본을 source로 지정한다.")
     work.parent.mkdir(parents=True, exist_ok=True)
