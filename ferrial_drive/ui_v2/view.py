@@ -42,7 +42,7 @@ class UiV2View(UiView):
                                  depth=0, lean=lean, slope=slope)
         r.warped_text(text, 0, 0, role, color, plane.point, opacity, scale_x=scale, scale_y=scale)
 
-    def panel(self, rect, opacity, offset_x=0, *, fill_opacity=None, corner_cut_ratio=None):
+    def panel(self, rect, opacity, offset_x=0, *, fill_opacity=None, corner_cut_ratio=None, fill_color=None):
         """v2 전용 비대칭 외곽. 기존 금속 사각 패널을 호출하지 않는다."""
         x, y, width, height = rect
         x += offset_x
@@ -50,7 +50,7 @@ class UiV2View(UiView):
         cut = min(self.style["panel_cut_pixels"], width / 5, height / 3)
         points = ((x + cut, y), (x + width, y), (x + width - cut, y + height), (x, y + height))
         fill = self.style["surface_opacity"] if fill_opacity is None else fill_opacity
-        self.polygon(points, c["panel"], opacity * fill, filled=True)
+        self.polygon(points, c["panel"] if fill_color is None else fill_color, opacity * fill, filled=True)
         self.stroke((points[3], points[0], (x + width * 0.45, y)), self.ui_accent, opacity * 0.8, 1.5)
         self.stroke(((x + width * 0.55, y + height), points[2], points[1]), self.ui_accent, opacity * 0.5)
 
@@ -60,7 +60,8 @@ class UiV2View(UiView):
         padding_x, padding_y = self.style["ultimate_label_padding_pixels"]
         width, height = (width + 0.15 * height) * scale, height * scale
         self.panel((right - width - padding_x, y - padding_y,
-                    width + padding_x * 2, height + padding_y * 2), opacity, fill_opacity=0.98)
+                    width + padding_x * 2, height + padding_y * 2), opacity, fill_opacity=0.98,
+                   fill_color=self.config.colors["panel_surface"])
         self.slanted_text(text, right, y, "hud_small", color, opacity, scale=scale, align="right")
 
     def buttons(self, scene, input_state, opacity, offset_x, buttons=None, *, offset_y=0):
@@ -249,7 +250,7 @@ class UiV2View(UiView):
             left = x + (0 if active else 22)
             shape = ((left + 18, top), (x + width, top + 5),
                      (x + width - 10, top + height), (left - 4, top + height - 6))
-            self.polygon(shape, c["panel"], alpha * 0.65, filled=True)
+            self.polygon(shape, c["panel_surface"], alpha * 0.65, filled=True)
             self.stroke((shape[0], (left - 8, top + height - 6), shape[2], shape[1]),
                          self.ui_accent, alpha * 0.85)
             self.stroke((shape[0], (left - 8, top + height - 6)), self.ui_accent,
