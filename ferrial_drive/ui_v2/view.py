@@ -1,16 +1,77 @@
-"""ui-concept-v2의 배치. 기존 Pico2D 표현·카운터·레이더를 재사용한다."""
+"""v2 도안의 사선·연결형 자원부·원근 카운터를 그린다."""
 
-from math import cos, pi, sin
+from math import cos, hypot, pi, sin
 
 from ferrial_drive.ui.components import Rect
 from ferrial_drive.ui.counter import CounterVisual
 from ferrial_drive.ui.view import UiView
+from .geometry import PerspectivePlane, energy_frame, slanted_meter
 
 
 class UiV2View(UiView):
     @property
     def layout(self):
         return self.config.data["v2"]["layout"]
+
+    @property
+    def style(self):
+        return self.config.data["v2"]["style"]
+
+    def background(self):
+        self.renderer.clear(self.config.colors["background"])
+
+    def stroke(self, points, color, opacity=1, width=1):
+        for a, b in zip(points, points[1:]):
+            if width <= 1:
+                self.renderer.line(*a, *b, color, opacity)
+                continue
+            distance = hypot(b[0] - a[0], b[1] - a[1])
+            if not distance:
+                continue
+            nx, ny = -(b[1] - a[1]) / distance * width / 2, (b[0] - a[0]) / distance * width / 2
+            self.polygon(((a[0] + nx, a[1] + ny), (b[0] + nx, b[1] + ny),
+                          (b[0] - nx, b[1] - ny), (a[0] - nx, a[1] - ny)),
+                         color, opacity, filled=True)
+
+    def slanted_text(self, text, x, y, role, color, opacity=1, *, scale=1, slope=0, lean=0.15):
+        r = self.renderer
+        width, height = r.text_size(text, role)
+        plane = PerspectivePlane(x, y, max(1, width * scale), max(1, height * scale),
+                                 depth=0, lean=lean, slope=slope)
+        r.warped_text(text, 0, 0, role, color, plane.point, opacity, scale_x=scale, scale_y=scale)
+
+    def panel(self, rect, opacity, offset_x=0, *, fill_opacity=None, corner_cut_ratio=None):
+        """v2 전용 비대칭 외곽. 기존 금속 사각 패널을 호출하지 않는다."""
+        x, y, width, height = rect
+        x += offset_x
+        c = self.config.colors
+        cut = min(self.style["panel_cut_pixels"], width / 5, height / 3)
+        points = ((x + cut, y), (x + width, y), (x + width - cut, y + height), (x, y + height))
+        fill = self.style["surface_opacity"] if fill_opacity is None else fill_opacity
+        self.polygon(points, c["panel"], opacity * fill, filled=True)
+        self.stroke((points[3], points[0], (x + width * 0.45, y)), self.ui_accent, opacity * 0.8, 1.5)
+        self.stroke(((x + width * 0.55, y + height), points[2], points[1]), self.ui_accent, opacity * 0.5)
+
+    def buttons(self, scene, input_state, opacity, offset_x, buttons=None, *, offset_y=0):
+        r, c = self.renderer, self.config.colors
+        for index, button in enumerate(self.config.buttons[scene] if buttons is None else buttons):
+            rect = button.rect.translated(offset_x, offset_y)
+            x, y, width, height = rect.x, rect.y, rect.width, rect.height
+            hovered = button.enabled and input_state.hovered_id == button.button_id
+            pressed = hovered and input_state.pressed_id == button.button_id
+            alpha = opacity * (1 if button.enabled else 0.3)
+            points = ((x + 16, y + 2), (x + width, y + 2),
+                      (x + width - 18, y + height - 2), (x, y + height - 2))
+            self.polygon(points, c["ui_accent"] if hovered else c["panel_surface"],
+                         alpha * (0.6 if pressed else 0.25 if hovered else 0.12), filled=True)
+            self.stroke(((x + 22, y + height - 3), (x + width - 18, y + height - 3),
+                         (x + width - 5, y + 10)), self.ui_accent, alpha * (1 if hovered else 0.5))
+            self.stroke(((x + 5, y + height - 13), (x + 15, y + 11), (x + 25, y + 11)),
+                         c["energy"] if hovered else self.ui_accent, alpha, 2)
+            if scene == "menu":
+                r.text(f"{index + 1:02}", x + 34, y + 15, "button_index", c["muted"], alpha)
+            r.text(button.label, x + (74 if scene == "menu" else 38), y + 13,
+                   "body", c["text"], alpha)
 
     def polygon(self, points, color, opacity=1, *, filled=False):
         if filled:
@@ -25,17 +86,18 @@ class UiV2View(UiView):
         """형상은 고정하고 채움만 자른다. 실제 자원 규칙은 계산하지 않는다."""
         r, c = self.renderer, self.config.colors
         x, y, width, height = self.layout[key]
-        cut = min(12, height / 2)
-        points = ((x + cut, y), (x + width - cut, y), (x + width, y + height),
-                  (x + cut, y + height), (x, y))
-        self.polygon(points, c["panel_surface"], opacity, filled=True)
+        cut = min(18, height * 0.65)
+        points = slanted_meter((x, y, width, height))
+        self.polygon(points, c["panel_surface"], opacity * 0.7, filled=True)
         ratio = max(0.0, min(1.0, ratio))
         trail = ratio if trailing_ratio is None else max(ratio, min(1.0, trailing_ratio))
         for fill, fill_color in ((trail, c["health_loss"]), (ratio, c[color])):
             if fill > 0:
-                with r.clip(Rect(x, y, width * fill, height)):
-                    self.polygon(points, fill_color, opacity, filled=True)
-        self.polygon(points, self.ui_accent, opacity * 0.8)
+                self.polygon(slanted_meter((x, y, width, height), fill), fill_color, opacity, filled=True)
+        self.stroke(((x - cut - 7, y - 4), (x + width - cut + 3, y - 4),
+                     (x + width + 7, y + height + 2)), self.ui_accent, opacity * 0.8)
+        self.stroke(((x + 5, y + height + 4), (x + width * 0.63, y + height + 4)),
+                     self.ui_accent, opacity * 0.35)
 
     def minimap(self, hud, opacity):
         r, c = self.renderer, self.config.colors
@@ -60,9 +122,16 @@ class UiV2View(UiView):
         x, y, radius = self.layout["lock_diamond"]
         x += offset_x
         points = ((x, y - radius), (x + radius, y), (x, y + radius), (x - radius, y))
-        self.polygon(points, self.ui_accent, opacity * (1 if hud.target else 0.3))
-        r.text("LOCK ON" if hud.target else "NO TARGET", x - radius, y - radius - 40,
-               "hud_small", c["muted"], opacity)
+        alpha = opacity * (1 if hud.target else 0.3)
+        self.stroke(points + points[:1], self.ui_accent, alpha, self.style["lock_thickness_pixels"])
+        self.stroke(((x - radius - 9, y - 9), (x - 9, y - radius - 9), (x + 13, y - radius + 13)),
+                     c["text"], alpha, 2)
+        angle = -pi / 4
+        def label_point(px, py):
+            return (x - radius - self.style["lock_label_gap_pixels"] + px * cos(angle) - py * sin(angle),
+                    y - 10 + px * sin(angle) + py * cos(angle))
+        r.warped_text("LOCK ON" if hud.target else "NO TARGET", 0, 0, "target_heading",
+                      c["text"], label_point, alpha)
         if hud.target:
             r.text(hud.target.name, x, y + radius + 7, "target_name", c["text"], opacity,
                    align="center", max_width=200)
@@ -71,35 +140,64 @@ class UiV2View(UiView):
         r, c = self.renderer, self.config.colors
         hud = state.hud
         self.meter("hp_bar", hud.player_health.ratio, "accent", opacity, player_trailing_ratio)
-        self.meter("energy_bar", state.energy_ratio, "energy", opacity)
         x, y = self.layout["hp_text"]
         r.text(f"{hud.player_health.current:,.0f}", x, y, "v2_hp", c["text"], opacity)
-        r.text("HP", x + r.text_size(f"{hud.player_health.current:,.0f}", "v2_hp")[0] + 9,
-               y + 17, "hud_small", c["muted"], opacity)
+        self.slanted_text("HP", x + r.text_size(f"{hud.player_health.current:,.0f}", "v2_hp")[0] + 9,
+                          y + 20, "hud_small", c["muted"], opacity)
         x, y, width, height = self.layout["energy_bar"]
-        r.text("OVERDRIVE" if state.overdrive else "ENERGY", x + width / 2, y + 1,
-               "v2_meter_label", c["text"], opacity, align="center")
-        rect = self.layout["level_panel"]
-        self.panel(rect, opacity, fill_opacity=0.9, corner_cut_ratio=(0.16, 0.2))
-        x, y, width, height = rect
-        r.text("LV", x + 10, y + 4, "hud_small", c["muted"], opacity)
-        r.text(f"{state.energy_level:02}", x + width / 2, y + 22, "v2_level", c["text"],
-               opacity, align="center")
+        level_width, level_rise = self.layout["energy_level_size"]
+        join = x + width
+        outline = energy_frame((x, y, width, height), level_width, level_rise)
+        # 목 부분이 오목하므로 채움은 두 볼록 도형으로 나누고 외곽은 하나로 그린다.
+        seam = (join - 6, y + height + 4)
+        self.polygon((outline[0], outline[1], seam, outline[-1]), c["panel"], opacity * 0.96, filled=True)
+        self.polygon(outline[1:-1] + (seam,), c["panel"], opacity * 0.96, filled=True)
+        self.stroke(outline + outline[:1], c["text"], opacity * 0.75, 1.5)
+        channel = ((x + 4, y + 2), (join - 13, y + 2),
+                   (join - 3, y + height - 1), (x + 16, y + height - 1))
+        self.polygon(channel, c["energy"], opacity * 0.1, filled=True)
+        if state.energy_ratio > 0:
+            with r.clip(Rect(x, y, width * state.energy_ratio, height)):
+                self.polygon(channel, c["energy_fill"], opacity, filled=True)
+            tip = x + width * state.energy_ratio
+            self.stroke(((tip - 6, y + 3), (tip + 1, y + height - 2)), c["energy"], opacity, 2)
+        self.stroke(((x + 19, y + height + 4), (join + level_width - 7, y + height + 4)),
+                     c["energy"] if state.overdrive else self.ui_accent, opacity, 2)
+        self.stroke(((join - 21, y - level_rise + 8), (join - 5, y + height - 2)),
+                     self.ui_accent, opacity * 0.6)
+        label = "O V E R D R I V E" if state.overdrive else "E N E R G Y"
+        label_width = r.text_size(label, "v2_meter_label")[0]
+        self.slanted_text(label, x + (width - label_width) / 2, y + 2,
+                          "v2_meter_label", c["text"], opacity)
+        self.slanted_text("LV", join + 7, y - level_rise + 9, "hud_small", c["muted"], opacity, scale=0.8)
+        self.slanted_text(f"{state.energy_level:02}", join + 10, y - level_rise + 28,
+                          "v2_level", c["text"], opacity, lean=0.1)
         cx, cy, radius = self.layout["ultimate_icon"]
-        self.polygon(((cx, cy - radius), (cx + radius, cy), (cx, cy + radius), (cx - radius, cy)),
-                     c["panel_surface"], opacity, filled=True)
-        self.polygon(((cx, cy - radius), (cx + radius, cy), (cx, cy + radius), (cx - radius, cy)),
-                     self.ui_accent, opacity)
-        # 교체 가능한 기본 도형 아이콘. 최종 필살기 아트가 아니다.
-        for angle in (0, pi / 2, pi, 3 * pi / 2):
-            r.line(cx - cos(angle) * 20, cy - sin(angle) * 20,
-                   cx + cos(angle + 0.6) * 25, cy + sin(angle + 0.6) * 25,
-                   c["energy"], opacity)
-        r.text(self.config.data["v2"]["labels"]["ultimate_key"], cx - radius + 2, cy - radius - 18,
-               "hud_small", c["text"], opacity)
-        r.text("LV.01", cx, cy + radius + 3, "hud_small", c["muted"], opacity, align="center")
+        diamond = ((cx, cy - radius - 4), (cx + radius + 4, cy),
+                   (cx, cy + radius + 4), (cx - radius - 4, cy))
+        self.polygon(diamond, c["panel"], opacity * 0.8, filled=True)
+        self.stroke(diamond + diamond[:1], c["text"], opacity * 0.9, 1.5)
+        # 기본 도형으로 만든 비대칭 네 갈래 칼날. 원본 아이콘 아트는 별도 제작한다.
+        for angle in (-0.3, pi / 2 - 0.3, pi - 0.3, 3 * pi / 2 - 0.3):
+            def blade_point(dx, dy):
+                return cx + cos(angle) * dx - sin(angle) * dy, cy + sin(angle) * dx + cos(angle) * dy
+            icon_scale = self.style["ultimate_icon_scale"]
+            blade = tuple(blade_point(point[0] * icon_scale, point[1] * icon_scale)
+                          for point in ((-5, -5), (radius + 5, -10), (12, 4), (1, 18)))
+            self.polygon(blade, c["energy_fill"], opacity * 0.75, filled=True)
+            self.stroke(blade + blade[:1], c["text"], opacity * 0.9, 1.5)
+        self.stroke(((cx - radius - 5, cy + 12), (cx - 15, cy + radius + 7),
+                     (cx + radius + 14, cy + radius + 2)), self.ui_accent, opacity * 0.6)
+        self.stroke(((cx + 18, cy - radius - 5), (x - 20, y - 5)), self.ui_accent, opacity * 0.65)
+        self.slanted_text(self.config.data["v2"]["labels"]["ultimate_key"], cx - radius + 5, cy - radius - 17,
+                          "hud_small", c["text"], opacity)
+        self.slanted_text("LV.01", cx - 15, cy + radius + 8, "hud_small", c["muted"], opacity, scale=0.85)
         x, y = self.layout["dash_label"]
-        r.text("SPACE", x, y, "hud_small", c["text"], opacity * (1 if state.dash_ready else 0.35))
+        alpha = opacity * (1 if state.dash_ready else 0.25)
+        self.stroke(((x + 16, y - 24), (x + 25, y - 43), (x + 32, y - 39), (x + 21, y - 18),
+                     (x + 32, y - 15)), c["text"], alpha, 2)
+        self.stroke(((x + 10, y - 31), (x + 7, y - 19), (x + 2, y - 14)), self.ui_accent, alpha)
+        self.slanted_text("SPACE", x, y, "hud_small", c["text"], alpha, scale=0.9)
 
     def weapons(self, hud, opacity, offset_x):
         if not hud.loadouts:
@@ -109,23 +207,33 @@ class UiV2View(UiView):
         x += offset_x
         for index in range(len(hud.loadouts)):
             tab = (x + width - 104 + index * 54, y - 29, 50, 24)
-            self.panel(tab, opacity if index == hud.active_loadout_index else opacity * 0.4,
-                       fill_opacity=0.8, corner_cut_ratio=(0.12, 0.2))
-            r.text(f"{index + 1:02}", tab[0] + 25, tab[1] + 3, "equipment_number", c["text"],
-                   opacity, align="center")
+            tx, ty, tw, th = tab
+            alpha = opacity * (1 if index == hud.active_loadout_index else 0.35)
+            shape = ((tx + 10, ty), (tx + tw, ty), (tx + tw - 9, ty + th), (tx, ty + th))
+            self.polygon(shape, c["panel_surface"], alpha * 0.5, filled=True)
+            self.stroke(shape + shape[:1], self.ui_accent, alpha)
+            self.slanted_text(f"{index + 1:02}", tx + 15, ty + 3, "equipment_number", c["text"], alpha)
         loadout = hud.loadouts[hud.active_loadout_index]
         for index, (kind, weapon) in enumerate((("melee", loadout.melee), ("ranged", loadout.ranged))):
             top = y + index * (height + 8)
             active = kind == hud.active_weapon_kind
             alpha = opacity if active else opacity * 0.5
-            self.panel((x, top, width, height), alpha, fill_opacity=0.85,
-                       corner_cut_ratio=(0.06, 0.18))
-            r.rect(Rect(x + 5, top + 8, 3, height - 16), c["energy"] if active else c["line"], alpha)
-            self.weapon_image(weapon, kind, Rect(x + 19, top + 10, width - 94, height - 36), alpha)
-            r.text("MELEE" if kind == "melee" else "RANGED", x + 17, top + height - 24,
-                   "weapon_name", c["muted"], alpha)
+            left = x + (0 if active else 22)
+            shape = ((left + 18, top), (x + width, top + 5),
+                     (x + width - 10, top + height), (left - 4, top + height - 6))
+            self.polygon(shape, c["panel"], alpha * 0.65, filled=True)
+            self.stroke((shape[0], (left - 8, top + height - 6), shape[2], shape[1]),
+                         self.ui_accent, alpha * 0.85)
+            self.stroke(((left - 7, top + 17), (left - 15, top + 35), (left - 9, top + 35)),
+                         c["energy"] if active else self.ui_accent, alpha, 2)
+            self.stroke(((left + 28, top + 4), (x + width - 3, top + 8)), self.ui_accent, alpha * 0.3)
+            self.weapon_image(weapon, kind, Rect(left + 18, top + 11, width - 112, height - 39), alpha)
+            self.slanted_text("MELEE" if kind == "melee" else "RANGED", left + 17, top + height - 23,
+                              "weapon_name", c["text"], alpha)
             if weapon.rounds is not None:
-                r.text(str(weapon.rounds), x + width - 14, top + 9, "v2_ammo", c["text"], alpha, align="right")
+                text = str(weapon.rounds)
+                self.slanted_text(text, x + width - r.text_size(text, "v2_ammo")[0] - 16,
+                                  top + 10, "v2_ammo", c["text"], alpha, lean=0.2)
 
     def absorption(self, trails, opacity):
         r, color = self.renderer, self.config.colors["energy"]
@@ -136,41 +244,101 @@ class UiV2View(UiView):
                 b = a + 0.28 / 18
                 if b <= 0 or a >= 1:
                     continue
-                r.line(*trail.point(a), *trail.point(b), color, opacity * (index + 1) / 18)
+                alpha = opacity * ((index + 1) / 18) ** 1.5
+                segment = (trail.point(a), trail.point(b))
+                self.stroke(segment, color, alpha * 0.12, 5)
+                self.stroke(segment, color, alpha * 0.5, 2)
+                self.stroke(segment, self.config.colors["text"], alpha)
+
+    def perspective_counter(self, visual, role, label, y, opacity):
+        """회전 숫자를 평면에서 자르고 한 투영면에 올려 원근을 유지한다."""
+        r, c = self.renderer, self.config.colors
+        settings = self.style["counters"][label]
+        spec = "," if label == "damage" else "d"
+        old, new = format(visual.previous_value, spec), format(visual.value, spec)
+        slots = max(len(old), len(new))
+        old, new = old.rjust(slots), new.rjust(slots)
+        digit_width = max(r.text_size(str(digit), role)[0] for digit in range(10))
+        comma_width = r.text_size(",", role)[0]
+        widths = [comma_width if char == "," else digit_width for char in new]
+        scale = min(1, settings["max_width_pixels"] / sum(widths))
+        width, height = sum(widths) * scale, r.text_size("0", role)[1] * scale
+        right = self.config.window["width"] - settings["right_margin_pixels"]
+        origin = right - width - height * settings["lean"] / 2 - 2
+        plane = PerspectivePlane(origin, y, width, height, settings["depth"], settings["lean"], settings["slope"])
+        shadow = lambda px, py: (plane.point(px, py)[0] + 2, plane.point(px, py)[1] + 3)
+        viewport = Rect(0, 0, width, height)
+        x = 0
+        for before, after, slot_width in zip(old, new, widths):
+            moving = visual.moving and before != after and after != ","
+            faces = ((before, -height * visual.vertical_progress, 1 - visual.progress),
+                     (after, height * (1 - visual.vertical_progress), 1)) if moving else ((after, 0, 1),)
+            for char, top, alpha in faces:
+                if char == " ":
+                    continue
+                left = x + (slot_width - r.text_size(char, role)[0]) * scale / 2
+                for project, color in ((shadow, c["counter_shadow"]), (plane.point, c["text"])):
+                    r.warped_text(char, left, top, role, color, project, opacity * alpha,
+                                  scale_x=scale, scale_y=scale, clip_rect=viewport)
+            x += slot_width * scale
+        # 기울어진 받침선과 짧은 두 꼬리로 도안의 속도 방향을 이어 준다.
+        rail_y = height + 8
+        rail = (plane.point(-24, rail_y - 5), plane.point(-12, rail_y),
+                plane.point(width - 6, rail_y), plane.point(width + 3, rail_y + 5))
+        self.stroke(rail, self.ui_accent, opacity * 0.9, self.style["counter_baseline_pixels"])
+        for tail in (-42, -32):
+            points = tuple(plane.point(px, py) for px, py in
+                           ((tail, rail_y - 12), (tail + 5, rail_y - 11),
+                            (tail + 8, rail_y - 1), (tail + 3, rail_y - 2)))
+            self.stroke(points + points[:1], self.ui_accent, opacity * 0.65)
+        label_text = self.config.labels[label]
+        label_role = f"{label}_label"
+        label_width = r.text_size(label_text, label_role)[0]
+        r.warped_text(label_text, width - label_width - 6, height + 16,
+                      label_role, c["muted"], plane.point, opacity)
 
     def combat(self, state, damage_visuals=(), opacity=1, offset_x=0, *,
                counter_visual=None, combo_visual=None, counters_opacity=1,
                cursor_position=None, player_trailing_ratio=None, target_trailing_ratio=None,
                absorption_trails=()):
         r, c, hud = self.renderer, self.config.colors, state.hud
-        self.minimap(hud, opacity)
+        scale = self.style["hud_scale"]
+        width, height = self.config.window["width"], self.config.window["height"]
+        with r.scaled(scale, self.layout["minimap"][:2]):
+            self.minimap(hud, opacity)
         self.radar(hud.radar_contacts, opacity)
-        self.target(hud, opacity, offset_x)
-        if hud.target:
-            self.meter("target_hp", hud.target.health.ratio, "enemy", opacity, target_trailing_ratio)
-        else:
-            self.meter("target_hp", 0, "enemy", opacity)
-        x, y, width, height = self.layout["target_hp"]
-        r.text("TARGET", x + width, y + height + 4, "target_heading", c["muted"], opacity, align="right")
-        self.resources(state, opacity, offset_x, player_trailing_ratio)
-        self.weapons(hud, opacity, offset_x)
+        with r.scaled(scale, self.config.actor_anchor("target")):
+            self.target(hud, opacity, offset_x)
+            if hud.target:
+                self.meter("target_hp", hud.target.health.ratio, "enemy", opacity, target_trailing_ratio)
+            else:
+                self.meter("target_hp", 0, "enemy", opacity)
+            x, y, bar_width, bar_height = self.layout["target_hp"]
+            r.text("TARGET", x + bar_width, y + bar_height + 4, "target_heading", c["muted"], opacity, align="right")
+        with r.scaled(scale, (width / 2, height)):
+            self.resources(state, opacity, offset_x, player_trailing_ratio)
+        with r.scaled(scale, (width, height)):
+            self.weapons(hud, opacity, offset_x)
         alpha = opacity * counters_opacity
         combo_visual = combo_visual or CounterVisual(hud.combo_count, hud.combo_count, 1, 1)
         counter_visual = counter_visual or CounterVisual(hud.total_damage_dealt, hud.total_damage_dealt, 1, 1)
         for visual, role, label, y in ((combo_visual, "combo_number", "combo", self.layout["hit_y"]),
                                      (counter_visual, "damage_total", "damage", self.layout["damage_y"])):
-            row_height = self.number_counter(visual, alpha, offset_x, number_role=role,
-                                             label_key=label, label_role=f"{label}_label",
-                                             color="text", anchor_y=y, group_digits=label == "damage")
-            right = self.config.window["width"] - self.config.layout["counter_stack"]["right_margin_pixels"]
-            r.line(right - 200, y + row_height - 27, right, y + row_height - 27, self.ui_accent, alpha * 0.6)
+            right = width - self.style["counters"][label]["right_margin_pixels"]
+            with r.scaled(scale, (right, y)):
+                self.perspective_counter(visual, role, label, y, alpha)
         if state.counter:
-            r.text("COUNTER!", *self.layout["counter_message"], "v2_counter", c["warning"], opacity)
+            text_scale = self.style["counter_text_scale"]
+            with r.scaled(scale, self.layout["counter_message"]):
+                r.text("COUNTER!", *self.layout["counter_message"], "v2_counter", c["warning"],
+                       opacity, scale_x=text_scale, scale_y=text_scale)
         for visual in damage_visuals:
-            self.damage_number(visual, opacity, offset_x)
+            with r.scaled(scale, (visual.x, visual.y)):
+                self.damage_number(visual, opacity, offset_x)
         self.absorption(absorption_trails, opacity)
         if cursor_position is not None:
             x, y = cursor_position
-            r.ring(x, y, 18, 2, c["crosshair"], opacity)
-            r.line(x - 24, y, x - 9, y, c["crosshair"], opacity)
-            r.line(x + 9, y, x + 24, y, c["crosshair"], opacity)
+            with r.scaled(scale, (x, y)):
+                r.ring(x, y, 18, 2, c["crosshair"], opacity)
+                r.line(x - 24, y, x - 9, y, c["crosshair"], opacity)
+                r.line(x + 9, y, x + 24, y, c["crosshair"], opacity)

@@ -1,7 +1,7 @@
 """ui-unit-test-v2
 
 사용자 도안의 전투 배치·게이지·흡수 Trail을 샘플 상태로 확인한다.
-타이틀·일시정지는 기존 화면을 시작점으로 사용한다.
+샘플 상태와 타이틀·일시정지 흐름을 확인한다.
 """
 
 from dataclasses import replace
@@ -19,10 +19,11 @@ from ferrial_drive.ui.counter import RollingCounter
 from ferrial_drive.ui.damage import DamageNumbers
 from ferrial_drive.ui.health import HealthTrail
 from ferrial_drive.ui.pause import PauseState
-from ferrial_drive.ui.pico_renderer import PicoRenderer
 from ferrial_drive.ui.state import Health, HudState, LoadoutInfo, RadarContact, TargetInfo, WeaponInfo
 from ferrial_drive.ui.transition import SceneTransition
 from ferrial_drive.ui_v2.effects import EnergyAbsorption
+from ferrial_drive.ui_v2.geometry import scaled_point
+from ferrial_drive.ui_v2.pico_renderer import PicoV2Renderer
 from ferrial_drive.ui_v2.state import HudV2State
 from ferrial_drive.ui_v2.view import UiV2View
 
@@ -82,7 +83,7 @@ class UiUnitTestV2:
         import pico2d.pico2d as pico
 
         self.pico = pico
-        self.renderer = PicoRenderer(self.config.font_paths, self.config.font_sizes)
+        self.renderer = PicoV2Renderer(self.config.font_paths, self.config.font_sizes)
         self.view = UiV2View(self.config, self.renderer)
 
     def set_hud(self, **changes):
@@ -93,6 +94,10 @@ class UiUnitTestV2:
         icon = layout["ultimate_icon"][:2]
         x, y, width, height = layout["energy_bar"]
         destination = (x + width * self.state.energy_ratio, y + height / 2)
+        scale = self.config.data["v2"]["style"]["hud_scale"]
+        anchor = (self.config.window["width"] / 2, self.config.window["height"])
+        icon = scaled_point(icon, anchor, scale)
+        destination = scaled_point(destination, anchor, scale)
         start = self.config.actor_anchor("target")
         for offset in (-15, 0, 15):
             self.absorption.add((start[0] + offset, start[1] - offset), icon, destination)

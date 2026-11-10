@@ -120,7 +120,7 @@
         "fill_opacity": 0.45,
         "border_opacity": 1.0,
         "metallic": {
-            "enabled": true,
+            "enabled": false,
             "contrast": 0.28,
             "highlight_center": [
                 0.5,
@@ -215,7 +215,7 @@
         "duration_seconds": 0.6
     },
     "radar": {
-        "radius_pixels": 128,
+        "radius_pixels": 160,
         "range_units": 1.0,
         "ring_thickness_pixels": 2,
         "arrow_length_pixels": 16,
@@ -225,9 +225,9 @@
         "ring_opacity": 0.4
     },
     "colors": {
-        "background": "#091217",
-        "panel": "#101F27",
-        "panel_surface": "#39444A",
+        "background": "#0A1218",
+        "panel": "#101E27",
+        "panel_surface": "#22343F",
         "weapon_name_plate": "#17242B",
         "weapon_outline": "#D8E6ED",
         "panel_hover": "#1B3941",
@@ -243,16 +243,18 @@
         "line": "#2D4B55",
         "panel_border": "#91AEBB",
         "grid": "#12242C",
-        "text": "#D8E6ED",
+        "text": "#DCEBF0",
         "muted": "#B7CDDA",
         "ui_accent": "#91AEBB",
-        "accent": "#AEDEBE",
+        "accent": "#C7DCE2",
         "crosshair": "#91AEBB",
         "warning": "#E4B36C",
         "enemy": "#F18775",
         "health_loss": "#8F2028",
         "damage_number": "#FF625D",
-        "energy": "#91AEBB"
+        "energy": "#9DDFEA",
+        "energy_fill": "#3B7180",
+        "counter_shadow": "#274653"
     },
     "labels": {
         "menu_title_first": "FERRIAL",
@@ -568,44 +570,38 @@
             "lock_diamond": [
                 333,
                 364,
-                46
+                35
             ],
             "target_hp": [
                 344,
                 303,
                 144,
-                12
+                6
             ],
             "hp_bar": [
-                362,
-                630,
+                364,
+                626,
                 372,
-                30
+                26
             ],
             "hp_text": [
-                362,
-                580
+                364,
+                579
             ],
             "energy_bar": [
-                374,
-                674,
-                360,
-                24
+                370,
+                670,
+                390,
+                26
             ],
             "ultimate_icon": [
-                322,
-                660,
-                37
-            ],
-            "level_panel": [
-                748,
-                634,
-                66,
-                64
+                320,
+                650,
+                34
             ],
             "dash_label": [
-                840,
-                673
+                870,
+                682
             ],
             "weapons": [
                 1004,
@@ -613,11 +609,15 @@
                 260,
                 70
             ],
-            "hit_y": 194,
-            "damage_y": 311,
+            "hit_y": 178,
+            "damage_y": 318,
             "counter_message": [
-                772,
-                340
+                810,
+                342
+            ],
+            "energy_level_size": [
+                78,
+                34
             ]
         },
         "map_walls": [
@@ -657,6 +657,32 @@
                 0.5,
                 0.65
             ]
-        ]
+        ],
+        "style": {
+            "panel_cut_pixels": 20,
+            "surface_opacity": 0.9,
+            "counters": {
+                "combo": {
+                    "depth": 0.16,
+                    "lean": 0.14,
+                    "slope": 0.055,
+                    "max_width_pixels": 240,
+                    "right_margin_pixels": 34
+                },
+                "damage": {
+                    "depth": 0.16,
+                    "lean": 0.14,
+                    "slope": 0.055,
+                    "max_width_pixels": 300,
+                    "right_margin_pixels": 34
+                }
+            },
+            "hud_scale": 0.9,
+            "lock_thickness_pixels": 2,
+            "lock_label_gap_pixels": 42,
+            "ultimate_icon_scale": 0.62,
+            "counter_baseline_pixels": 3,
+            "counter_text_scale": 0.82
+        }
     }
 }

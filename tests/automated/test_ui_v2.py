@@ -17,6 +17,7 @@ SAMPLE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(SAMPLE)
 
 from ferrial_drive.ui_v2.effects import AbsorptionTrail, EnergyAbsorption
+from ferrial_drive.ui_v2.geometry import PerspectivePlane, energy_frame, scaled_point, slanted_meter
 
 
 class UiV2Tests(unittest.TestCase):
@@ -96,6 +97,44 @@ class UiV2Tests(unittest.TestCase):
         before = self.program.state
         self.program.handle_event(SimpleNamespace(type=2, key=49, repeat=False))
         self.assertEqual(self.program.state, before)
+
+    def test_perspective_grows_toward_near_edge_without_reversing_digits(self):
+        plane = PerspectivePlane(100, 200, 150, 80, depth=0.3)
+        left_top, left_bottom = plane.point(0, 0), plane.point(0, 80)
+        right_top, right_bottom = plane.point(150, 0), plane.point(150, 80)
+        self.assertLess(left_bottom[1] - left_top[1], right_bottom[1] - right_top[1])
+        self.assertLess(plane.point(0, 40)[0], plane.point(75, 40)[0])
+        self.assertLess(plane.point(75, 40)[0], plane.point(150, 40)[0])
+        self.assertGreater(right_top[0], right_bottom[0])
+
+    def test_energy_frame_moves_level_with_bar_end(self):
+        original = energy_frame((300, 650, 390, 26), 78, 34)
+        wider = energy_frame((300, 650, 440, 26), 78, 34)
+        self.assertEqual(original[0], wider[0])
+        self.assertEqual(original[-1], wider[-1])
+        for before, after in zip(original[1:-1], wider[1:-1]):
+            self.assertEqual(after, (before[0] + 50, before[1]))
+
+    def test_partial_health_keeps_full_height_and_parallel_slanted_caps(self):
+        bar = (360, 620, 372, 26)
+        full, half = slanted_meter(bar), slanted_meter(bar, 0.5)
+        self.assertEqual(half[0], full[0])
+        self.assertEqual(half[-1], full[-1])
+        self.assertEqual(half[2][1] - half[1][1], bar[3])
+        self.assertEqual(half[2][0] - half[1][0], full[2][0] - full[1][0])
+        self.assertEqual(half[1][0] - half[0][0], bar[2] / 2)
+
+    def test_absorption_keeps_world_start_and_reaches_scaled_icon_and_bar(self):
+        self.program.absorb()
+        trail = self.program.absorption.trails[1]
+        layout = self.program.config.data["v2"]["layout"]
+        anchor = (640, 720)
+        scale = self.program.config.data["v2"]["style"]["hud_scale"]
+        self.assertEqual(trail.start, self.program.config.actor_anchor("target"))
+        self.assertEqual(trail.icon, scaled_point(layout["ultimate_icon"][:2], anchor, scale))
+        x, y, width, height = layout["energy_bar"]
+        destination = (x + width * self.program.state.energy_ratio, y + height / 2)
+        self.assertEqual(trail.destination, scaled_point(destination, anchor, scale))
 
 
 if __name__ == "__main__":
