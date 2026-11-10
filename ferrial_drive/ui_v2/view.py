@@ -203,14 +203,15 @@ class UiV2View(UiView):
             self.polygon(blade, c["energy_fill"], opacity * 0.75, filled=True)
             self.stroke(blade + blade[:1], c["text"], opacity * 0.9, 1.5)
         key = self.config.data["v2"]["labels"]["ultimate_key"]
+        level = "LV. 01"
+        key_width = r.text_size(key, "hud_small")[0]
         key_height = r.text_size(key, "hud_small")[1]
-        level_height = r.text_size("LV.01", "hud_small")[1] * 0.85
-        line_gap = self.style["ultimate_info_line_gap_pixels"]
-        info_top = cy - (key_height + line_gap + level_height) / 2
-        info_right = cx - radius - self.style["ultimate_info_gap_pixels"]
-        self.slanted_text(key, info_right, info_top, "hud_small", c["text"], opacity, align="right")
-        self.slanted_text("LV.01", info_right, info_top + key_height + line_gap,
-                          "hud_small", c["muted"], opacity, scale=0.85, align="right")
+        level_width = r.text_size(level, "hud_small")[0] * 0.85
+        gap = self.style["ultimate_label_gap_pixels"]
+        self.slanted_text(key, cx - key_width / 2, cy - radius - key_height - gap,
+                          "hud_small", c["text"], opacity)
+        self.slanted_text(level, cx - level_width / 2, cy + radius + gap,
+                          "hud_small", c["muted"], opacity, scale=0.85)
         x, y = self.layout["dash_label"]
         alpha = opacity * (1 if state.dash_ready else 0.25)
         self.stroke(((x + 16, y - 24), (x + 25, y - 43), (x + 32, y - 39), (x + 21, y - 18),

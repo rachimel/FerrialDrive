@@ -20,7 +20,7 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 - `v2.style.counters`: HIT/DAMAGE의 원근 `depth`(0~1)·기울기 `lean`/`slope`·최대 폭·오른쪽 여백. 숫자 갱신도 같은 투영을 사용한다.
 - `v2.style.panel_cut_pixels`·`surface_opacity`: 사선 외곽과 면의 기본 표현. 기존 금속 사각 패널을 사용하지 않는다.
 - `v2.style.hud_scale`: 일반 전투 HUD 배율 0.81. `map_scale`·`equipment_scale`은 0.9로 미니맵·웨폰·로드아웃의 현재 크기를 유지한다. 레이더는 별도로 반경 144px와 표시 치수를 조정했다. 기체·메뉴는 조정 대상이 아니다.
-- `v2.style.resource_label_gap_pixels`·`ultimate_info_gap_pixels`·`ultimate_info_line_gap_pixels`: 바 위 HP 표기와 아이콘 왼쪽 정보의 간격. 에너지 레벨은 오른쪽, 단축키/필살기 레벨은 아이콘 왼쪽에 오른쪽 정렬한다.
+- `v2.style.resource_label_gap_pixels`·`ultimate_label_gap_pixels`: 바 위 HP 표기와 마름모 위/아래 문구의 간격. 에너지 레벨은 오른쪽 정렬, V와 `LV. 01`은 각각 마름모 위/아래에 가운데 정렬한다.
 - `v2.style.counter_plaque_height_pixels`·`counter_plaque_slant_pixels`: 숫자 아래 평행사변형 받침판의 두께와 사선. 색은 `colors.counter_plaque`다.
 - `v2.style.lock_body_scale`·`lock_thickness_pixels`·`lock_accent_pixels`: 몸통 대비 테두리 배율과 기본/강조선 두께.
 - `v2.style.lock_text_gap_pixels`·`lock_text_end_gap_pixels`: 강조선에 끝점을 맞추는 글자의 수직 간격과 끝 여백. 크기 값은 HUD 축소 전 논리 픽셀이다.
@@ -56,5 +56,6 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 - v2 자동 검사 16개, 기존 UI 포함 71개 통과: 기존 경계 검사와 함께 마름모 공통 접점·레벨/HP 비침범·몸통 비례·받침판 평행 조건을 확인했다.
 - Pico2D/SDL dummy에서 기본·긴 카운터·숫자 갱신·HP 감소·작은/큰 표적·자원/타겟 없음·흡수·일시정지·타이틀·도움말 11개 상태를 렌더링하고 자원을 해제했다. 주요 이미지를 열어 오른쪽 잘림·공유 경계·강조선/글자·무장 외곽을 확인했다. 기존 금속 패널 미생성과 배율/viewport/clip 복원도 확인했다.
 - 추가 축소 전후의 미니맵·웨폰 행·로드아웃 탭 이미지 영역이 픽셀 단위로 같은 것을 확인했다. HP 채움/외곽 일치와 큰 마름모 변의 접점도 자동 검사했다.
+- V/필살기 레벨의 후속 위아래 정렬 변경은 자동 71개와 기본 화면 재렌더·이미지 열기로 확인했다. 하단 글자가 화면 안에 들어오는 것도 확인했다.
 - 실제 창 키·클릭 조작, Runner GUI 드롭, 애니메이션 사용감과 사용자 외관 승인은 미확인이다.
 - 진입점의 `--scene menu`·`--frames 2`·`--capture output/ui_unit_test_v2/combat.png`는 장면 선택·프레임 제한·재생성 가능한 화면 저장용이다.

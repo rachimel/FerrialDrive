@@ -576,19 +576,19 @@
             ],
             "hp_bar": [
                 350,
-                655,
+                633,
                 372,
                 16
             ],
             "energy_bar": [
                 370,
-                670,
+                648,
                 390,
                 26
             ],
             "dash_label": [
                 870,
-                682
+                660
             ],
             "weapons": [
                 1004,
@@ -678,8 +678,7 @@
             "map_scale": 0.9,
             "equipment_scale": 0.9,
             "resource_label_gap_pixels": 4,
-            "ultimate_info_gap_pixels": 10,
-            "ultimate_info_line_gap_pixels": 4
+            "ultimate_label_gap_pixels": 4
         }
     }
 }
