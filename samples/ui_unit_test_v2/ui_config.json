@@ -575,14 +575,14 @@
                 6
             ],
             "hp_bar": [
-                364,
-                635,
+                350,
+                646,
                 372,
                 16
             ],
             "hp_text": [
-                364,
-                579
+                350,
+                590
             ],
             "energy_bar": [
                 370,
@@ -656,25 +656,28 @@
                     "lean": 0.14,
                     "slope": 0.055,
                     "max_width_pixels": 240,
-                    "right_margin_pixels": 34
+                    "right_margin_pixels": 14
                 },
                 "damage": {
                     "depth": 0.16,
                     "lean": 0.14,
                     "slope": 0.055,
                     "max_width_pixels": 300,
-                    "right_margin_pixels": 34
+                    "right_margin_pixels": 14
                 }
             },
             "hud_scale": 0.9,
             "lock_thickness_pixels": 2,
-            "lock_label_gap_pixels": 42,
             "ultimate_icon_scale": 0.62,
             "counter_text_scale": 0.82,
             "level_curve_radius_pixels": 12,
             "lock_body_scale": 1.8,
             "counter_plaque_height_pixels": 8,
-            "counter_plaque_slant_pixels": 6
+            "counter_plaque_slant_pixels": 6,
+            "lock_accent_pixels": 3,
+            "lock_text_gap_pixels": 7,
+            "lock_text_end_gap_pixels": 2,
+            "weapon_outer_edge_pixels": 3
         }
     }
 }

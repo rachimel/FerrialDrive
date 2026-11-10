@@ -55,31 +55,35 @@ def resource_geometry(layout, curve_radius=10):
     cx = layout["ultimate_center_x"]
     top, bottom = hy - 4, ey + eh + 4
     cy, radius = (top + bottom) / 2, (bottom - top) / 2
-    hp_right, hp_bottom = hx + hw, hy + hh + 3
-    joint = hp_right + 7
-    hp_outline = ((cx, top), (joint - (hp_bottom - top), top),
-                  (joint, hp_bottom), (cx + hp_bottom - top, hp_bottom))
-    left = cx + hy - top + 2
-    hp_shape = ((left, hy), (hp_right - hh, hy),
-                (hp_right, hy + hh), (left + hh, hy + hh))
+    level_left, level_top = hx + hw, ey - hh
+    neck = (level_left + curve_radius * 7 / 6, cy)
+    shoulder = (level_left + curve_radius / 4, level_top + curve_radius / 3)
+    side_slope = (neck[0] - shoulder[0]) / (neck[1] - shoulder[1])
+    cap_x = lambda y: neck[0] + (y - cy) * side_slope
+    hp_outline = ((cx, top), (cap_x(top), top), neck, (cx + radius, cy))
+    # 채움을 공유 경계 쪽으로 내리고 양 끝을 각 외곽의 사선에 맞춘다.
+    fill_top, fill_bottom = cy - hh - 3, cy - 3
+    left = cx + fill_top - top + 2
+    hp_shape = ((left, fill_top), (cap_x(fill_top) - 3, fill_top),
+                (cap_x(fill_bottom) - 3, fill_bottom), (left + hh, fill_bottom))
     right = ex + ew + layout["energy_level_width_pixels"]
-    neck, contact = (joint + 5, cy), (joint, hp_bottom)
-    upper = (right - curve_radius * 2, hp_bottom)
-    side, end = (right + 6, hp_bottom + curve_radius * 1.8), (right - curve_radius, bottom)
-    level_shape = ((neck,) + quadratic_curve(neck, (joint - curve_radius * 0.6, hp_bottom), contact)
-                   + (upper,) + quadratic_curve(upper, (right + 6, hp_bottom), side)
+    upper = (right - curve_radius * 2, level_top)
+    side, end = (right + 6, level_top + curve_radius * 1.8), (right - curve_radius, bottom)
+    level_shape = ((neck, shoulder) + quadratic_curve(shoulder, (level_left, level_top),
+                                                    (level_left + curve_radius, level_top))
+                   + (upper,) + quadratic_curve(upper, (right + 6, level_top), side)
                    + quadratic_curve(side, (right + 10, bottom), end)
-                   + ((joint + 14, bottom),))
+                   + ((neck[0], bottom),))
     icon_right, icon_bottom = (cx + radius, cy), (cx, bottom)
     energy_body = (icon_right, neck, level_shape[-1], icon_bottom)
     energy_outline = (icon_right,) + level_shape[:-1] + (icon_bottom,)
     channel_top, channel_bottom = ey + 2, bottom - 5
     left_top = cx + radius - (channel_top - cy) + 4
     left_bottom = cx + radius - (channel_bottom - cy) + 4
-    channel = ((left_top, channel_top), (joint + 2, channel_top),
-               (joint + 2 - (channel_bottom - channel_top), channel_bottom), (left_bottom, channel_bottom))
+    channel = ((left_top, channel_top), (neck[0] + 2, channel_top),
+               (neck[0] + 2 - (channel_bottom - channel_top), channel_bottom), (left_bottom, channel_bottom))
     return ResourceGeometry((cx, cy), radius, hp_shape, hp_outline, energy_outline,
-                            energy_body, level_shape, channel, hp_bottom, joint)
+                            energy_body, level_shape, channel, level_top, level_left)
 
 
 def body_diamond(body, size_scale):

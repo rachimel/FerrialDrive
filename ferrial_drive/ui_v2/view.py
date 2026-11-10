@@ -130,13 +130,21 @@ class UiV2View(UiView):
         points = ((x, y - ry), (x + rx, y), (x, y + ry), (x - rx, y))
         alpha = opacity * (1 if hud.target else 0.3)
         self.stroke(points + points[:1], self.ui_accent, alpha, self.style["lock_thickness_pixels"])
-        self.stroke(((x - rx - 9, y - 9), (x - 9, y - ry - 9), (x + 13, y - ry + 13)),
-                     c["text"], alpha, 2)
+        # 마름모 안으로 파고드는 꼬리를 빼고 강조선을 왼쪽 위 변에 붙인다.
+        self.stroke((points[3], points[0]), c["text"], alpha, self.style["lock_accent_pixels"])
         angle = -atan2(ry, rx)
+        label = "LOCK ON" if hud.target else "NO TARGET"
+        label_width, label_height = r.text_size(label, "target_heading")
+        ux, uy = cos(angle), sin(angle)
+        nx, ny = -uy, ux
+        gap, end_gap = self.style["lock_text_gap_pixels"], self.style["lock_text_end_gap_pixels"]
+        label_end = (points[0][0] - nx * gap - ux * end_gap,
+                     points[0][1] - ny * gap - uy * end_gap)
+        origin = (label_end[0] - ux * label_width - nx * label_height,
+                  label_end[1] - uy * label_width - ny * label_height)
         def label_point(px, py):
-            return (x - rx - self.style["lock_label_gap_pixels"] + px * cos(angle) - py * sin(angle),
-                    y - 10 + px * sin(angle) + py * cos(angle))
-        r.warped_text("LOCK ON" if hud.target else "NO TARGET", 0, 0, "target_heading",
+            return origin[0] + px * ux + py * nx, origin[1] + px * uy + py * ny
+        r.warped_text(label, 0, 0, "target_heading",
                       c["text"], label_point, alpha)
         if hud.target:
             r.text(hud.target.name, x, y + max(ry + 7, body.height * 2), "target_name", c["text"], opacity,
@@ -169,9 +177,12 @@ class UiV2View(UiView):
         label_center = sum(point[0] for point in channel) / 4
         self.slanted_text(label, label_center - label_width / 2, y + 2,
                           "v2_meter_label", c["text"], opacity)
-        self.slanted_text("LV", geometry.level_left + 12, geometry.level_top + 4,
+        level_right = x + width + self.layout["energy_level_width_pixels"]
+        number_width = r.text_size(f"{state.energy_level:02}", "v2_level")[0] * 0.85
+        level_text_x = (geometry.level_left + level_right - number_width) / 2
+        self.slanted_text("LV", level_text_x, geometry.level_top + 4,
                           "hud_small", c["muted"], opacity, scale=0.65)
-        self.slanted_text(f"{state.energy_level:02}", geometry.level_left + 12, geometry.level_top + 15,
+        self.slanted_text(f"{state.energy_level:02}", level_text_x, geometry.level_top + 15,
                           "v2_level", c["text"], opacity, scale=0.85, lean=0.1)
         cx, cy = geometry.icon_center
         radius = geometry.icon_radius
@@ -222,8 +233,8 @@ class UiV2View(UiView):
             self.polygon(shape, c["panel"], alpha * 0.65, filled=True)
             self.stroke((shape[0], (left - 8, top + height - 6), shape[2], shape[1]),
                          self.ui_accent, alpha * 0.85)
-            self.stroke(((left - 7, top + 17), (left - 15, top + 35), (left - 9, top + 35)),
-                         c["energy"] if active else self.ui_accent, alpha, 2)
+            self.stroke((shape[0], (left - 8, top + height - 6)), self.ui_accent,
+                         alpha * 0.95, self.style["weapon_outer_edge_pixels"])
             self.stroke(((left + 28, top + 4), (x + width - 3, top + 8)), self.ui_accent, alpha * 0.3)
             self.weapon_image(weapon, kind, Rect(left + 18, top + 11, width - 112, height - 39), alpha)
             self.slanted_text("MELEE" if kind == "melee" else "RANGED", left + 17, top + height - 23,

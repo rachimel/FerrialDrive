@@ -149,11 +149,17 @@ class UiV2Tests(unittest.TestCase):
         self.assertEqual(geometry.hp_outline[0], (x, y - radius))
         self.assertEqual(geometry.energy_outline[0], (x + radius, y))
         self.assertEqual(geometry.energy_outline[-1], (x, y + radius))
+        self.assertEqual(geometry.hp_outline[3], geometry.energy_body[0])
+        self.assertEqual(geometry.hp_outline[2], geometry.energy_body[1])
 
     def test_curved_level_touches_hp_without_entering_it(self):
         geometry = resource_geometry(self.program.config.data["v2"]["layout"])
-        bottom = max(point[1] for point in geometry.hp_outline)
-        self.assertGreaterEqual(min(point[1] for point in geometry.level_shape), bottom)
+        a, b = geometry.hp_outline[1:3]
+        # 레벨이 HP와 높이를 공유해도 공유 사선의 오른쪽에만 있어야 한다.
+        for x, y in geometry.level_shape:
+            if y <= b[1]:
+                side = (b[0] - a[0]) * (y - a[1]) - (b[1] - a[1]) * (x - a[0])
+                self.assertLessEqual(side, 1e-8)
         self.assertIn(geometry.hp_outline[2], geometry.level_shape)
         self.assertGreater(len(geometry.level_shape), 20)
 
