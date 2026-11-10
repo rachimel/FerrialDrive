@@ -33,9 +33,11 @@ class UiV2View(UiView):
                           (b[0] - nx, b[1] - ny), (a[0] - nx, a[1] - ny)),
                          color, opacity, filled=True)
 
-    def slanted_text(self, text, x, y, role, color, opacity=1, *, scale=1, slope=0, lean=0.15):
+    def slanted_text(self, text, x, y, role, color, opacity=1, *, scale=1, slope=0, lean=0.15, align="left"):
         r = self.renderer
         width, height = r.text_size(text, role)
+        if align == "right":
+            x -= (width + max(0, lean * height / 2)) * scale
         plane = PerspectivePlane(x, y, max(1, width * scale), max(1, height * scale),
                                  depth=0, lean=lean, slope=slope)
         r.warped_text(text, 0, 0, role, color, plane.point, opacity, scale_x=scale, scale_y=scale)
@@ -156,10 +158,13 @@ class UiV2View(UiView):
         geometry = resource_geometry(self.layout, self.style["level_curve_radius_pixels"])
         self.meter("hp_bar", hud.player_health.ratio, "accent", opacity, player_trailing_ratio,
                    shape=geometry.hp_shape, border=geometry.hp_outline)
-        x, y = self.layout["hp_text"]
-        r.text(f"{hud.player_health.current:,.0f}", x, y, "v2_hp", c["text"], opacity)
-        self.slanted_text("HP", x + r.text_size(f"{hud.player_health.current:,.0f}", "v2_hp")[0] + 9,
-                          y + 20, "hud_small", c["muted"], opacity)
+        value = f"{hud.player_health.current:,.0f}"
+        value_width, value_height = r.text_size(value, "v2_hp")
+        x, top = geometry.hp_outline[0]
+        gap = self.style["resource_label_gap_pixels"]
+        r.text(value, x, top - value_height - gap, "v2_hp", c["text"], opacity)
+        hp_height = r.text_size("HP", "hud_small")[1]
+        r.text("HP", x + value_width + 9, top - hp_height - gap, "hud_small", c["muted"], opacity)
         x, y, width, height = self.layout["energy_bar"]
         outline, channel = geometry.energy_outline, geometry.energy_channel
         self.polygon(geometry.energy_body, c["panel"], opacity * 0.96, filled=True)
@@ -178,12 +183,11 @@ class UiV2View(UiView):
         self.slanted_text(label, label_center - label_width / 2, y + 2,
                           "v2_meter_label", c["text"], opacity)
         level_right = x + width + self.layout["energy_level_width_pixels"]
-        number_width = r.text_size(f"{state.energy_level:02}", "v2_level")[0] * 0.85
-        level_text_x = (geometry.level_left + level_right - number_width) / 2
-        self.slanted_text("LV", level_text_x, geometry.level_top + 4,
-                          "hud_small", c["muted"], opacity, scale=0.65)
-        self.slanted_text(f"{state.energy_level:02}", level_text_x, geometry.level_top + 15,
-                          "v2_level", c["text"], opacity, scale=0.85, lean=0.1)
+        level_text_right = level_right - 8
+        self.slanted_text("LV", level_text_right, geometry.level_top + 4,
+                          "hud_small", c["muted"], opacity, scale=0.65, align="right")
+        self.slanted_text(f"{state.energy_level:02}", level_text_right, geometry.level_top + 15,
+                          "v2_level", c["text"], opacity, scale=0.85, lean=0.1, align="right")
         cx, cy = geometry.icon_center
         radius = geometry.icon_radius
         diamond = ((cx, cy - radius), (cx + radius, cy), (cx, cy + radius), (cx - radius, cy))
@@ -198,9 +202,15 @@ class UiV2View(UiView):
                           for point in ((-5, -5), (radius + 5, -10), (12, 4), (1, 18)))
             self.polygon(blade, c["energy_fill"], opacity * 0.75, filled=True)
             self.stroke(blade + blade[:1], c["text"], opacity * 0.9, 1.5)
-        self.slanted_text(self.config.data["v2"]["labels"]["ultimate_key"], cx - radius + 5, cy - radius - 17,
-                          "hud_small", c["text"], opacity)
-        self.slanted_text("LV.01", cx - 15, cy + radius + 3, "hud_small", c["muted"], opacity, scale=0.85)
+        key = self.config.data["v2"]["labels"]["ultimate_key"]
+        key_height = r.text_size(key, "hud_small")[1]
+        level_height = r.text_size("LV.01", "hud_small")[1] * 0.85
+        line_gap = self.style["ultimate_info_line_gap_pixels"]
+        info_top = cy - (key_height + line_gap + level_height) / 2
+        info_right = cx - radius - self.style["ultimate_info_gap_pixels"]
+        self.slanted_text(key, info_right, info_top, "hud_small", c["text"], opacity, align="right")
+        self.slanted_text("LV.01", info_right, info_top + key_height + line_gap,
+                          "hud_small", c["muted"], opacity, scale=0.85, align="right")
         x, y = self.layout["dash_label"]
         alpha = opacity * (1 if state.dash_ready else 0.25)
         self.stroke(((x + 16, y - 24), (x + 25, y - 43), (x + 32, y - 39), (x + 21, y - 18),
@@ -322,7 +332,7 @@ class UiV2View(UiView):
         r, c, hud = self.renderer, self.config.colors, state.hud
         scale = self.style["hud_scale"]
         width, height = self.config.window["width"], self.config.window["height"]
-        with r.scaled(scale, self.layout["minimap"][:2]):
+        with r.scaled(self.style["map_scale"], self.layout["minimap"][:2]):
             self.minimap(hud, opacity)
         self.radar(hud.radar_contacts, opacity)
         body = state.target_body
@@ -338,7 +348,7 @@ class UiV2View(UiView):
             r.text("TARGET", x + bar_width, y + bar_height + 4, "target_heading", c["muted"], opacity, align="right")
         with r.scaled(scale, (width / 2, height)):
             self.resources(state, opacity, offset_x, player_trailing_ratio)
-        with r.scaled(scale, (width, height)):
+        with r.scaled(self.style["equipment_scale"], (width, height)):
             self.weapons(hud, opacity, offset_x)
         alpha = opacity * counters_opacity
         combo_visual = combo_visual or CounterVisual(hud.combo_count, hud.combo_count, 1, 1)

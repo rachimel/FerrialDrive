@@ -142,13 +142,16 @@ class UiV2Tests(unittest.TestCase):
         destination = geometry.energy_tip(self.program.state.energy_ratio)
         self.assertEqual(trail.destination, scaled_point(destination, anchor, scale))
 
-    def test_resource_borders_share_diamond_vertices(self):
+    def test_resource_borders_share_large_diamond_edges_without_hp_padding(self):
         geometry = resource_geometry(self.program.config.data["v2"]["layout"])
         x, y = geometry.icon_center
         radius = geometry.icon_radius
-        self.assertEqual(geometry.hp_outline[0], (x, y - radius))
+        hp_left = geometry.hp_outline[0]
+        energy_left = geometry.energy_outline[-1]
+        self.assertAlmostEqual(abs(hp_left[0] - x) + abs(hp_left[1] - y), radius)
         self.assertEqual(geometry.energy_outline[0], (x + radius, y))
-        self.assertEqual(geometry.energy_outline[-1], (x, y + radius))
+        self.assertAlmostEqual(abs(energy_left[0] - x) + abs(energy_left[1] - y), radius)
+        self.assertEqual(geometry.hp_shape, geometry.hp_outline)
         self.assertEqual(geometry.hp_outline[3], geometry.energy_body[0])
         self.assertEqual(geometry.hp_outline[2], geometry.energy_body[1])
 

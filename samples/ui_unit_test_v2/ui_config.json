@@ -215,11 +215,11 @@
         "duration_seconds": 0.6
     },
     "radar": {
-        "radius_pixels": 160,
+        "radius_pixels": 144.0,
         "range_units": 1.0,
-        "ring_thickness_pixels": 2,
-        "arrow_length_pixels": 16,
-        "arrow_half_width_pixels": 14,
+        "ring_thickness_pixels": 1.8,
+        "arrow_length_pixels": 14.4,
+        "arrow_half_width_pixels": 12.6,
         "arrow_min_scale": 0.45,
         "arrow_min_opacity": 0.3,
         "ring_opacity": 0.4
@@ -576,13 +576,9 @@
             ],
             "hp_bar": [
                 350,
-                646,
+                655,
                 372,
                 16
-            ],
-            "hp_text": [
-                350,
-                590
             ],
             "energy_bar": [
                 370,
@@ -607,7 +603,8 @@
                 342
             ],
             "ultimate_center_x": 320,
-            "energy_level_width_pixels": 78
+            "energy_level_width_pixels": 78,
+            "ultimate_radius_pixels": 43
         },
         "map_walls": [
             [
@@ -666,7 +663,7 @@
                     "right_margin_pixels": 14
                 }
             },
-            "hud_scale": 0.9,
+            "hud_scale": 0.81,
             "lock_thickness_pixels": 2,
             "ultimate_icon_scale": 0.62,
             "counter_text_scale": 0.82,
@@ -677,7 +674,12 @@
             "lock_accent_pixels": 3,
             "lock_text_gap_pixels": 7,
             "lock_text_end_gap_pixels": 2,
-            "weapon_outer_edge_pixels": 3
+            "weapon_outer_edge_pixels": 3,
+            "map_scale": 0.9,
+            "equipment_scale": 0.9,
+            "resource_label_gap_pixels": 4,
+            "ultimate_info_gap_pixels": 10,
+            "ultimate_info_line_gap_pixels": 4
         }
     }
 }

@@ -49,23 +49,19 @@ class ResourceGeometry:
 
 
 def resource_geometry(layout, curve_radius=10):
-    """두 바의 외곽에서 마름모와 HP 아래에 붙는 레벨 곡선을 함께 계산한다."""
+    """여백 없는 HP·큰 마름모·에너지·레벨 곡선의 공통 접점을 계산한다."""
     hx, hy, hw, hh = layout["hp_bar"]
     ex, ey, ew, eh = layout["energy_bar"]
     cx = layout["ultimate_center_x"]
-    top, bottom = hy - 4, ey + eh + 4
-    cy, radius = (top + bottom) / 2, (bottom - top) / 2
+    top, bottom = hy, ey + eh + 4
+    cy, radius = hy + hh, layout["ultimate_radius_pixels"]
     level_left, level_top = hx + hw, ey - hh
     neck = (level_left + curve_radius * 7 / 6, cy)
     shoulder = (level_left + curve_radius / 4, level_top + curve_radius / 3)
     side_slope = (neck[0] - shoulder[0]) / (neck[1] - shoulder[1])
     cap_x = lambda y: neck[0] + (y - cy) * side_slope
-    hp_outline = ((cx, top), (cap_x(top), top), neck, (cx + radius, cy))
-    # 채움을 공유 경계 쪽으로 내리고 양 끝을 각 외곽의 사선에 맞춘다.
-    fill_top, fill_bottom = cy - hh - 3, cy - 3
-    left = cx + fill_top - top + 2
-    hp_shape = ((left, fill_top), (cap_x(fill_top) - 3, fill_top),
-                (cap_x(fill_bottom) - 3, fill_bottom), (left + hh, fill_bottom))
+    hp_outline = ((cx + radius - hh, top), (cap_x(top), top), neck, (cx + radius, cy))
+    hp_shape = hp_outline
     right = ex + ew + layout["energy_level_width_pixels"]
     upper = (right - curve_radius * 2, level_top)
     side, end = (right + 6, level_top + curve_radius * 1.8), (right - curve_radius, bottom)
@@ -74,7 +70,8 @@ def resource_geometry(layout, curve_radius=10):
                    + (upper,) + quadratic_curve(upper, (right + 6, level_top), side)
                    + quadratic_curve(side, (right + 10, bottom), end)
                    + ((neck[0], bottom),))
-    icon_right, icon_bottom = (cx + radius, cy), (cx, bottom)
+    # 큰 마름모의 변 중간에도 바를 붙일 수 있도록 각 높이의 접점을 구한다.
+    icon_right, icon_bottom = (cx + radius, cy), (cx + radius - (bottom - cy), bottom)
     energy_body = (icon_right, neck, level_shape[-1], icon_bottom)
     energy_outline = (icon_right,) + level_shape[:-1] + (icon_bottom,)
     channel_top, channel_bottom = ey + 2, bottom - 5
