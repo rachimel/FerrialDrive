@@ -1,7 +1,7 @@
 """전투 상태를 도형과 기존 HUD로 표시한다. 판정이나 입력은 처리하지 않는다."""
 
 from dataclasses import replace
-from math import atan2, cos, pi, sin
+from math import cos, pi, sin
 
 from ..ui.components import Rect
 from ..ui.state import Health, HudState, LoadoutInfo, RadarContact, TargetInfo, WeaponInfo
@@ -123,31 +123,21 @@ class CombatView:
             end = point(39, 20, 10)
             r.line(*hand, *end, color)
             return
-        direction = attack.direction
-        base = actor.position + direction * 14
-        progress = max(0, min(1, (attack.elapsed_seconds - attack.windup_seconds) / attack.active_seconds))
-        angle = atan2(direction.y, direction.x)
-        if attack.combo_index == 1:
-            angle += -1.1 + progress * 2.2
-        elif attack.combo_index == 3:
-            angle += 1.1 - progress * 2.2
-        elif attack.phase == "windup":
-            angle -= 0.9
-        blade_reach = max(0, attack.reach_units - 14)
-        length = blade_reach if attack.phase == "active" else blade_reach * 0.64
-        if attack.combo_index == 2:
-            length = blade_reach * (0.45 + progress * 0.55)
-        z = 24 + (1 - progress) * 30 if attack.combo_index == 0 else 28
-        tip = base + Vec2(cos(angle), sin(angle)) * length
-        start_screen = self.project(base, world.player.position, 28)
-        end_screen = self.project(tip, world.player.position, z)
+        # 전투가 생성한 판정 면과 칼날 위치를 그대로 읽어 표시한다.
+        trail_color = self.config.colors["ui_accent" if actor.owner == "player" else "enemy"]
+        for section in attack.trail_sections:
+            age = max(0, attack.elapsed_seconds - section.created_seconds)
+            opacity = 0.18 + 0.30 * max(0, 1 - age / attack.active_seconds)
+            self.polygon([self.project(vertex, world.player.position, 28) for vertex in section.vertices],
+                         trail_color, opacity)
+            r.line(*self.project(section.start_tip, world.player.position, 28),
+                   *self.project(section.end_tip, world.player.position, 28), trail_color, 0.85)
+        pose = world.blade_pose(actor)
+        start_screen = self.project(pose.root, world.player.position, 28)
+        end_screen = self.project(pose.tip, world.player.position, 28)
         r.line(*hand, *start_screen, color)
         r.line(*start_screen, *end_screen, color)
         r.line(start_screen[0] + 1, start_screen[1], end_screen[0] + 1, end_screen[1], color)
-        # 타격 중의 실제 무기 잔상만 표시한다. 공격 전 범위·경고 표시는 없다.
-        if attack.phase == "active":
-            previous_tip = base + Vec2(cos(angle - 0.22), sin(angle - 0.22)) * length
-            r.line(*start_screen, *self.project(previous_tip, world.player.position, z), color, 0.3)
 
     def hud_state(self, world):
         enemy = world.enemy

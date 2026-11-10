@@ -63,6 +63,9 @@ class CombatConfig:
     sword_half_angle_degrees: float = 55
     sword_step_units: float = 24
     sword_damage: int = 40
+    melee_trail_half_width_units: float = 4.0
+    melee_trail_sample_seconds: float = 1 / 240
+    melee_trail_max_sweep_degrees: float = 5.0
     combo_buffer_seconds: float = 0.12
     combo_reset_seconds: float = 0.80
     swap_cooldown_seconds: float = 0.28

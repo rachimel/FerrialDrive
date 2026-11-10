@@ -2,32 +2,12 @@
 
 from dataclasses import dataclass, field, replace
 from heapq import heappop, heappush
-from math import acos, asin, ceil, cos, exp, expm1, floor, hypot, isfinite, log1p, radians, sin
+from math import ceil, cos, exp, expm1, floor, isfinite, log1p, radians, sin
 from random import Random
 
 from .config import Arena, CombatConfig
-
-
-@dataclass(frozen=True)
-class Vec2:
-    x: float = 0
-    y: float = 0
-
-    def __add__(self, other):
-        return Vec2(self.x + other.x, self.y + other.y)
-
-    def __sub__(self, other):
-        return Vec2(self.x - other.x, self.y - other.y)
-
-    def __mul__(self, scalar):
-        return Vec2(self.x * scalar, self.y * scalar)
-
-    @property
-    def length(self):
-        return hypot(self.x, self.y)
-
-    def normalized(self, fallback=None):
-        return self * (1 / self.length) if self.length > 1e-9 else (fallback or Vec2())
+from .geometry import Vec2, moving_circle_touches_polygon
+from .trails import BladePose, TrailSection, blade_pose, trail_section
 
 
 @dataclass(frozen=True)
@@ -56,6 +36,7 @@ class Attack:
     dash_attack: bool = False
     elapsed_seconds: float = 0
     hit_owners: set[str] = field(default_factory=set)
+    trail_sections: list[TrailSection] = field(default_factory=list)
 
     @property
     def phase(self):
@@ -205,6 +186,7 @@ class CombatWorld:
 
     def _step(self, seconds, inputs):
         c, player = self.config, self.player
+        previous_positions = {actor.owner: actor.position for actor in (player, self.enemy)}
         self.elapsed_seconds += seconds
         for name in ("shot_remaining_seconds", "swap_remaining_seconds",
                      "combo_remaining_seconds", "path_remaining_seconds"):
@@ -216,6 +198,8 @@ class CombatWorld:
         player.facing = aim
         if inputs.dash_pressed and player.dash is None and not (player.attack and player.attack.dash_attack):
             player.dash = Dash(inputs.movement.normalized(aim))
+            if player.attack is not None:
+                player.attack.trail_sections.clear()
             player.attack = None
             self.queued_melee = False
         if inputs.swap_pressed and self.swap_remaining_seconds == 0 and player.attack is None:
@@ -245,13 +229,16 @@ class CombatWorld:
             speed = c.sprint_speed_units_per_second if inputs.sprint else c.walk_speed_units_per_second
             self._move(player, inputs.movement.normalized() * (speed * seconds))
         self._enemy_think(seconds)
-        self._advance_attack(player, self.enemy, seconds)
-        self._advance_attack(self.enemy, player, seconds)
+        self._advance_attack(player, self.enemy, seconds, previous_positions)
+        self._advance_attack(self.enemy, player, seconds, previous_positions)
         self._advance_bullets(seconds)
         if not player.alive or not self.enemy.alive:
             self.result = "defeat" if not player.alive else "victory"
             self.bullets.clear()
             player.dash = None
+            for actor in (player, self.enemy):
+                if actor.attack is not None:
+                    actor.attack.trail_sections.clear()
             player.attack = self.enemy.attack = None
 
     def _start_player_melee(self, aim):
@@ -341,7 +328,22 @@ class CombatWorld:
             direction = (self.enemy_route[0] - enemy.position).normalized() if self.enemy_route else Vec2()
         self._move(enemy, direction * (c.enemy_speed_units_per_second * seconds))
 
-    def _advance_attack(self, actor, target, seconds):
+    def blade_pose(self, actor, *, elapsed_seconds=None, origin=None):
+        """타격 판정과 무기 표시가 함께 읽는 칼날 위치. 벽에서 잘라낸다."""
+        attack = actor.attack
+        elapsed = attack.elapsed_seconds if elapsed_seconds is None else elapsed_seconds
+        progress = (elapsed - attack.windup_seconds) / attack.active_seconds
+        pose = blade_pose(actor.position if origin is None else origin, attack.direction,
+                          attack.reach_units, attack.half_angle_degrees, attack.combo_index, progress)
+        recovery = max(0.0, min(1.0, (elapsed - attack.windup_seconds - attack.active_seconds)
+                                / attack.recovery_seconds))
+        tip = pose.root + (pose.tip - pose.root) * (1 - recovery * 0.36)
+        fraction = min((hit for wall in self.arena.walls
+                        if (hit := segment_box(pose.root, tip, wall.expanded(
+                            self.config.melee_trail_half_width_units))) is not None), default=1.0)
+        return BladePose(pose.root, pose.root + (tip - pose.root) * fraction)
+
+    def _advance_attack(self, actor, target, seconds, previous_positions):
         attack = actor.attack
         if attack is None or not actor.alive:
             return
@@ -352,9 +354,29 @@ class CombatWorld:
         if active_time > 0:
             if actor.dash is None:
                 self._move(actor, attack.direction * (attack.step_units * active_time / attack.active_seconds))
-            if target.alive and target.owner not in attack.hit_owners and self._melee_touches(actor, target, attack):
+            first_time = max(old, active_start)
+            movement = actor.position - previous_positions[actor.owner]
+            sweep = attack.half_angle_degrees * (1.1 if attack.combo_index == 0
+                                                else 2 if attack.combo_index in (1, 3) else 0)
+            count = max(1, ceil(active_time / self.config.melee_trail_sample_seconds),
+                        ceil(sweep * active_time / (attack.active_seconds
+                                                    * self.config.melee_trail_max_sweep_degrees)))
+            for index in range(count):
+                before_time = first_time + active_time * index / count
+                after_time = first_time + active_time * (index + 1) / count
+                before_position = previous_positions[actor.owner] + movement * ((before_time - old) / seconds)
+                after_position = previous_positions[actor.owner] + movement * ((after_time - old) / seconds)
+                before = self.blade_pose(actor, elapsed_seconds=before_time, origin=before_position)
+                after = self.blade_pose(actor, elapsed_seconds=after_time, origin=after_position)
+                attack.trail_sections.append(trail_section(before, after,
+                                                          self.config.melee_trail_half_width_units, after_time,
+                                                          started_seconds=before_time))
+            if (target.alive and target.owner not in attack.hit_owners
+                    and self._melee_touches(target, attack, previous_positions[target.owner], old, seconds)):
                 attack.hit_owners.add(target.owner)
                 self._damage(target, attack.damage, attack.direction)
+        if attack.phase != "active":
+            attack.trail_sections.clear()
         if actor is self.player:
             actor.facing = attack.direction
         if attack.elapsed_seconds + 1e-9 >= attack.duration_seconds:
@@ -365,17 +387,16 @@ class CombatWorld:
                     self.queued_melee = False
                     self._start_player_melee(actor.facing)
 
-    def _melee_touches(self, actor, target, attack):
-        offset = target.position - actor.position
-        distance = offset.length
-        if distance > attack.reach_units + self.config.actor_radius_units:
-            return False
-        if not self._line_clear(actor.position, target.position):
-            return False
-        unit = offset.normalized(attack.direction)
-        dot = max(-1.0, min(1.0, unit.x * attack.direction.x + unit.y * attack.direction.y))
-        allowance = asin(min(1.0, self.config.actor_radius_units / max(distance, 1e-9)))
-        return acos(dot) <= radians(attack.half_angle_degrees) + allowance
+    def _melee_touches(self, target, attack, previous_position, old_seconds, step_seconds):
+        movement = target.position - previous_position
+        active_end = min(attack.elapsed_seconds, attack.windup_seconds + attack.active_seconds)
+        for section in attack.trail_sections:
+            active_start = max(old_seconds, attack.windup_seconds, section.started_seconds)
+            start = previous_position + movement * ((active_start - old_seconds) / step_seconds)
+            end = previous_position + movement * ((active_end - old_seconds) / step_seconds)
+            if moving_circle_touches_polygon(start, end, self.config.actor_radius_units, section.vertices):
+                return True
+        return False
 
     def _advance_bullets(self, seconds):
         c = self.config

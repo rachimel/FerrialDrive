@@ -290,6 +290,8 @@ class CombatTests(unittest.TestCase):
         before = world.enemy.health
         world.advance(world.config.sword_windup_seconds + world.config.fixed_step_seconds,
                       CombatInput(attack_pressed=True))
+        self.assertEqual(world.enemy.health, before)
+        world.advance(world.config.sword_active_seconds * 0.6, CombatInput())
         self.assertEqual(world.enemy.health, before - world.config.sword_damage)
 
     def test_switch_is_allowed_in_dash_and_blocked_during_melee(self):

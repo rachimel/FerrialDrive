@@ -166,6 +166,21 @@ class CombatApplicationTests(unittest.TestCase):
         self.assertEqual(app.world.ammo_recovery_fraction, 0)
         self.assertEqual(app.world.last_shot_seconds, 0)
 
+    def test_renderer_draws_the_combat_trail_polygon_without_own_hit_shape(self):
+        app = self.program
+        self.start()
+        self.hit_enemy()
+        attack = app.world.player.attack
+        self.assertTrue(attack.trail_sections)
+        section = attack.trail_sections[0]
+        expected = [app.view.project(vertex, app.world.player.position, 28) for vertex in section.vertices]
+        with patch.object(app.view, "polygon", wraps=app.view.polygon) as polygon:
+            app.draw()
+        self.assertTrue(any(call.args[0] == expected for call in polygon.call_args_list))
+        app.update(0.08)
+        self.assertFalse(attack.trail_sections)
+        app.draw()
+
     def test_repeat_key_does_not_retrigger_dash_and_close_is_local(self):
         app, p = self.program, self.program.pico
         self.start()
