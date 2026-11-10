@@ -22,7 +22,8 @@ def create_sample():
     ]
     for side, sign in (("L", 1), ("R", -1)):
         definitions.extend([
-            (f"ShoulderWingLower.{side}", (0, sign*.35, 2.4), (0, sign*.55, 2.4), "Chest"),
+            (f"ShoulderWingUpper.{side}", (0, sign*.35, 2.5), (0, sign*.55, 2.5), "Chest"),
+            (f"ShoulderWingLower.{side}", (0, sign*.35, 2.4), (0, sign*.55, 2.4), f"ShoulderWingUpper.{side}"),
             (f"UpperArm.{side}", (0, sign*.55, 2.4), (.10, sign*.85, 1.95), f"ShoulderWingLower.{side}"),
             (f"Forearm.{side}", (.10, sign*.85, 1.95), (.0, sign*1.0, 1.5), f"UpperArm.{side}"),
             (f"WristSwivel.{side}", (.0, sign*1.0, 1.5), (.0, sign*1.02, 1.45), f"Forearm.{side}"),

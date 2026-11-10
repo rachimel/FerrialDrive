@@ -100,6 +100,67 @@ def upgrade_palm_handles():
     bpy.context.scene.frame_set(bpy.context.scene.frame_current)
 
 
+def upgrade_shoulders():
+    """기존 하부 컨트롤을 상부로 옮기며 방문한 동작과 현재 자세를 보존한다."""
+    data = state()
+    original, proxy = rig_objects()
+    changes = {}
+    for side in ("L", "R"):
+        key, lower, upper = "shoulder."+side, "ShoulderWingLower."+side, "ShoulderWingUpper."+side
+        if data["profile"]["body"].get(key) == lower and upper in proxy.pose.bones:
+            if proxy.data.bones[upper] not in proxy.data.bones[lower].parent_recursive:
+                raise ValueError("어깨 상부가 하부의 부모 계층에 있어야 한다.")
+            changes[key] = (lower, upper)
+    if not changes:
+        return []
+    active, frame = data["active"], bpy.context.scene.frame_current
+    current = world_bones(original)
+    stash_session(data)
+    store(data)
+    samples = {}
+    with suspend_meshes():
+        for clip in data["clips"]:
+            if clip["name"] not in data["sessions"]:
+                continue
+            activate_clip(clip["name"])
+            samples[clip["name"]] = {}
+            for sample_frame in range(clip["start"], clip["end"]+1):
+                bpy.context.scene.frame_set(sample_frame)
+                samples[clip["name"]][sample_frame] = world_bones(original)
+        samples[active][frame] = current
+        data = state()
+        ctrls = controls()
+        for key, (lower, upper) in changes.items():
+            constraint = proxy.pose.bones[lower].constraints.get(PREFIX+"Body")
+            if constraint:
+                proxy.pose.bones[lower].constraints.remove(constraint)
+            constraint = proxy.pose.bones[upper].constraints.new("COPY_TRANSFORMS")
+            constraint.name, constraint.target = PREFIX+"Body", ctrls[key]
+            constraint.owner_space = constraint.target_space = "WORLD"
+            data["profile"]["body"][key] = upper
+            rest = original.matrix_world @ original.data.bones[upper].matrix_local
+            ctrls[key]["fd_pose_rest"] = [v for row in rest for v in row]
+        store(data)
+        for name, poses in samples.items():
+            activate_clip(name)
+            for sample_frame, worlds in poses.items():
+                bpy.context.scene.frame_set(sample_frame)
+                for key, (_, upper) in changes.items():
+                    ctrls[key].matrix_world = worlds[upper]
+                    update()
+                    key_transform(ctrls[key], sample_frame)
+                bases = local_basis(proxy, worlds)
+                for lower, upper in changes.values():
+                    for bone in (proxy.pose.bones[lower], proxy.pose.bones[upper]):
+                        bone.matrix_basis = bases[bone.name]
+                        key_transform(bone, sample_frame)
+            for key in changes:
+                linear_keys(ctrls[key].animation_data.action)
+        activate_clip(active)
+        bpy.context.scene.frame_set(frame)
+    return list(changes)
+
+
 def update():
     bpy.context.view_layer.update()
 

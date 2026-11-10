@@ -9,7 +9,7 @@ def default_profile():
     return {
         "version": 1, "rig": "PlayerRigidRig", "mirror_axis": "Y",
         "body": {"pelvis": "Pelvis", "waist": "Waist", "chest": "Chest", "head": "Head",
-                 "shoulder.L": "ShoulderWingLower.L", "shoulder.R": "ShoulderWingLower.R"},
+                 "shoulder.L": "ShoulderWingUpper.L", "shoulder.R": "ShoulderWingUpper.R"},
         "limbs": {f"{part}.{side}": {"upper": upper + "." + side,
                                     "lower": lower + "." + side, "end": end + "." + side}
                   for part, upper, lower, end in (("hand", "UpperArm", "Forearm", "Hand"),

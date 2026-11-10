@@ -23,6 +23,7 @@ class PartEditing:
     def __init__(self, *, initialize=True):
         self.rig, self.proxy = engine.rig_objects()
         if initialize:
+            engine.upgrade_shoulders()
             self.link_wrists()
             self.prepare_assemblies()
 
@@ -240,7 +241,7 @@ class PartEditing:
         return math.degrees(math.atan2(axis.dot(upper.cross(lower)), upper.dot(lower)))
 
     def joint_axis(self, key, worlds=None):
-        """현재 굽힘 면을 사용하고, 편 자세에서는 해당 팔의 rest 축으로 복구한다."""
+        """현재 굽힘 면을 사용하고, 편 자세에서는 해당 팔다리의 rest 축으로 복구한다."""
         limb = engine.state()["profile"]["limbs"][key.removeprefix("pole.")]
         worlds = worlds or engine.world_bones(self.rig)
         upper = (worlds[limb["lower"]].translation-worlds[limb["upper"]].translation).normalized()
@@ -249,8 +250,9 @@ class PartEditing:
         rest_upper, rest_lower, rest_end = (bones[limb[field]] for field in ("upper", "lower", "end"))
         rest_direction = rest_lower.head_local-rest_upper.head_local
         rest_axis = rest_direction.cross(rest_end.head_local-rest_lower.head_local)
-        # 기준 리그의 정면은 +X다. rest의 미세 역굽힘과 양의 굽힘을 구분한다.
-        if rest_axis.cross(rest_direction).x < 0:
+        # 기준 정면은 +X다. 양의 굽힘은 팔꿈치 앞쪽, 무릎 뒤쪽이다.
+        forward = -1 if key.startswith("pole.foot.") else 1
+        if rest_axis.cross(rest_direction).x*forward < 0:
             rest_axis.negate()
         reference = worlds[limb["upper"]].to_3x3() @ rest_upper.matrix_local.to_3x3().inverted() @ rest_axis
         axis = upper.cross(lower)
@@ -270,7 +272,7 @@ class PartEditing:
         end = key.removeprefix("pole.")
         limb = engine.state()["profile"]["limbs"][end]
         constraint = self.proxy.pose.bones[limb["lower"]].constraints[engine.PREFIX+"IK"]
-        support = any(obj.constraints.get(engine.PREFIX+"Support") for obj in engine.controls().values())
+        support = end.startswith("hand.") and any(obj.constraints.get(engine.PREFIX+"Support") for obj in engine.controls().values())
         anchor = bpy.data.objects.get(engine.PREFIX+"SupportAnchor")
         return {"end": self.world(end), "pole": self.world(key),
                 "basis": {limb[field]: self.proxy.pose.bones[limb[field]].matrix_basis.copy()
@@ -292,13 +294,14 @@ class PartEditing:
         engine.update()
 
     def set_joint_angle(self, key, degrees):
-        """상박을 유지하며 팔꿈치 회전에 하박과 손 목표를 함께 움직인다."""
-        if not key.startswith("pole.hand."):
-            raise ValueError("팔꿈치를 선택한다.")
+        """상위 마디를 유지하며 관절 회전에 하위 마디와 손·발 목표를 함께 움직인다."""
+        if not key.startswith("pole.") or key.removeprefix("pole.") not in engine.state()["profile"]["limbs"]:
+            raise ValueError("팔꿈치 또는 무릎을 선택한다.")
         if not math.isfinite(degrees) or not -179.9 <= degrees <= 179.9:
-            raise ValueError("팔꿈치 굽힘 각도는 -179.9~179.9도다.")
+            raise ValueError("관절 굽힘 각도는 -179.9~179.9도다.")
         current_angle = self.joint_angle(key)
-        if abs(degrees-current_angle) < .001:
+        # 표시 정밀도(0.1도)보다 작은 IK 잔차 때문에 같은 입력이 누적되지 않게 한다.
+        if abs(degrees-current_angle) < .01:
             return
         end = key.removeprefix("pole.")
         limb = engine.state()["profile"]["limbs"][end]
@@ -326,7 +329,7 @@ class PartEditing:
             else:
                 pole.translation = engine.pole_position(desired, limb)
             self.set_world(key, pole)
-            # IK의 입력 자세도 목표와 맞춰 상박의 roll이 바뀌지 않게 한다.
+            # IK 입력 자세도 목표와 맞춰 상박·허벅지의 roll이 바뀌지 않게 한다.
             bases = engine.local_basis(self.proxy, desired)
             for field in ("upper", "lower"):
                 self.proxy.pose.bones[limb[field]].matrix_basis = bases[limb[field]]

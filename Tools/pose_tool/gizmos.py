@@ -5,7 +5,7 @@ from bpy.props import StringProperty
 from bpy_extras import view3d_utils
 from mathutils import Matrix, Vector
 from . import scene as engine
-from .part_editing import PartEditing
+from .part_editing import PartEditing, CORE_LABELS
 
 
 class BendJoint(bpy.types.Operator):
@@ -73,7 +73,7 @@ class JointHandles(bpy.types.GizmoGroup):
             gizmo.line_width = 3
             gizmo.scale_basis = .12
             gizmo.use_draw_modal = True
-            gizmo.target_set_operator("fdpose.elbow_drag" if key.startswith("pole.hand.") else "fdpose.bend_drag").target = key
+            gizmo.target_set_operator("fdpose.joint_drag").target = key
             self.handles[key] = gizmo
 
     def draw_prepare(self, context):
@@ -121,10 +121,10 @@ class WorldArrows(bpy.types.GizmoGroup):
                 gizmo.matrix_basis.translation = parts.world(key).translation
 
 
-class BendElbow(bpy.types.Operator):
-    bl_idname = "fdpose.elbow_drag"
-    bl_label = "팔꿈치 굽힘 각도"
-    bl_description = "좌우로 끌어 팔꿈치를 굽히거나 편다. 하박과 손이 함께 움직인다"
+class BendLimb(bpy.types.Operator):
+    bl_idname = "fdpose.joint_drag"
+    bl_label = "팔꿈치·무릎 굽힘 각도"
+    bl_description = "좌우로 끌어 굽힘 각도를 조절한다. 손 또는 발이 함께 움직인다"
     bl_options = {"REGISTER", "UNDO", "BLOCKING"}
     target: StringProperty()
 
@@ -155,11 +155,11 @@ class BendElbow(bpy.types.Operator):
             try:
                 parts.restore_joint_pose(self.target, self.before)
                 parts.set_joint_angle(self.target, degrees)
-                context.workspace.status_text_set(f"팔꿈치 {degrees:.1f}° · 좌우 드래그 · Esc 취소")
+                context.workspace.status_text_set(f"{CORE_LABELS[self.target]} {degrees:.1f}° · 좌우 드래그 · Esc 취소")
             except ValueError as error:
                 context.workspace.status_text_set(str(error))
             context.area.tag_redraw()
         return {"RUNNING_MODAL"}
 
 
-CLASSES = (BendJoint, BendElbow, JointHandles, WorldArrows)
+CLASSES = (BendJoint, BendLimb, JointHandles, WorldArrows)
