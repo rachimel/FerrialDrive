@@ -1,5 +1,7 @@
 # 직접 실행 확인
 
+`combat_test.py`는 도형 기체로 이동·검/기관단총·적 한 기와의 교전·승패를 확인하는 독립 전투 프로토타입이다. `python tests/combat_test.py`로 직접 실행하거나 Runner에서 선택·드롭한다. Enter 시작, WASD 이동, Shift 달리기, Space 대시, E 검/총 전환, 좌클릭 공격, 총 장착 중 우클릭 조준, Esc 일시정지, R 재시작, F10 종료다. [샘플과 조작 안내](../samples/combat_prototype/README.md)와 [구현·검증 범위](../docs/unit-tests/combat_prototype.md)를 따른다.
+
 1. `Unit Test Runner.lnk`를 더블클릭해 Python GUI를 연다.
 2. 같은 폴더의 **`ui_test.py`를 열린 GUI 창에 드롭**한다.
 3. 별도 UI 테스트 창에서 피해·타겟·초기화 버튼과 Esc 일시정지·계속·타이틀 복귀를 확인한다. 설정 버튼은 타이틀·일시정지에 비활성으로 배치돼 있다. 메뉴 종료·UI 창 X는 해당 테스트만 닫고 Runner는 유지한다. 같은 파일을 Runner에 다시 드롭하면 이전 테스트를 종료하고 새로 실행한다.
