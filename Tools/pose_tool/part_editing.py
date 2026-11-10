@@ -230,6 +230,116 @@ class PartEditing:
         limb = engine.state()["profile"]["limbs"][key.removeprefix("pole.")]
         return engine.world_bones(self.rig)[limb["lower"]].translation
 
+    def joint_angle(self, key):
+        """완전히 편 자세를 0도로 하는 실제 관절 굽힘 각도."""
+        limb = engine.state()["profile"]["limbs"][key.removeprefix("pole.")]
+        worlds = engine.world_bones(self.rig)
+        upper = worlds[limb["lower"]].translation-worlds[limb["upper"]].translation
+        lower = worlds[limb["end"]].translation-worlds[limb["lower"]].translation
+        axis = self.joint_axis(key, worlds)
+        return math.degrees(math.atan2(axis.dot(upper.cross(lower)), upper.dot(lower)))
+
+    def joint_axis(self, key, worlds=None):
+        """현재 굽힘 면을 사용하고, 편 자세에서는 해당 팔의 rest 축으로 복구한다."""
+        limb = engine.state()["profile"]["limbs"][key.removeprefix("pole.")]
+        worlds = worlds or engine.world_bones(self.rig)
+        upper = (worlds[limb["lower"]].translation-worlds[limb["upper"]].translation).normalized()
+        lower = (worlds[limb["end"]].translation-worlds[limb["lower"]].translation).normalized()
+        bones = self.rig.data.bones
+        rest_upper, rest_lower, rest_end = (bones[limb[field]] for field in ("upper", "lower", "end"))
+        rest_direction = rest_lower.head_local-rest_upper.head_local
+        rest_axis = rest_direction.cross(rest_end.head_local-rest_lower.head_local)
+        # 기준 리그의 정면은 +X다. rest의 미세 역굽힘과 양의 굽힘을 구분한다.
+        if rest_axis.cross(rest_direction).x < 0:
+            rest_axis.negate()
+        reference = worlds[limb["upper"]].to_3x3() @ rest_upper.matrix_local.to_3x3().inverted() @ rest_axis
+        axis = upper.cross(lower)
+        if axis.length < 1e-3:
+            axis = reference
+            if axis.length < 1e-6:
+                axis = (self.world(key).translation-worlds[limb["lower"]].translation).cross(upper)
+        elif axis.dot(reference) < 0:
+            axis.negate()
+        axis -= upper*axis.dot(upper)
+        if axis.length < 1e-6:
+            raise ValueError("관절의 굽힘 축을 정할 수 없다.")
+        return axis.normalized()
+
+    def joint_pose(self, key):
+        """드래그 취소 시 복구할 컨트롤·IK 입력만 보관한다."""
+        end = key.removeprefix("pole.")
+        limb = engine.state()["profile"]["limbs"][end]
+        constraint = self.proxy.pose.bones[limb["lower"]].constraints[engine.PREFIX+"IK"]
+        support = any(obj.constraints.get(engine.PREFIX+"Support") for obj in engine.controls().values())
+        anchor = bpy.data.objects.get(engine.PREFIX+"SupportAnchor")
+        return {"end": self.world(end), "pole": self.world(key),
+                "basis": {limb[field]: self.proxy.pose.bones[limb[field]].matrix_basis.copy()
+                          for field in ("upper", "lower")},
+                "angle": constraint.pole_angle,
+                "support": anchor.matrix_basis.copy() if support and anchor else None}
+
+    def restore_joint_pose(self, key, pose):
+        end = key.removeprefix("pole.")
+        limb = engine.state()["profile"]["limbs"][end]
+        self.set_world(end, pose["end"])
+        self.set_world(key, pose["pole"])
+        for name, basis in pose["basis"].items():
+            self.proxy.pose.bones[name].matrix_basis = basis
+        self.proxy.pose.bones[limb["lower"]].constraints[engine.PREFIX+"IK"].pole_angle = pose["angle"]
+        if pose["support"] is not None:
+            engine.support_pin(True)
+            bpy.data.objects[engine.PREFIX+"SupportAnchor"].matrix_basis = pose["support"]
+        engine.update()
+
+    def set_joint_angle(self, key, degrees):
+        """상박을 유지하며 팔꿈치 회전에 하박과 손 목표를 함께 움직인다."""
+        if not key.startswith("pole.hand."):
+            raise ValueError("팔꿈치를 선택한다.")
+        if not math.isfinite(degrees) or not -179.9 <= degrees <= 179.9:
+            raise ValueError("팔꿈치 굽힘 각도는 -179.9~179.9도다.")
+        current_angle = self.joint_angle(key)
+        if abs(degrees-current_angle) < .001:
+            return
+        end = key.removeprefix("pole.")
+        limb = engine.state()["profile"]["limbs"][end]
+        worlds = engine.world_bones(self.rig)
+        axis = self.joint_axis(key, worlds)
+        pivot = worlds[limb["lower"]].translation
+        rotation = (Matrix.Translation(pivot) @ Matrix.Rotation(math.radians(degrees-current_angle), 4, axis)
+                    @ Matrix.Translation(-pivot))
+        desired = dict(worlds)
+        for field in ("lower", "end"):
+            desired[limb[field]] = rotation @ worlds[limb[field]]
+        before = self.joint_pose(key)
+        constraint = self.proxy.pose.bones[limb["lower"]].constraints[engine.PREFIX+"IK"]
+        try:
+            # 이전 IK 해의 굽힘을 재사용하지 않고 새 입력 자세에서 평가한다.
+            constraint.mute = True
+            engine.update()
+            if before["support"] is not None:
+                engine.support_pin(False)
+            self.set_world(end, engine.target_matrix(desired, self.rig, end, limb))
+            pole = self.world(key)
+            if abs(degrees) < .1:
+                direction = (pivot-worlds[limb["upper"]].translation).normalized()
+                pole.translation = pivot-axis.cross(direction).normalized()*self.rig.data.bones[limb["lower"]].length
+            else:
+                pole.translation = engine.pole_position(desired, limb)
+            self.set_world(key, pole)
+            # IK의 입력 자세도 목표와 맞춰 상박의 roll이 바뀌지 않게 한다.
+            bases = engine.local_basis(self.proxy, desired)
+            for field in ("upper", "lower"):
+                self.proxy.pose.bones[limb[field]].matrix_basis = bases[limb[field]]
+            engine.update()
+            constraint.mute = False
+            engine.update()
+            with engine.suspend_meshes():
+                engine.calibrate_pole(self.proxy, limb, desired)
+        except Exception:
+            constraint.mute = False
+            self.restore_joint_pose(key, before)
+            raise
+
     def bend_joint(self, key, location):
         limb = engine.state()["profile"]["limbs"][key.removeprefix("pole.")]
         worlds = engine.world_bones(self.rig)
@@ -260,6 +370,14 @@ class PartEditing:
         for key, entry in self.entries().items():
             if entry["kind"] != "control":
                 engine.key_transform(self.target(key), frame)
+        for limb in engine.state()["profile"]["limbs"].values():
+            for field in ("upper", "lower"):
+                engine.key_transform(self.proxy.pose.bones[limb[field]], frame)
+            self.proxy.pose.bones[limb["lower"]].constraints[engine.PREFIX+"IK"].keyframe_insert("pole_angle", frame=frame)
+        for curve in engine.all_curves(self.proxy.animation_data.action):
+            if curve.data_path.endswith(".pole_angle"):
+                for point in curve.keyframe_points:
+                    point.interpolation = "CONSTANT"
         for name in engine.state().get("independent_parts", []):
             obj = bpy.data.objects[name]
             if obj.animation_data and obj.animation_data.action:

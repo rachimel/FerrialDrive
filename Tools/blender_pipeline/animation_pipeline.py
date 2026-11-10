@@ -50,13 +50,13 @@ def bake(manifest, destination):
     source = (manifest.parent / data['source']).resolve()
     if hashlib.sha256(source.read_bytes()).hexdigest() != data['source_sha256']:
         raise ValueError('원본 해시 불일치')
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
     from model_review import require_stage_approval
     require_stage_approval(source)
     if destination.exists():
         raise FileExistsError('새 출력 폴더가 필요하다.')
     bpy.ops.wm.open_mainfile(filepath=str(source))
     if data.get('setup_operations'):
-        sys.path.insert(0, str(Path(__file__).resolve().parent))
         from model_operations import apply_operations
         apply_operations(data['setup_operations'])
     rig = bpy.data.objects[data['rig']]

@@ -166,3 +166,5 @@
 
 - [[FDLOG_MISSING_TIME:2026-11-09-asset-preview-frame-strip:scope]] — `2026-11-09-asset-preview-frame-strip.md`: 요청·구현 안내의 정확한 발언 시각. 검색 단서: 미리보기 창 밑에 각 프레임 미리보기.
 - [[FDLOG_MISSING_TIME:FDLOG-20261109-pipeline-visual-review:scope]] — `2026-11-09-pipeline-visual-review.md`: 중간 이미지 검토/6면 확인 요구와 손 위치·웨이트 보수 선택 응답의 개별 시각. 검색 단서: 중간 이미지를 산출하고, 손 위치 유지가 기본, 웨이트 보수는 별도 지정.
+
+- [[FDLOG_MISSING_TIME:pose-tool-elbow-angle:scope]] — `2026-11-10-pose-tool-elbow-angle.md`: 개별 발언 시각. 검색 단서: 팔꿈치 각도를 바꾸면 손 위치도 움직이게, 네 그렇게 구현해주세요.

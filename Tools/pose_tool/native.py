@@ -169,6 +169,11 @@ class PoseCommand(bpy.types.Operator):
             elif self.command == "first":
                 key_all(parts)
                 context.scene.frame_set(context.scene.frame_start)
+            elif self.command in ("joint_angle", "joint_bend"):
+                degrees = (context.scene.fd_pose_joint_angle if self.command == "joint_angle"
+                           else max(-179.9, min(179.9, parts.joint_angle(key)+context.scene.fd_pose_angle*self.direction)))
+                parts.set_joint_angle(key, degrees)
+                key_all(parts)
             elif self.command == "axis":
                 if context.scene.fd_pose_transform == "translate":
                     delta = Vector((0, 0, 0))
@@ -343,6 +348,17 @@ class PosePanel(bpy.types.Panel):
             command(pair, "", "axis", key, icon="REMOVE", axis=axis, direction=-1)
             command(pair, "", "axis", key, icon="ADD", axis=axis, direction=1)
         command(box, "이전 프레임 파츠 복제", "copy_previous", key, icon="DUPLICATE")
+        if key.startswith("pole.hand."):
+            box = layout.box()
+            box.label(text="팔꿈치 굽힘", icon="DRIVER_ROTATIONAL_DIFFERENCE")
+            box.label(text=f"현재 {PartEditing(initialize=False).joint_angle(key):.1f}° · 0°는 편 자세")
+            row = box.row(align=True)
+            row.prop(scene, "fd_pose_joint_angle", text="목표 각도")
+            command(row, "적용", "joint_angle", key)
+            row = box.row(align=True)
+            command(row, "펴기 −", "joint_bend", key, direction=-1)
+            command(row, "굽히기 +", "joint_bend", key)
+            box.label(text="하박과 손이 함께 회전한다.")
         if key.startswith(("hand.", "bone:Thumb", "bone:Index", "bone:Middle", "bone:Ring", "bone:Little")):
             box = layout.box()
             box.label(text="손가락", icon="VIEW_PAN")
@@ -369,7 +385,8 @@ class PosePanel(bpy.types.Panel):
             layout.operator("fdpose.open_render", icon="FILE_FOLDER")
         layout.label(text="G 이동 · R 회전 · X/Y/Z 월드 축")
         layout.label(text="Ctrl+Z 되돌리기 · 자동 키 켜짐")
-        layout.label(text="무릎·팔꿈치 원을 드래그")
+        layout.label(text="팔꿈치 원 좌우 드래그: 굽힘 각도")
+        layout.label(text="무릎 원 드래그: 굽힘 방향")
 
 
 CLASSES = (PoseCommand, SavePoseWork, OpenPoseModel, ExportPoseClip, OpenPoseRender, PosePanel)
@@ -381,6 +398,7 @@ PROPERTIES = {
     "fd_pose_transform": lambda: EnumProperty(name="월드 축", update=transform_changed, items=[("translate", "이동", ""), ("rotate", "회전", "")]),
     "fd_pose_distance": lambda: FloatProperty(name="이동량", default=.05, min=.0001, max=100, precision=3),
     "fd_pose_angle": lambda: FloatProperty(name="회전각", default=5, min=.1, max=180),
+    "fd_pose_joint_angle": lambda: FloatProperty(name="팔꿈치 굽힘 각도", default=90, min=-179.9, max=179.9, precision=1),
     "fd_pose_hand": lambda: EnumProperty(items=[("R", "오른손", ""), ("L", "왼손", "")]),
     "fd_pose_finger": lambda: EnumProperty(items=[("all", "손가락 전체", "")]+[(k, v, "") for k, v in FINGERS.items()]),
     "fd_pose_finger_joint": lambda: EnumProperty(items=[("all", "관절 전체", ""), ("Base", "엄지 뿌리", ""), ("01", "1번", ""), ("02", "2번", ""), ("03", "3번", "")]),

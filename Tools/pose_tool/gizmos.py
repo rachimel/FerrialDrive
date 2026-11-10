@@ -73,7 +73,7 @@ class JointHandles(bpy.types.GizmoGroup):
             gizmo.line_width = 3
             gizmo.scale_basis = .12
             gizmo.use_draw_modal = True
-            gizmo.target_set_operator("fdpose.bend_drag").target = key
+            gizmo.target_set_operator("fdpose.elbow_drag" if key.startswith("pole.hand.") else "fdpose.bend_drag").target = key
             self.handles[key] = gizmo
 
     def draw_prepare(self, context):
@@ -121,4 +121,45 @@ class WorldArrows(bpy.types.GizmoGroup):
                 gizmo.matrix_basis.translation = parts.world(key).translation
 
 
-CLASSES = (BendJoint, JointHandles, WorldArrows)
+class BendElbow(bpy.types.Operator):
+    bl_idname = "fdpose.elbow_drag"
+    bl_label = "팔꿈치 굽힘 각도"
+    bl_description = "좌우로 끌어 팔꿈치를 굽히거나 편다. 하박과 손이 함께 움직인다"
+    bl_options = {"REGISTER", "UNDO", "BLOCKING"}
+    target: StringProperty()
+
+    def invoke(self, context, event):
+        from .native import select_part
+        select_part(context, self.target)
+        parts = PartEditing(initialize=False)
+        self.before = parts.joint_pose(self.target)
+        self.start_angle = parts.joint_angle(self.target)
+        self.start_x = event.mouse_x
+        context.window_manager.modal_handler_add(self)
+        return {"RUNNING_MODAL"}
+
+    def modal(self, context, event):
+        parts = PartEditing(initialize=False)
+        if event.type in {"ESC", "RIGHTMOUSE"}:
+            parts.restore_joint_pose(self.target, self.before)
+            context.workspace.status_text_set(None)
+            context.area.tag_redraw()
+            return {"CANCELLED"}
+        if event.type == "LEFTMOUSE" and event.value == "RELEASE":
+            from .native import key_all
+            key_all(parts)
+            context.workspace.status_text_set(None)
+            return {"FINISHED"}
+        if event.type == "MOUSEMOVE":
+            degrees = max(-179.9, min(179.9, self.start_angle+(event.mouse_x-self.start_x)*.5))
+            try:
+                parts.restore_joint_pose(self.target, self.before)
+                parts.set_joint_angle(self.target, degrees)
+                context.workspace.status_text_set(f"팔꿈치 {degrees:.1f}° · 좌우 드래그 · Esc 취소")
+            except ValueError as error:
+                context.workspace.status_text_set(str(error))
+            context.area.tag_redraw()
+        return {"RUNNING_MODAL"}
+
+
+CLASSES = (BendJoint, BendElbow, JointHandles, WorldArrows)
