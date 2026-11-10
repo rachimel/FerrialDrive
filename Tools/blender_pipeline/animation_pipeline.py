@@ -61,16 +61,27 @@ def bake(manifest, destination):
         apply_operations(data['setup_operations'])
     rig = bpy.data.objects[data['rig']]
     animated = {rig.name}
+    keyed_paths = {rig.name: set()}
+    transform_channels = ('location', 'rotation_euler', 'rotation_quaternion', 'rotation_axis_angle', 'scale')
     for clip in data['clips']:
         for sample in clip['samples']:
             animated.update(sample.get('objects', {}))
             animated.update(sample.get('properties', {}))
+            for bone_name in sample['bones']:
+                bone = rig.pose.bones[bone_name]
+                keyed_paths[rig.name].update(bone.path_from_id(channel) for channel in transform_channels)
+            for name in sample.get('objects', {}):
+                keyed_paths.setdefault(name, set()).update(transform_channels)
     for name in animated:
         obj = bpy.data.objects[name]
         if obj.animation_data:
             obj.animation_data.action = None
             for track in obj.animation_data.nla_tracks:
                 track.mute = True
+            # 이미 표본에 포함한 변환을 출력 사본의 드라이버로 다시 적용하지 않는다.
+            for driver in obj.animation_data.drivers:
+                if driver.data_path in keyed_paths.get(name, ()):
+                    driver.mute = True
     scene = bpy.context.scene
     scene.render.fps = data['fps']
     scene.render.fps_base = 1
