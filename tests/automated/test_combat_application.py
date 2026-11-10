@@ -96,6 +96,57 @@ class CombatApplicationTests(unittest.TestCase):
             self.assertAlmostEqual(recovered.x, expected.x)
             self.assertAlmostEqual(recovered.y, expected.y)
 
+    def hit_enemy(self):
+        app = self.program
+        app.world.enemy.position = app.world.player.position + Vec2(100, 0)
+        app.mouse = app.view.project(app.world.enemy.position, app.world.player.position)
+        app.attack_pressed = True
+        app.update(0.12)
+
+    def test_counter_expiry_resets_values_and_next_hit_starts_new_totals(self):
+        app = self.program
+        self.start()
+        self.hit_enemy()
+        first_damage = app.world.total_damage
+        self.assertEqual(app.world.hit_count, 1)
+        visibility = app.counter_visibility
+        app.update(visibility.hold_seconds + visibility.fade_seconds / 2 - visibility.elapsed_seconds)
+        self.assertGreater(visibility.opacity, 0)
+        self.assertLess(visibility.opacity, 1)
+        self.assertEqual(app.world.total_damage, first_damage)
+        enemy_health = app.world.enemy.health
+        app.update(visibility.fade_seconds / 2 + 0.01)
+        self.assertEqual(visibility.opacity, 0)
+        self.assertEqual((app.world.hit_count, app.world.total_damage), (0, 0))
+        self.assertEqual(app.world.enemy.health, enemy_health)
+        for counter in (app.hit_counter, app.damage_counter):
+            self.assertEqual((counter.visual.previous_value, counter.visual.value, counter.latest_value), (0, 0, 0))
+        app.draw()
+        self.hit_enemy()
+        self.assertEqual(app.world.hit_count, 1)
+        self.assertEqual(app.world.total_damage, first_damage)
+        self.assertEqual(visibility.opacity, 1)
+
+    def test_hit_during_counter_fade_extends_totals_and_pause_freezes_expiry(self):
+        app = self.program
+        self.start()
+        self.hit_enemy()
+        first_damage = app.world.total_damage
+        visibility = app.counter_visibility
+        app.update(visibility.hold_seconds + visibility.fade_seconds / 2 - visibility.elapsed_seconds)
+        self.hit_enemy()
+        self.assertEqual(app.world.hit_count, 2)
+        self.assertEqual(app.world.total_damage, first_damage * 2)
+        self.assertEqual(visibility.opacity, 1)
+        self.key(app.pico.SDLK_ESCAPE)
+        elapsed = visibility.elapsed_seconds
+        app.update(visibility.hold_seconds + visibility.fade_seconds + 1)
+        self.assertEqual(visibility.elapsed_seconds, elapsed)
+        self.assertEqual(app.world.hit_count, 2)
+        self.start()
+        app.update(visibility.hold_seconds + visibility.fade_seconds)
+        self.assertEqual((app.world.hit_count, app.world.total_damage), (0, 0))
+
     def test_ammo_recovery_pauses_and_restart_clears_recovery_state(self):
         app, p = self.program, self.program.pico
         self.start()

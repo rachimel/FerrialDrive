@@ -169,7 +169,7 @@ class CombatWorld:
         self.combo_remaining_seconds = 0.0
         self.combo_index = 0
         self.queued_melee = False
-        self.hit_count = self.total_damage = 0
+        self.reset_counters()
         self.elapsed_seconds = self.accumulator_seconds = 0.0
         self.result = "running"
         self.bullets = []
@@ -177,6 +177,10 @@ class CombatWorld:
         self.enemy_route = []
         self.path_remaining_seconds = 0.0
         self.pending_attack = self.pending_dash = self.pending_swap = False
+
+    def reset_counters(self):
+        """현재 HIT·DAMAGE 집계만 비우고 공격·기체 상태는 유지한다."""
+        self.hit_count = self.total_damage = 0
 
     def advance(self, delta_seconds, command):
         if not isfinite(delta_seconds) or delta_seconds < 0:

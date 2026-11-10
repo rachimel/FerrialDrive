@@ -127,7 +127,10 @@ class CombatApplication:
         self.damage_counter.update(delta_seconds)
         self.hit_counter.update(delta_seconds)
         self.damage_numbers.update(delta_seconds)
-        self.counter_visibility.update(delta_seconds)
+        if self.counter_visibility.update(delta_seconds):
+            self.world.reset_counters()
+            self.damage_counter.reset()
+            self.hit_counter.reset()
 
     def draw(self):
         self.view.draw(self.world, self.mouse, self.damage_numbers.visuals, self.weapon_swap,

@@ -343,6 +343,19 @@ class CombatTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             CombatWorld(arena=Arena(player_spawn=(10, 10)))
 
+    def test_counter_reset_preserves_current_attack_combo_and_ammo(self):
+        world = quiet_world()
+        world.enemy.position = Vec2(400, 400)
+        world.advance(0.12, CombatInput(attack_pressed=True))
+        self.assertGreater(world.hit_count, 0)
+        self.assertGreater(world.total_damage, 0)
+        attack, combo, ammo, health = (world.player.attack, world.combo_index,
+                                       world.ammo, world.enemy.health)
+        world.reset_counters()
+        self.assertEqual((world.hit_count, world.total_damage), (0, 0))
+        self.assertIs(world.player.attack, attack)
+        self.assertEqual((world.combo_index, world.ammo, world.enemy.health), (combo, ammo, health))
+
     def test_segment_geometry(self):
         self.assertAlmostEqual(segment_box(Vec2(), Vec2(100, 0), Wall(50, -10, 5, 20)), 0.5)
         self.assertIsNone(segment_box(Vec2(), Vec2(100, 0), Wall(50, 10, 5, 20)))
