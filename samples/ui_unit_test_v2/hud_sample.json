@@ -1,0 +1,86 @@
+{
+    "player_name": "플레이어",
+    "player_health": {
+        "current": 800,
+        "maximum": 1000
+    },
+    "attack_direction_x": 1,
+    "loadouts": [
+        {
+            "melee": {
+                "name": "도검"
+            },
+            "ranged": {
+                "name": "PDW",
+                "rounds": 45
+            }
+        },
+        {
+            "melee": {
+                "name": "도검"
+            },
+            "ranged": {
+                "name": "PDW",
+                "rounds": 18
+            }
+        }
+    ],
+    "active_loadout_index": 0,
+    "active_weapon_kind": "ranged",
+    "target": {
+        "name": "훈련 표적 A",
+        "health": {
+            "current": 540,
+            "maximum": 800
+        }
+    },
+    "combo_count": 98,
+    "total_damage_dealt": 12004,
+    "radar_contacts": [
+        {
+            "x": 0.232,
+            "y": 0.036,
+            "screen_x": 333,
+            "screen_y": 364,
+            "kind": "enemy"
+        },
+        {
+            "x": -0.48,
+            "y": 0.55,
+            "screen_x": 400,
+            "screen_y": 85,
+            "kind": "enemy"
+        },
+        {
+            "x": 0.6,
+            "y": -0.8,
+            "screen_x": 940,
+            "screen_y": 760,
+            "kind": "enemy"
+        },
+        {
+            "x": 1.3,
+            "y": 0.3,
+            "screen_x": 1290,
+            "screen_y": 210,
+            "kind": "enemy"
+        },
+        {
+            "x": -0.28,
+            "y": -0.48,
+            "screen_x": 500,
+            "screen_y": 600,
+            "kind": "ally"
+        }
+    ],
+    "energy_ratio": 0.72,
+    "energy_level": 3,
+    "overdrive": true,
+    "counter": true,
+    "dash_ready": true,
+    "target_names": [
+        "훈련 표적 A",
+        "훈련 표적 B",
+        "훈련 표적 C"
+    ]
+}

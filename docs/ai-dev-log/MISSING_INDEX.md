@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [UI Unit Test v2](2026-11-11-ui-unit-test-v2.md): TIME(scope). 현재 대화의 v2 생성 요청·하단 에너지/필살기 아이콘/흡수 Trail 정정·록온 각도/거리/R 순환 확인 발언 시각을 확인한다.
+
 - [Pose Tool 선택 파일명 유지](2026-11-10-pose-tool-file-names.md): 1개, TIME(scope). 현재 대화의 고정 pose_work.blend 표시 제보와 파일명만 같다는 확인 응답의 정확한 시각을 확인한다.
 
 - [Pose Tool 상박·허벅지와 IK 방향](2026-11-10-pose-tool-upper-twist.md): 1개, TIME(scope). 현재 대화의 제어점 추가·손발 추종/손가락 제외·IK 비틀림과 굽힘 요청 발언의 정확한 시각을 확인한다.
