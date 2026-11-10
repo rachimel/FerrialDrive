@@ -204,14 +204,13 @@ class UiV2View(UiView):
             self.stroke(blade + blade[:1], c["text"], opacity * 0.9, 1.5)
         key = self.config.data["v2"]["labels"]["ultimate_key"]
         level = "LV. 01"
-        key_width = r.text_size(key, "hud_small")[0]
         key_height = r.text_size(key, "hud_small")[1]
-        level_width = r.text_size(level, "hud_small")[0] * 0.85
         gap = self.style["ultimate_label_gap_pixels"]
-        self.slanted_text(key, cx - key_width / 2, cy - radius - key_height - gap,
-                          "hud_small", c["text"], opacity)
-        self.slanted_text(level, cx - level_width / 2, cy + radius + gap,
-                          "hud_small", c["muted"], opacity, scale=0.85)
+        label_right = cx - radius / 2 - gap
+        self.slanted_text(key, label_right, cy - radius / 2 - key_height - gap,
+                          "hud_small", c["text"], opacity, align="right")
+        self.slanted_text(level, label_right, cy + radius / 2 + gap,
+                          "hud_small", c["muted"], opacity, scale=0.85, align="right")
         x, y = self.layout["dash_label"]
         alpha = opacity * (1 if state.dash_ready else 0.25)
         self.stroke(((x + 16, y - 24), (x + 25, y - 43), (x + 32, y - 39), (x + 21, y - 18),
