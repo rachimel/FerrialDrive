@@ -10,6 +10,8 @@ from mathutils import Matrix, Vector
 from . import scene as engine
 from .part_editing import PartEditing, FINGERS
 
+MODELS_DIR = Path(__file__).resolve().parents[2] / "data/models"
+
 _clip_items = []
 _part_items = []
 _signature = None
@@ -242,6 +244,10 @@ class OpenPoseModel(bpy.types.Operator, ImportHelper):
     bl_label = "모델 / 작업본 열기"
     filename_ext = ".blend"
     filter_glob: StringProperty(default="*.blend", options={"HIDDEN"})
+
+    def invoke(self, context, event):
+        self.filepath = MODELS_DIR.as_posix() + "/"
+        return ImportHelper.invoke(self, context, event)
 
     def execute(self, context):
         try:
