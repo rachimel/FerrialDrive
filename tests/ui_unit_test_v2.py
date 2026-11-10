@@ -22,7 +22,7 @@ from ferrial_drive.ui.pause import PauseState
 from ferrial_drive.ui.state import Health, HudState, LoadoutInfo, RadarContact, TargetInfo, WeaponInfo
 from ferrial_drive.ui.transition import SceneTransition
 from ferrial_drive.ui_v2.effects import EnergyAbsorption
-from ferrial_drive.ui_v2.geometry import scaled_point
+from ferrial_drive.ui_v2.geometry import resource_geometry, scaled_point
 from ferrial_drive.ui_v2.pico_renderer import PicoV2Renderer
 from ferrial_drive.ui_v2.state import HudV2State
 from ferrial_drive.ui_v2.view import UiV2View
@@ -59,6 +59,8 @@ class UiUnitTestV2:
                        active_weapon_kind=data["active_weapon_kind"])
         self.state = HudV2State(hud, data["energy_ratio"], data["energy_level"],
                                 data["overdrive"], data["counter"], data["dash_ready"])
+        self.target_size_index = 0
+        self.set_target_size(1)
         duration = self.config.data["damage_counter"]["duration_seconds"]
         self.hit_counter = RollingCounter(duration, hud.combo_count)
         self.damage_counter = RollingCounter(duration, hud.total_damage_dealt)
@@ -79,6 +81,13 @@ class UiUnitTestV2:
         size = self.config.font_sizes["damage_number"]
         return len(text) * size, size
 
+    def set_target_size(self, amount):
+        width, height = self.preset["target_body_size_pixels"]
+        width, height = width * amount, height * amount
+        x, y = self.config.actor_anchor("target")
+        body = Rect(x - width / 2, y - 12 * amount, width, height)
+        self.state = replace(self.state, target_body=body)
+
     def enter(self):
         import pico2d.pico2d as pico
 
@@ -91,9 +100,8 @@ class UiUnitTestV2:
 
     def absorb(self):
         layout = self.config.data["v2"]["layout"]
-        icon = layout["ultimate_icon"][:2]
-        x, y, width, height = layout["energy_bar"]
-        destination = (x + width * self.state.energy_ratio, y + height / 2)
+        geometry = resource_geometry(layout, self.config.data["v2"]["style"]["level_curve_radius_pixels"])
+        icon, destination = geometry.icon_center, geometry.energy_tip(self.state.energy_ratio)
         scale = self.config.data["v2"]["style"]["hud_scale"]
         anchor = (self.config.window["width"] / 2, self.config.window["height"])
         icon = scaled_point(icon, anchor, scale)
@@ -160,6 +168,10 @@ class UiUnitTestV2:
             self.absorb()
         elif action == "level":
             self.state = replace(self.state, energy_level=self.state.energy_level % 3 + 1)
+        elif action == "target_size":
+            sizes = (1, 1.5, 0.75)
+            self.target_size_index = (self.target_size_index + 1) % len(sizes)
+            self.set_target_size(sizes[self.target_size_index])
         elif action in ("overdrive", "counter", "dash"):
             field = {"overdrive": "overdrive", "counter": "counter", "dash": "dash_ready"}[action]
             self.state = replace(self.state, **{field: not getattr(self.state, field)})
@@ -192,7 +204,7 @@ class UiUnitTestV2:
                 return
             actions = {p.SDLK_1: "damage_target", p.SDLK_2: "damage_player",
                        p.SDLK_3: "energy_down", p.SDLK_4: "energy_up", p.SDLK_5: "level",
-                       p.SDLK_6: "overdrive", p.SDLK_c: "counter", p.SDLK_t: "toggle_target",
+                       p.SDLK_6: "overdrive", p.SDLK_7: "target_size", p.SDLK_c: "counter", p.SDLK_t: "toggle_target",
                        p.SDLK_e: "swap", p.SDLK_f: "loadout", p.SDLK_r: "next_target", p.SDLK_F5: "reset",
                        p.SDLK_g: "absorb", p.SDLK_SPACE: "dash"}
             if event.key in actions:
@@ -228,11 +240,16 @@ class UiUnitTestV2:
     def actor(self, owner, opacity):
         r, c = self.renderer, self.config.colors
         x, y = self.config.actor_anchor(owner)
+        sx = sy = 1
+        if owner == "target" and self.state.target_body is not None:
+            body = self.state.target_body
+            sx, sy = body.width / 30, body.height / 27
+            x, y = body.x + body.width / 2, body.y + 12 * sy
         color = c["accent" if owner == "player" else "enemy"]
         for dx, dy, width, height in ((-8, -27, 16, 13), (-15, -12, 30, 27),
                                        (-26, -8, 8, 24), (18, -8, 8, 24),
                                        (-13, 18, 9, 19), (4, 18, 9, 19)):
-            r.rect(Rect(x + dx, y + dy, width, height), color, opacity * 0.7)
+            r.rect(Rect(x + dx * sx, y + dy * sy, width * sx, height * sy), color, opacity * 0.7)
 
     def draw(self):
         self.view.background()
@@ -262,10 +279,10 @@ class UiUnitTestV2:
 
     def draw_help(self):
         self.view.panel((262, 32, 655, 134), 1, fill_opacity=0.98)
-        for index, text in enumerate(("1 / 2 적·플레이어 피해   3 / 4 에너지 감소·증가   5 레벨   6 Overdrive",
+        for index, text in enumerate(("1 / 2 적·플레이어 피해   3 / 4 에너지   5 레벨   6 Overdrive   7 표적 크기",
                                       "E 무기 교체   F 로드아웃   T 타겟   C COUNTER   SPACE 대시 표시",
                                       "G 흡수 Trail   R 샘플 표적 교체   F5 초기화   Esc 일시정지   F1 도움말 닫기")):
-            self.renderer.text(text, 278, 48 + index * 36, "small", self.config.colors["text"])
+            self.renderer.text(text, 290, 48 + index * 36, "small", self.config.colors["text"])
 
     def exit(self):
         if self.renderer is not None:

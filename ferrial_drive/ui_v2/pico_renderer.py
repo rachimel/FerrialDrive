@@ -8,6 +8,25 @@ from ferrial_drive.ui.pico_renderer import PicoRenderer
 
 
 class PicoV2Renderer(PicoRenderer):
+    def __init__(self, font_paths, font_sizes):
+        self.ink_bottoms = {}
+        super().__init__(font_paths, font_sizes)
+
+    def digit_ink_bottom(self, role):
+        """글꼴의 빈 하단 여백을 제외한 숫자 기준선을 캐시한다."""
+        if role not in self.ink_bottoms:
+            ascent = self.text_ascent(role)
+            bottoms = []
+            for digit in "0123456789":
+                metrics = [c_int() for _ in range(5)]
+                result = self.pico.TTF_GlyphMetrics(self.fonts[role].font, ord(digit),
+                                                   *(byref(value) for value in metrics))
+                if result != 0:
+                    raise RuntimeError("숫자 기준선 측정 실패")
+                bottoms.append(ascent - metrics[2].value)
+            self.ink_bottoms[role] = min(self.text_size("0", role)[1], max(bottoms))
+        return self.ink_bottoms[role]
+
     @contextmanager
     def scaled(self, amount, anchor):
         """HUD 묶음의 앵커를 유지하며 크기만 조절하고 SDL 상태를 복원한다."""

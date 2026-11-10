@@ -17,7 +17,8 @@ SAMPLE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(SAMPLE)
 
 from ferrial_drive.ui_v2.effects import AbsorptionTrail, EnergyAbsorption
-from ferrial_drive.ui_v2.geometry import PerspectivePlane, energy_frame, scaled_point, slanted_meter
+from ferrial_drive.ui_v2.geometry import (PerspectivePlane, body_diamond, counter_plaque,
+                                         resource_geometry, scaled_point, slanted_meter)
 
 
 class UiV2Tests(unittest.TestCase):
@@ -108,12 +109,17 @@ class UiV2Tests(unittest.TestCase):
         self.assertGreater(right_top[0], right_bottom[0])
 
     def test_energy_frame_moves_level_with_bar_end(self):
-        original = energy_frame((300, 650, 390, 26), 78, 34)
-        wider = energy_frame((300, 650, 440, 26), 78, 34)
-        self.assertEqual(original[0], wider[0])
-        self.assertEqual(original[-1], wider[-1])
-        for before, after in zip(original[1:-1], wider[1:-1]):
-            self.assertEqual(after, (before[0] + 50, before[1]))
+        layout = self.program.config.data["v2"]["layout"]
+        original = resource_geometry(layout)
+        wider_layout = {**layout, "hp_bar": list(layout["hp_bar"]), "energy_bar": list(layout["energy_bar"])}
+        wider_layout["hp_bar"][2] += 50
+        wider_layout["energy_bar"][2] += 50
+        wider = resource_geometry(wider_layout)
+        self.assertEqual(original.icon_center, wider.icon_center)
+        self.assertEqual(original.icon_radius, wider.icon_radius)
+        for before, after in zip(original.level_shape, wider.level_shape):
+            self.assertAlmostEqual(after[0], before[0] + 50)
+            self.assertAlmostEqual(after[1], before[1])
 
     def test_partial_health_keeps_full_height_and_parallel_slanted_caps(self):
         bar = (360, 620, 372, 26)
@@ -131,10 +137,39 @@ class UiV2Tests(unittest.TestCase):
         anchor = (640, 720)
         scale = self.program.config.data["v2"]["style"]["hud_scale"]
         self.assertEqual(trail.start, self.program.config.actor_anchor("target"))
-        self.assertEqual(trail.icon, scaled_point(layout["ultimate_icon"][:2], anchor, scale))
-        x, y, width, height = layout["energy_bar"]
-        destination = (x + width * self.program.state.energy_ratio, y + height / 2)
+        geometry = resource_geometry(layout, self.program.config.data["v2"]["style"]["level_curve_radius_pixels"])
+        self.assertEqual(trail.icon, scaled_point(geometry.icon_center, anchor, scale))
+        destination = geometry.energy_tip(self.program.state.energy_ratio)
         self.assertEqual(trail.destination, scaled_point(destination, anchor, scale))
+
+    def test_resource_borders_share_diamond_vertices(self):
+        geometry = resource_geometry(self.program.config.data["v2"]["layout"])
+        x, y = geometry.icon_center
+        radius = geometry.icon_radius
+        self.assertEqual(geometry.hp_outline[0], (x, y - radius))
+        self.assertEqual(geometry.energy_outline[0], (x + radius, y))
+        self.assertEqual(geometry.energy_outline[-1], (x, y + radius))
+
+    def test_curved_level_touches_hp_without_entering_it(self):
+        geometry = resource_geometry(self.program.config.data["v2"]["layout"])
+        bottom = max(point[1] for point in geometry.hp_outline)
+        self.assertGreaterEqual(min(point[1] for point in geometry.level_shape), bottom)
+        self.assertIn(geometry.hp_outline[2], geometry.level_shape)
+        self.assertGreater(len(geometry.level_shape), 20)
+
+    def test_lock_border_scales_with_torso_and_keeps_its_center(self):
+        for amount in (0.75, 1, 1.5):
+            self.program.set_target_size(amount)
+            body = self.program.state.target_body
+            x, y, rx, ry = body_diamond((body.x, body.y, body.width, body.height), 1.8)
+            self.assertEqual((x, y), (body.x + body.width / 2, body.y + body.height / 2))
+            self.assertAlmostEqual(rx, 27 * amount)
+            self.assertAlmostEqual(ry, 24.3 * amount)
+
+    def test_counter_plaque_has_parallel_opposite_edges(self):
+        a, b, c, d = counter_plaque((50, 90), (200, 100), 8, 6)
+        self.assertEqual((b[0] - a[0], b[1] - a[1]), (c[0] - d[0], c[1] - d[1]))
+        self.assertEqual((d[0] - a[0], d[1] - a[1]), (c[0] - b[0], c[1] - b[1]))
 
 
 if __name__ == "__main__":

@@ -254,7 +254,8 @@
         "damage_number": "#FF625D",
         "energy": "#9DDFEA",
         "energy_fill": "#3B7180",
-        "counter_shadow": "#274653"
+        "counter_shadow": "#274653",
+        "counter_plaque": "#304650"
     },
     "labels": {
         "menu_title_first": "FERRIAL",
@@ -567,11 +568,6 @@
                 210,
                 140
             ],
-            "lock_diamond": [
-                333,
-                364,
-                35
-            ],
             "target_hp": [
                 344,
                 303,
@@ -580,9 +576,9 @@
             ],
             "hp_bar": [
                 364,
-                626,
+                635,
                 372,
-                26
+                16
             ],
             "hp_text": [
                 364,
@@ -593,11 +589,6 @@
                 670,
                 390,
                 26
-            ],
-            "ultimate_icon": [
-                320,
-                650,
-                34
             ],
             "dash_label": [
                 870,
@@ -615,10 +606,8 @@
                 810,
                 342
             ],
-            "energy_level_size": [
-                78,
-                34
-            ]
+            "ultimate_center_x": 320,
+            "energy_level_width_pixels": 78
         },
         "map_walls": [
             [
@@ -681,8 +670,11 @@
             "lock_thickness_pixels": 2,
             "lock_label_gap_pixels": 42,
             "ultimate_icon_scale": 0.62,
-            "counter_baseline_pixels": 3,
-            "counter_text_scale": 0.82
+            "counter_text_scale": 0.82,
+            "level_curve_radius_pixels": 12,
+            "lock_body_scale": 1.8,
+            "counter_plaque_height_pixels": 8,
+            "counter_plaque_slant_pixels": 6
         }
     }
 }

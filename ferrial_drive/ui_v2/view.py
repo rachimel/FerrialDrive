@@ -1,11 +1,11 @@
 """v2 도안의 사선·연결형 자원부·원근 카운터를 그린다."""
 
-from math import cos, hypot, pi, sin
+from math import atan2, cos, hypot, pi, sin
 
 from ferrial_drive.ui.components import Rect
 from ferrial_drive.ui.counter import CounterVisual
 from ferrial_drive.ui.view import UiView
-from .geometry import PerspectivePlane, energy_frame, slanted_meter
+from .geometry import PerspectivePlane, body_diamond, counter_plaque, quad_fill, resource_geometry, slanted_meter
 
 
 class UiV2View(UiView):
@@ -82,18 +82,21 @@ class UiV2View(UiView):
             for first, second in zip(points, points[1:] + points[:1]):
                 self.renderer.line(*first, *second, color, opacity)
 
-    def meter(self, key, ratio, color, opacity, trailing_ratio=None):
+    def meter(self, key, ratio, color, opacity, trailing_ratio=None, *, shape=None, border=None):
         """형상은 고정하고 채움만 자른다. 실제 자원 규칙은 계산하지 않는다."""
         r, c = self.renderer, self.config.colors
         x, y, width, height = self.layout[key]
         cut = min(18, height * 0.65)
-        points = slanted_meter((x, y, width, height))
+        points = slanted_meter((x, y, width, height)) if shape is None else shape
         self.polygon(points, c["panel_surface"], opacity * 0.7, filled=True)
         ratio = max(0.0, min(1.0, ratio))
         trail = ratio if trailing_ratio is None else max(ratio, min(1.0, trailing_ratio))
         for fill, fill_color in ((trail, c["health_loss"]), (ratio, c[color])):
             if fill > 0:
-                self.polygon(slanted_meter((x, y, width, height), fill), fill_color, opacity, filled=True)
+                self.polygon(quad_fill(points, fill), fill_color, opacity, filled=True)
+        if border is not None:
+            self.stroke(border + border[:1], self.ui_accent, opacity * 0.85, 1.5)
+            return
         self.stroke(((x - cut - 7, y - 4), (x + width - cut + 3, y - 4),
                      (x + width + 7, y + height + 2)), self.ui_accent, opacity * 0.8)
         self.stroke(((x + 5, y + height + 4), (x + width * 0.63, y + height + 4)),
@@ -117,64 +120,62 @@ class UiV2View(UiView):
                     r.rect(Rect(px - 2, py - 2, 4, 4), c["enemy" if contact.kind == "enemy" else "accent"], opacity)
         r.text("MAP", rect.x, rect.y + rect.height + 6, "hud_small", c["muted"], opacity)
 
-    def target(self, hud, opacity, offset_x):
+    def target(self, state, opacity, offset_x):
         r, c = self.renderer, self.config.colors
-        x, y, radius = self.layout["lock_diamond"]
+        hud, body = state.hud, state.target_body
+        if body is None:
+            return
+        x, y, rx, ry = body_diamond((body.x, body.y, body.width, body.height), self.style["lock_body_scale"])
         x += offset_x
-        points = ((x, y - radius), (x + radius, y), (x, y + radius), (x - radius, y))
+        points = ((x, y - ry), (x + rx, y), (x, y + ry), (x - rx, y))
         alpha = opacity * (1 if hud.target else 0.3)
         self.stroke(points + points[:1], self.ui_accent, alpha, self.style["lock_thickness_pixels"])
-        self.stroke(((x - radius - 9, y - 9), (x - 9, y - radius - 9), (x + 13, y - radius + 13)),
+        self.stroke(((x - rx - 9, y - 9), (x - 9, y - ry - 9), (x + 13, y - ry + 13)),
                      c["text"], alpha, 2)
-        angle = -pi / 4
+        angle = -atan2(ry, rx)
         def label_point(px, py):
-            return (x - radius - self.style["lock_label_gap_pixels"] + px * cos(angle) - py * sin(angle),
+            return (x - rx - self.style["lock_label_gap_pixels"] + px * cos(angle) - py * sin(angle),
                     y - 10 + px * sin(angle) + py * cos(angle))
         r.warped_text("LOCK ON" if hud.target else "NO TARGET", 0, 0, "target_heading",
                       c["text"], label_point, alpha)
         if hud.target:
-            r.text(hud.target.name, x, y + radius + 7, "target_name", c["text"], opacity,
+            r.text(hud.target.name, x, y + max(ry + 7, body.height * 2), "target_name", c["text"], opacity,
                    align="center", max_width=200)
 
     def resources(self, state, opacity, offset_x, player_trailing_ratio):
         r, c = self.renderer, self.config.colors
         hud = state.hud
-        self.meter("hp_bar", hud.player_health.ratio, "accent", opacity, player_trailing_ratio)
+        geometry = resource_geometry(self.layout, self.style["level_curve_radius_pixels"])
+        self.meter("hp_bar", hud.player_health.ratio, "accent", opacity, player_trailing_ratio,
+                   shape=geometry.hp_shape, border=geometry.hp_outline)
         x, y = self.layout["hp_text"]
         r.text(f"{hud.player_health.current:,.0f}", x, y, "v2_hp", c["text"], opacity)
         self.slanted_text("HP", x + r.text_size(f"{hud.player_health.current:,.0f}", "v2_hp")[0] + 9,
                           y + 20, "hud_small", c["muted"], opacity)
         x, y, width, height = self.layout["energy_bar"]
-        level_width, level_rise = self.layout["energy_level_size"]
-        join = x + width
-        outline = energy_frame((x, y, width, height), level_width, level_rise)
-        # 목 부분이 오목하므로 채움은 두 볼록 도형으로 나누고 외곽은 하나로 그린다.
-        seam = (join - 6, y + height + 4)
-        self.polygon((outline[0], outline[1], seam, outline[-1]), c["panel"], opacity * 0.96, filled=True)
-        self.polygon(outline[1:-1] + (seam,), c["panel"], opacity * 0.96, filled=True)
+        outline, channel = geometry.energy_outline, geometry.energy_channel
+        self.polygon(geometry.energy_body, c["panel"], opacity * 0.96, filled=True)
+        self.polygon(geometry.level_shape, c["panel"], opacity * 0.96, filled=True)
         self.stroke(outline + outline[:1], c["text"], opacity * 0.75, 1.5)
-        channel = ((x + 4, y + 2), (join - 13, y + 2),
-                   (join - 3, y + height - 1), (x + 16, y + height - 1))
         self.polygon(channel, c["energy"], opacity * 0.1, filled=True)
         if state.energy_ratio > 0:
-            with r.clip(Rect(x, y, width * state.energy_ratio, height)):
-                self.polygon(channel, c["energy_fill"], opacity, filled=True)
-            tip = x + width * state.energy_ratio
-            self.stroke(((tip - 6, y + 3), (tip + 1, y + height - 2)), c["energy"], opacity, 2)
-        self.stroke(((x + 19, y + height + 4), (join + level_width - 7, y + height + 4)),
+            filled = quad_fill(channel, state.energy_ratio)
+            self.polygon(filled, c["energy_fill"], opacity, filled=True)
+            self.stroke((filled[1], filled[2]), c["energy"], opacity, 2)
+        self.stroke((outline[-1], geometry.level_shape[-2]),
                      c["energy"] if state.overdrive else self.ui_accent, opacity, 2)
-        self.stroke(((join - 21, y - level_rise + 8), (join - 5, y + height - 2)),
-                     self.ui_accent, opacity * 0.6)
         label = "O V E R D R I V E" if state.overdrive else "E N E R G Y"
         label_width = r.text_size(label, "v2_meter_label")[0]
-        self.slanted_text(label, x + (width - label_width) / 2, y + 2,
+        label_center = sum(point[0] for point in channel) / 4
+        self.slanted_text(label, label_center - label_width / 2, y + 2,
                           "v2_meter_label", c["text"], opacity)
-        self.slanted_text("LV", join + 7, y - level_rise + 9, "hud_small", c["muted"], opacity, scale=0.8)
-        self.slanted_text(f"{state.energy_level:02}", join + 10, y - level_rise + 28,
-                          "v2_level", c["text"], opacity, lean=0.1)
-        cx, cy, radius = self.layout["ultimate_icon"]
-        diamond = ((cx, cy - radius - 4), (cx + radius + 4, cy),
-                   (cx, cy + radius + 4), (cx - radius - 4, cy))
+        self.slanted_text("LV", geometry.level_left + 12, geometry.level_top + 4,
+                          "hud_small", c["muted"], opacity, scale=0.65)
+        self.slanted_text(f"{state.energy_level:02}", geometry.level_left + 12, geometry.level_top + 15,
+                          "v2_level", c["text"], opacity, scale=0.85, lean=0.1)
+        cx, cy = geometry.icon_center
+        radius = geometry.icon_radius
+        diamond = ((cx, cy - radius), (cx + radius, cy), (cx, cy + radius), (cx - radius, cy))
         self.polygon(diamond, c["panel"], opacity * 0.8, filled=True)
         self.stroke(diamond + diamond[:1], c["text"], opacity * 0.9, 1.5)
         # 기본 도형으로 만든 비대칭 네 갈래 칼날. 원본 아이콘 아트는 별도 제작한다.
@@ -186,12 +187,9 @@ class UiV2View(UiView):
                           for point in ((-5, -5), (radius + 5, -10), (12, 4), (1, 18)))
             self.polygon(blade, c["energy_fill"], opacity * 0.75, filled=True)
             self.stroke(blade + blade[:1], c["text"], opacity * 0.9, 1.5)
-        self.stroke(((cx - radius - 5, cy + 12), (cx - 15, cy + radius + 7),
-                     (cx + radius + 14, cy + radius + 2)), self.ui_accent, opacity * 0.6)
-        self.stroke(((cx + 18, cy - radius - 5), (x - 20, y - 5)), self.ui_accent, opacity * 0.65)
         self.slanted_text(self.config.data["v2"]["labels"]["ultimate_key"], cx - radius + 5, cy - radius - 17,
                           "hud_small", c["text"], opacity)
-        self.slanted_text("LV.01", cx - 15, cy + radius + 8, "hud_small", c["muted"], opacity, scale=0.85)
+        self.slanted_text("LV.01", cx - 15, cy + radius + 3, "hud_small", c["muted"], opacity, scale=0.85)
         x, y = self.layout["dash_label"]
         alpha = opacity * (1 if state.dash_ready else 0.25)
         self.stroke(((x + 16, y - 24), (x + 25, y - 43), (x + 32, y - 39), (x + 21, y - 18),
@@ -250,6 +248,22 @@ class UiV2View(UiView):
                 self.stroke(segment, color, alpha * 0.5, 2)
                 self.stroke(segment, self.config.colors["text"], alpha)
 
+    def counter_base(self, plane, width, ink_bottom, opacity):
+        thickness = self.style["counter_plaque_height_pixels"]
+        slant = self.style["counter_plaque_slant_pixels"]
+        left, right = plane.point(-14, ink_bottom - 1), plane.point(width + 3, ink_bottom - 1)
+        color = self.config.colors["counter_plaque"]
+        self.polygon(counter_plaque(left, right, thickness, slant), color, opacity, filled=True)
+        distance = hypot(right[0] - left[0], right[1] - left[1])
+        ux, uy = (right[0] - left[0]) / distance, (right[1] - left[1]) / distance
+        cursor = left
+        for index, (length, size, alpha) in enumerate(((13, 0.85, 0.55), (10, 0.65, 0.3), (7, 0.45, 0.12))):
+            end = (cursor[0] - ux * 5, cursor[1] - uy * 5 - index * 0.8)
+            start = (end[0] - ux * length, end[1] - uy * length)
+            self.polygon(counter_plaque(start, end, thickness * size, slant * size),
+                         color, opacity * alpha, filled=True)
+            cursor = start
+
     def perspective_counter(self, visual, role, label, y, opacity):
         """회전 숫자를 평면에서 자르고 한 투영면에 올려 원근을 유지한다."""
         r, c = self.renderer, self.config.colors
@@ -267,7 +281,9 @@ class UiV2View(UiView):
         origin = right - width - height * settings["lean"] / 2 - 2
         plane = PerspectivePlane(origin, y, width, height, settings["depth"], settings["lean"], settings["slope"])
         shadow = lambda px, py: (plane.point(px, py)[0] + 2, plane.point(px, py)[1] + 3)
-        viewport = Rect(0, 0, width, height)
+        ink_bottom = r.digit_ink_bottom(role) * scale
+        viewport = Rect(0, 0, width, ink_bottom)
+        self.counter_base(plane, width, ink_bottom, opacity)
         x = 0
         for before, after, slot_width in zip(old, new, widths):
             moving = visual.moving and before != after and after != ","
@@ -281,20 +297,11 @@ class UiV2View(UiView):
                     r.warped_text(char, left, top, role, color, project, opacity * alpha,
                                   scale_x=scale, scale_y=scale, clip_rect=viewport)
             x += slot_width * scale
-        # 기울어진 받침선과 짧은 두 꼬리로 도안의 속도 방향을 이어 준다.
-        rail_y = height + 8
-        rail = (plane.point(-24, rail_y - 5), plane.point(-12, rail_y),
-                plane.point(width - 6, rail_y), plane.point(width + 3, rail_y + 5))
-        self.stroke(rail, self.ui_accent, opacity * 0.9, self.style["counter_baseline_pixels"])
-        for tail in (-42, -32):
-            points = tuple(plane.point(px, py) for px, py in
-                           ((tail, rail_y - 12), (tail + 5, rail_y - 11),
-                            (tail + 8, rail_y - 1), (tail + 3, rail_y - 2)))
-            self.stroke(points + points[:1], self.ui_accent, opacity * 0.65)
         label_text = self.config.labels[label]
         label_role = f"{label}_label"
         label_width = r.text_size(label_text, label_role)[0]
-        r.warped_text(label_text, width - label_width - 6, height + 16,
+        r.warped_text(label_text, width - label_width - 6,
+                      ink_bottom + self.style["counter_plaque_height_pixels"] + 5,
                       label_role, c["muted"], plane.point, opacity)
 
     def combat(self, state, damage_visuals=(), opacity=1, offset_x=0, *,
@@ -307,8 +314,11 @@ class UiV2View(UiView):
         with r.scaled(scale, self.layout["minimap"][:2]):
             self.minimap(hud, opacity)
         self.radar(hud.radar_contacts, opacity)
-        with r.scaled(scale, self.config.actor_anchor("target")):
-            self.target(hud, opacity, offset_x)
+        body = state.target_body
+        target_anchor = ((body.x + body.width / 2, body.y + body.height / 2)
+                         if body is not None else self.config.actor_anchor("target"))
+        with r.scaled(scale, target_anchor):
+            self.target(state, opacity, offset_x)
             if hud.target:
                 self.meter("target_hp", hud.target.health.ratio, "enemy", opacity, target_trailing_ratio)
             else:
