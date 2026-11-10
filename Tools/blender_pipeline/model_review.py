@@ -40,12 +40,20 @@ def capture_fixture(config):
     if not frames or any(type(frame) is not int for frame in frames):
         raise ValueError('검토 프레임은 비어 있지 않은 정수 배열이어야 한다.')
     points = []
+    frame_bounds = {}
     try:
         for frame in frames:
             scene.frame_set(frame)
+            frame_points = []
             for obj in review_meshes(config):
                 evaluated = obj.evaluated_get(bpy.context.evaluated_depsgraph_get())
-                points.extend(evaluated.matrix_world @ Vector(c) for c in evaluated.bound_box)
+                frame_points.extend(evaluated.matrix_world @ Vector(c) for c in evaluated.bound_box)
+            points.extend(frame_points)
+            if config.get('per_frame_framing'):
+                low = Vector([min(p[i] for p in frame_points) for i in range(3)])
+                high = Vector([max(p[i] for p in frame_points) for i in range(3)])
+                center = (low+high)/2
+                frame_bounds[str(frame)] = {'center': list(center), 'radius': max((p-center).length for p in frame_points)}
     finally:
         scene.frame_set(original_frame)
     low = Vector([min(p[i] for p in points) for i in range(3)])
@@ -68,6 +76,8 @@ def capture_fixture(config):
     return {'center': list(center), 'radius': radius, 'frames': frames, 'views': views,
             'sizes': sizes, 'samples': config.get('samples', 16), 'seed': 0,
             'view_transform': 'AgX', 'exposure': 0.0, 'gamma': 1.0,
+            'engine': config.get('engine', 'CYCLES'), 'frame_bounds': frame_bounds,
+            'disable_bevel': config.get('disable_bevel', False),
             'lights': [{'direction': direction, 'power': power} for direction, power in
                        [([3, -4, 5], 500), ([-3, 2, 4], 350), ([1, 2, -4], 250)]]}
 
@@ -86,11 +96,26 @@ def render_review(config, directory, fixture=None):
     for obj in scene.objects:
         if obj.type == 'LIGHT' or (obj.type == 'MESH' and obj not in meshes):
             obj.hide_render = True
-    scene.render.engine = 'CYCLES'
-    scene.cycles.samples = fixture['samples']
-    scene.cycles.seed = fixture['seed']
-    scene.cycles.use_animated_seed = False
-    scene.cycles.use_denoising = True
+    scene.render.engine = fixture.get('engine', 'CYCLES')
+    if scene.render.engine == 'CYCLES':
+        scene.cycles.samples = fixture['samples']
+        scene.cycles.seed = fixture['seed']
+        scene.cycles.use_animated_seed = False
+        scene.cycles.use_denoising = True
+    elif scene.render.engine == 'BLENDER_WORKBENCH':
+        scene.display.shading.light = 'STUDIO'
+        scene.display.shading.color_type = 'MATERIAL'
+        scene.display.shading.show_shadows = True
+        scene.display.shading.show_cavity = True
+        scene.display.shading.cavity_type = 'BOTH'
+        scene.display.render_aa = '8'
+    else:
+        raise ValueError('검토 렌더는 CYCLES 또는 BLENDER_WORKBENCH를 사용한다.')
+    if fixture.get('disable_bevel'):
+        for obj in meshes:
+            for modifier in obj.modifiers:
+                if modifier.type == 'BEVEL':
+                    modifier.show_render = False
     scene.render.film_transparent = True
     scene.render.resolution_percentage = 100
     scene.render.image_settings.file_format = 'PNG'
@@ -121,6 +146,10 @@ def render_review(config, directory, fixture=None):
     evidence = []
     for frame in fixture['frames']:
         scene.frame_set(frame)
+        bounds = fixture.get('frame_bounds', {}).get(str(frame))
+        if bounds:
+            center, radius = Vector(bounds['center']), bounds['radius']
+            camera.data.ortho_scale = radius*2.2
         for name, direction in fixture['views']:
             camera.location = center + Vector(direction).normalized() * radius * 4
             camera.rotation_euler = (center - camera.location).to_track_quat('-Z', 'Y').to_euler()
