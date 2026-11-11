@@ -1,7 +1,8 @@
 """흡수 Trail·패널 스캔·대화창 개폐의 시간 상태. 입력·렌더러와 분리한다."""
 
 from dataclasses import dataclass
-from math import cos, floor, isfinite, tau
+from math import cos, isfinite, tau
+from bisect import bisect_right
 from functools import lru_cache
 from random import Random
 
@@ -13,20 +14,34 @@ def _brightness_sample(index, seed):
     return Random(index + seed * 65537).random()
 
 
-def subtle_flicker(elapsed_seconds, *, minimum_opacity=0.94, interval_seconds=0.6, seed=1):
-    """작은 밝기 범위의 샘플을 부드럽게 연결한다. 글자를 끄지 않는다."""
-    if (not all(map(isfinite, (elapsed_seconds, minimum_opacity, interval_seconds)))
-            or elapsed_seconds < 0 or not 0 <= minimum_opacity <= 1 or interval_seconds <= 0):
+@lru_cache(maxsize=32)
+def _flicker_schedule(seed, minimum_seconds, maximum_seconds):
+    random = Random(seed * 193)
+    times = [0]
+    for _ in range(32):
+        times.append(times[-1] + random.uniform(minimum_seconds, maximum_seconds))
+    return tuple(times)
+
+
+def subtle_flicker(elapsed_seconds, *, minimum_opacity=0.88, interval_min_seconds=1.5,
+                   interval_max_seconds=2.5, dip_seconds=0.08, seed=1):
+    """평소 밝기를 유지하다가 간격을 두고 한 번씩 짧게 어둡게 한다."""
+    if (not all(map(isfinite, (elapsed_seconds, minimum_opacity, interval_min_seconds, interval_max_seconds, dip_seconds)))
+            or elapsed_seconds < 0 or not 0 <= minimum_opacity <= 1
+            or not 0 < dip_seconds < interval_min_seconds <= interval_max_seconds):
         raise ValueError("밝기 시간·범위·간격이 유효하지 않다.")
-    position = elapsed_seconds / interval_seconds
-    index = floor(position)
-    amount = position - index
+    times = _flicker_schedule(seed, interval_min_seconds, interval_max_seconds)
+    position = (elapsed_seconds + _brightness_sample(0, seed) * times[-1]) % times[-1]
+    elapsed = position - times[bisect_right(times, position) - 1]
+    if elapsed >= dip_seconds:
+        return 1
+    edge_seconds = min(0.012, dip_seconds / 4)
+    amount = min(1, elapsed / edge_seconds, (dip_seconds - elapsed) / edge_seconds)
     amount = amount * amount * (3 - 2 * amount)
-    a, b = _brightness_sample(index, seed), _brightness_sample(index + 1, seed)
-    return minimum_opacity + (1 - minimum_opacity) * (a + (b - a) * amount)
+    return 1 - (1 - minimum_opacity) * amount
 
 
-def breathing_opacity(elapsed_seconds, *, period_seconds=2.4, minimum_opacity=0.82):
+def breathing_opacity(elapsed_seconds, *, period_seconds=2.4, minimum_opacity=0.65):
     if (not all(map(isfinite, (elapsed_seconds, period_seconds, minimum_opacity)))
             or elapsed_seconds < 0 or period_seconds <= 0 or not 0 <= minimum_opacity <= 1):
         raise ValueError("호흡 시간·주기·밝기 범위가 유효하지 않다.")

@@ -656,12 +656,14 @@
         ],
         "style": {
             "text_flicker": {
-                "minimum_opacity": 0.94,
-                "interval_seconds": 0.6
+                "minimum_opacity": 0.88,
+                "interval_min_seconds": 1.5,
+                "interval_max_seconds": 2.5,
+                "dip_seconds": 0.08
             },
             "energy_breathing": {
                 "period_seconds": 2.4,
-                "minimum_opacity": 0.82
+                "minimum_opacity": 0.65
             },
             "counter_message_motion": {
                 "enter_seconds": 0.06,

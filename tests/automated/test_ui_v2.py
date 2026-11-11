@@ -30,18 +30,22 @@ from ferrial_drive.ui_v2.panels import (build_panel_geometry, build_scanlines,
 
 
 class UiV2Tests(unittest.TestCase):
-    def test_subtle_text_brightness_is_bounded_continuous_and_deterministic(self):
+    def test_text_brightness_has_short_separated_dips_and_is_deterministic(self):
         for seed in (1, 4, 7, 10):
             samples = [subtle_flicker(index / 60, seed=seed) for index in range(600)]
-            self.assertTrue(all(0.94 <= value <= 1 for value in samples))
-            self.assertLess(max(abs(a - b) for a, b in zip(samples, samples[1:])), 0.003)
+            self.assertTrue(all(0.88 <= value <= 1 for value in samples))
+            self.assertLess(sum(value < 1 for value in samples), 60)
+            self.assertGreater(sum(value < 1 for value in samples), 0)
+            starts = [index for index in range(1, len(samples)) if samples[index] < 1 and samples[index - 1] == 1]
+            self.assertTrue(all(1.5 - 1 / 60 <= (b - a) / 60 <= 2.5 + 1 / 60 for a, b in zip(starts, starts[1:])))
+            for index in starts:
+                self.assertTrue(all(value == 1 for value in samples[index + 5:index + 20]))
             self.assertEqual(samples[60], subtle_flicker(1, seed=seed))
-            self.assertAlmostEqual(subtle_flicker(0.6 - 1e-8, seed=seed), subtle_flicker(0.6 + 1e-8, seed=seed))
         self.assertEqual(subtle_flicker(0.3, minimum_opacity=1), 1)
 
     def test_energy_breathing_period_and_indicator_transition_reversal(self):
         self.assertAlmostEqual(breathing_opacity(0), 1)
-        self.assertAlmostEqual(breathing_opacity(1.2), 0.82)
+        self.assertAlmostEqual(breathing_opacity(1.2), 0.65)
         self.assertAlmostEqual(breathing_opacity(2.4), 1)
         indicator = IndicatorFade()
         indicator.request(True)
@@ -77,7 +81,7 @@ class UiV2Tests(unittest.TestCase):
         with patch.object(view, "counter_base") as base:
             view.perspective_counter(CounterVisual(98, 98, 1, 1), "combo_number", "combo", 178, 1)
         self.assertEqual(base.call_args.args[-1], 1)
-        self.assertTrue(all(0.94 <= call.args[6] <= 1 for call in renderer.warped_text.call_args_list))
+        self.assertTrue(all(0.88 <= call.args[6] <= 1 for call in renderer.warped_text.call_args_list))
 
     def test_hp_flash_keeps_each_real_damage_interval_and_does_not_restart_older_hits(self):
         effect = HealthDamageFlash()
