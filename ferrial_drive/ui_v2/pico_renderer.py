@@ -3,7 +3,7 @@
 from contextlib import contextmanager
 from collections import OrderedDict
 from ctypes import byref, c_float, c_int, c_ubyte, memmove, string_at
-from math import ceil, exp, floor, isfinite, log2
+from math import ceil, exp, floor, hypot, isfinite, log2
 from random import Random
 
 from ferrial_drive.ui.pico_renderer import PicoRenderer
@@ -18,6 +18,9 @@ class PicoV2Renderer(PicoRenderer):
         self.grain_textures = OrderedDict()
         self.neon_textures = OrderedDict()
         self.neon_font_sizes = dict(font_sizes)
+        self.motion_texture = None
+        self.motion_size = None
+        self.motion_sampler = None
         super().__init__(font_paths, font_sizes)
 
     def draw_transform(self):
@@ -380,7 +383,73 @@ class PicoV2Renderer(PicoRenderer):
             raise
         return texture
 
+    @contextmanager
+    def directional_blur(self, bounds, displacement, strength, samples=33):
+        """현재 카드 한 장을 같은 화면 좌표에 렌더한 뒤 연속 방향성 필터로 합성한다."""
+        from ferrial_drive.rendering.canvas import renderer_info
+        if strength <= 0 or hypot(*displacement) < 0.01 or renderer_info(self.pico).name != 'opengl':
+            yield
+            return
+        p = self.pico
+        scale, viewport_values, output_size, clipping = self.draw_transform()
+        if self.motion_sampler is None:
+            from ferrial_drive.rendering.directional_blur import DirectionalBlurSampler
+            self.motion_sampler = DirectionalBlurSampler(p)
+        if self.motion_size != output_size:
+            if self.motion_texture:
+                p.SDL_DestroyTexture(self.motion_texture)
+                self.motion_texture = None
+            texture = p.SDL_CreateTexture(p.renderer, p.SDL_PIXELFORMAT_RGBA8888,
+                                          p.SDL_TEXTUREACCESS_TARGET, *output_size)
+            if not texture:
+                raise RuntimeError('모션 블러 대상 텍스처 생성 실패')
+            p.SDL_SetTextureScaleMode(texture, p.SDL_ScaleModeLinear)
+            self.motion_texture, self.motion_size = texture, output_size
+        target = p.SDL_GetRenderTarget(p.renderer)
+        viewport = p.SDL_Rect(*viewport_values)
+        clip = p.SDL_Rect(*clipping) if clipping is not None else None
+        blend = c_int()
+        rgba = [c_ubyte() for _ in range(4)]
+        p.SDL_GetRenderDrawBlendMode(p.renderer, byref(blend))
+        p.SDL_GetRenderDrawColor(p.renderer, *(byref(value) for value in rgba))
+        try:
+            if p.SDL_SetRenderTarget(p.renderer, self.motion_texture) != 0:
+                raise RuntimeError('모션 블러 대상 연결 실패')
+            p.SDL_SetRenderDrawColor(p.renderer, 0, 0, 0, 0)
+            p.SDL_RenderClear(p.renderer)
+            p.SDL_RenderSetScale(p.renderer, *scale)
+            p.SDL_RenderSetViewport(p.renderer, byref(viewport))
+            p.SDL_RenderSetClipRect(p.renderer, byref(clip) if clip is not None else None)
+            yield
+        finally:
+            p.SDL_SetRenderTarget(p.renderer, target)
+            p.SDL_RenderSetScale(p.renderer, *scale)
+            p.SDL_RenderSetViewport(p.renderer, byref(viewport))
+            p.SDL_RenderSetClipRect(p.renderer, byref(clip) if clip is not None else None)
+            p.SDL_SetRenderDrawBlendMode(p.renderer, blend.value)
+            p.SDL_SetRenderDrawColor(p.renderer, *(value.value for value in rgba))
+        sx, sy = scale
+        vx, vy, _, _ = viewport_values
+        pad_x, pad_y = abs(displacement[0]) + 8, abs(displacement[1]) + 8
+        left = max(0, floor((bounds.x - pad_x + vx) * sx))
+        top = max(0, floor((bounds.y - pad_y + vy) * sy))
+        right = min(output_size[0], ceil((bounds.x + bounds.width + pad_x + vx) * sx))
+        bottom = min(output_size[1], ceil((bounds.y + bounds.height + pad_y + vy) * sy))
+        if right <= left or bottom <= top:
+            return
+        source = p.SDL_Rect(left, top, right - left, bottom - top)
+        destination = p.SDL_FRect(left / sx - vx, top / sy - vy, source.w / sx, source.h / sy)
+        self.motion_sampler.draw_blurred(self.motion_texture, output_size, source, destination,
+                                         (displacement[0] * sx, displacement[1] * sy), strength, samples)
+
     def close(self):
+        if self.motion_sampler is not None:
+            self.motion_sampler.close()
+            self.motion_sampler = None
+        if self.motion_texture:
+            self.pico.SDL_DestroyTexture(self.motion_texture)
+            self.motion_texture = None
+            self.motion_size = None
         for texture, _, _, _ in self.neon_textures.values():
             self.pico.SDL_DestroyTexture(texture)
         self.neon_textures.clear()

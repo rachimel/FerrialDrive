@@ -817,10 +817,10 @@
             "weapon_card_cut_pixels": 18,
             "weapon_depth_offset_pixels": 22,
             "weapon_swap_blur": {
-                "samples": 5,
-                "shutter_seconds": 0.045,
-                "opacity": 0.5,
-                "max_length_pixels": 12
+                "samples": 33,
+                "shutter_seconds": 0.06,
+                "opacity": 0.75,
+                "max_length_pixels": 16
             },
             "resource_label_gap_pixels": 4,
             "overdrive_width_ratio": 0.75,

@@ -149,29 +149,33 @@ class UiV2Tests(unittest.TestCase):
         self.assertEqual([call.args[0] for call in renderer.scaled.call_args_list],
                          [1, view.style["inactive_weapon_scale"]])
 
-    def test_weapon_swap_blur_follows_both_directions_is_bounded_and_stops(self):
+    def test_weapon_swap_blur_filters_each_card_once_in_opposite_directions_and_stops(self):
         renderer = Mock()
-        renderer.clip.side_effect = lambda *args: nullcontext()
+        renderer.scaled.side_effect = lambda *args: nullcontext()
+        renderer.directional_blur.side_effect = lambda *args: nullcontext()
+        renderer.text_size.return_value = (20, 18)
         view = UiV2View(self.program.config, renderer)
         for _ in range(2):
             self.program.perform("swap")
             self.program.update(self.program.weapon_swap.duration_seconds / 2)
             current = self.program.weapon_swap.visual.weight_before()
-            with patch.object(view, "weapon_cards") as cards, patch.object(view, "panel_layer") as tabs:
-                view.weapons(self.program.state.hud, 1, 0, weapon_swap_visual=self.program.weapon_swap.visual)
-            calls = cards.call_args_list
-            self.assertEqual(len(calls), view.style["weapon_swap_blur"]["samples"] + 1)
-            self.assertEqual(tabs.call_count, 2)
-            self.assertAlmostEqual(sum(call.args[2] for call in calls), 1)
-            self.assertAlmostEqual(calls[-1].kwargs["ranged_weight"], current)
-            self.assertTrue(any(call.kwargs["ranged_weight"] != current for call in calls[:-1]))
-            for call in calls:
-                distance = abs(call.kwargs["ranged_weight"] - current) * view.style["weapon_depth_offset_pixels"]
-                self.assertLessEqual(distance, view.style["weapon_swap_blur"]["max_length_pixels"] + 1e-8)
-            self.program.update(self.program.weapon_swap.duration_seconds)
-            with patch.object(view, "weapon_cards") as cards, patch.object(view, "panel_layer"):
+            renderer.directional_blur.reset_mock()
+            with patch.object(view, "weapon_cards", wraps=view.weapon_cards) as cards, patch.object(view, "panel_layer"):
                 view.weapons(self.program.state.hud, 1, 0, weapon_swap_visual=self.program.weapon_swap.visual)
             cards.assert_called_once()
+            self.assertAlmostEqual(cards.call_args.kwargs["ranged_weight"], current)
+            calls = renderer.directional_blur.call_args_list
+            self.assertEqual(len(calls), 2)
+            self.assertLess(calls[0].args[1][0] * calls[1].args[1][0], 0)
+            for call in calls:
+                self.assertLessEqual(abs(call.args[1][0]), view.style["weapon_swap_blur"]["max_length_pixels"])
+                self.assertEqual(call.args[3], 33)
+            self.program.update(self.program.weapon_swap.duration_seconds)
+            renderer.directional_blur.reset_mock()
+            with patch.object(view, "weapon_cards", wraps=view.weapon_cards) as cards, patch.object(view, "panel_layer"):
+                view.weapons(self.program.state.hud, 1, 0, weapon_swap_visual=self.program.weapon_swap.visual)
+            cards.assert_called_once()
+            renderer.directional_blur.assert_not_called()
 
     def test_camera_projection_and_mouse_auto_target_share_world_coordinates(self):
         self.program.mouse = (1000, 360)
