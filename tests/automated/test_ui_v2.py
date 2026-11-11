@@ -23,7 +23,7 @@ from ferrial_drive.ui_v2.geometry import (PerspectivePlane, body_diamond, counte
                                          resource_geometry, scaled_point, slanted_meter, tapered_stroke_mesh)
 from ferrial_drive.ui.counter import CounterVisual
 from ferrial_drive.ui_v2.view import UiV2View
-from ferrial_drive.ui_v2.panels import build_panel_geometry
+from ferrial_drive.ui_v2.panels import build_panel_geometry, build_scanlines
 
 
 class UiV2Tests(unittest.TestCase):
@@ -209,6 +209,35 @@ class UiV2Tests(unittest.TestCase):
             rail_x = [x for polygon in parts["upper_rail"].polygons for x, _ in polygon]
             fragment_x = [x for polygon in parts["upper_fragment_0"].polygons for x, _ in polygon]
             self.assertGreater(min(fragment_x), max(rail_x))
+
+    def test_scanlines_are_clipped_to_slanted_panel_surface(self):
+        style = self.program.config.data["v2"]["style"]
+        geometry = build_panel_geometry((20, 20, 240, 160), style["panel_cut_pixels"],
+                                        style["panel_frame"], style["panel_border"])
+        strips = build_scanlines(geometry.surface, 4, 1)
+        self.assertTrue(strips)
+        for strip in strips:
+            self.assertLessEqual(max(y for _, y in strip) - min(y for _, y in strip), 1)
+            for x, y in strip:
+                for a, b in zip(geometry.surface, geometry.surface[1:] + geometry.surface[:1]):
+                    side = (b[0] - a[0]) * (y - a[1]) - (b[1] - a[1]) * (x - a[0])
+                    self.assertGreaterEqual(side, -1e-8)
+        for spacing, thickness in ((0, 1), (4, 0), (4, 5)):
+            with self.assertRaises(ValueError):
+                build_scanlines(geometry.surface, spacing, thickness)
+
+    def test_minimap_has_no_border_and_scanlines_precede_contents(self):
+        renderer = Mock()
+        renderer.clip.side_effect = lambda *args: nullcontext()
+        view = UiV2View(self.program.config, renderer)
+        order = Mock()
+        with patch.object(view, "panel_surface", order.surface), patch.object(view, "panel_scanlines", order.scanlines), \
+                patch.object(view, "panel_border", order.border):
+            order.attach_mock(renderer.line, "map_content")
+            view.minimap(self.program.state.hud, 1)
+        order.border.assert_not_called()
+        self.assertEqual([call[0] for call in order.mock_calls[:3]], ["surface", "scanlines", "map_content"])
+        self.assertAlmostEqual(order.surface.call_args.kwargs["fill_opacity"], 0.42)
 
     def test_pause_blocks_sample_shortcuts(self):
         self.program.pico = SimpleNamespace(SDL_WINDOWEVENT=1, SDL_KEYDOWN=2,

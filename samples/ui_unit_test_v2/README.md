@@ -20,7 +20,8 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 - `v2.style.counters`: HIT/DAMAGE의 원근 `depth`(0~1)·기울기 `lean`/`slope`·고정 `text_scale`·원근 기준 폭 `perspective_width_pixels`·오른쪽 여백. 기준 폭은 최대 표시 폭이 아니다. 숫자를 축소하지 않고 받침판과 잔상 조각을 왼쪽으로 확장한다. 오른쪽 기준 투영은 자릿수와 무관하게 유지한다.
 - `v2.style.panel_cut_pixels`·`surface_opacity`: 사선 외곽과 면의 기본 표현. 기존 금속 사각 패널을 사용하지 않는다.
 - `v2.style.panel_border`: 기본/좌상단·우하단 두께 `thin_width_pixels`·`corner_width_pixels`는 1/5px다. `corner_hold_pixels=3`까지 최대 두께를 유지한 뒤 직선으로 가늘어진다. 일반 패널의 변화 구간은 `reach_pixels=180`이며 짧은 변에서는 길이에 맞춘다. 곡선 보간은 제거했다.
-- `v2.style.panel_frame`: 미니맵·대화창 레퍼런스 형상. `bevel_pixels`·`corner_join_pixels`는 꺾임, `upper/lower_side_ratio`·`upper/lower_rail_ratio`는 세로/가로선 길이, `fragment_*`는 분리된 사선 조각을 조절한다. 긴 세로 테두리를 제거하고 좌상단·우하단에 짧은 꺾임만 둔다.
+- `v2.style.panel_frame`: 통신 패널 레퍼런스 테두리·공통 면 형상. `bevel_pixels`·`corner_join_pixels`는 꺾임, `upper/lower_side_ratio`·`upper/lower_rail_ratio`는 세로/가로선 길이, `fragment_*`는 분리된 사선 조각을 조절한다. 미니맵은 테두리를 그리지 않는다.
+- `v2.style.panel_scanlines`: 배경 불투명도 `surface_opacity`는 맵 0.42·통신 0.6, 선 불투명도 `line_opacity`는 0.07/0.08이다. `spacing_pixels=4`·`thickness_pixels=1`의 고정 가로 패턴을 사선 면 안에만 그린다. 패널별 `line_opacity=0`으로 Scanline을 끈다. 글자·지형·표식의 투명도에는 적용하지 않는다.
 - `panel_border.filter_samples=2`: 공통 패널 면/테두리를 2배로 그린 뒤 선형 필터로 축소한다. 2~4의 정수를 받으며 최대 32개의 도형 텍스처를 재사용한다. 게임·Pico2D 원본은 변경하지 않는다.
 - `v2.layout.dialogue`·`v2.style.dialogue_padding_pixels`: 대화창 위치·크기와 안쪽 여백. 위쪽 표적/HUD 일부를 덮는다. 게임에서는 `DialogueInfo`를 표시 상태로 공급한다.
 - 최종 배치: 미니맵 (20,20), 논리 크기 240×160·표시 배율 0.9. 대화창 (360,28), 560×130. 미니맵의 화면 여백이 조금 더 작다.
@@ -69,6 +70,7 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 
 ## 검증
 
+- 이번 맵/통신 Scanline 변경: UI 85개·획득 7개, 총 92개 통과. 실제 사선 면 안으로 줄무늬 자르기·맵 테두리 미표시·배경→줄무늬→내용 순서를 확인했다. SDL dummy에서 기본 전투/상단 표적/Scanline 끄기/격자 배경 투명도 비교의 4개 상태를 렌더하고 기본 화면과 투명도 비교 이미지를 열어 검토했다. 고정 패턴이며 스캔 이동 애니메이션은 구현하지 않았다.
 - 이번 레퍼런스/등장 효과 준비 변경: UI 83개와 획득 7개, 총 90개 통과. 면만 그리기·테두리 한 조각만 그리기·조각별 표시 투명도·짧은 세로 꺾임·분리된 조각을 확인했다. SDL dummy에서 면만/테두리만/좌상단 꺾임만/기본 전투/위쪽 표적/대화창 없음의 6개 상태를 렌더했다. 등장 효과의 시간·순서·재생은 미구현이며 실제 창 조작·수정본 외관 승인과 구분한다.
 - 이번 꼭짓점/3기/R 변경: UI 81개와 표적 획득 7개, 합계 88개 통과. 각도/거리·근접각 동률·거리 경계·우클릭 확대·후보 소진/없음·적별 HP·곡선/3px 유지·무기 수평 표현을 확인했다. 실제 SDL 필터의 중간 밝기 픽셀·이동/투명도 캐시 재사용·예외 시 렌더 상태 복원·종료 해제도 확인했다. Pico2D/SDL dummy에서 좌/우/상단 선택·대화창 유무·후보 없음·도움말·일시정지·타이틀의 8개 상태를 렌더했다. R/D/T/F1/Esc 합성 입력과 정지 중 R 차단도 확인했다. 우/상단 가림 전후/도움말 이미지를 직접 열어 겹침과 표시 순서를 확인했다.
 - 아래 검증은 이전 변경 당시 결과다. 이번 직접 창 조작·Runner 드롭·사용자 외관 승인은 아직 확인하지 않았다.

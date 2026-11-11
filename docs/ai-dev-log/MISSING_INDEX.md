@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [UI v2 맵·통신 반투명 Scanline](2026-11-11-ui-v2-transparent-scanlines.md): TIME(scope). 현재 대화의 맵 테두리 구분·맵/통신 투명도·Scanline 시험 적용 요청의 정확한 시각을 확인한다.
+
 - [UI v2 레퍼런스 패널·테두리 분리](2026-11-11-ui-v2-reference-panel-parts.md): TIME(scope). 현재 대화의 패널 레퍼런스·등장 효과를 위한 테두리 분리·곡선 두께 제거 요청의 정확한 시각을 확인한다.
 
 - [UI v2 꼭짓점 테두리·적 3기·R 획득](2026-11-11-ui-v2-corners-targeting.md): TIME(scope). 현재 대화의 꼭짓점/3px/필터·적 3기·대화창 가림/여백·무기 평면화·R 요구사항과 배치 확인 응답의 정확한 시각을 확인한다.

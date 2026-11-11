@@ -7,7 +7,7 @@ from ferrial_drive.ui.counter import CounterVisual
 from ferrial_drive.ui.view import UiView
 from .geometry import (PerspectivePlane, body_diamond, counter_plaque, quad_fill,
                        resource_geometry, slanted_meter, tapered_stroke_mesh)
-from .panels import build_panel_geometry
+from .panels import build_panel_geometry, build_scanlines
 
 
 class UiV2View(UiView):
@@ -84,17 +84,33 @@ class UiV2View(UiView):
                 self.renderer.filtered_polygons(part.polygons, self.ui_accent, alpha,
                                                 self.style["panel_border"]["filter_samples"])
 
-    def framed_panel(self, rect, opacity, *, fill_opacity=None):
+    def panel_scanlines(self, geometry, opacity, settings):
+        """배경 위에 고정 Scanline을 그린다. 글자·지형·표식은 이후 그린다."""
+        alpha = opacity * settings["line_opacity"]
+        if alpha <= 0:
+            return
+        scanline = self.style["panel_scanlines"]
+        strips = build_scanlines(geometry.surface, scanline["spacing_pixels"], scanline["thickness_pixels"])
+        if strips:
+            self.renderer.filtered_polygons(strips, self.ui_accent, alpha,
+                                            self.style["panel_border"]["filter_samples"])
+
+    def framed_panel(self, rect, opacity, *, fill_opacity=None, draw_border=True, scanline_settings=None):
         geometry = build_panel_geometry(rect, self.style["panel_cut_pixels"],
                                         self.style["panel_frame"], self.style["panel_border"])
         self.panel_surface(geometry, opacity, fill_opacity=fill_opacity)
-        self.panel_border(geometry.border_parts, opacity)
+        if scanline_settings is not None:
+            self.panel_scanlines(geometry, opacity, scanline_settings)
+        if draw_border:
+            self.panel_border(geometry.border_parts, opacity)
 
     def dialogue(self, info, opacity):
         if info is None:
             return
         x, y, width, height = self.layout["dialogue"]
-        self.framed_panel((x, y, width, height), opacity, fill_opacity=1)
+        settings = self.style["panel_scanlines"]["dialogue"]
+        self.framed_panel((x, y, width, height), opacity, fill_opacity=settings["surface_opacity"],
+                          scanline_settings=settings)
         padding_x, padding_y = self.style["dialogue_padding_pixels"]
         self.renderer.text(info.speaker, x + padding_x, y + padding_y, "target_name",
                            self.ui_accent, opacity)
@@ -166,7 +182,10 @@ class UiV2View(UiView):
     def minimap(self, hud, opacity):
         r, c = self.renderer, self.config.colors
         rect = Rect(*self.layout["minimap"])
-        self.framed_panel((rect.x, rect.y, rect.width, rect.height), opacity, fill_opacity=0.85)
+        settings = self.style["panel_scanlines"]["minimap"]
+        self.framed_panel((rect.x, rect.y, rect.width, rect.height), opacity,
+                          fill_opacity=settings["surface_opacity"], draw_border=False,
+                          scanline_settings=settings)
         with r.clip(rect):
             for wall in self.config.data["v2"]["map_walls"]:
                 a, b, d, e = wall
