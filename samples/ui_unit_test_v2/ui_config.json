@@ -173,7 +173,7 @@
         "slide_pixels": 24
     },
     "weapon_swap": {
-        "duration_seconds": 0.2,
+        "duration_seconds": 0.12,
         "inactive_opacity": 0.65,
         "crossing_opacity": 0.35,
         "diamond_half_width_pixels": 64,
@@ -812,7 +812,14 @@
             "equipment_scale": 0.9,
             "inactive_weapon_scale": 0.8,
             "weapon_card_shape": "trapezoid",
+            "weapon_card_cut_pixels": 18,
             "weapon_depth_offset_pixels": 22,
+            "weapon_swap_blur": {
+                "samples": 5,
+                "shutter_seconds": 0.045,
+                "opacity": 0.5,
+                "max_length_pixels": 12
+            },
             "resource_label_gap_pixels": 4,
             "overdrive_width_ratio": 0.75,
             "overdrive_bloom": {
