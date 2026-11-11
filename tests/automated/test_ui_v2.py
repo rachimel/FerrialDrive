@@ -19,7 +19,7 @@ SAMPLE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(SAMPLE)
 
 from ferrial_drive.ui_v2.effects import (AbsorptionTrail, DialoguePanelMotion, DialoguePanelVisual,
-                                        EnergyAbsorption, ScanlineMotion, ScanlineVisual)
+                                        EnergyAbsorption, HealthDamageFlash, HealthFlashVisual, ScanlineMotion, ScanlineVisual)
 from ferrial_drive.ui_v2.geometry import (PerspectivePlane, body_diamond, counter_plaque,
                                          resource_geometry, scaled_point, slanted_meter, tapered_stroke_mesh)
 from ferrial_drive.ui.counter import CounterVisual
@@ -29,6 +29,66 @@ from ferrial_drive.ui_v2.panels import (build_panel_geometry, build_scanlines,
 
 
 class UiV2Tests(unittest.TestCase):
+    def test_hp_flash_keeps_each_real_damage_interval_and_does_not_restart_older_hits(self):
+        effect = HealthDamageFlash()
+        effect.trigger(1, 0.8)
+        effect.update(0.08)
+        effect.trigger(0.8, 0.7)
+        self.assertEqual([(v.start_ratio, v.end_ratio) for v in effect.visuals], [(0.8, 1), (0.7, 0.8)])
+        self.assertAlmostEqual(effect.visuals[0].opacity, 0.5)
+        self.assertEqual(effect.visuals[1].opacity, 1)
+        effect.update(0.04)
+        self.assertEqual(len(effect.visuals), 1)
+        effect.trigger(0.7, 0.7)
+        effect.trigger(0.7, 1)
+        self.assertEqual(len(effect.visuals), 1)
+        effect.update(0.08)
+        self.assertFalse(effect.visuals)
+
+    def test_hp_flash_leaves_original_red_trail_time_and_damage_width_unchanged(self):
+        from ferrial_drive.ui.health import HealthTrail
+        previous = self.program.state.hud.player_health.ratio
+        self.program.perform("damage_player")
+        current = self.program.state.hud.player_health.ratio
+        self.assertEqual(self.program.player_flash.visuals, (HealthFlashVisual(current, previous, 1),))
+        reference = HealthTrail(self.program.player_health.duration_seconds, previous)
+        reference.set_ratio(current)
+        for delta in (0.04, 0.04, 0.08, 0.2):
+            self.program.update(delta)
+            reference.update(delta)
+            self.assertEqual(self.program.player_health.trailing_ratio, reference.trailing_ratio)
+        self.assertFalse(self.program.player_flash.visuals)
+        self.assertGreater(self.program.player_health.trailing_ratio, current)
+
+    def test_hp_flash_draws_only_latest_damage_inside_visible_red_trail(self):
+        view = UiV2View(self.program.config, Mock())
+        shape = ((0, 0), (100, 0), (100, 10), (0, 10))
+        with patch.object(view, "polygon") as polygon, patch.object(view, "stroke"):
+            view.meter("hp_bar", 0.5, "accent", 1, 0.9, shape=shape,
+                       damage_flashes=(HealthFlashVisual(0.5, 0.6, 1),))
+            white = [call for call in polygon.call_args_list if call.args[1] == "#FFFFFF"]
+            self.assertEqual(len(white), 1)
+            self.assertEqual(white[0].args[0], ((50, 0), (60, 0), (60, 10), (50, 10)))
+            polygon.reset_mock()
+            view.meter("hp_bar", 0.5, "accent", 1, 0.55, shape=shape,
+                       damage_flashes=(HealthFlashVisual(0.4, 0.6, 1),))
+            white = [call for call in polygon.call_args_list if call.args[1] == "#FFFFFF"]
+            self.assertAlmostEqual(white[0].args[0][1][0], 55)
+            self.assertEqual(white[0].args[0][0][0], 50)
+
+    def test_hp_flash_freezes_with_damage_state_and_does_not_transfer_to_new_target(self):
+        self.program.perform("damage_player")
+        self.program.perform("damage_target")
+        player_flash = self.program.player_flash.visuals
+        self.program.perform("next_target")
+        self.assertFalse(self.program.target_flash.visuals)
+        self.assertEqual(self.program.player_flash.visuals, player_flash)
+        self.program.pause.request(True)
+        self.program.update(1)
+        self.assertEqual(self.program.player_flash.visuals, player_flash)
+        self.program.perform("reset")
+        self.assertFalse(self.program.player_flash.visuals)
+
     def setUp(self):
         self.program = SAMPLE.create_test()
 

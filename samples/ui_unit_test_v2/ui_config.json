@@ -656,6 +656,11 @@
             ]
         ],
         "style": {
+            "health_damage_flash": {
+                "color": "#FFFFFF",
+                "hold_seconds": 0.04,
+                "fade_seconds": 0.08
+            },
             "dialogue_key_color": "#F0FCFF",
             "dialogue_description_opacity": 0.78,
             "lock_motion": {

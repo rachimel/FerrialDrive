@@ -5,6 +5,44 @@ from math import isfinite
 
 
 @dataclass(frozen=True)
+class HealthFlashVisual:
+    start_ratio: float
+    end_ratio: float
+    opacity: float
+
+
+class HealthDamageFlash:
+    """각 피해의 실제 HP 감소 구간만 잠시 강조한다. 빨간 Trail과 독립이다."""
+    def __init__(self, hold_seconds=0.04, fade_seconds=0.08):
+        if (not all(map(isfinite, (hold_seconds, fade_seconds)))
+                or hold_seconds < 0 or fade_seconds <= 0):
+            raise ValueError("HP flash 유지 시간은 0 이상, 감소 시간은 양수인 초 단위 값이어야 한다.")
+        self.hold_seconds, self.fade_seconds = hold_seconds, fade_seconds
+        self.clear()
+
+    def clear(self):
+        self._flashes = []
+
+    def trigger(self, previous_ratio, current_ratio):
+        if not all(isfinite(value) and 0 <= value <= 1 for value in (previous_ratio, current_ratio)):
+            raise ValueError("HP flash 비율은 0~1의 유한한 값이어야 한다.")
+        if current_ratio < previous_ratio:
+            self._flashes.append((current_ratio, previous_ratio, 0))
+
+    def update(self, delta_seconds):
+        if not isfinite(delta_seconds) or delta_seconds < 0:
+            raise ValueError("HP flash 갱신 시간은 0 이상의 유한한 초 단위 값이어야 한다.")
+        duration = self.hold_seconds + self.fade_seconds
+        self._flashes = [(low, high, elapsed + delta_seconds) for low, high, elapsed in self._flashes
+                         if elapsed + delta_seconds + 1e-9 < duration]
+
+    @property
+    def visuals(self):
+        return tuple(HealthFlashVisual(low, high, 1 - max(0, elapsed - self.hold_seconds) / self.fade_seconds)
+                     for low, high, elapsed in self._flashes)
+
+
+@dataclass(frozen=True)
 class ScanlineVisual:
     line_offset_pixels: float = 0
     highlight_travel_pixels: float = 0

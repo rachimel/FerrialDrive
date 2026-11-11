@@ -76,6 +76,7 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 
 ## 검증
 
+- 이번 HP 피해 flash: UI 115개·획득 7개, 총 122개 통과. 실제 피해 구간·연속 피해별 시간·Trail 감소값 유지·흰 구간 클리핑·일시정지/초기화·표적 교체 시 분리를 검사했다. 실제 SDL에서 적/플레이어 동시 피해·연속 피해·다른 표적 피해를 60fps 시간 간격의 120프레임으로 렌더하고 주요 이미지를 열어 흰색→빨간 Trail→Trail 축소를 확인했다. 출력은 `output/ui_unit_test_v2/health_damage_flash/`다. 실제 창 조작·GPU 성능·최종 외관 승인은 미확인이다.
 - 이번 등장 중 퇴장 변경: 자동 118개 통과. 시작/오버슈트/중간/완성 직전의 취소에서 각도·크기가 이어지고, 끝값은 취소 순간 각도의 2배·배율의 1.5배이며 0.25초 후 제거되는 것을 검사했다. 최종 설정의 빠른 교체·정상 교체 180프레임을 실제 SDL로 렌더했다. 출력은 `output/ui_unit_test_v2/lock_cancel_exit/`다. 실제 창 조작·외관 승인은 미확인이다.
 - 이번 록온/가이드 톤 변경: UI 111개·획득 7개, 총 118개 통과. 곡선 끝점/중간점·회전 오버슈트·신구 표적 동시 표시·진행 구간 역재생·글자 전 정상 퇴장·비정사각 몸통의 정사각 테두리·외곽 경유/반대 위치 교환·0.25초 정지·실제 렌더러 캐럿과 혼합 글자 색/투명도를 검사했다. 60fps 시간 간격의 300프레임에서 초기 획득·정상 교체·빠른 교체·글자 표시 중 교체를 렌더했다. 주요 이미지를 열어 확인했고 미리보기는 `output/ui_unit_test_v2/lock_on_motion/preview.gif`다. 실제 창 조작·GPU 성능·외관 승인은 미확인이다.
 - 이번 볼드/조작키 강조: UI 104개·획득 7개, 총 111개 통과. 실제 SDL에서 일반/볼드의 픽셀 차이·측정/텍스처 구분·재사용과 출력/측정 실패 후 폰트 상태 복원을 확인했다. 혼합 굵기의 구간별 폭·최대 폭·표기 해석과 개폐 중 본문 숨김도 검사했다. 같은 시간 상태에서 일반/볼드 화면을 렌더하고 비교 이미지를 열어 조작키만 굵어지는 것을 확인했다. 가이드 본문 밖의 픽셀은 같았고 4줄의 폭은 302/392/356/377px로 504px 안에 들어간다. 출력은 `output/ui_unit_test_v2/guide_bold/`다. 실제 창 조작·GPU 성능·사용자 외관 승인은 미확인이다.
@@ -100,6 +101,8 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 - 진입점의 `--scene menu`·`--frames 2`·`--capture output/ui_unit_test_v2/combat.png`는 장면 선택·프레임 제한·재생성 가능한 화면 저장용이다.
 
 ## 등장 효과 연결 지점
+
+HP flash는 `HealthDamageFlash.trigger(피해 전 비율, 피해 후 비율)`·`update(delta_seconds)`로 관리하고 `visuals`를 `view.combat(player_damage_flashes=..., target_damage_flashes=...)`에 공급한다. 실제 피해가 0이면 발생시키지 않는다. 상태는 실제 HP·빨간 Trail과 분리하며 샘플에서는 Trail과 함께 일시정지한다. 표적 교체와 F5는 해당 flash를 비운다. 색/유지/감소 시간은 `v2.style.health_damage_flash`의 흰색/0.04초/0.08초다. 흰 구간은 이번 실제 피해량이며, 남은 HP나 이전 피해 Trail 전체를 빛내지 않는다.
 
 록온은 `LockOnMotion.select(target_id, body)`·`update(delta_seconds)`로 제어하고 `visuals`를 `view.combat(lock_visuals=...)`에 공급한다. 몸통 Rect는 카메라 투영 후 좌표다. 선택 유지 중에는 `update_body(body)`로 위치/크기를 갱신한다. 이전 표시의 퇴장은 보존한 Rect에서 수행하며 획득 규칙은 `TargetAcquisition`이 계속 담당한다. 샘플은 F5에서 초기 등장, R의 실제 표적 변경에서 개별 교체를 재생한다.
 

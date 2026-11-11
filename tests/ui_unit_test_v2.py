@@ -22,7 +22,7 @@ from ferrial_drive.ui.health import HealthTrail
 from ferrial_drive.ui.pause import PauseState
 from ferrial_drive.ui.state import Health, HudState, LoadoutInfo, RadarContact, TargetInfo, WeaponInfo
 from ferrial_drive.ui.transition import SceneTransition
-from ferrial_drive.ui_v2.effects import DialoguePanelMotion, EnergyAbsorption, ScanlineMotion
+from ferrial_drive.ui_v2.effects import DialoguePanelMotion, EnergyAbsorption, HealthDamageFlash, ScanlineMotion
 from ferrial_drive.ui_v2.lock_on import LockOnMotion
 from ferrial_drive.ui_v2.geometry import resource_geometry, scaled_point
 from ferrial_drive.ui_v2.pico_renderer import PicoV2Renderer
@@ -89,6 +89,9 @@ class UiUnitTestV2:
         duration = self.config.data["health_trail"]["duration_seconds"]
         self.player_health = HealthTrail(duration, hud.player_health.ratio)
         self.target_health = HealthTrail(duration, hud.target.health.ratio)
+        flash = self.config.data["v2"]["style"]["health_damage_flash"]
+        self.player_flash = HealthDamageFlash(flash["hold_seconds"], flash["fade_seconds"])
+        self.target_flash = HealthDamageFlash(flash["hold_seconds"], flash["fade_seconds"])
         animation = self.config.data["animation"]
         self.damage_numbers = DamageNumbers(animation["damage_duration_seconds"],
                                             animation["damage_scatter_x_pixels"],
@@ -127,6 +130,7 @@ class UiUnitTestV2:
         self.set_hud(target=TargetInfo(enemy["name"], enemy["health"]) if enemy else None)
         self.set_target_size(self.target_scale)
         self.target_health.reset(enemy["health"].ratio if enemy else 0)
+        self.target_flash.clear()
         self.lock_motion.select(self.selected_target_id, self.state.target_body)
 
     def enter(self):
@@ -174,17 +178,20 @@ class UiUnitTestV2:
             applied = min(self.config.data["sample_actions"][action], health.current)
             if applied <= 0:
                 return
+            previous_ratio = health.ratio
             health = replace(health, current=health.current - applied)
             if target:
                 self.enemies[self.selected_target_id]["health"] = health
                 self.set_hud(target=replace(hud.target, health=health), combo_count=hud.combo_count + 1,
                              total_damage_dealt=hud.total_damage_dealt + int(applied))
                 self.target_health.set_ratio(health.ratio)
+                self.target_flash.trigger(previous_ratio, health.ratio)
                 self.hit_counter.set_value(self.state.hud.combo_count)
                 self.damage_counter.set_value(self.state.hud.total_damage_dealt)
             else:
                 self.set_hud(player_health=health)
                 self.player_health.set_ratio(health.ratio)
+                self.player_flash.trigger(previous_ratio, health.ratio)
             owner = self.selected_target_id if target else "player"
             origin = self.config.actor_anchor("player")
             position = self.enemies[owner]["position"] if target else origin
@@ -284,6 +291,8 @@ class UiUnitTestV2:
         self.damage_counter.update(delta_seconds)
         self.player_health.update(delta_seconds)
         self.target_health.update(delta_seconds)
+        self.player_flash.update(delta_seconds)
+        self.target_flash.update(delta_seconds)
         self.damage_numbers.update(delta_seconds)
         self.absorption.update(delta_seconds)
 
@@ -326,7 +335,9 @@ class UiUnitTestV2:
                                  absorption_trails=self.absorption.trails,
                                  scanline_visual=self.scanline_motion.visual,
                                  dialogue_visual=self.dialogue_motion.visual,
-                                 lock_visuals=self.lock_motion.visuals)
+                                 lock_visuals=self.lock_motion.visuals,
+                                 player_damage_flashes=self.player_flash.visuals,
+                                 target_damage_flashes=self.target_flash.visuals)
         if self.pause.opacity > 0:
             self.view.pause(self.pause.opacity, self.inputs,
                             scanline_visual=self.scanline_motion.visual)

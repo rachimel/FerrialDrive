@@ -261,7 +261,8 @@ class UiV2View(UiView):
             for first, second in zip(points, points[1:] + points[:1]):
                 self.renderer.line(*first, *second, color, opacity)
 
-    def meter(self, key, ratio, color, opacity, trailing_ratio=None, *, shape=None, border=None, rect=None):
+    def meter(self, key, ratio, color, opacity, trailing_ratio=None, *, shape=None, border=None, rect=None,
+              damage_flashes=()):
         """형상은 고정하고 채움만 자른다. 실제 자원 규칙은 계산하지 않는다."""
         r, c = self.renderer, self.config.colors
         x, y, width, height = self.layout[key] if rect is None else rect
@@ -273,6 +274,12 @@ class UiV2View(UiView):
         for fill, fill_color in ((trail, c["health_loss"]), (ratio, c[color])):
             if fill > 0:
                 self.polygon(quad_fill(points, fill), fill_color, opacity, filled=True)
+        for flash in damage_flashes:
+            low, high = max(ratio, flash.start_ratio), min(trail, flash.end_ratio)
+            if high > low and flash.opacity > 0:
+                left, right = quad_fill(points, low), quad_fill(points, high)
+                self.polygon((left[1], right[1], right[2], left[2]), self.style["health_damage_flash"]["color"],
+                             opacity * flash.opacity, filled=True)
         if border is not None:
             self.stroke(border + border[:1], self.ui_accent, opacity * 0.85, 1.5)
             return
@@ -354,12 +361,12 @@ class UiV2View(UiView):
             cursor = label_width * visual.label_progress
             self.stroke((label_point(cursor, 0), label_point(cursor, label_height)), c["text"], alpha, 2)
 
-    def resources(self, state, opacity, offset_x, player_trailing_ratio):
+    def resources(self, state, opacity, offset_x, player_trailing_ratio, *, damage_flashes=()):
         r, c = self.renderer, self.config.colors
         hud = state.hud
         geometry = resource_geometry(self.layout, self.style["level_curve_radius_pixels"])
         self.meter("hp_bar", hud.player_health.ratio, "accent", opacity, player_trailing_ratio,
-                   shape=geometry.hp_shape, border=geometry.hp_outline)
+                   shape=geometry.hp_shape, border=geometry.hp_outline, damage_flashes=damage_flashes)
         value = f"{hud.player_health.current:,.0f}"
         value_width, value_height = r.text_size(value, "v2_hp")
         x, top = geometry.hp_outline[0]
@@ -544,7 +551,8 @@ class UiV2View(UiView):
     def _combat(self, state, damage_visuals=(), opacity=1, offset_x=0, *,
                counter_visual=None, combo_visual=None, counters_opacity=1,
                cursor_position=None, player_trailing_ratio=None, target_trailing_ratio=None,
-               absorption_trails=(), scanline_visual=None, dialogue_visual=None, lock_visuals=None):
+               absorption_trails=(), scanline_visual=None, dialogue_visual=None, lock_visuals=None,
+               player_damage_flashes=(), target_damage_flashes=()):
         r, c, hud = self.renderer, self.config.colors, state.hud
         scale = self.style["hud_scale"]
         width, height = self.config.window["width"], self.config.window["height"]
@@ -562,7 +570,7 @@ class UiV2View(UiView):
             target_rect = (x, y, bar_width, bar_height)
             if hud.target:
                 self.meter("target_hp", hud.target.health.ratio, "enemy", opacity, target_trailing_ratio,
-                           rect=target_rect)
+                           rect=target_rect, damage_flashes=target_damage_flashes)
             else:
                 self.meter("target_hp", 0, "enemy", opacity, rect=target_rect)
             r.text("TARGET", x + bar_width, y + bar_height + 4, "target_heading", c["muted"], opacity, align="right")
@@ -572,7 +580,7 @@ class UiV2View(UiView):
                 with r.scaled(scale, (body.x + body.width / 2, body.y + body.height / 2)):
                     self.lock_marker(visual, opacity, offset_x)
         with r.scaled(scale, (width / 2, height)):
-            self.resources(state, opacity, offset_x, player_trailing_ratio)
+            self.resources(state, opacity, offset_x, player_trailing_ratio, damage_flashes=player_damage_flashes)
         with r.scaled(self.style["equipment_scale"], (width, height)):
             self.weapons(hud, opacity, offset_x)
         alpha = opacity * counters_opacity
