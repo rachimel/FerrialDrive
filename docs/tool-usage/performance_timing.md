@@ -1,5 +1,7 @@
 # 공통 성능 계측
 
+프로젝트의 성능 분석 도구 이름은 **성능 프로파일러(FDrive Profiler)**다. 전체 Python 호출 스택·Flame Graph와 AI 분석용 요약은 [py-spy 연결 도구](../../Tools/profiler/README.md)를 사용한다. 이 문서의 `TimingRecorder`는 지정한 함수·구간의 시간 집계와 반복 측정을 담당하는 기존 API로 유지한다.
+
 ## 목적과 범위
 
 게임·유닛 테스트·성능 모니터링에서 필요한 때만 함수와 코드 구간을 측정하고, 개발자와 AI가 병목을 분석할 JSON 로그를 남긴다. 구현은 `ferrial_drive/diagnostics/timing.py`의 `TimingRecorder`이며 Python 3.11 표준 라이브러리만 사용한다. UI·Pico2D·Runner를 import하거나 창·실행 루프를 생성하지 않는다.

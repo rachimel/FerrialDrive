@@ -1,0 +1,2 @@
+# 외부 프로세스의 Python 호출 스택 샘플링. MIT License.
+py-spy==0.4.3

@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [성능 프로파일러·py-spy 연결](2026-11-11-performance-profiler.md): TIME(scope). 도구 명칭·사용률/Flame Graph·기존 프로파일러 연결 제안과 수용의 개별 발언 시각을 확인한다.
+
 - [UI v2 짧은 감광·호흡 강조](2026-11-11-ui-v2-clearer-hud-motion.md): TIME(scope). 기존 효과의 차이가 작다는 피드백·짧은 감광 동의·에너지 강조 요청과 구현·검증 보고의 정확한 시각을 확인한다.
 
 - [UI v2 미세 명도·호흡·빠른 전환](2026-11-11-ui-v2-subtle-hud-motion.md): TIME(scope). 약한 깜빡임·에너지 호흡·글자/숫자 범위·피해 숫자/COUNTER 대상 선택과 구현·검증 보고의 정확한 시각을 확인한다.
