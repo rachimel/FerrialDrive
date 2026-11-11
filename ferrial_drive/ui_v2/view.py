@@ -392,11 +392,22 @@ class UiV2View(UiView):
             self.stroke((filled[1], filled[2]), c["energy"], energy_alpha, 2)
         self.stroke((outline[-1], geometry.level_shape[-2]),
                      c["energy"] if state.overdrive else self.ui_accent, opacity, 2)
-        label = "O V E R D R I V E" if state.overdrive else "E N E R G Y"
-        label_width = r.text_size(label, "v2_meter_label")[0]
         label_center = sum(point[0] for point in channel) / 4
-        self.slanted_text(label, label_center - label_width / 2, y + 2,
-                          "v2_meter_label", c["text"], energy_alpha)
+        if state.overdrive:
+            label, role = "OVERDRIVE", "v2_overdrive"
+            spacing = self.style["overdrive_letter_spacing_pixels"]
+            sizes = [r.text_size(letter, role) for letter in label]
+            label_width = sum(size[0] for size in sizes) + spacing * (len(label) - 1)
+            label_y = sum(point[1] for point in channel) / 4 - max(size[1] for size in sizes) / 2
+            label_x = label_center - label_width / 2
+            for letter, (letter_width, _) in zip(label, sizes):
+                r.text(letter, label_x, label_y, role, c["text"], energy_alpha)
+                label_x += letter_width + spacing
+        else:
+            label = "E N E R G Y"
+            label_width = r.text_size(label, "v2_meter_label")[0]
+            self.slanted_text(label, label_center - label_width / 2, y + 2,
+                              "v2_meter_label", c["text"], energy_alpha)
         level_right = x + width + self.layout["energy_level_width_pixels"]
         level_text_right = level_right - 8
         self.slanted_text("LV", level_text_right, geometry.level_top + 4,

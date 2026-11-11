@@ -107,6 +107,10 @@
             "path": "../../data/fonts/ferrial_hud_square_wide/FerrialHudSquareWide-Regular.otf",
             "size": 16
         },
+        "v2_overdrive": {
+            "path": "../../data/fonts/SUITE-otf/SUITE-Light.otf",
+            "size": 16
+        },
         "v2_level": {
             "path": "../../data/fonts/ferrial_hud_square_wide/FerrialHudSquareWide-Regular.otf",
             "size": 32
@@ -808,6 +812,7 @@
             "equipment_scale": 0.9,
             "inactive_weapon_scale": 0.8,
             "resource_label_gap_pixels": 4,
+            "overdrive_letter_spacing_pixels": 6,
             "ultimate_label_gap_pixels": 4,
             "ultimate_label_padding_pixels": [
                 4,

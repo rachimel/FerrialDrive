@@ -34,6 +34,10 @@ Desktop.ini
 !/data/fonts/
 /data/fonts/*
 !/data/fonts/README.md
+!/data/fonts/SUITE-otf/
+/data/fonts/SUITE-otf/*
+!/data/fonts/SUITE-otf/SUITE-Light.otf
+!/data/fonts/SUITE-otf/LICENSE
 !/data/fonts/s_core_dream/
 !/data/fonts/Cafe24Ohsquare-v2.0/
 /data/fonts/Cafe24Ohsquare-v2.0/*

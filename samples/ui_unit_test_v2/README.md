@@ -128,3 +128,5 @@ Scanline 시간은 `effects.py`의 `ScanlineMotion`이 관리한다. 같은 `vis
 대화창은 `DialoguePanelMotion.request(opened)`·`update(delta_seconds)`로 제어하고 `visual`을 `view.combat(dialogue_visual=...)`에 공급한다. 닫힘 중에는 `DialogueInfo`를 유지하고 `phase == "closed"`가 된 뒤 제거한다. 조회와 실제 출력은 같은 표시값을 사용해 펼쳐지는 패널의 Y 구간도 밝은 띠 경로에 반영한다. 글자를 압축하지 않고 완성 뒤 표시하며, 다른 패널의 개폐와 테두리 조각별 순차 등장은 후속 범위다.
 
 프레임 출력 전에 `view.prepare_panel_effects(draw_panels)`로 그릴 UI를 한 번 조회한다. 이 단계는 도형을 출력하지 않고 보이는 패널의 Y 구간을 수집하므로 콜백 안에서 입력·시간·게임 상태를 갱신하지 않는다. 실제 출력과 같은 레이아웃·배율·clip을 사용하며 등장/퇴장 중인 패널도 반영한다.
+
+OVERDRIVE 문구는 에너지 채움 영역의 가로·세로 중앙에 SUITE Light 16px로 표시한다. 글꼴은 `fonts.v2_overdrive`, 넓은 자간은 `v2.style.overdrive_letter_spacing_pixels=6`에서 조절한다.
