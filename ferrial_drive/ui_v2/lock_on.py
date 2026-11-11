@@ -65,8 +65,9 @@ class LockOnTrack:
     body: object
     age: float = 0
     leaving: bool = False
-    reverse: bool = False
     exit_age: float = 0
+    exit_start_angle_degrees: float = 45
+    exit_start_scale: float = 1
 
 
 class LockOnMotion:
@@ -89,12 +90,11 @@ class LockOnMotion:
         if target_id == self.selected_id:
             self.update_body(body)
             return
-        for track in self.tracks:
+        for track, visual in zip(self.tracks, self.visuals):
             if not track.leaving:
                 track.leaving = True
-                track.reverse = track.age + 1e-9 < self.enter_seconds
-                if track.reverse:
-                    track.age = min(track.age, self.enter_seconds)
+                track.exit_start_angle_degrees = visual.angle_degrees
+                track.exit_start_scale = visual.scale
         self.selected_id = target_id
         if target_id is not None and body is not None:
             self.tracks = [track for track in self.tracks if track.target_id != target_id]
@@ -111,12 +111,10 @@ class LockOnMotion:
         for track in self.tracks:
             if not track.leaving:
                 track.age += delta_seconds
-            elif track.reverse:
-                track.age -= delta_seconds
             else:
                 track.exit_age += delta_seconds
         self.tracks = [track for track in self.tracks if not track.leaving or
-                       (track.age > 1e-9 if track.reverse else track.exit_age + 1e-9 < self.exit_seconds)]
+                       track.exit_age + 1e-9 < self.exit_seconds]
 
     @property
     def visuals(self):
@@ -129,11 +127,10 @@ class LockOnMotion:
             label = max(0, min(1, (track.age - self.enter_seconds) / self.label_seconds))
             if track.leaving:
                 label = 0
-                if not track.reverse:
-                    t = min(1, track.exit_age / self.exit_seconds)
-                    angle = 45 + 45 * cubic(t, 0.42, 0, 0.58, 1)
-                    scale = 1 + (self.exit_scale - 1) * emphasized(t)
-                    opacity = 1 - t
+                t = min(1, track.exit_age / self.exit_seconds)
+                angle = track.exit_start_angle_degrees * (1 + cubic(t, 0.42, 0, 0.58, 1))
+                scale = track.exit_start_scale * (1 + (self.exit_scale - 1) * emphasized(t))
+                opacity = 1 - t
             patrol_age = max(0, track.age - self.enter_seconds - self.label_seconds)
             cycle = self.move_seconds + self.hold_seconds
             step, local = divmod(patrol_age, cycle)

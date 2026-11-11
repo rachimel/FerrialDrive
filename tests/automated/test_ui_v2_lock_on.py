@@ -1,4 +1,4 @@
-"""록온 곡선·동시 교체·역재생·외곽 순환을 검사한다."""
+"""록온 곡선·동시 교체·현재 상태 기반 퇴장·외곽 순환을 검사한다."""
 
 import unittest
 from ferrial_drive.ui.components import Rect
@@ -13,7 +13,7 @@ class LockOnTests(unittest.TestCase):
             motion.select("a", body)
             motion.update(elapsed)
             motion.select("b", body)
-            self.assertFalse(motion.tracks[0].reverse)
+            self.assertAlmostEqual(motion.tracks[0].exit_start_angle_degrees, 45)
             motion.update(0.125)
             self.assertAlmostEqual(motion.visuals[0].angle_degrees, 67.5)
             self.assertEqual(motion.visuals[0].label_progress, 0)
@@ -65,22 +65,28 @@ class LockOnTests(unittest.TestCase):
         motion.update(0.125)
         self.assertEqual([v.target_id for v in motion.visuals], ["b"])
 
-    def test_interrupted_entry_replays_exact_curve_backwards(self):
+    def test_interrupted_entry_exits_from_current_angle_and_scale_without_reversing(self):
         body = Rect(0, 0, 20, 20)
         motion = LockOnMotion()
         motion.select("a", body)
-        motion.update(0.16)
-        before = motion.visuals[0]
-        motion.select("b", body)
-        self.assertEqual(motion.visuals[0], before)
-        motion.update(0.06)
-        reference = LockOnMotion()
-        reference.select("a", body)
-        reference.update(0.1)
-        self.assertAlmostEqual(motion.visuals[0].angle_degrees, reference.visuals[0].angle_degrees)
-        self.assertAlmostEqual(motion.visuals[0].scale, reference.visuals[0].scale)
-        motion.update(0.1)
-        self.assertEqual([v.target_id for v in motion.visuals], ["b"])
+        for elapsed in (0, 0.04, 0.08, 0.16, 0.3):
+            motion.reset("a", body)
+            motion.update(elapsed)
+            before = motion.visuals[0]
+            motion.select("b", body)
+            self.assertEqual(motion.visuals[0], before)
+            motion.update(0.125)
+            during = motion.visuals[0]
+            self.assertAlmostEqual(during.angle_degrees, before.angle_degrees * 1.5)
+            self.assertGreater(during.scale, before.scale)
+            self.assertAlmostEqual(during.opacity, 0.5)
+            motion.tracks[0].exit_age = 0.25
+            end = motion.visuals[0]
+            self.assertAlmostEqual(end.angle_degrees, before.angle_degrees * 2)
+            self.assertAlmostEqual(end.scale, before.scale * motion.exit_scale)
+            self.assertEqual(end.opacity, 0)
+            motion.update(0)
+            self.assertEqual([v.target_id for v in motion.visuals], ["b"])
 
     def test_opposed_segments_swap_places_along_outline_then_pause(self):
         points = ((0, -10), (10, 0), (0, 10), (-10, 0))

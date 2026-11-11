@@ -76,6 +76,7 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 
 ## 검증
 
+- 이번 등장 중 퇴장 변경: 자동 118개 통과. 시작/오버슈트/중간/완성 직전의 취소에서 각도·크기가 이어지고, 끝값은 취소 순간 각도의 2배·배율의 1.5배이며 0.25초 후 제거되는 것을 검사했다. 최종 설정의 빠른 교체·정상 교체 180프레임을 실제 SDL로 렌더했다. 출력은 `output/ui_unit_test_v2/lock_cancel_exit/`다. 실제 창 조작·외관 승인은 미확인이다.
 - 이번 록온/가이드 톤 변경: UI 111개·획득 7개, 총 118개 통과. 곡선 끝점/중간점·회전 오버슈트·신구 표적 동시 표시·진행 구간 역재생·글자 전 정상 퇴장·비정사각 몸통의 정사각 테두리·외곽 경유/반대 위치 교환·0.25초 정지·실제 렌더러 캐럿과 혼합 글자 색/투명도를 검사했다. 60fps 시간 간격의 300프레임에서 초기 획득·정상 교체·빠른 교체·글자 표시 중 교체를 렌더했다. 주요 이미지를 열어 확인했고 미리보기는 `output/ui_unit_test_v2/lock_on_motion/preview.gif`다. 실제 창 조작·GPU 성능·외관 승인은 미확인이다.
 - 이번 볼드/조작키 강조: UI 104개·획득 7개, 총 111개 통과. 실제 SDL에서 일반/볼드의 픽셀 차이·측정/텍스처 구분·재사용과 출력/측정 실패 후 폰트 상태 복원을 확인했다. 혼합 굵기의 구간별 폭·최대 폭·표기 해석과 개폐 중 본문 숨김도 검사했다. 같은 시간 상태에서 일반/볼드 화면을 렌더하고 비교 이미지를 열어 조작키만 굵어지는 것을 확인했다. 가이드 본문 밖의 픽셀은 같았고 4줄의 폭은 302/392/356/377px로 504px 안에 들어간다. 출력은 `output/ui_unit_test_v2/guide_bold/`다. 실제 창 조작·GPU 성능·사용자 외관 승인은 미확인이다.
 - 이번 대화창 개폐 시안: UI 102개·획득 7개, 총 109개 통과. 0.2초 완성 전 본문 숨기기·완성 즉시 표시·0.1초 닫힘·60fps/단일 시간 갱신 일치·반전 입력·큰 시간 간격·잘못된 시간·중앙 기준 형상과 기존 10개 조각 유지를 검사했다. 실제 SDL에서 열기/닫기 두 순환을 60fps 시간 간격의 180프레임으로 렌더하고 단계별 이미지를 열어 검토했다. 최종 닫힘에서 데이터가 제거되고 텍스처 캐시가 상한 안에 있는 것을 확인했다. 미리보기는 `output/ui_unit_test_v2/dialogue_popup/preview.gif`다. 실제 창 조작·GPU 성능·최종 외관 승인은 미확인이다.
@@ -103,6 +104,8 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 록온은 `LockOnMotion.select(target_id, body)`·`update(delta_seconds)`로 제어하고 `visuals`를 `view.combat(lock_visuals=...)`에 공급한다. 몸통 Rect는 카메라 투영 후 좌표다. 선택 유지 중에는 `update_body(body)`로 위치/크기를 갱신한다. 이전 표시의 퇴장은 보존한 Rect에서 수행하며 획득 규칙은 `TargetAcquisition`이 계속 담당한다. 샘플은 F5에서 초기 등장, R의 실제 표적 변경에서 개별 교체를 재생한다.
 
 `v2.style.lock_motion`은 등장 0.4초·캐럿 0.2초·퇴장 0.25초·강조선 이동 0.4초/정지 0.25초·시작 배율 0.25/퇴장 배율 1.5를 조절한다. 기본형은 정사각형이며 등장 완료 45°는 마름모다. 가이드 조작키 색/설명 투명도는 `dialogue_key_color`·`dialogue_description_opacity`다.
+
+등장 중 취소도 역재생하지 않는다. 취소 시점의 실제 회전값/배율을 저장해 그 값부터 회전은 2배, 크기는 `exit_scale`배까지 확대하며 흐려진다. 완료 뒤 취소는 기존 45→90°·1→1.5배와 같다.
 
 곡선 정의는 Flutter 공식 [elasticOut](https://api.flutter.dev/flutter/animation/ElasticOutCurve-class.html), [easeInOutCubicEmphasized](https://api.flutter.dev/flutter/animation/Curves/easeInOutCubicEmphasized-constant.html), [easeInOut](https://api.flutter.dev/flutter/animation/Curves/easeInOut-constant.html)를 따른다. Flutter 런타임 의존성은 추가하지 않는다.
 
