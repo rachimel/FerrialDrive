@@ -463,7 +463,7 @@ class UiV2View(UiView):
             r.filtered_polygons(quads, color, alpha, self.style["panel_border"]["filter_samples"])
         self.slanted_text("SPACE", x, y, "hud_small", c["text"], alpha, scale=key_scale)
 
-    def weapons(self, hud, opacity, offset_x):
+    def weapons(self, hud, opacity, offset_x, *, loadout_visual=None, weapon_swap_visual=None):
         if not hud.loadouts:
             return
         r, c = self.renderer, self.config.colors
@@ -478,29 +478,74 @@ class UiV2View(UiView):
             self.stroke(shape + shape[:1], self.ui_accent, alpha)
             r.neon_text(f"{index + 1:02}", tx + 15, ty + 3, "equipment_number", c["text"], alpha * self.style["weapon_text_opacity"],
                         **self.style["weapon_text_neon"])
-        loadout = hud.loadouts[hud.active_loadout_index]
+        ranged_weight = (float(hud.active_weapon_kind == "ranged") if weapon_swap_visual is None
+                         else weapon_swap_visual.weight_before())
+        if loadout_visual is None or not loadout_visual.moving:
+            index = hud.active_loadout_index if loadout_visual is None else loadout_visual.incoming_index
+            self.weapon_cards(hud, hud.loadouts[index], opacity, offset_x, ranged_weight=ranged_weight)
+            return
+        leftmost = x - (self.style["weapon_depth_offset_pixels"]
+                        if self.style["weapon_card_shape"] == "trapezoid" else 0)
+        exit_distance = self.config.window["width"] - leftmost + self.config.data["loadout_slide"]["exit_padding_pixels"]
+        progress = loadout_visual.progress_before()
+        settings = self.config.data["equipment_motion_blur"]
+        shutter, maximum = settings["shutter_seconds"], settings["max_length_pixels"]
+        old_progress = loadout_visual.progress_before(shutter)
+        travel_distance = exit_distance * 10
+        extent = abs(progress - old_progress) * travel_distance
+        samples = settings["samples"]
+        strength = settings["opacity"] * min(1, extent / maximum) if maximum > 0 and samples else 0
+
+        def paint(amount, alpha):
+            shift, fade, index = loadout_visual.pose(exit_distance, amount)
+            if fade > 0:
+                self.weapon_cards(hud, hud.loadouts[index], alpha * fade, offset_x + shift,
+                                  ranged_weight=ranged_weight)
+
+        with r.clip(Rect(0, 0, self.config.window["width"], self.config.window["height"])):
+            if strength > 0:
+                total = samples * (samples + 1) / 2
+                for sample in range(samples, 0, -1):
+                    amount = loadout_visual.progress_before(shutter * sample / samples)
+                    travel = abs(amount - progress) * travel_distance
+                    ratio = min(1, maximum / travel) if travel > 0 else 1
+                    amount = progress + (amount - progress) * ratio
+                    paint(amount, opacity * strength * (samples + 1 - sample) / total)
+            paint(progress, opacity * (1 - strength))
+
+    def weapon_cards(self, hud, loadout, opacity, offset_x, *, ranged_weight):
+        r, c = self.renderer, self.config.colors
+        x, y, width, height = self.layout["weapons"]
+        x += offset_x
         for index, (kind, weapon) in enumerate((("melee", loadout.melee), ("ranged", loadout.ranged))):
             top = y + index * (height + 8)
-            active = kind == hud.active_weapon_kind
-            alpha = opacity if active else opacity * 0.5
-            left = x + (0 if active else 22)
-            amount = 1 if active else self.style["inactive_weapon_scale"]
-            with r.scaled(amount, (x + width, top + height / 2)):
-                shape = ((left + 18, top), (x + width, top),
-                         (x + width - 18, top + height), (left, top + height))
+            weight = ranged_weight if kind == "ranged" else 1 - ranged_weight
+            alpha = opacity * (0.5 + 0.5 * weight)
+            trapezoid = self.style["weapon_card_shape"] == "trapezoid"
+            if trapezoid:
+                left = x - self.style["weapon_depth_offset_pixels"] * weight
+                right, amount = left + width, 1
+            else:
+                left, right = x + 22 * (1 - weight), x + width
+                amount = self.style["inactive_weapon_scale"] + (1 - self.style["inactive_weapon_scale"]) * weight
+            with r.scaled(amount, (right, top + height / 2)):
+                shape = (((left + 18, top), (right, top), (right, top + height), (left, top + height))
+                         if trapezoid else ((left + 18, top), (right, top),
+                                            (right - 18, top + height), (left, top + height)))
                 self.panel_layer(shape, c["panel_surface"], alpha, grain=True)
                 self.stroke((shape[0], shape[3], shape[2], shape[1]),
                              self.ui_accent, alpha * 0.85)
                 self.stroke((shape[0], shape[3]), self.ui_accent,
                              alpha * 0.95, self.style["weapon_outer_edge_pixels"])
-                self.stroke(((left + 28, top + 4), (x + width - 4, top + 4)), self.ui_accent, alpha * 0.3)
+                self.stroke(((left + 28, top + 4), (right - 4, top + 4)),
+                            self.ui_accent, alpha * 0.3)
                 self.weapon_image(weapon, kind, Rect(left + 18, top + 11, width - 112, height - 39), alpha)
                 r.neon_text("MELEE" if kind == "melee" else "RANGED", left + 17, top + height - 23,
                             "weapon_name", c["text"], alpha * self.style["weapon_text_opacity"],
                             **self.style["weapon_text_neon"])
                 if weapon.rounds is not None:
                     text = str(weapon.rounds)
-                    r.neon_text(text, x + width - r.text_size(text, "v2_ammo")[0] - 16,
+                    r.neon_text(text, right - r.text_size(text, "v2_ammo")[0] - 16,
                                 top + 10, "v2_ammo", c["text"], alpha * self.style["weapon_text_opacity"],
                                 **self.style["weapon_text_neon"])
 
@@ -589,7 +634,8 @@ class UiV2View(UiView):
                counter_visual=None, combo_visual=None, counters_opacity=1,
                cursor_position=None, player_trailing_ratio=None, target_trailing_ratio=None,
                absorption_trails=(), scanline_visual=None, dialogue_visual=None, lock_visuals=None,
-               player_damage_flashes=(), target_damage_flashes=(), counter_message_opacity=None, player_screen=None):
+               player_damage_flashes=(), target_damage_flashes=(), counter_message_opacity=None, player_screen=None,
+               loadout_visual=None, weapon_swap_visual=None):
         r, c, hud = self.renderer, self.config.colors, state.hud
         scale = self.style["hud_scale"]
         width, height = self.config.window["width"], self.config.window["height"]
@@ -619,7 +665,8 @@ class UiV2View(UiView):
         with r.scaled(scale, (width / 2, height)):
             self.resources(state, opacity, offset_x, player_trailing_ratio, damage_flashes=player_damage_flashes)
         with r.scaled(self.style["equipment_scale"], (width, height)):
-            self.weapons(hud, opacity, offset_x)
+            self.weapons(hud, opacity, offset_x, loadout_visual=loadout_visual,
+                         weapon_swap_visual=weapon_swap_visual)
         alpha = opacity * counters_opacity
         combo_visual = combo_visual or CounterVisual(hud.combo_count, hud.combo_count, 1, 1)
         counter_visual = counter_visual or CounterVisual(hud.total_damage_dealt, hud.total_damage_dealt, 1, 1)

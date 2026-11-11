@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [UI v2 로드아웃·사다리꼴 무기 카드](2026-11-12-ui-v2-equipment-motion.md): TIME(scope). 로드아웃 요청·무기 전환 제안 수용·사다리꼴 정정·두 행 유지 선택 발언의 개별 시각을 확인한다.
+
 - [UI v2 OVERDRIVE 폭 75%·네온 필터](2026-11-12-ui-v2-overdrive-neon-filter.md): TIME(scope). 폭 60%·깨짐 점검·네온 강화와 최종 75% 정정 발언의 정확한 시각을 확인한다.
 
 - [UI v2 OVERDRIVE 문구 폭 80%](2026-11-11-ui-v2-overdrive-width.md): TIME(scope). 바 폭 80% 자간 조정 요청의 정확한 발언 시각을 확인한다.

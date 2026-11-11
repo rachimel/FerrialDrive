@@ -21,9 +21,11 @@ from ferrial_drive.ui.config import UiConfig
 from ferrial_drive.ui.counter import RollingCounter
 from ferrial_drive.ui.damage import DamageNumbers
 from ferrial_drive.ui.health import HealthTrail
+from ferrial_drive.ui.loadout_slide import LoadoutSlide
 from ferrial_drive.ui.pause import PauseState
 from ferrial_drive.ui.state import Health, HudState, LoadoutInfo, RadarContact, TargetInfo, WeaponInfo
 from ferrial_drive.ui.transition import SceneTransition
+from ferrial_drive.ui.weapon_swap import WeaponSwap
 from ferrial_drive.ui_v2.effects import DialoguePanelMotion, EnergyAbsorption, HealthDamageFlash, IndicatorFade, ScanlineMotion
 from ferrial_drive.ui_v2.lock_on import LockOnMotion
 from ferrial_drive.ui_v2.geometry import resource_geometry, scaled_point
@@ -111,6 +113,10 @@ class UiUnitTestV2:
         self.lock_motion.reset(self.selected_target_id, self.state.target_body)
         self.counter_message = IndicatorFade(**self.config.data["v2"]["style"]["counter_message_motion"])
         self.counter_message.reset(self.state.counter, animate=True)
+        self.loadout_slide = LoadoutSlide(hud.active_loadout_index,
+                                         self.config.data["loadout_slide"]["duration_seconds"])
+        self.weapon_swap = WeaponSwap(hud.active_weapon_kind,
+                                      self.config.data["weapon_swap"]["duration_seconds"])
 
     def damage_text_size(self, text):
         if self.renderer is not None:
@@ -254,8 +260,10 @@ class UiUnitTestV2:
             self.state = replace(self.state, **{field: not getattr(self.state, field)})
         elif action == "swap":
             self.set_hud(active_weapon_kind="melee" if hud.active_weapon_kind == "ranged" else "ranged")
+            self.weapon_swap.request(self.state.hud.active_weapon_kind)
         elif action == "loadout":
             self.set_hud(active_loadout_index=(hud.active_loadout_index + 1) % len(hud.loadouts))
+            self.loadout_slide.request(self.state.hud.active_loadout_index)
         else:
             raise ValueError(f"v2 샘플 동작 없음: {action}")
 
@@ -319,6 +327,10 @@ class UiUnitTestV2:
             self.pause.update(delta_seconds)
             return
         self.transition.update(delta_seconds)
+        self.loadout_slide.request(self.state.hud.active_loadout_index)
+        self.loadout_slide.update(delta_seconds)
+        self.weapon_swap.request(self.state.hud.active_weapon_kind)
+        self.weapon_swap.update(delta_seconds)
         if self.transition.target == "combat" and not self.transition.active:
             self.update_world_view(delta_seconds)
         self.hit_counter.update(delta_seconds)
@@ -376,6 +388,8 @@ class UiUnitTestV2:
                                  player_damage_flashes=self.player_flash.visuals,
                                  target_damage_flashes=self.target_flash.visuals,
                                  counter_message_opacity=self.counter_message.opacity,
+                                 loadout_visual=self.loadout_slide.visual,
+                                 weapon_swap_visual=self.weapon_swap.visual,
                                  player_screen=self.camera.world_to_screen(self.player_world))
         if self.pause.opacity > 0:
             self.view.pause(self.pause.opacity, self.inputs,

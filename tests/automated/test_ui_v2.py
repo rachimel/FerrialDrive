@@ -30,6 +30,121 @@ from ferrial_drive.ui_v2.panels import (build_panel_geometry, build_scanlines,
 
 
 class UiV2Tests(unittest.TestCase):
+    def test_loadout_cards_exit_then_enter_while_number_tabs_stay_fixed(self):
+        renderer = Mock()
+        renderer.clip.side_effect = lambda *args: nullcontext()
+        renderer.text_size.return_value = (20, 18)
+        view = UiV2View(self.program.config, renderer)
+        self.program.config.data["equipment_motion_blur"]["samples"] = 0
+        old_index = self.program.state.hud.active_loadout_index
+        self.program.perform("loadout")
+        hud = self.program.state.hud
+        motion = self.program.loadout_slide
+        distance = (self.program.config.window["width"] - view.layout["weapons"][0]
+                    + view.style["weapon_depth_offset_pixels"]
+                    + self.program.config.data["loadout_slide"]["exit_padding_pixels"])
+        initial_tabs = None
+        for delta, expected_index, expected_shift, expected_alpha in (
+                (0, old_index, 0, 1), (0.125, old_index, distance / 2, 0.5),
+                (0.125, None, None, None), (0.125, hud.active_loadout_index, distance / 2, 0.5),
+                (0.125, hud.active_loadout_index, 0, 1)):
+            motion.update(delta)
+            with patch.object(view, "weapon_cards") as cards, patch.object(view, "panel_layer") as tabs:
+                view.weapons(hud, 1, 0, loadout_visual=motion.visual)
+            current_tabs = [call.args for call in tabs.call_args_list]
+            if initial_tabs is None:
+                initial_tabs = current_tabs
+            self.assertEqual(current_tabs, initial_tabs)
+            if expected_index is None:
+                cards.assert_not_called()
+            else:
+                cards.assert_called_once()
+                self.assertIs(cards.call_args.args[1], hud.loadouts[expected_index])
+                self.assertAlmostEqual(cards.call_args.args[2], expected_alpha)
+                self.assertAlmostEqual(cards.call_args.args[3], expected_shift)
+
+    def test_loadout_motion_pauses_queues_latest_request_and_resets(self):
+        initial = self.program.state.hud.active_loadout_index
+        self.program.perform("loadout")
+        self.program.update(0.1)
+        self.program.perform("loadout")
+        before = self.program.loadout_slide.visual
+        self.program.pause.request(True)
+        self.program.update(0.2)
+        self.assertEqual(self.program.loadout_slide.visual, before)
+        self.program.pause.request(False)
+        self.program.pause.update(1)
+        self.program.update(1)
+        self.assertFalse(self.program.loadout_slide.visual.moving)
+        self.assertEqual(self.program.loadout_slide.visual.incoming_index, initial)
+        self.program.perform("loadout")
+        self.program.reset()
+        self.assertFalse(self.program.loadout_slide.visual.moving)
+        self.assertEqual(self.program.loadout_slide.visual.incoming_index,
+                         self.program.state.hud.active_loadout_index)
+
+    def test_weapon_swap_interpolates_depth_and_opacity_with_equal_trapezoid_rows(self):
+        renderer = Mock()
+        renderer.scaled.side_effect = lambda *args: nullcontext()
+        renderer.text_size.return_value = (20, 18)
+        view = UiV2View(self.program.config, renderer)
+        self.program.perform("swap")
+        self.program.update(0.1)
+        motion = self.program.weapon_swap
+        self.assertTrue(motion.visual.moving)
+        self.assertAlmostEqual(motion.visual.weight_before(), 0.5)
+        hud = self.program.state.hud
+        with patch.object(view, "weapon_image") as images:
+            view.weapon_cards(hud, hud.loadouts[hud.active_loadout_index], 1, 0,
+                              ranged_weight=motion.visual.weight_before())
+        self.assertEqual([call.args[1] for call in images.call_args_list], ["melee", "ranged"])
+        for call in images.call_args_list:
+            self.assertAlmostEqual(call.args[3], 0.75)
+        scales = renderer.scaled.call_args_list
+        self.assertEqual(len(scales), 2)
+        for call in scales:
+            self.assertEqual(call.args[0], 1)
+        self.assertEqual(scales[1].args[1][1] - scales[0].args[1][1], view.layout["weapons"][3] + 8)
+        self.program.pause.request(True)
+        before = motion.visual
+        self.program.update(0.2)
+        self.assertEqual(motion.visual, before)
+        self.program.pause.request(False)
+        self.program.pause.update(1)
+        self.program.perform("swap")
+        self.program.update(1)
+        self.assertFalse(motion.visual.moving)
+        self.assertEqual(motion.visual.weight_before(), float(self.program.state.hud.active_weapon_kind == "ranged"))
+        self.program.perform("swap")
+        self.program.reset()
+        self.assertFalse(self.program.weapon_swap.visual.moving)
+
+    def test_trapezoid_cards_keep_equal_dimensions_and_can_restore_slanted_shape(self):
+        renderer = Mock()
+        renderer.scaled.side_effect = lambda *args: nullcontext()
+        renderer.text_size.return_value = (20, 18)
+        view = UiV2View(self.program.config, renderer)
+        hud = self.program.state.hud
+        x, y, width, height = view.layout["weapons"]
+        for weight in (0, 0.5, 1):
+            with patch.object(view, "panel_layer") as panels, patch.object(view, "weapon_image"):
+                view.weapon_cards(hud, hud.loadouts[0], 1, 0, ranged_weight=weight)
+            shapes = [call.args[0] for call in panels.call_args_list]
+            for points in shapes:
+                self.assertAlmostEqual(max(p[0] for p in points) - min(p[0] for p in points), width)
+                self.assertAlmostEqual(max(p[1] for p in points) - min(p[1] for p in points), height)
+                self.assertLess(points[1][0] - points[0][0], points[2][0] - points[3][0])
+                self.assertEqual(points[1][0], points[2][0])
+                self.assertLessEqual(max(p[0] for p in points), x + width)
+            self.assertAlmostEqual(shapes[1][3][0] - shapes[0][3][0],
+                                   view.style["weapon_depth_offset_pixels"] * (1 - 2 * weight))
+        view.style["weapon_card_shape"] = "slanted"
+        renderer.scaled.reset_mock()
+        with patch.object(view, "panel_layer"), patch.object(view, "weapon_image"):
+            view.weapon_cards(hud, hud.loadouts[0], 1, 0, ranged_weight=0)
+        self.assertEqual([call.args[0] for call in renderer.scaled.call_args_list],
+                         [1, view.style["inactive_weapon_scale"]])
+
     def test_camera_projection_and_mouse_auto_target_share_world_coordinates(self):
         self.program.mouse = (1000, 360)
         self.program.update(0)
