@@ -1,7 +1,34 @@
-"""흡수 위치에서 필살기 아이콘을 통과해 에너지 바로 향하는 표시 효과."""
+"""흡수 Trail과 패널 Scanline의 시간 상태. 입력·렌더러와 분리한다."""
 
 from dataclasses import dataclass
 from math import isfinite
+
+
+@dataclass(frozen=True)
+class ScanlineVisual:
+    line_offset_pixels: float = 0
+    highlight_travel_pixels: float = 0
+
+
+class ScanlineMotion:
+    def __init__(self, spacing_pixels, slow_speed_pixels_per_second, fast_speed_pixels_per_second):
+        if (not all(map(isfinite, (spacing_pixels, slow_speed_pixels_per_second, fast_speed_pixels_per_second)))
+                or spacing_pixels <= 0 or not 0 <= slow_speed_pixels_per_second < fast_speed_pixels_per_second):
+            raise ValueError("Scanline 간격은 양수이며 밝은 띠의 속도가 기본 스크롤보다 커야 한다.")
+        self.spacing_pixels = spacing_pixels
+        self.slow_speed_pixels_per_second = slow_speed_pixels_per_second
+        self.fast_speed_pixels_per_second = fast_speed_pixels_per_second
+        self.reset()
+
+    def reset(self):
+        self.visual = ScanlineVisual()
+
+    def update(self, delta_seconds):
+        if not isfinite(delta_seconds) or delta_seconds < 0:
+            raise ValueError("Scanline 갱신 시간은 0 이상의 유한한 초 단위 값이어야 한다.")
+        self.visual = ScanlineVisual(
+            (self.visual.line_offset_pixels + self.slow_speed_pixels_per_second * delta_seconds) % self.spacing_pixels,
+            self.visual.highlight_travel_pixels + self.fast_speed_pixels_per_second * delta_seconds)
 
 
 def _bezier(points, amount):

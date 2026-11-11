@@ -18,7 +18,7 @@ SPEC = importlib.util.spec_from_file_location("ui_v2_sample", ROOT / "tests/ui_u
 SAMPLE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(SAMPLE)
 
-from ferrial_drive.ui_v2.effects import AbsorptionTrail, EnergyAbsorption
+from ferrial_drive.ui_v2.effects import AbsorptionTrail, EnergyAbsorption, ScanlineMotion, ScanlineVisual
 from ferrial_drive.ui_v2.geometry import (PerspectivePlane, body_diamond, counter_plaque,
                                          resource_geometry, scaled_point, slanted_meter, tapered_stroke_mesh)
 from ferrial_drive.ui.counter import CounterVisual
@@ -238,6 +238,33 @@ class UiV2Tests(unittest.TestCase):
         order.border.assert_not_called()
         self.assertEqual([call[0] for call in order.mock_calls[:3]], ["surface", "scanlines", "map_content"])
         self.assertAlmostEqual(order.surface.call_args.kwargs["fill_opacity"], 0.42)
+
+    def test_scanline_speeds_and_phase_do_not_depend_on_frame_rate(self):
+        full = ScanlineMotion(4, 3, 120)
+        stepped = ScanlineMotion(4, 3, 120)
+        full.update(1.5)
+        for _ in range(90):
+            stepped.update(1 / 60)
+        self.assertAlmostEqual(full.visual.line_offset_pixels, 0.5)
+        self.assertAlmostEqual(full.visual.highlight_travel_pixels, 180)
+        self.assertAlmostEqual(full.visual.line_offset_pixels, stepped.visual.line_offset_pixels)
+        self.assertAlmostEqual(full.visual.highlight_travel_pixels, stepped.visual.highlight_travel_pixels)
+        with self.assertRaises(ValueError):
+            full.update(-0.1)
+
+    def test_pause_freezes_scanlines_and_reset_restarts_both_layers(self):
+        self.program.update(0.5)
+        before = self.program.scanline_motion.visual
+        self.program.pause.request(True)
+        self.program.update(1)
+        self.assertEqual(self.program.scanline_motion.visual, before)
+        self.program.perform("resume")
+        self.program.update(1)
+        self.assertEqual(self.program.scanline_motion.visual, before)
+        self.program.update(0.1)
+        self.assertNotEqual(self.program.scanline_motion.visual, before)
+        self.program.perform("reset")
+        self.assertEqual(self.program.scanline_motion.visual, ScanlineVisual())
 
     def test_pause_blocks_sample_shortcuts(self):
         self.program.pico = SimpleNamespace(SDL_WINDOWEVENT=1, SDL_KEYDOWN=2,

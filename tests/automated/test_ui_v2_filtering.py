@@ -74,6 +74,24 @@ class UiV2FilteringTests(unittest.TestCase):
             self.assertEqual(self.render_state(), before)
             self.assertEqual(len(self.renderer.filtered_textures), 1)
 
+    def test_scrolling_scanlines_reuse_patterns_and_release_them(self):
+        images = []
+        for frame in range(120):
+            self.renderer.clear("#000000")
+            self.renderer.scanline_layer(self.shape[0], "#91AEBB", 0.1, 4, 1, frame / 60 * 3)
+            self.renderer.scanline_layer(self.shape[0], "#FFFFFF", 0.22, 4, 1, frame / 60 * 3,
+                                          bright_band=(frame / 60 * 120 % 84 - 24, 24))
+            if frame in (0, 30):
+                pixels = (c_ubyte * (96 * 96 * 4))()
+                self.assertEqual(self.pico.SDL_RenderReadPixels(self.pico.renderer, None,
+                                 self.pico.SDL_PIXELFORMAT_RGBA32, pixels, 96 * 4), 0)
+                images.append(bytes(pixels))
+        self.assertNotEqual(*images)
+        self.assertEqual(len(self.renderer.scanline_textures), 2)
+        self.assertFalse(self.renderer.filtered_textures)
+        self.renderer.close()
+        self.assertFalse(self.renderer.scanline_textures)
+
 
 if __name__ == "__main__":
     unittest.main()

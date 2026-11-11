@@ -2,17 +2,89 @@
 
 from contextlib import contextmanager
 from collections import OrderedDict
-from ctypes import byref, c_float, c_int, c_ubyte
+from ctypes import byref, c_float, c_int, c_ubyte, memmove
 from math import ceil, floor, isfinite
 
 from ferrial_drive.ui.pico_renderer import PicoRenderer
+from .panels import clip_panel_band
 
 
 class PicoV2Renderer(PicoRenderer):
     def __init__(self, font_paths, font_sizes):
         self.ink_bottoms = {}
         self.filtered_textures = OrderedDict()
+        self.scanline_textures = OrderedDict()
         super().__init__(font_paths, font_sizes)
+
+    def _scanline_texture(self, height, spacing, thickness, color):
+        """위상과 무관한 세로 반복 패턴. 두 배 해상도로 만들어 선형 보간한다."""
+        p = self.pico
+        logical_height = ceil(height + spacing)
+        key = (logical_height, spacing, thickness, color)
+        if key not in self.scanline_textures:
+            surface = p.SDL_CreateRGBSurfaceWithFormat(0, 1, logical_height * 2, 32, p.SDL_PIXELFORMAT_RGBA32)
+            if not surface:
+                raise RuntimeError("Scanline 패턴 surface 생성 실패")
+            try:
+                if p.SDL_LockSurface(surface) != 0:
+                    raise RuntimeError("Scanline 패턴 surface 잠금 실패")
+                try:
+                    rgb = self.rgba(color)[:3]
+                    for index in range(logical_height * 2):
+                        offset = ((index + 0.5) / 2) % spacing
+                        alpha = 255 if (offset - spacing / 2) % spacing < thickness else 0
+                        memmove(surface.contents.pixels + index * surface.contents.pitch,
+                                bytes((*rgb, alpha)), 4)
+                finally:
+                    p.SDL_UnlockSurface(surface)
+                texture = p.SDL_CreateTextureFromSurface(p.renderer, surface)
+            finally:
+                p.SDL_FreeSurface(surface)
+            if not texture:
+                raise RuntimeError("Scanline 패턴 텍스처 생성 실패")
+            if (p.SDL_SetTextureBlendMode(texture, p.SDL_BLENDMODE_BLEND) != 0
+                    or p.SDL_SetTextureScaleMode(texture, p.SDL_ScaleModeLinear) != 0):
+                p.SDL_DestroyTexture(texture)
+                raise RuntimeError("Scanline 패턴 필터 설정 실패")
+            self.scanline_textures[key] = texture
+            if len(self.scanline_textures) > 8:
+                _, old = self.scanline_textures.popitem(last=False)
+                p.SDL_DestroyTexture(old)
+        self.scanline_textures.move_to_end(key)
+        return self.scanline_textures[key], logical_height
+
+    def scanline_layer(self, surface, color, opacity, spacing_pixels, thickness_pixels,
+                       offset_pixels, *, bright_band=None):
+        """패턴 UV만 스크롤한다. 밝은 띠는 같은 패턴 위의 밝기 구간으로 그린다."""
+        if opacity <= 0:
+            return
+        top = min(y for _, y in surface)
+        height = max(y for _, y in surface) - top
+        polygons = (surface,)
+        if bright_band is not None:
+            band_top, band_height = bright_band
+            polygons = tuple(clip_panel_band(surface, band_top + index * band_height / 2, band_height / 2)
+                             for index in range(2))
+        polygons = tuple(polygon for polygon in polygons if len(polygon) >= 3)
+        if not polygons:
+            return
+        texture, texture_height = self._scanline_texture(height, spacing_pixels, thickness_pixels, color)
+        p = self.pico
+        p.SDL_SetTextureAlphaMod(texture, 255)
+        offset = spacing_pixels - offset_pixels % spacing_pixels
+        for polygon in polygons:
+            vertices = []
+            for x, y in polygon:
+                weight = 1
+                if bright_band is not None:
+                    weight = max(0, 1 - abs((y - band_top - band_height / 2) / (band_height / 2)))
+                tint = p.SDL_Color(255, 255, 255, self.rgba(color, opacity * weight)[3])
+                vertices.append(p.SDL_Vertex(p.SDL_FPoint(x, y), tint,
+                                             p.SDL_FPoint(0.5, (y - top + offset) / texture_height)))
+            indices = tuple(value for index in range(1, len(vertices) - 1) for value in (0, index, index + 1))
+            if p.SDL_RenderGeometry(p.renderer, texture, (p.SDL_Vertex * len(vertices))(*vertices),
+                                    len(vertices), (c_int * len(indices))(*indices), len(indices)) != 0:
+                raise RuntimeError("Scanline 스크롤 표시 실패")
 
     def filtered_polygons(self, polygons, color, opacity=1, samples=2):
         """확대 렌더를 선형 축소하고 이동·투명도와 무관한 도형 텍스처를 재사용한다."""
@@ -87,6 +159,9 @@ class PicoV2Renderer(PicoRenderer):
         return texture
 
     def close(self):
+        for texture in self.scanline_textures.values():
+            self.pico.SDL_DestroyTexture(texture)
+        self.scanline_textures.clear()
         for texture in self.filtered_textures.values():
             self.pico.SDL_DestroyTexture(texture)
         self.filtered_textures.clear()

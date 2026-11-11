@@ -19,17 +19,13 @@ class PanelGeometry:
     border_parts: tuple[PanelBorderPart, ...]
 
 
-def build_scanlines(surface, spacing_pixels, thickness_pixels):
-    """수평 줄무늬를 패널의 실제 사선·절단 외곽 안으로 자른다."""
-    if (not all(map(isfinite, (spacing_pixels, thickness_pixels)))
-            or not 0 < thickness_pixels <= spacing_pixels):
-        raise ValueError("Scanline 두께·간격은 양수이며 두께가 간격보다 클 수 없다.")
-
-    def clip(points, boundary, below):
-        result = []
+def clip_panel_band(surface, top_pixels, height_pixels):
+    """패널 면을 수평 띠로 자른다. 사선 외곽과 짧은 절단을 유지한다."""
+    points = surface
+    for boundary, below in ((top_pixels, True), (top_pixels + height_pixels, False)):
         if not points:
             return ()
-        previous = points[-1]
+        result, previous = [], points[-1]
         previous_inside = (previous[1] >= boundary) if below else (previous[1] <= boundary)
         for current in points:
             inside = (current[1] >= boundary) if below else (current[1] <= boundary)
@@ -39,13 +35,21 @@ def build_scanlines(surface, spacing_pixels, thickness_pixels):
             if inside:
                 result.append(current)
             previous, previous_inside = current, inside
-        return tuple(result)
+        points = tuple(result)
+    return points
+
+
+def build_scanlines(surface, spacing_pixels, thickness_pixels):
+    """고정 비교용 수평 줄무늬를 패널의 실제 사선·절단 외곽 안으로 자른다."""
+    if (not all(map(isfinite, (spacing_pixels, thickness_pixels)))
+            or not 0 < thickness_pixels <= spacing_pixels):
+        raise ValueError("Scanline 두께·간격은 양수이며 두께가 간격보다 클 수 없다.")
 
     top, bottom = min(y for _, y in surface), max(y for _, y in surface)
     strips = []
     for index in range(ceil((bottom - top) / spacing_pixels)):
         y = top + (index + 0.5) * spacing_pixels
-        strip = clip(clip(surface, y, True), y + thickness_pixels, False)
+        strip = clip_panel_band(surface, y, thickness_pixels)
         if len(strip) >= 3:
             strips.append(strip)
     return tuple(strips)

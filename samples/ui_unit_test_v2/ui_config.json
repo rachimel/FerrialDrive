@@ -653,6 +653,12 @@
         ],
         "style": {
             "panel_scanlines": {
+                "motion": {
+                    "slow_speed_pixels_per_second": 3,
+                    "fast_speed_pixels_per_second": 120,
+                    "highlight_height_pixels": 24,
+                    "highlight_opacity": 0.22
+                },
                 "spacing_pixels": 4,
                 "thickness_pixels": 1,
                 "minimap": {

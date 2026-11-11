@@ -22,7 +22,7 @@ from ferrial_drive.ui.health import HealthTrail
 from ferrial_drive.ui.pause import PauseState
 from ferrial_drive.ui.state import Health, HudState, LoadoutInfo, RadarContact, TargetInfo, WeaponInfo
 from ferrial_drive.ui.transition import SceneTransition
-from ferrial_drive.ui_v2.effects import EnergyAbsorption
+from ferrial_drive.ui_v2.effects import EnergyAbsorption, ScanlineMotion
 from ferrial_drive.ui_v2.geometry import resource_geometry, scaled_point
 from ferrial_drive.ui_v2.pico_renderer import PicoV2Renderer
 from ferrial_drive.ui_v2.state import DialogueInfo, HudV2State
@@ -47,6 +47,10 @@ class UiUnitTestV2:
                                           self.config.data["animation"]["duration_seconds"], 0)
         self.pause = PauseState(self.config.data["pause"]["duration_seconds"])
         self.absorption = EnergyAbsorption(self.config.data["v2"]["absorption_duration_seconds"])
+        scanline = self.config.data["v2"]["style"]["panel_scanlines"]
+        self.scanline_motion = ScanlineMotion(scanline["spacing_pixels"],
+                                              scanline["motion"]["slow_speed_pixels_per_second"],
+                                              scanline["motion"]["fast_speed_pixels_per_second"])
         self.reset()
 
     def reset(self):
@@ -89,6 +93,7 @@ class UiUnitTestV2:
                                             measure_text=self.damage_text_size,
                                             **self.config.data["damage_popup"])
         self.absorption.clear()
+        self.scanline_motion.reset()
 
     def damage_text_size(self, text):
         if self.renderer is not None:
@@ -271,6 +276,8 @@ class UiUnitTestV2:
         self.target_health.update(delta_seconds)
         self.damage_numbers.update(delta_seconds)
         self.absorption.update(delta_seconds)
+        if self.transition.pose("combat").opacity > 0:
+            self.scanline_motion.update(delta_seconds)
 
     def actor(self, owner, opacity):
         r, c = self.renderer, self.config.colors
@@ -299,7 +306,8 @@ class UiUnitTestV2:
                                  combo_visual=self.hit_counter.visual, cursor_position=self.mouse,
                                  player_trailing_ratio=self.player_health.trailing_ratio,
                                  target_trailing_ratio=self.target_health.trailing_ratio,
-                                 absorption_trails=self.absorption.trails)
+                                 absorption_trails=self.absorption.trails,
+                                 scanline_visual=self.scanline_motion.visual)
         if self.pause.opacity > 0:
             self.view.pause(self.pause.opacity, self.inputs)
         if self.help_visible:
