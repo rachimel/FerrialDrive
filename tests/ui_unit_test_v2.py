@@ -22,7 +22,7 @@ from ferrial_drive.ui.health import HealthTrail
 from ferrial_drive.ui.pause import PauseState
 from ferrial_drive.ui.state import Health, HudState, LoadoutInfo, RadarContact, TargetInfo, WeaponInfo
 from ferrial_drive.ui.transition import SceneTransition
-from ferrial_drive.ui_v2.effects import DialoguePanelMotion, EnergyAbsorption, HealthDamageFlash, ScanlineMotion
+from ferrial_drive.ui_v2.effects import DialoguePanelMotion, EnergyAbsorption, HealthDamageFlash, IndicatorFade, ScanlineMotion
 from ferrial_drive.ui_v2.lock_on import LockOnMotion
 from ferrial_drive.ui_v2.geometry import resource_geometry, scaled_point
 from ferrial_drive.ui_v2.pico_renderer import PicoV2Renderer
@@ -102,6 +102,8 @@ class UiUnitTestV2:
         self.scanline_motion.reset()
         self.dialogue_motion.reset(opened=True, animate=True)
         self.lock_motion.reset(self.selected_target_id, self.state.target_body)
+        self.counter_message = IndicatorFade(**self.config.data["v2"]["style"]["counter_message_motion"])
+        self.counter_message.reset(self.state.counter, animate=True)
 
     def damage_text_size(self, text):
         if self.renderer is not None:
@@ -277,6 +279,8 @@ class UiUnitTestV2:
             self.perform(result.action)
 
     def update(self, delta_seconds):
+        self.counter_message.request(self.state.counter)
+        self.counter_message.update(delta_seconds)
         self.scanline_motion.update(delta_seconds)
         self.dialogue_motion.update(delta_seconds)
         self.lock_motion.update_body(self.state.target_body)
@@ -337,7 +341,8 @@ class UiUnitTestV2:
                                  dialogue_visual=self.dialogue_motion.visual,
                                  lock_visuals=self.lock_motion.visuals,
                                  player_damage_flashes=self.player_flash.visuals,
-                                 target_damage_flashes=self.target_flash.visuals)
+                                 target_damage_flashes=self.target_flash.visuals,
+                                 counter_message_opacity=self.counter_message.opacity)
         if self.pause.opacity > 0:
             self.view.pause(self.pause.opacity, self.inputs,
                             scanline_visual=self.scanline_motion.visual)

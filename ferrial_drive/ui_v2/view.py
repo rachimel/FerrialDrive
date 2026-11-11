@@ -11,11 +11,17 @@ from .geometry import (PerspectivePlane, body_diamond, counter_plaque, quad_fill
 from .panels import (PanelGeometry, build_panel_geometry, merge_panel_y_ranges,
                      panel_bright_band_top, scale_panel_geometry)
 from .panel_probe import PanelProbeRenderer
-from .effects import DialoguePanelVisual, ScanlineVisual
+from .effects import DialoguePanelVisual, ScanlineVisual, breathing_opacity, subtle_flicker
 from .lock_on import LockOnVisual, outline_segment
 
 
 class UiV2View(UiView):
+    def text_flicker(self, seed):
+        return subtle_flicker(self._scanline_visual.elapsed_seconds, seed=seed, **self.style["text_flicker"])
+
+    def damage_number(self, visual, opacity, offset_x):
+        super().damage_number(visual, opacity * self.text_flicker(9), offset_x)
+
     def __init__(self, config, renderer):
         super().__init__(config, renderer)
         self._scanline_visual = ScanlineVisual()
@@ -307,7 +313,7 @@ class UiV2View(UiView):
                 if abs(contact.x) <= 1 and abs(contact.y) <= 1:
                     px, py = cx + contact.x * rect.width * 0.43, cy - contact.y * rect.height * 0.43
                     r.rect(Rect(px - 2, py - 2, 4, 4), c["enemy" if contact.kind == "enemy" else "accent"], opacity)
-        r.text("MAP", rect.x, rect.y + rect.height + 6, "hud_small", c["muted"], opacity)
+        r.text("MAP", rect.x, rect.y + rect.height + 6, "hud_small", c["muted"], opacity * self.text_flicker(1))
 
     def target(self, state, opacity, offset_x, *, draw_marker=True):
         r, c = self.renderer, self.config.colors
@@ -371,26 +377,28 @@ class UiV2View(UiView):
         value_width, value_height = r.text_size(value, "v2_hp")
         x, top = geometry.hp_outline[0]
         gap = self.style["resource_label_gap_pixels"]
-        r.text(value, x, top - value_height - gap, "v2_hp", c["text"], opacity)
+        hp_alpha = opacity * self.text_flicker(2)
+        r.text(value, x, top - value_height - gap, "v2_hp", c["text"], hp_alpha)
         hp_height = r.text_size("HP", "hud_small")[1]
-        r.text("HP", x + value_width + 9, top - hp_height - gap, "hud_small", c["muted"], opacity)
+        r.text("HP", x + value_width + 9, top - hp_height - gap, "hud_small", c["muted"], hp_alpha)
         x, y, width, height = self.layout["energy_bar"]
         outline, channel = geometry.energy_outline, geometry.energy_channel
         self.panel_layer(geometry.energy_body, c["panel"], opacity, grain=True)
         self.polygon(geometry.level_shape, c["panel"], opacity * self.style["surface_opacity"], filled=True)
         self.stroke(outline + outline[:1], c["text"], opacity * 0.75, 1.5)
         self.polygon(channel, c["energy"], opacity * 0.1, filled=True)
+        energy_alpha = opacity * breathing_opacity(self._scanline_visual.elapsed_seconds, **self.style["energy_breathing"])
         if state.energy_ratio > 0:
             filled = quad_fill(channel, state.energy_ratio)
-            self.polygon(filled, c["energy_fill"], opacity, filled=True)
-            self.stroke((filled[1], filled[2]), c["energy"], opacity, 2)
+            self.polygon(filled, c["energy_fill"], energy_alpha, filled=True)
+            self.stroke((filled[1], filled[2]), c["energy"], energy_alpha, 2)
         self.stroke((outline[-1], geometry.level_shape[-2]),
                      c["energy"] if state.overdrive else self.ui_accent, opacity, 2)
         label = "O V E R D R I V E" if state.overdrive else "E N E R G Y"
         label_width = r.text_size(label, "v2_meter_label")[0]
         label_center = sum(point[0] for point in channel) / 4
         self.slanted_text(label, label_center - label_width / 2, y + 2,
-                          "v2_meter_label", c["text"], opacity)
+                          "v2_meter_label", c["text"], energy_alpha)
         level_right = x + width + self.layout["energy_level_width_pixels"]
         level_text_right = level_right - 8
         self.slanted_text("LV", level_text_right, geometry.level_top + 4,
@@ -476,12 +484,12 @@ class UiV2View(UiView):
                 self.stroke(((left + 28, top + 4), (x + width - 4, top + 4)), self.ui_accent, alpha * 0.3)
                 self.weapon_image(weapon, kind, Rect(left + 18, top + 11, width - 112, height - 39), alpha)
                 r.neon_text("MELEE" if kind == "melee" else "RANGED", left + 17, top + height - 23,
-                            "weapon_name", c["text"], alpha * self.style["weapon_text_opacity"],
+                            "weapon_name", c["text"], alpha * self.style["weapon_text_opacity"] * self.text_flicker(4 + index),
                             **self.style["weapon_text_neon"])
                 if weapon.rounds is not None:
                     text = str(weapon.rounds)
                     r.neon_text(text, x + width - r.text_size(text, "v2_ammo")[0] - 16,
-                                top + 10, "v2_ammo", c["text"], alpha * self.style["weapon_text_opacity"],
+                                top + 10, "v2_ammo", c["text"], alpha * self.style["weapon_text_opacity"] * self.text_flicker(6),
                                 **self.style["weapon_text_neon"])
 
     def absorption(self, trails, opacity):
@@ -540,6 +548,7 @@ class UiV2View(UiView):
         ink_bottom = r.digit_ink_bottom(role) * scale
         viewport = Rect(0, 0, width, ink_bottom)
         self.counter_base(project, width, ink_bottom, opacity)
+        text_alpha = opacity * self.text_flicker(7 if label == "combo" else 8)
         x = 0
         for before, after, slot_width in zip(old, new, widths):
             moving = visual.moving and before != after and after != ","
@@ -550,7 +559,7 @@ class UiV2View(UiView):
                     continue
                 left = x + (slot_width - r.text_size(char, role)[0]) * scale / 2
                 for projection, color in ((shadow, c["counter_shadow"]), (project, c["text"])):
-                    r.warped_text(char, left, top, role, color, projection, opacity * alpha,
+                    r.warped_text(char, left, top, role, color, projection, text_alpha * alpha,
                                   scale_x=scale, scale_y=scale, clip_rect=viewport)
             x += slot_width * scale
         label_text = self.config.labels[label]
@@ -558,7 +567,7 @@ class UiV2View(UiView):
         label_width = r.text_size(label_text, label_role)[0]
         r.warped_text(label_text, width - label_width - 6,
                       ink_bottom + self.style["counter_plaque_height_pixels"] + 5,
-                      label_role, c["muted"], project, opacity)
+                      label_role, c["muted"], project, text_alpha)
 
     def combat(self, state, damage_visuals=(), opacity=1, offset_x=0, *, scanline_visual=None, **kwargs):
         with self.scanline_frame(scanline_visual):
@@ -568,7 +577,7 @@ class UiV2View(UiView):
                counter_visual=None, combo_visual=None, counters_opacity=1,
                cursor_position=None, player_trailing_ratio=None, target_trailing_ratio=None,
                absorption_trails=(), scanline_visual=None, dialogue_visual=None, lock_visuals=None,
-               player_damage_flashes=(), target_damage_flashes=()):
+               player_damage_flashes=(), target_damage_flashes=(), counter_message_opacity=None):
         r, c, hud = self.renderer, self.config.colors, state.hud
         scale = self.style["hud_scale"]
         width, height = self.config.window["width"], self.config.window["height"]
@@ -607,11 +616,12 @@ class UiV2View(UiView):
             right = width - self.style["counters"][label]["right_margin_pixels"]
             with r.scaled(scale, (right, y)):
                 self.perspective_counter(visual, role, label, y, alpha)
-        if state.counter:
+        counter_alpha = float(state.counter) if counter_message_opacity is None else counter_message_opacity
+        if counter_alpha > 0:
             text_scale = self.style["counter_text_scale"]
             with r.scaled(scale, self.layout["counter_message"]):
                 r.text("COUNTER!", *self.layout["counter_message"], "v2_counter", c["warning"],
-                       opacity, scale_x=text_scale, scale_y=text_scale)
+                       opacity * counter_alpha * self.text_flicker(10), scale_x=text_scale, scale_y=text_scale)
         for visual in damage_visuals:
             with r.scaled(scale, (visual.x, visual.y)):
                 self.damage_number(visual, opacity, offset_x)

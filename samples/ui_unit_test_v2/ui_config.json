@@ -10,8 +10,8 @@
         "damage_duration_seconds": 1.15,
         "damage_scatter_x_pixels": 64,
         "damage_scatter_y_pixels": 44,
-        "damage_width_expand_seconds": 0.05,
-        "damage_height_expand_seconds": 0.06,
+        "damage_width_expand_seconds": 0.025,
+        "damage_height_expand_seconds": 0.035,
         "transition_input_policy": "consume_until_finished"
     },
     "fonts": {
@@ -146,6 +146,8 @@
         "fade_seconds": 0.3
     },
     "damage_popup": {
+        "width_expand_seconds": 0.025,
+        "height_expand_seconds": 0.035,
         "digit_scales": [
             0.75,
             1.0,
@@ -653,6 +655,18 @@
             ]
         ],
         "style": {
+            "text_flicker": {
+                "minimum_opacity": 0.94,
+                "interval_seconds": 0.6
+            },
+            "energy_breathing": {
+                "period_seconds": 2.4,
+                "minimum_opacity": 0.82
+            },
+            "counter_message_motion": {
+                "enter_seconds": 0.06,
+                "exit_seconds": 0.05
+            },
             "dash_icon": {
                 "chevron_width_pixels": 24,
                 "height_pixels": 26,

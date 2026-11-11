@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [UI v2 미세 명도·호흡·빠른 전환](2026-11-11-ui-v2-subtle-hud-motion.md): TIME(scope). 약한 깜빡임·에너지 호흡·글자/숫자 범위·피해 숫자/COUNTER 대상 선택과 구현·검증 보고의 정확한 시각을 확인한다.
+
 - [UI v2 대시 꺾쇠·하단 정렬](2026-11-11-ui-v2-dash-chevrons.md): TIME(scope). 재제작/하단 정렬 요청·꺾쇠/가로 위치 선택과 구현·검증 보고의 정확한 시각을 확인한다.
 
 - [UI v2 HP 피해 구간 flash](2026-11-11-ui-v2-health-damage-flash.md): TIME(scope). HP 순간 감소 구간 지정·빨간 Trail 유지 요청과 구현·검증 보고의 정확한 시각을 확인한다.

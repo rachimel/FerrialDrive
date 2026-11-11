@@ -19,7 +19,8 @@ SAMPLE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(SAMPLE)
 
 from ferrial_drive.ui_v2.effects import (AbsorptionTrail, DialoguePanelMotion, DialoguePanelVisual,
-                                        EnergyAbsorption, HealthDamageFlash, HealthFlashVisual, ScanlineMotion, ScanlineVisual)
+                                        EnergyAbsorption, HealthDamageFlash, HealthFlashVisual, IndicatorFade,
+                                        ScanlineMotion, ScanlineVisual, breathing_opacity, subtle_flicker)
 from ferrial_drive.ui_v2.geometry import (PerspectivePlane, body_diamond, counter_plaque,
                                          resource_geometry, scaled_point, slanted_meter, tapered_stroke_mesh)
 from ferrial_drive.ui.counter import CounterVisual
@@ -29,6 +30,55 @@ from ferrial_drive.ui_v2.panels import (build_panel_geometry, build_scanlines,
 
 
 class UiV2Tests(unittest.TestCase):
+    def test_subtle_text_brightness_is_bounded_continuous_and_deterministic(self):
+        for seed in (1, 4, 7, 10):
+            samples = [subtle_flicker(index / 60, seed=seed) for index in range(600)]
+            self.assertTrue(all(0.94 <= value <= 1 for value in samples))
+            self.assertLess(max(abs(a - b) for a, b in zip(samples, samples[1:])), 0.003)
+            self.assertEqual(samples[60], subtle_flicker(1, seed=seed))
+            self.assertAlmostEqual(subtle_flicker(0.6 - 1e-8, seed=seed), subtle_flicker(0.6 + 1e-8, seed=seed))
+        self.assertEqual(subtle_flicker(0.3, minimum_opacity=1), 1)
+
+    def test_energy_breathing_period_and_indicator_transition_reversal(self):
+        self.assertAlmostEqual(breathing_opacity(0), 1)
+        self.assertAlmostEqual(breathing_opacity(1.2), 0.82)
+        self.assertAlmostEqual(breathing_opacity(2.4), 1)
+        indicator = IndicatorFade()
+        indicator.request(True)
+        indicator.update(0.03)
+        self.assertAlmostEqual(indicator.opacity, 0.5)
+        before = indicator.opacity
+        indicator.request(False)
+        self.assertEqual(indicator.opacity, before)
+        indicator.update(0.05)
+        self.assertEqual(indicator.opacity, 0)
+        indicator.request(True)
+        indicator.update(0.06)
+        self.assertEqual(indicator.opacity, 1)
+
+    def test_fast_damage_entry_and_exit_keep_full_lifetime(self):
+        self.program.perform("damage_player")
+        numbers = self.program.damage_numbers
+        self.assertAlmostEqual(numbers.width_expand_seconds + numbers.height_expand_seconds, 0.06)
+        self.assertEqual(numbers.duration_seconds, 1.15)
+        numbers.update(0.06)
+        self.assertEqual(numbers.visuals[0].width_progress, 1)
+        self.assertAlmostEqual(numbers.visuals[0].height_progress, 1)
+        numbers.update(1.15 - 0.06 - 0.03)
+        self.assertLess(numbers.visuals[0].height_progress, 1)
+        numbers.update(0.04)
+        self.assertFalse(numbers.visuals)
+
+    def test_counter_brightness_changes_glyphs_while_plaque_opacity_stays_fixed(self):
+        renderer = Mock()
+        renderer.text_size.side_effect = lambda text, role: (len(text) * 16, 24)
+        renderer.digit_ink_bottom.return_value = 24
+        view = UiV2View(self.program.config, renderer)
+        with patch.object(view, "counter_base") as base:
+            view.perspective_counter(CounterVisual(98, 98, 1, 1), "combo_number", "combo", 178, 1)
+        self.assertEqual(base.call_args.args[-1], 1)
+        self.assertTrue(all(0.94 <= call.args[6] <= 1 for call in renderer.warped_text.call_args_list))
+
     def test_hp_flash_keeps_each_real_damage_interval_and_does_not_restart_older_hits(self):
         effect = HealthDamageFlash()
         effect.trigger(1, 0.8)

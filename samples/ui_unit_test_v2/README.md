@@ -77,6 +77,7 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 
 ## 검증
 
+- 이번 미세 명도/호흡/전환: UI 119개·획득 7개, 총 126개 통과. 글자 명도 범위·60fps 인접 변화량·경계 연속성·결정성, 호흡 주기/범위, COUNTER 중간 반전/종료, 피해 펼침 단축/수명 유지, 카운터 받침판 투명도 유지를 검사했다. 실제 SDL에서 피해·COUNTER 전환과 호흡 240프레임을 렌더하고 주요 이미지를 검토했다. 출력은 `output/ui_unit_test_v2/subtle_hud_motion/`다. 실제 창 사용감·개인별 시각 반응·GPU 성능·최종 외관 승인은 미확인이다.
 - 이번 대시 아이콘/하단 정렬: 기존 자동 122개 통과. 실제 SDL에서 창 높이 720/900 각각 전투 화면·대시 준비·비활성, 총 6개 상태를 렌더했다. 주요 이미지를 열어 꺾쇠와 SPACE 배치를 검토했다. 두 높이에서 잉크 좌우 범위는 825~873px로 같고 실제 잉크 아래 여백도 15px로 같았다. 출력은 `output/ui_unit_test_v2/dash_chevrons/`다. 실제 창 조작·외관 승인은 미확인이다.
 - 이번 HP 피해 flash: UI 115개·획득 7개, 총 122개 통과. 실제 피해 구간·연속 피해별 시간·Trail 감소값 유지·흰 구간 클리핑·일시정지/초기화·표적 교체 시 분리를 검사했다. 실제 SDL에서 적/플레이어 동시 피해·연속 피해·다른 표적 피해를 60fps 시간 간격의 120프레임으로 렌더하고 주요 이미지를 열어 흰색→빨간 Trail→Trail 축소를 확인했다. 출력은 `output/ui_unit_test_v2/health_damage_flash/`다. 실제 창 조작·GPU 성능·최종 외관 승인은 미확인이다.
 - 이번 등장 중 퇴장 변경: 자동 118개 통과. 시작/오버슈트/중간/완성 직전의 취소에서 각도·크기가 이어지고, 끝값은 취소 순간 각도의 2배·배율의 1.5배이며 0.25초 후 제거되는 것을 검사했다. 최종 설정의 빠른 교체·정상 교체 180프레임을 실제 SDL로 렌더했다. 출력은 `output/ui_unit_test_v2/lock_cancel_exit/`다. 실제 창 조작·외관 승인은 미확인이다.
@@ -103,6 +104,10 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 - 진입점의 `--scene menu`·`--frames 2`·`--capture output/ui_unit_test_v2/combat.png`는 장면 선택·프레임 제한·재생성 가능한 화면 저장용이다.
 
 ## 등장 효과 연결 지점
+
+미세 명도는 `v2.style.text_flicker`의 최소 불투명도 0.94/샘플 간격 0.6초, 호흡은 `energy_breathing`의 최소 0.82/주기 2.4초다. 각각 최소 불투명도를 1로 두면 해당 변화가 정지한다. 기존 `ScanlineVisual.elapsed_seconds`를 사용하며 글자 명도는 패널에 적용하지 않는다.
+
+피해 숫자의 실제 펼침 설정은 `damage_popup.width_expand_seconds=0.025`·`height_expand_seconds=0.035`다. 각 등장/퇴장 0.06초이며 총 표시 시간은 유지한다. COUNTER는 `IndicatorFade`를 갱신해 `view.combat(counter_message_opacity=...)`로 공급한다. 시간은 `counter_message_motion`의 등장 0.06초·퇴장 0.05초다. 이는 HIT/DAMAGE의 숫자 자리 갱신 시간이나 록온 개폐 시간과 별개다.
 
 HP flash는 `HealthDamageFlash.trigger(피해 전 비율, 피해 후 비율)`·`update(delta_seconds)`로 관리하고 `visuals`를 `view.combat(player_damage_flashes=..., target_damage_flashes=...)`에 공급한다. 실제 피해가 0이면 발생시키지 않는다. 상태는 실제 HP·빨간 Trail과 분리하며 샘플에서는 Trail과 함께 일시정지한다. 표적 교체와 F5는 해당 flash를 비운다. 색/유지/감소 시간은 `v2.style.health_damage_flash`의 흰색/0.04초/0.08초다. 흰 구간은 이번 실제 피해량이며, 남은 HP나 이전 피해 Trail 전체를 빛내지 않는다.
 

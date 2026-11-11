@@ -1,7 +1,62 @@
 """흡수 Trail·패널 스캔·대화창 개폐의 시간 상태. 입력·렌더러와 분리한다."""
 
 from dataclasses import dataclass
-from math import isfinite
+from math import cos, floor, isfinite, tau
+from functools import lru_cache
+from random import Random
+
+from ferrial_drive.animation import ScalarAnimation
+
+
+@lru_cache(maxsize=128)
+def _brightness_sample(index, seed):
+    return Random(index + seed * 65537).random()
+
+
+def subtle_flicker(elapsed_seconds, *, minimum_opacity=0.94, interval_seconds=0.6, seed=1):
+    """작은 밝기 범위의 샘플을 부드럽게 연결한다. 글자를 끄지 않는다."""
+    if (not all(map(isfinite, (elapsed_seconds, minimum_opacity, interval_seconds)))
+            or elapsed_seconds < 0 or not 0 <= minimum_opacity <= 1 or interval_seconds <= 0):
+        raise ValueError("밝기 시간·범위·간격이 유효하지 않다.")
+    position = elapsed_seconds / interval_seconds
+    index = floor(position)
+    amount = position - index
+    amount = amount * amount * (3 - 2 * amount)
+    a, b = _brightness_sample(index, seed), _brightness_sample(index + 1, seed)
+    return minimum_opacity + (1 - minimum_opacity) * (a + (b - a) * amount)
+
+
+def breathing_opacity(elapsed_seconds, *, period_seconds=2.4, minimum_opacity=0.82):
+    if (not all(map(isfinite, (elapsed_seconds, period_seconds, minimum_opacity)))
+            or elapsed_seconds < 0 or period_seconds <= 0 or not 0 <= minimum_opacity <= 1):
+        raise ValueError("호흡 시간·주기·밝기 범위가 유효하지 않다.")
+    return minimum_opacity + (1 - minimum_opacity) * (0.5 + 0.5 * cos(tau * elapsed_seconds / period_seconds))
+
+
+class IndicatorFade:
+    def __init__(self, enter_seconds=0.06, exit_seconds=0.05):
+        if not all(isfinite(value) and value > 0 for value in (enter_seconds, exit_seconds)):
+            raise ValueError("인디케이터 전환 시간은 양수인 초 단위 값이어야 한다.")
+        self.enter_seconds, self.exit_seconds = enter_seconds, exit_seconds
+        self.reset(False)
+
+    def reset(self, visible, *, animate=False):
+        self.visible = bool(visible)
+        self.animation = ScalarAnimation(0 if animate else float(visible), float(visible),
+                                         self.enter_seconds if visible else self.exit_seconds)
+
+    def request(self, visible):
+        if self.visible != bool(visible):
+            self.visible = bool(visible)
+            self.animation = ScalarAnimation(self.opacity, float(visible),
+                                             self.enter_seconds if visible else self.exit_seconds)
+
+    def update(self, delta_seconds):
+        self.animation.update(delta_seconds)
+
+    @property
+    def opacity(self):
+        return self.animation.value
 
 
 @dataclass(frozen=True)
