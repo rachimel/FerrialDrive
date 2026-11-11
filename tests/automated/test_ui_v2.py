@@ -60,17 +60,17 @@ class UiV2Tests(unittest.TestCase):
         self.assertIsNone(self.program.auto_target.pending_id)
 
     def test_text_blinks_regularly_with_smooth_transitions_and_half_opacity_floor(self):
-        samples = [subtle_flicker((index + 0.5) / 60) for index in range(120)]
+        samples = [subtle_flicker((index + 0.5) / 100) for index in range(160)]
         self.assertTrue(all(0.5 <= value <= 1 for value in samples))
         self.assertTrue(any(0.5 < value < 1 for value in samples))
-        for index in range(12, 120):
-            self.assertAlmostEqual(samples[index], samples[index - 12])
-        for elapsed, expected in ((0, 1), (0.07, 1), (0.085, 0.75), (0.1, 0.5),
-                                  (0.17, 0.5), (0.185, 0.75), (0.2, 1)):
+        for index in range(16, 160):
+            self.assertAlmostEqual(samples[index], samples[index - 16])
+        for elapsed, expected in ((0, 1), (0.01, 1), (0.045, 0.75), (0.08, 0.5),
+                                  (0.09, 0.5), (0.125, 0.75), (0.16, 1)):
             self.assertAlmostEqual(subtle_flicker(elapsed), expected)
-        for edge in (0.07, 0.1, 0.17, 0.2):
+        for edge in (0.01, 0.08, 0.09, 0.16):
             self.assertAlmostEqual(subtle_flicker(edge - 1e-7), subtle_flicker(edge + 1e-7), places=7)
-        self.assertEqual(samples[60], subtle_flicker(60.5 / 60))
+        self.assertEqual(samples[60], subtle_flicker(60.5 / 100))
         self.assertEqual(subtle_flicker(0.3, minimum_opacity=1), 1)
 
     def test_energy_breathing_period_and_indicator_transition_reversal(self):

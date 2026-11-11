@@ -6,8 +6,8 @@ from math import cos, isfinite, tau
 from ferrial_drive.animation import ScalarAnimation
 
 
-def subtle_flicker(elapsed_seconds, *, minimum_opacity=0.5, period_seconds=0.2,
-                   dim_seconds=0.1, transition_seconds=0.03):
+def subtle_flicker(elapsed_seconds, *, minimum_opacity=0.5, period_seconds=0.16,
+                   dim_seconds=0.08, transition_seconds=0.07):
     """공통 주기로 밝기를 교대하고 전환 구간만 부드럽게 보간한다."""
     if (not all(map(isfinite, (elapsed_seconds, minimum_opacity, period_seconds, dim_seconds, transition_seconds)))
             or elapsed_seconds < 0 or not 0 <= minimum_opacity <= 1
