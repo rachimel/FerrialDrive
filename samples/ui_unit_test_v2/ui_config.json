@@ -55,6 +55,10 @@
             "path": "../../data/fonts/ferrial_hud_square_wide/FerrialHudSquareWide-Regular.otf",
             "size": 16
         },
+        "v2_map_label": {
+            "path": "../../data/fonts/ferrial_hud_square_wide/FerrialHudSquareWide-Regular.otf",
+            "size": 20
+        },
         "target_heading": {
             "path": "../../data/fonts/ferrial_hud_square_wide/FerrialHudSquareWide-Regular.otf",
             "size": 14

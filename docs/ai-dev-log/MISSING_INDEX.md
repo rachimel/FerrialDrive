@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [UI v2 MAP 확대](2026-11-12-ui-v2-map-label.md): TIME(scope). MAP 확대 요청의 정확한 발언 시각을 확인한다.
+
 - [UI v2 GPU 방향성 블러](2026-11-12-ui-v2-weapon-blur-stronger.md): TIME(scope). 잔상 강화 요청·실제 블러 질문·방향성 필터 선택의 개별 시각을 확인한다.
 
 - [UI v2 카운터 축소·중앙 정렬](2026-11-12-ui-v2-counter-center.md): TIME(scope). 10% 축소·간격 축소·묶음 전체 중앙 정렬 선택의 개별 시각을 확인한다.

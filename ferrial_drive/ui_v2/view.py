@@ -311,7 +311,7 @@ class UiV2View(UiView):
                 if abs(contact.x) <= 1 and abs(contact.y) <= 1:
                     px, py = cx + contact.x * rect.width * 0.43, cy - contact.y * rect.height * 0.43
                     r.rect(Rect(px - 2, py - 2, 4, 4), c["enemy" if contact.kind == "enemy" else "accent"], opacity)
-        r.text("MAP", rect.x, rect.y + rect.height + 6, "hud_small", c["muted"], opacity)
+        r.text("MAP", rect.x, rect.y + rect.height + 6, "v2_map_label", c["muted"], opacity)
 
     def target(self, state, opacity, offset_x, *, draw_marker=True):
         r, c = self.renderer, self.config.colors

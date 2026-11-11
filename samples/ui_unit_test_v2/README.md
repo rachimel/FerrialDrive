@@ -48,6 +48,7 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 - `v2.style.lock_text_gap_pixels`·`lock_text_end_gap_pixels`: 강조선에 끝점을 맞추는 글자의 수직 간격과 끝 여백. 크기 값은 HUD 축소 전 논리 픽셀이다.
 - `v2.style.weapon_outer_edge_pixels`: L자 대신 강조하는 무장 왼쪽 외곽의 두께.
 - `ui_config.json`의 `colors`·`fonts`: 색상과 글꼴 역할·크기.
+- `fonts.v2_map_label`: MAP 전용 20px 글꼴 크기다.
 - `hud_sample.json`: HP·에너지·Overdrive·HIT/DAMAGE·무장, 적 3기의 고유 ID·위치·개별 HP, 대화 문구.
 - 변경 뒤 Runner에서 재실행한다. 실행 중 샘플 원본을 저장하거나 수정하지 않는다.
 
