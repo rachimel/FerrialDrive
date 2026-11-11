@@ -665,7 +665,7 @@
         ],
         "style": {
             "text_flicker": {
-                "minimum_opacity": 0.8,
+                "minimum_opacity": 0.9,
                 "period_seconds": 0.12,
                 "dim_seconds": 0.06,
                 "transition_seconds": 0.06

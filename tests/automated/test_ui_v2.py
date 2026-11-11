@@ -59,13 +59,13 @@ class UiV2Tests(unittest.TestCase):
         self.assertEqual(self.program.selected_target_id, before)
         self.assertIsNone(self.program.auto_target.pending_id)
 
-    def test_text_blinks_regularly_with_continuous_transitions_and_80_percent_floor(self):
+    def test_text_blinks_regularly_with_continuous_transitions_and_90_percent_floor(self):
         samples = [subtle_flicker((index + 0.5) / 100) for index in range(120)]
-        self.assertTrue(all(0.8 <= value <= 1 for value in samples))
-        self.assertTrue(any(0.8 < value < 1 for value in samples))
+        self.assertTrue(all(0.9 <= value <= 1 for value in samples))
+        self.assertTrue(any(0.9 < value < 1 for value in samples))
         for index in range(12, 120):
             self.assertAlmostEqual(samples[index], samples[index - 12])
-        for elapsed, expected in ((0, 1), (0.03, 0.9), (0.06, 0.8), (0.09, 0.9), (0.12, 1)):
+        for elapsed, expected in ((0, 1), (0.03, 0.95), (0.06, 0.9), (0.09, 0.95), (0.12, 1)):
             self.assertAlmostEqual(subtle_flicker(elapsed), expected)
         for edge in (0.06, 0.12):
             self.assertAlmostEqual(subtle_flicker(edge - 1e-7), subtle_flicker(edge + 1e-7), places=7)
@@ -111,7 +111,7 @@ class UiV2Tests(unittest.TestCase):
         with patch.object(view, "counter_base") as base:
             view.perspective_counter(CounterVisual(98, 98, 1, 1), "combo_number", "combo", 178, 1)
         self.assertEqual(base.call_args.args[-1], 1)
-        self.assertTrue(all(abs(call.args[6] - 0.8) < 1e-9 for call in renderer.warped_text.call_args_list))
+        self.assertTrue(all(abs(call.args[6] - 0.9) < 1e-9 for call in renderer.warped_text.call_args_list))
 
     def test_only_hit_and_damage_counters_use_the_blink_effect(self):
         renderer = Mock()
