@@ -656,6 +656,17 @@
             ]
         ],
         "style": {
+            "dialogue_key_color": "#F0FCFF",
+            "dialogue_description_opacity": 0.78,
+            "lock_motion": {
+                "enter_seconds": 0.4,
+                "label_seconds": 0.2,
+                "exit_seconds": 0.25,
+                "move_seconds": 0.4,
+                "hold_seconds": 0.25,
+                "start_scale": 0.25,
+                "exit_scale": 1.5
+            },
             "dialogue_motion": {
                 "open_seconds": 0.2,
                 "text_seconds": 0,

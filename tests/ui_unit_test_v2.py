@@ -23,6 +23,7 @@ from ferrial_drive.ui.pause import PauseState
 from ferrial_drive.ui.state import Health, HudState, LoadoutInfo, RadarContact, TargetInfo, WeaponInfo
 from ferrial_drive.ui.transition import SceneTransition
 from ferrial_drive.ui_v2.effects import DialoguePanelMotion, EnergyAbsorption, ScanlineMotion
+from ferrial_drive.ui_v2.lock_on import LockOnMotion
 from ferrial_drive.ui_v2.geometry import resource_geometry, scaled_point
 from ferrial_drive.ui_v2.pico_renderer import PicoV2Renderer
 from ferrial_drive.ui_v2.state import DialogueInfo, HudV2State
@@ -52,6 +53,7 @@ class UiUnitTestV2:
         self.scanline_motion = ScanlineMotion(*scanline_speeds)
         motion = self.config.data["v2"]["style"]["dialogue_motion"]
         self.dialogue_motion = DialoguePanelMotion(**{key: value for key, value in motion.items() if key.endswith("_seconds")})
+        self.lock_motion = LockOnMotion(**self.config.data["v2"]["style"]["lock_motion"])
         self.reset()
 
     def reset(self):
@@ -96,6 +98,7 @@ class UiUnitTestV2:
         self.absorption.clear()
         self.scanline_motion.reset()
         self.dialogue_motion.reset(opened=True, animate=True)
+        self.lock_motion.reset(self.selected_target_id, self.state.target_body)
 
     def damage_text_size(self, text):
         if self.renderer is not None:
@@ -124,6 +127,7 @@ class UiUnitTestV2:
         self.set_hud(target=TargetInfo(enemy["name"], enemy["health"]) if enemy else None)
         self.set_target_size(self.target_scale)
         self.target_health.reset(enemy["health"].ratio if enemy else 0)
+        self.lock_motion.select(self.selected_target_id, self.state.target_body)
 
     def enter(self):
         import pico2d.pico2d as pico
@@ -268,6 +272,8 @@ class UiUnitTestV2:
     def update(self, delta_seconds):
         self.scanline_motion.update(delta_seconds)
         self.dialogue_motion.update(delta_seconds)
+        self.lock_motion.update_body(self.state.target_body)
+        self.lock_motion.update(delta_seconds)
         if self.dialogue_motion.phase == "closed" and self.state.dialogue is not None:
             self.state = replace(self.state, dialogue=None)
         if self.pause.blocking:
@@ -319,7 +325,8 @@ class UiUnitTestV2:
                                  target_trailing_ratio=self.target_health.trailing_ratio,
                                  absorption_trails=self.absorption.trails,
                                  scanline_visual=self.scanline_motion.visual,
-                                 dialogue_visual=self.dialogue_motion.visual)
+                                 dialogue_visual=self.dialogue_motion.visual,
+                                 lock_visuals=self.lock_motion.visuals)
         if self.pause.opacity > 0:
             self.view.pause(self.pause.opacity, self.inputs,
                             scanline_visual=self.scanline_motion.visual)

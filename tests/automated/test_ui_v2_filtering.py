@@ -10,9 +10,23 @@ from ferrial_drive.rendering import PicoCanvas
 from ferrial_drive.ui.components import Rect
 from ferrial_drive.ui_v2.pico_renderer import PicoV2Renderer
 from ferrial_drive.ui_v2.panel_probe import PanelProbeRenderer
+from ferrial_drive.ui.config import UiConfig
+from ferrial_drive.ui_v2.view import UiV2View
+from ferrial_drive.ui_v2.lock_on import LockOnVisual
 
 
 class UiV2FilteringTests(unittest.TestCase):
+    def test_lock_label_caret_renders_with_actual_renderer(self):
+        root = Path(__file__).resolve().parents[2]
+        config = UiConfig(root / "samples/ui_unit_test_v2/ui_config.json")
+        renderer = PicoV2Renderer(config.font_paths, config.font_sizes)
+        try:
+            view = UiV2View(config, renderer)
+            view.lock_marker(LockOnVisual("a", Rect(32, 32, 12, 12), label_progress=0.5), 1)
+            self.assertTrue(renderer.textures)
+        finally:
+            renderer.close()
+
     def setUp(self):
         self.previous_driver = os.environ.get("SDL_VIDEODRIVER")
         os.environ["SDL_VIDEODRIVER"] = "dummy"
@@ -222,6 +236,13 @@ class UiV2FilteringTests(unittest.TestCase):
                     self.assertEqual(call.args[1], cursor)
                     cursor += renderer.text_size(call.args[0], "text", bold=call.kwargs["bold"])[0]
                 self.assertEqual(renderer.rich_text_size(text, "text")[0], cursor - 5)
+                draw.reset_mock()
+                renderer.rich_text(text, 5, 10, "text", "#AAAAAA", 0.8,
+                                   bold_color="#FFFFFF", regular_opacity=0.78)
+                self.assertEqual([call.args[4] for call in draw.call_args_list],
+                                 ["#FFFFFF", "#AAAAAA", "#FFFFFF", "#AAAAAA"])
+                self.assertEqual([call.args[5] for call in draw.call_args_list],
+                                 [0.8, 0.8 * 0.78, 0.8, 0.8 * 0.78])
                 draw.reset_mock()
                 renderer.rich_text(text, 5, 10, "text", "#FFFFFF", max_width=1)
                 self.assertEqual(draw.call_count, 1)

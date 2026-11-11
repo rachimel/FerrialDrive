@@ -12,6 +12,7 @@ from .panels import (PanelGeometry, build_panel_geometry, merge_panel_y_ranges,
                      panel_bright_band_top, scale_panel_geometry)
 from .panel_probe import PanelProbeRenderer
 from .effects import DialoguePanelVisual, ScanlineVisual
+from .lock_on import LockOnVisual, outline_segment
 
 
 class UiV2View(UiView):
@@ -202,7 +203,9 @@ class UiV2View(UiView):
         for index, line in enumerate(info.lines):
             self.renderer.rich_text(line, x + padding_x, first_line + index * self.style["dialogue_line_spacing_pixels"],
                                     role, self.config.colors["text"], opacity,
-                                    max_width=width - padding_x * 2)
+                                    max_width=width - padding_x * 2,
+                                    bold_color=self.style["dialogue_key_color"],
+                                    regular_opacity=self.style["dialogue_description_opacity"])
 
     def dialogue_shutdown_line(self, center, width, opacity, flash):
         """TV 종료의 얇은 가로 빛과 마지막 점. 면·테두리·본문과 분리한다."""
@@ -299,20 +302,41 @@ class UiV2View(UiView):
                     r.rect(Rect(px - 2, py - 2, 4, 4), c["enemy" if contact.kind == "enemy" else "accent"], opacity)
         r.text("MAP", rect.x, rect.y + rect.height + 6, "hud_small", c["muted"], opacity)
 
-    def target(self, state, opacity, offset_x):
+    def target(self, state, opacity, offset_x, *, draw_marker=True):
         r, c = self.renderer, self.config.colors
         hud, body = state.hud, state.target_body
         if body is None:
             return
         x, y, rx, ry = body_diamond((body.x, body.y, body.width, body.height), self.style["lock_body_scale"])
+        if draw_marker:
+            self.lock_marker(LockOnVisual("", body), opacity, offset_x)
+        if hud.target:
+            r.text(hud.target.name, x + offset_x, y + max(ry + 7, body.height * 2), "target_name", c["text"], opacity,
+                   align="center", max_width=200)
+
+    def lock_marker(self, visual, opacity, offset_x=0):
+        r, c, body = self.renderer, self.config.colors, visual.body
+        x, y, rx, ry = body_diamond((body.x, body.y, body.width, body.height), self.style["lock_body_scale"])
         x += offset_x
-        points = ((x, y - ry), (x + rx, y), (x, y + ry), (x - rx, y))
-        alpha = opacity * (1 if hud.target else 0.3)
+        angle = visual.angle_degrees * pi / 180
+        def transform(dx, dy):
+            return (x + (dx * cos(angle) - dy * sin(angle)) * visual.scale,
+                    y + (dx * sin(angle) + dy * cos(angle)) * visual.scale)
+        half_side = max(rx, ry) / 2 ** 0.5
+        points = tuple(transform(dx, dy) for dx, dy in
+                       ((-half_side, -half_side), (half_side, -half_side),
+                        (half_side, half_side), (-half_side, half_side)))
+        alpha = opacity * visual.opacity
+        if alpha <= 0 or visual.scale <= 0:
+            return
         self.stroke(points + points[:1], self.ui_accent, alpha, self.style["lock_thickness_pixels"])
-        # 마름모 안으로 파고드는 꼬리를 빼고 강조선을 왼쪽 위 변에 붙인다.
-        self.stroke((points[3], points[0]), c["text"], alpha, self.style["lock_accent_pixels"])
-        angle = -atan2(ry, rx)
-        label = "LOCK ON" if hud.target else "NO TARGET"
+        for position in (visual.border_position, visual.border_position + 2):
+            self.stroke(outline_segment(points, position - 0.325), c["text"], alpha,
+                        self.style["lock_accent_pixels"])
+        if visual.label_progress <= 0:
+            return
+        angle = atan2(points[0][1] - points[3][1], points[0][0] - points[3][0])
+        label = "LOCK ON"
         label_width, label_height = r.text_size(label, "target_heading")
         ux, uy = cos(angle), sin(angle)
         nx, ny = -uy, ux
@@ -324,10 +348,11 @@ class UiV2View(UiView):
         def label_point(px, py):
             return origin[0] + px * ux + py * nx, origin[1] + px * uy + py * ny
         r.warped_text(label, 0, 0, "target_heading",
-                      c["text"], label_point, alpha)
-        if hud.target:
-            r.text(hud.target.name, x, y + max(ry + 7, body.height * 2), "target_name", c["text"], opacity,
-                   align="center", max_width=200)
+                      c["text"], label_point, alpha,
+                      clip_rect=Rect(0, 0, label_width * visual.label_progress, label_height))
+        if visual.label_progress < 1:
+            cursor = label_width * visual.label_progress
+            self.stroke((label_point(cursor, 0), label_point(cursor, label_height)), c["text"], alpha, 2)
 
     def resources(self, state, opacity, offset_x, player_trailing_ratio):
         r, c = self.renderer, self.config.colors
@@ -519,7 +544,7 @@ class UiV2View(UiView):
     def _combat(self, state, damage_visuals=(), opacity=1, offset_x=0, *,
                counter_visual=None, combo_visual=None, counters_opacity=1,
                cursor_position=None, player_trailing_ratio=None, target_trailing_ratio=None,
-               absorption_trails=(), scanline_visual=None, dialogue_visual=None):
+               absorption_trails=(), scanline_visual=None, dialogue_visual=None, lock_visuals=None):
         r, c, hud = self.renderer, self.config.colors, state.hud
         scale = self.style["hud_scale"]
         width, height = self.config.window["width"], self.config.window["height"]
@@ -530,7 +555,7 @@ class UiV2View(UiView):
         target_anchor = ((body.x + body.width / 2, body.y + body.height / 2)
                          if body is not None else self.config.actor_anchor("target"))
         with r.scaled(scale, target_anchor):
-            self.target(state, opacity, offset_x)
+            self.target(state, opacity, offset_x, draw_marker=lock_visuals is None)
             x, y, bar_width, bar_height = self.layout["target_hp"]
             dx, dy = self.layout["target_hp_offset_pixels"]
             x, y = target_anchor[0] + dx, target_anchor[1] + dy
@@ -541,6 +566,11 @@ class UiV2View(UiView):
             else:
                 self.meter("target_hp", 0, "enemy", opacity, rect=target_rect)
             r.text("TARGET", x + bar_width, y + bar_height + 4, "target_heading", c["muted"], opacity, align="right")
+        if lock_visuals is not None:
+            for visual in lock_visuals:
+                body = visual.body
+                with r.scaled(scale, (body.x + body.width / 2, body.y + body.height / 2)):
+                    self.lock_marker(visual, opacity, offset_x)
         with r.scaled(scale, (width / 2, height)):
             self.resources(state, opacity, offset_x, player_trailing_ratio)
         with r.scaled(self.style["equipment_scale"], (width, height)):

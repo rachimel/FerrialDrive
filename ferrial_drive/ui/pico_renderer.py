@@ -251,7 +251,8 @@ class PicoRenderer:
         sizes = [self.text_size(part, role, bold=bold) for part, bold in self._bold_runs(text)]
         return sum(width for width, _ in sizes), max((height for _, height in sizes), default=0)
 
-    def rich_text(self, text, x, y, role, color, opacity=1, *, max_width=None):
+    def rich_text(self, text, x, y, role, color, opacity=1, *, max_width=None,
+                  bold_color=None, regular_opacity=1):
         """한 줄의 일반/볼드 구간을 같은 기준선에 배치한다. 초과 구간은 말줄임한다."""
         if opacity <= 0 or not text:
             return
@@ -261,7 +262,9 @@ class PicoRenderer:
             remaining = None if max_width is None else max_width - (cursor - x)
             if remaining is not None and remaining <= 0:
                 break
-            self.text(part, cursor, y + ascent - self.text_ascent(role, bold=bold), role, color, opacity,
+            self.text(part, cursor, y + ascent - self.text_ascent(role, bold=bold), role,
+                      bold_color if bold and bold_color is not None else color,
+                      opacity * (1 if bold else regular_opacity),
                       max_width=remaining, bold=bold)
             if remaining is not None and width > remaining:
                 break

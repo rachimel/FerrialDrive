@@ -76,6 +76,7 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 
 ## 검증
 
+- 이번 록온/가이드 톤 변경: UI 111개·획득 7개, 총 118개 통과. 곡선 끝점/중간점·회전 오버슈트·신구 표적 동시 표시·진행 구간 역재생·글자 전 정상 퇴장·비정사각 몸통의 정사각 테두리·외곽 경유/반대 위치 교환·0.25초 정지·실제 렌더러 캐럿과 혼합 글자 색/투명도를 검사했다. 60fps 시간 간격의 300프레임에서 초기 획득·정상 교체·빠른 교체·글자 표시 중 교체를 렌더했다. 주요 이미지를 열어 확인했고 미리보기는 `output/ui_unit_test_v2/lock_on_motion/preview.gif`다. 실제 창 조작·GPU 성능·외관 승인은 미확인이다.
 - 이번 볼드/조작키 강조: UI 104개·획득 7개, 총 111개 통과. 실제 SDL에서 일반/볼드의 픽셀 차이·측정/텍스처 구분·재사용과 출력/측정 실패 후 폰트 상태 복원을 확인했다. 혼합 굵기의 구간별 폭·최대 폭·표기 해석과 개폐 중 본문 숨김도 검사했다. 같은 시간 상태에서 일반/볼드 화면을 렌더하고 비교 이미지를 열어 조작키만 굵어지는 것을 확인했다. 가이드 본문 밖의 픽셀은 같았고 4줄의 폭은 302/392/356/377px로 504px 안에 들어간다. 출력은 `output/ui_unit_test_v2/guide_bold/`다. 실제 창 조작·GPU 성능·사용자 외관 승인은 미확인이다.
 - 이번 대화창 개폐 시안: UI 102개·획득 7개, 총 109개 통과. 0.2초 완성 전 본문 숨기기·완성 즉시 표시·0.1초 닫힘·60fps/단일 시간 갱신 일치·반전 입력·큰 시간 간격·잘못된 시간·중앙 기준 형상과 기존 10개 조각 유지를 검사했다. 실제 SDL에서 열기/닫기 두 순환을 60fps 시간 간격의 180프레임으로 렌더하고 단계별 이미지를 열어 검토했다. 최종 닫힘에서 데이터가 제거되고 텍스처 캐시가 상한 안에 있는 것을 확인했다. 미리보기는 `output/ui_unit_test_v2/dialogue_popup/preview.gif`다. 실제 창 조작·GPU 성능·최종 외관 승인은 미확인이다.
 - 이번 그레인·네온·패널 구간 변경: UI 97개·획득 7개, 총 104개 통과. 실제 SDL 픽셀에서 그레인의 약한 세기·패널 밖 제외·프레임 재사용, 글자 본문 유지·청록 광의 외곽 번짐·캐시 해제를 확인했다. 패널 수집 단계와 실제 배율/viewport/clip, Y 구간 합치기·빈 구간 건너뛰기도 검사했다. 전투 96프레임과 전후/색상 비교·근접 무기/로드아웃 2·일시정지·메뉴를 렌더했고 주요 이미지를 열어 검토했다. 마지막 청록 광은 전투 96프레임과 색상 비교에서 확인했다. 그레인 8개·스캔 패턴 2개가 유지됐다. 최신 GIF는 `output/ui_unit_test_v2/grain_neon/preview.gif`다. 실제 창 사용감·GPU 성능·사용자 외관 승인은 미확인이다.
@@ -98,6 +99,12 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 - 진입점의 `--scene menu`·`--frames 2`·`--capture output/ui_unit_test_v2/combat.png`는 장면 선택·프레임 제한·재생성 가능한 화면 저장용이다.
 
 ## 등장 효과 연결 지점
+
+록온은 `LockOnMotion.select(target_id, body)`·`update(delta_seconds)`로 제어하고 `visuals`를 `view.combat(lock_visuals=...)`에 공급한다. 몸통 Rect는 카메라 투영 후 좌표다. 선택 유지 중에는 `update_body(body)`로 위치/크기를 갱신한다. 이전 표시의 퇴장은 보존한 Rect에서 수행하며 획득 규칙은 `TargetAcquisition`이 계속 담당한다. 샘플은 F5에서 초기 등장, R의 실제 표적 변경에서 개별 교체를 재생한다.
+
+`v2.style.lock_motion`은 등장 0.4초·캐럿 0.2초·퇴장 0.25초·강조선 이동 0.4초/정지 0.25초·시작 배율 0.25/퇴장 배율 1.5를 조절한다. 기본형은 정사각형이며 등장 완료 45°는 마름모다. 가이드 조작키 색/설명 투명도는 `dialogue_key_color`·`dialogue_description_opacity`다.
+
+곡선 정의는 Flutter 공식 [elasticOut](https://api.flutter.dev/flutter/animation/ElasticOutCurve-class.html), [easeInOutCubicEmphasized](https://api.flutter.dev/flutter/animation/Curves/easeInOutCubicEmphasized-constant.html), [easeInOut](https://api.flutter.dev/flutter/animation/Curves/easeInOut-constant.html)를 따른다. Flutter 런타임 의존성은 추가하지 않는다.
 
 `ferrial_drive/ui_v2/panels.py`의 `build_panel_geometry()`는 `surface`와 `border_parts`를 따로 반환한다. 테두리 ID는 `upper_corner`·`upper_rail`·`upper_fragment_0~2`, `lower_corner`·`lower_rail`·`lower_fragment_0~2`다. 면은 `panel_surface()`, 테두리는 `panel_border()`로 그린다. `part_opacities`로 각 조각을 독립 표시할 수 있다. 입력·시간·등장 순서는 형상 모듈에 넣지 않는다.
 
