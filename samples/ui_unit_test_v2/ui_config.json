@@ -23,6 +23,10 @@
             "path": "../../data/fonts/SUITE-otf/SUITE-Bold.otf",
             "size": 26
         },
+        "dialogue_heading": {
+            "path": "../../data/fonts/ferrial_hud_square_wide/FerrialHudSquareWide-Regular.otf",
+            "size": 24
+        },
         "pause_heading": {
             "path": "../../data/fonts/ferrial_hud_square_wide/FerrialHudSquareWide-Regular.otf",
             "size": 26
@@ -263,7 +267,7 @@
         "menu_subtitle": "ui-unit-test-v2 / UI 배치와 스타일 확인",
         "menu_heading": "UI UNIT TEST V2",
         "menu_description": "사용자 도안 기반 독립 미리보기",
-        "menu_notice": "조작 안내는 전투 통신 패널에 표시한다.",
+        "menu_notice": "전투 화면의 조작 가이드에서 확인한다.",
         "combat_heading": "전투 HUD",
         "combat_subtitle": "샘플 상태",
         "target": "TARGET",
@@ -668,6 +672,9 @@
                 "dialogue": {
                     "surface_opacity": 0.6,
                     "line_opacity": 0.08
+                },
+                "panels": {
+                    "line_opacity": 0.06
                 }
             },
             "panel_frame": {
@@ -695,7 +702,7 @@
             "dialogue_body_offset_pixels": 28,
             "dialogue_line_spacing_pixels": 20,
             "panel_cut_pixels": 20,
-            "surface_opacity": 0.9,
+            "surface_opacity": 0.55,
             "counters": {
                 "combo": {
                     "depth": 0.16,

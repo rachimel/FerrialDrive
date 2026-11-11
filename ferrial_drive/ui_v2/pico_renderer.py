@@ -3,7 +3,7 @@
 from contextlib import contextmanager
 from collections import OrderedDict
 from ctypes import byref, c_float, c_int, c_ubyte, memmove
-from math import ceil, floor, isfinite
+from math import ceil, floor, isfinite, log2
 
 from ferrial_drive.ui.pico_renderer import PicoRenderer
 from .panels import clip_panel_band
@@ -19,7 +19,8 @@ class PicoV2Renderer(PicoRenderer):
     def _scanline_texture(self, height, spacing, thickness, color):
         """위상과 무관한 세로 반복 패턴. 두 배 해상도로 만들어 선형 보간한다."""
         p = self.pico
-        logical_height = ceil(height + spacing)
+        # 높이를 64/128/256/512… 단위로 묶어 패턴 재생성을 막는다.
+        logical_height = 1 << max(6, ceil(log2(height + spacing)))
         key = (logical_height, spacing, thickness, color)
         if key not in self.scanline_textures:
             surface = p.SDL_CreateRGBSurfaceWithFormat(0, 1, logical_height * 2, 32, p.SDL_PIXELFORMAT_RGBA32)
@@ -55,21 +56,32 @@ class PicoV2Renderer(PicoRenderer):
 
     def scanline_layer(self, surface, color, opacity, spacing_pixels, thickness_pixels,
                        offset_pixels, *, bright_band=None):
-        """패턴 UV만 스크롤한다. 밝은 띠는 같은 패턴 위의 밝기 구간으로 그린다."""
+        """화면 좌표의 반복 패턴과 밝은 띠를 패널 내부에만 그린다."""
         if opacity <= 0:
             return
-        top = min(y for _, y in surface)
-        height = max(y for _, y in surface) - top
-        polygons = (surface,)
+        p = self.pico
+        sy = c_float()
+        sx = c_float()
+        viewport = p.SDL_Rect()
+        output_width, output_height = c_int(), c_int()
+        p.SDL_RenderGetScale(p.renderer, byref(sx), byref(sy))
+        p.SDL_RenderGetViewport(p.renderer, byref(viewport))
+        p.SDL_GetRendererOutputSize(p.renderer, byref(output_width), byref(output_height))
+        screen_y = lambda y: (y + viewport.y) * sy.value
+        left = min(x for x, _ in surface)
+        width = max(x for x, _ in surface) - left
+        visible_surface = clip_panel_band(surface, -viewport.y, output_height.value / sy.value)
+        polygons = (visible_surface,)
         if bright_band is not None:
             band_top, band_height = bright_band
-            polygons = tuple(clip_panel_band(surface, band_top + index * band_height / 2, band_height / 2)
+            local_top = band_top / sy.value - viewport.y
+            local_height = band_height / sy.value
+            polygons = tuple(clip_panel_band(visible_surface, local_top + index * local_height / 2, local_height / 2)
                              for index in range(2))
         polygons = tuple(polygon for polygon in polygons if len(polygon) >= 3)
         if not polygons:
             return
-        texture, texture_height = self._scanline_texture(height, spacing_pixels, thickness_pixels, color)
-        p = self.pico
+        texture, texture_height = self._scanline_texture(output_height.value, spacing_pixels, thickness_pixels, color)
         p.SDL_SetTextureAlphaMod(texture, 255)
         offset = spacing_pixels - offset_pixels % spacing_pixels
         for polygon in polygons:
@@ -77,14 +89,15 @@ class PicoV2Renderer(PicoRenderer):
             for x, y in polygon:
                 weight = 1
                 if bright_band is not None:
-                    weight = max(0, 1 - abs((y - band_top - band_height / 2) / (band_height / 2)))
+                    weight = max(0, 1 - abs((screen_y(y) - band_top - band_height / 2) / (band_height / 2)))
                 tint = p.SDL_Color(255, 255, 255, self.rgba(color, opacity * weight)[3])
                 vertices.append(p.SDL_Vertex(p.SDL_FPoint(x, y), tint,
-                                             p.SDL_FPoint(0.5, (y - top + offset) / texture_height)))
-            indices = tuple(value for index in range(1, len(vertices) - 1) for value in (0, index, index + 1))
-            if p.SDL_RenderGeometry(p.renderer, texture, (p.SDL_Vertex * len(vertices))(*vertices),
-                                    len(vertices), (c_int * len(indices))(*indices), len(indices)) != 0:
-                raise RuntimeError("Scanline 스크롤 표시 실패")
+                                             p.SDL_FPoint((x - left) / width, (screen_y(y) + offset) / texture_height)))
+            # 사각형 복사 경로를 피하고 배율이 달라도 UV 위상을 유지한다.
+            for index in range(1, len(vertices) - 1):
+                triangle = (p.SDL_Vertex * 3)(vertices[0], vertices[index], vertices[index + 1])
+                if p.SDL_RenderGeometry(p.renderer, texture, triangle, 3, None, 0) != 0:
+                    raise RuntimeError("Scanline 스크롤 표시 실패")
 
     def filtered_polygons(self, polygons, color, opacity=1, samples=2):
         """확대 렌더를 선형 축소하고 이동·투명도와 무관한 도형 텍스처를 재사용한다."""

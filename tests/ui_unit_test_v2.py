@@ -47,9 +47,9 @@ class UiUnitTestV2:
         self.pause = PauseState(self.config.data["pause"]["duration_seconds"])
         self.absorption = EnergyAbsorption(self.config.data["v2"]["absorption_duration_seconds"])
         scanline = self.config.data["v2"]["style"]["panel_scanlines"]
-        self.scanline_motion = ScanlineMotion(scanline["spacing_pixels"],
-                                              scanline["motion"]["slow_speed_pixels_per_second"],
-                                              scanline["motion"]["fast_speed_pixels_per_second"])
+        scanline_speeds = (scanline["spacing_pixels"], scanline["motion"]["slow_speed_pixels_per_second"],
+                           scanline["motion"]["fast_speed_pixels_per_second"])
+        self.scanline_motion = ScanlineMotion(*scanline_speeds)
         self.reset()
 
     def reset(self):
@@ -262,6 +262,7 @@ class UiUnitTestV2:
             self.perform(result.action)
 
     def update(self, delta_seconds):
+        self.scanline_motion.update(delta_seconds)
         if self.pause.blocking:
             self.pause.update(delta_seconds)
             return
@@ -272,8 +273,6 @@ class UiUnitTestV2:
         self.target_health.update(delta_seconds)
         self.damage_numbers.update(delta_seconds)
         self.absorption.update(delta_seconds)
-        if self.transition.pose("combat").opacity > 0:
-            self.scanline_motion.update(delta_seconds)
 
     def actor(self, owner, opacity):
         r, c = self.renderer, self.config.colors
@@ -292,7 +291,8 @@ class UiUnitTestV2:
             if pose.opacity <= 0:
                 continue
             if scene == "menu":
-                self.view.menu(pose.opacity, 0, self.inputs)
+                self.view.menu(pose.opacity, 0, self.inputs,
+                               scanline_visual=self.scanline_motion.visual)
             else:
                 self.actor("player", pose.opacity)
                 for enemy_id in self.enemies:
@@ -305,7 +305,8 @@ class UiUnitTestV2:
                                  absorption_trails=self.absorption.trails,
                                  scanline_visual=self.scanline_motion.visual)
         if self.pause.opacity > 0:
-            self.view.pause(self.pause.opacity, self.inputs)
+            self.view.pause(self.pause.opacity, self.inputs,
+                            scanline_visual=self.scanline_motion.visual)
         if self.capture_path:
             self.renderer.save_frame(self.capture_path, self.config.window["width"], self.config.window["height"])
             self.capture_path = None

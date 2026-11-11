@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [UI v2 전역 패널 효과·헤더 확대](2026-11-11-ui-v2-global-panel-effects.md): TIME(scope)·CAUSE(I3). 패널 공통 효과·전역 좌표·제외 대상·헤더 확대의 발언 시각과 SDL 사각형/삼각형 출력 경로의 위상 차이 원인을 확인한다.
+
 - [UI v2 통신 조작 가이드·속도 조정](2026-11-11-ui-v2-communication-guide.md): TIME(scope). 현재 대화의 밝은 띠 감속·기본 5px/s·통신 가이드 통합·삭제 대상 정정·헤더/본문 상향 발언의 정확한 시각을 확인한다.
 
 - [UI v2 느린 Scanline·빠른 밝기 띠](2026-11-11-ui-v2-dual-scanline-motion.md): TIME(scope). 현재 대화의 느린 Scanline·빠른 밝은 영역 추가 요청의 정확한 시각을 확인한다.

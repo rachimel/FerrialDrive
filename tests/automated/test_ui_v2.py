@@ -166,7 +166,8 @@ class UiV2Tests(unittest.TestCase):
 
     def test_weapon_panels_use_flat_text_and_horizontal_edges(self):
         renderer = SimpleNamespace(text_size=lambda text, role: (len(text) * 16, 24),
-                                   scaled=lambda *args: nullcontext(), text=Mock(), warped_text=Mock())
+                                   scaled=lambda *args: nullcontext(), text=Mock(), warped_text=Mock(),
+                                   scanline_layer=Mock())
         view = UiV2View(self.program.config, renderer)
         with patch.object(view, "polygon") as polygon, patch.object(view, "stroke"), patch.object(view, "weapon_image"):
             view.weapons(self.program.state.hud, 1, 0)
@@ -252,19 +253,59 @@ class UiV2Tests(unittest.TestCase):
         with self.assertRaises(ValueError):
             full.update(-0.1)
 
-    def test_pause_freezes_scanlines_and_reset_restarts_both_layers(self):
+    def test_global_scanlines_continue_through_pause_and_reset_restarts_them(self):
         self.program.update(0.5)
         before = self.program.scanline_motion.visual
         self.program.pause.request(True)
         self.program.update(1)
-        self.assertEqual(self.program.scanline_motion.visual, before)
+        self.assertNotEqual(self.program.scanline_motion.visual, before)
+        before = self.program.scanline_motion.visual
         self.program.perform("resume")
         self.program.update(1)
-        self.assertEqual(self.program.scanline_motion.visual, before)
+        self.assertNotEqual(self.program.scanline_motion.visual, before)
+        before = self.program.scanline_motion.visual
         self.program.update(0.1)
         self.assertNotEqual(self.program.scanline_motion.visual, before)
         self.program.perform("reset")
         self.assertEqual(self.program.scanline_motion.visual, ScanlineVisual())
+
+    def test_one_scanline_clock_is_supplied_to_all_visible_scenes(self):
+        self.program.view = Mock()
+        self.program.renderer = Mock()
+        self.program.pause.request(True)
+        self.program.update(1)
+        self.program.draw()
+        visual = self.program.scanline_motion.visual
+        self.assertEqual(self.program.view.combat.call_args.kwargs["scanline_visual"], visual)
+        self.assertEqual(self.program.view.pause.call_args.kwargs["scanline_visual"], visual)
+        self.program.perform("show_menu")
+        self.program.update(1)
+        self.program.draw()
+        self.assertEqual(self.program.view.menu.call_args.kwargs["scanline_visual"], self.program.scanline_motion.visual)
+
+    def test_menu_panels_share_phase_and_scene_scope_restores_after_errors(self):
+        renderer = Mock()
+        view = UiV2View(self.program.config, renderer)
+        visual = ScanlineVisual(2, 80)
+        view.menu(1, 0, self.program.inputs, scanline_visual=visual)
+        self.assertTrue(renderer.scanline_layer.call_args_list)
+        self.assertTrue(all(call.args[5] == 2 for call in renderer.scanline_layer.call_args_list))
+        self.assertEqual(view._scanline_visual, ScanlineVisual())
+        with self.assertRaises(RuntimeError):
+            with view.scanline_frame(visual):
+                raise RuntimeError("의도한 장면 검사 실패")
+        self.assertEqual(view._scanline_visual, ScanlineVisual())
+
+    def test_resource_scanlines_exclude_hp_ultimate_and_energy_level(self):
+        renderer = Mock()
+        renderer.text_size.side_effect = lambda text, role: (len(text) * 10, 18)
+        view = UiV2View(self.program.config, renderer)
+        with patch.object(view, "panel_scanlines") as scanlines:
+            view.resources(self.program.state, 1, 0, 0.8)
+        self.assertEqual(scanlines.call_count, 1)
+        geometry = resource_geometry(self.program.config.data["v2"]["layout"],
+                                     self.program.config.data["v2"]["style"]["level_curve_radius_pixels"])
+        self.assertEqual(scanlines.call_args.args[0].surface, geometry.energy_body)
 
     def test_pause_blocks_sample_shortcuts(self):
         self.program.pico = SimpleNamespace(SDL_WINDOWEVENT=1, SDL_KEYDOWN=2,
@@ -358,7 +399,7 @@ class UiV2Tests(unittest.TestCase):
 
     def test_counter_digit_growth_keeps_last_digit_size_and_right_edge(self):
         renderer = SimpleNamespace(text_size=lambda text, role: (len(text) * 40, 60),
-                                   digit_ink_bottom=lambda role: 50, warped_text=Mock())
+                                   digit_ink_bottom=lambda role: 50, warped_text=Mock(), scanline_layer=Mock())
         view = UiV2View(self.program.config, renderer)
         for label, role in (("combo", "combo_number"), ("damage", "damage_total")):
             previous_left = None

@@ -1,17 +1,40 @@
 """v2 도안의 사선·연결형 자원부·원근 카운터를 그린다."""
 
 from math import atan2, cos, hypot, pi, sin
+from contextlib import contextmanager
 
 from ferrial_drive.ui.components import Rect
 from ferrial_drive.ui.counter import CounterVisual
 from ferrial_drive.ui.view import UiView
 from .geometry import (PerspectivePlane, body_diamond, counter_plaque, quad_fill,
                        resource_geometry, slanted_meter, tapered_stroke_mesh)
-from .panels import build_panel_geometry
+from .panels import PanelGeometry, build_panel_geometry
 from .effects import ScanlineVisual
 
 
 class UiV2View(UiView):
+    def __init__(self, config, renderer):
+        super().__init__(config, renderer)
+        self._scanline_visual = ScanlineVisual()
+
+    @contextmanager
+    def scanline_frame(self, visual):
+        """호출한 장면의 위상을 공유하고 중첩 호출·예외 뒤에는 복원한다."""
+        previous = self._scanline_visual
+        self._scanline_visual = visual or ScanlineVisual()
+        try:
+            yield
+        finally:
+            self._scanline_visual = previous
+
+    def menu(self, opacity, offset_x, input_state, *, scanline_visual=None):
+        with self.scanline_frame(scanline_visual):
+            super().menu(opacity, offset_x, input_state)
+
+    def pause(self, opacity, input_state, *, scanline_visual=None):
+        with self.scanline_frame(scanline_visual):
+            super().pause(opacity, input_state)
+
     @property
     def layout(self):
         return self.config.data["v2"]["layout"]
@@ -46,7 +69,7 @@ class UiV2View(UiView):
         r.warped_text(text, 0, 0, role, color, plane.point, opacity, scale_x=scale, scale_y=scale)
 
     def panel(self, rect, opacity, offset_x=0, *, fill_opacity=None, corner_cut_ratio=None,
-              fill_color=None, draw_border=True, slant_right=False):
+              fill_color=None, draw_border=True, slant_right=False, scanlines=True):
         """v2 전용 비대칭 외곽. 기존 금속 사각 패널을 호출하지 않는다."""
         x, y, width, height = rect
         x += offset_x
@@ -55,10 +78,12 @@ class UiV2View(UiView):
         points = (((x, y), (x + width - cut, y), (x + width, y + height), (x + cut, y + height))
                   if slant_right else
                   ((x + cut, y), (x + width, y), (x + width - cut, y + height), (x, y + height)))
-        fill = self.style["surface_opacity"] if fill_opacity is None else fill_opacity
+        fill = self.style["surface_opacity"] if fill_opacity is None else min(fill_opacity, self.style["surface_opacity"])
         settings = self.style["panel_border"]
         self.renderer.filtered_polygons((points,), c["panel"] if fill_color is None else fill_color,
                                         opacity * fill, settings["filter_samples"])
+        if scanlines:
+            self.panel_scanlines(PanelGeometry(points, ()), opacity, self.style["panel_scanlines"]["panels"])
         if draw_border:
             for path, corners, alpha in (
                     ((points[3], points[0], (x + width * 0.45, y)), (1,), 0.8),
@@ -76,6 +101,12 @@ class UiV2View(UiView):
                                         self.config.colors["panel"] if fill_color is None else fill_color,
                                         opacity * fill, self.style["panel_border"]["filter_samples"])
 
+    def panel_layer(self, points, color, opacity, *, fill_opacity=None):
+        """임의 패널의 배경만 반투명·스캔 처리한다. 내용은 호출자가 이후 그린다."""
+        fill = self.style["surface_opacity"] if fill_opacity is None else min(fill_opacity, self.style["surface_opacity"])
+        self.polygon(points, color, opacity * fill, filled=True)
+        self.panel_scanlines(PanelGeometry(points, ()), opacity, self.style["panel_scanlines"]["panels"])
+
     def panel_border(self, parts, opacity, *, part_opacities=None):
         """테두리만 그린다. 각 조각의 표시값은 외부 효과 제어부가 공급할 수 있다."""
         for part in parts:
@@ -91,15 +122,13 @@ class UiV2View(UiView):
         if alpha <= 0:
             return
         scanline = self.style["panel_scanlines"]
-        visual = visual or ScanlineVisual()
+        visual = visual or self._scanline_visual
         r = self.renderer
         r.scanline_layer(geometry.surface, self.ui_accent, alpha, scanline["spacing_pixels"],
                          scanline["thickness_pixels"], visual.line_offset_pixels)
         motion = scanline["motion"]
         band_height = motion["highlight_height_pixels"]
-        top = min(y for _, y in geometry.surface)
-        height = max(y for _, y in geometry.surface) - top
-        band_top = top + visual.highlight_travel_pixels % (height + band_height) - band_height
+        band_top = visual.highlight_travel_pixels % (self.config.window["height"] + band_height) - band_height
         r.scanline_layer(geometry.surface, self.config.colors["text"], opacity * motion["highlight_opacity"],
                          scanline["spacing_pixels"], scanline["thickness_pixels"], visual.line_offset_pixels,
                          bright_band=(band_top, band_height))
@@ -122,7 +151,7 @@ class UiV2View(UiView):
         self.framed_panel((x, y, width, height), opacity, fill_opacity=settings["surface_opacity"],
                           scanline_settings=settings, scanline_visual=scanline_visual)
         padding_x, padding_y = self.style["dialogue_padding_pixels"]
-        self.renderer.text(info.speaker, x + padding_x, y + padding_y, "target_name",
+        self.renderer.text(info.speaker, x + padding_x, y + padding_y, "dialogue_heading",
                            self.ui_accent, opacity)
         role = self.style["dialogue_body_role"]
         first_line = y + padding_y + self.style["dialogue_body_offset_pixels"]
@@ -138,7 +167,8 @@ class UiV2View(UiView):
         width, height = (width + 0.15 * height) * scale, height * scale
         self.panel((right - width - padding_x, y - padding_y,
                     width + padding_x * 2, height + padding_y * 2), opacity, fill_opacity=0.98,
-                   fill_color=self.config.colors["panel_surface"], draw_border=False, slant_right=slant_right)
+                   fill_color=self.config.colors["panel_surface"], draw_border=False,
+                   slant_right=slant_right, scanlines=False)
         self.slanted_text(text, right, y, "hud_small", color, opacity, scale=scale, align="right")
 
     def buttons(self, scene, input_state, opacity, offset_x, buttons=None, *, offset_y=0):
@@ -151,8 +181,8 @@ class UiV2View(UiView):
             alpha = opacity * (1 if button.enabled else 0.3)
             points = ((x + 16, y + 2), (x + width, y + 2),
                       (x + width - 18, y + height - 2), (x, y + height - 2))
-            self.polygon(points, c["ui_accent"] if hovered else c["panel_surface"],
-                         alpha * (0.6 if pressed else 0.25 if hovered else 0.12), filled=True)
+            self.panel_layer(points, c["ui_accent"] if hovered else c["panel_surface"], alpha,
+                             fill_opacity=0.6 if pressed else 0.25 if hovered else 0.12)
             self.stroke(((x + 22, y + height - 3), (x + width - 18, y + height - 3),
                          (x + width - 5, y + 10)), self.ui_accent, alpha * (1 if hovered else 0.5))
             self.stroke(((x + 5, y + height - 13), (x + 15, y + 11), (x + 25, y + 11)),
@@ -177,7 +207,7 @@ class UiV2View(UiView):
         x, y, width, height = self.layout[key] if rect is None else rect
         cut = min(18, height * 0.65)
         points = slanted_meter((x, y, width, height)) if shape is None else shape
-        self.polygon(points, c["panel_surface"], opacity * 0.7, filled=True)
+        self.polygon(points, c["panel_surface"], opacity * self.style["surface_opacity"], filled=True)
         ratio = max(0.0, min(1.0, ratio))
         trail = ratio if trailing_ratio is None else max(ratio, min(1.0, trailing_ratio))
         for fill, fill_color in ((trail, c["health_loss"]), (ratio, c[color])):
@@ -257,8 +287,8 @@ class UiV2View(UiView):
         r.text("HP", x + value_width + 9, top - hp_height - gap, "hud_small", c["muted"], opacity)
         x, y, width, height = self.layout["energy_bar"]
         outline, channel = geometry.energy_outline, geometry.energy_channel
-        self.polygon(geometry.energy_body, c["panel"], opacity * 0.96, filled=True)
-        self.polygon(geometry.level_shape, c["panel"], opacity * 0.96, filled=True)
+        self.panel_layer(geometry.energy_body, c["panel"], opacity)
+        self.polygon(geometry.level_shape, c["panel"], opacity * self.style["surface_opacity"], filled=True)
         self.stroke(outline + outline[:1], c["text"], opacity * 0.75, 1.5)
         self.polygon(channel, c["energy"], opacity * 0.1, filled=True)
         if state.energy_ratio > 0:
@@ -281,7 +311,7 @@ class UiV2View(UiView):
         cx, cy = geometry.icon_center
         radius = geometry.icon_radius
         diamond = ((cx, cy - radius), (cx + radius, cy), (cx, cy + radius), (cx - radius, cy))
-        self.polygon(diamond, c["panel"], opacity * 0.8, filled=True)
+        self.polygon(diamond, c["panel"], opacity * self.style["surface_opacity"], filled=True)
         self.stroke(diamond + diamond[:1], c["text"], opacity * 0.9, 1.5)
         # 기본 도형으로 만든 비대칭 네 갈래 칼날. 원본 아이콘 아트는 별도 제작한다.
         for angle in (-0.3, pi / 2 - 0.3, pi - 0.3, 3 * pi / 2 - 0.3):
@@ -319,7 +349,7 @@ class UiV2View(UiView):
             tx, ty, tw, th = tab
             alpha = opacity * (1 if index == hud.active_loadout_index else 0.35)
             shape = ((tx + 10, ty), (tx + tw, ty), (tx + tw - 9, ty + th), (tx, ty + th))
-            self.polygon(shape, c["panel_surface"], alpha * 0.5, filled=True)
+            self.panel_layer(shape, c["panel_surface"], alpha, fill_opacity=0.5)
             self.stroke(shape + shape[:1], self.ui_accent, alpha)
             r.text(f"{index + 1:02}", tx + 15, ty + 3, "equipment_number", c["text"], alpha)
         loadout = hud.loadouts[hud.active_loadout_index]
@@ -332,7 +362,7 @@ class UiV2View(UiView):
             with r.scaled(amount, (x + width, top + height / 2)):
                 shape = ((left + 18, top), (x + width, top),
                          (x + width - 18, top + height), (left, top + height))
-                self.polygon(shape, c["panel_surface"], alpha * 0.65, filled=True)
+                self.panel_layer(shape, c["panel_surface"], alpha)
                 self.stroke((shape[0], shape[3], shape[2], shape[1]),
                              self.ui_accent, alpha * 0.85)
                 self.stroke((shape[0], shape[3]), self.ui_accent,
@@ -366,7 +396,7 @@ class UiV2View(UiView):
         slant = self.style["counter_plaque_slant_pixels"]
         left, right = project(-14, ink_bottom - 1), project(width + 3, ink_bottom - 1)
         color = self.config.colors["counter_plaque"]
-        self.polygon(counter_plaque(left, right, thickness, slant), color, opacity, filled=True)
+        self.panel_layer(counter_plaque(left, right, thickness, slant), color, opacity)
         distance = hypot(right[0] - left[0], right[1] - left[1])
         ux, uy = (right[0] - left[0]) / distance, (right[1] - left[1]) / distance
         cursor = left
@@ -374,7 +404,7 @@ class UiV2View(UiView):
             end = (cursor[0] - ux * 5, cursor[1] - uy * 5 - index * 0.8)
             start = (end[0] - ux * length, end[1] - uy * length)
             self.polygon(counter_plaque(start, end, thickness * size, slant * size),
-                         color, opacity * alpha, filled=True)
+                         color, opacity * alpha * self.style["surface_opacity"], filled=True)
             cursor = start
 
     def perspective_counter(self, visual, role, label, y, opacity):
@@ -422,7 +452,11 @@ class UiV2View(UiView):
                       ink_bottom + self.style["counter_plaque_height_pixels"] + 5,
                       label_role, c["muted"], project, opacity)
 
-    def combat(self, state, damage_visuals=(), opacity=1, offset_x=0, *,
+    def combat(self, state, damage_visuals=(), opacity=1, offset_x=0, *, scanline_visual=None, **kwargs):
+        with self.scanline_frame(scanline_visual):
+            self._combat(state, damage_visuals, opacity, offset_x, scanline_visual=scanline_visual, **kwargs)
+
+    def _combat(self, state, damage_visuals=(), opacity=1, offset_x=0, *,
                counter_visual=None, combo_visual=None, counters_opacity=1,
                cursor_position=None, player_trailing_ratio=None, target_trailing_ratio=None,
                absorption_trails=(), scanline_visual=None):

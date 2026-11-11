@@ -89,8 +89,29 @@ class UiV2FilteringTests(unittest.TestCase):
         self.assertNotEqual(*images)
         self.assertEqual(len(self.renderer.scanline_textures), 2)
         self.assertFalse(self.renderer.filtered_textures)
+        for height in (8, 19, 24, 26, 70, 130, 160, 414):
+            shape = ((10, 10), (50, 10), (50, 10 + height), (10, 10 + height))
+            for color in ("#91AEBB", "#FFFFFF"):
+                self.renderer.scanline_layer(shape, color, 0.1, 4, 1, 2)
+        self.assertLessEqual(len(self.renderer.scanline_textures), 8)
         self.renderer.close()
         self.assertFalse(self.renderer.scanline_textures)
+
+    def test_global_scanline_rows_and_bright_band_align_across_scaled_panels(self):
+        p = self.pico
+        left = ((0, 0), (45, 0), (45, 96), (0, 96))
+        right = ((96, 0), (192, 0), (192, 192), (96, 192))
+        for band in (None, (25, 24)):
+            self.renderer.clear("#000000")
+            self.renderer.scanline_layer(left, "#FFFFFF", 1, 4, 1, 1.5, bright_band=band)
+            with self.renderer.scaled(0.5, (0, 6)):
+                viewport = p.SDL_Rect(0, 6, 192, 192)
+                p.SDL_RenderSetViewport(p.renderer, byref(viewport))
+                self.renderer.scanline_layer(right, "#FFFFFF", 1, 4, 1, 1.5, bright_band=band)
+            pixels = (c_ubyte * (96 * 96 * 4))()
+            self.assertEqual(p.SDL_RenderReadPixels(p.renderer, None, p.SDL_PIXELFORMAT_RGBA32, pixels, 96 * 4), 0)
+            for y in range(5, 90):
+                self.assertLessEqual(abs(pixels[(y * 96 + 20) * 4] - pixels[(y * 96 + 70) * 4]), 2)
 
 
 if __name__ == "__main__":
