@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [UI v2 OVERDRIVE 폭 75%·네온 필터](2026-11-12-ui-v2-overdrive-neon-filter.md): TIME(scope). 폭 60%·깨짐 점검·네온 강화와 최종 75% 정정 발언의 정확한 시각을 확인한다.
+
 - [UI v2 OVERDRIVE 문구 폭 80%](2026-11-11-ui-v2-overdrive-width.md): TIME(scope). 바 폭 80% 자간 조정 요청의 정확한 발언 시각을 확인한다.
 
 - [UI v2 OVERDRIVE Bloom·호흡·굵기](2026-11-11-ui-v2-overdrive-bloom.md): TIME(scope). 에너지 색 Bloom·호흡·자간 확대·굵기 조정 요청의 개별 시각을 확인한다.

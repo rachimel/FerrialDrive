@@ -9,7 +9,7 @@
 | 파일 경로 | 용도 |
 | --- | --- |
 | `data/fonts/SUITE-otf/SUITE-Light.otf` | UI v2 OVERDRIVE의 이전 가는 굵기 비교본 |
-| `data/fonts/SUITE-otf/SUITE-Regular.otf` | UI v2 OVERDRIVE 문구·16px·에너지 바 폭 80%에 맞춘 자간 |
+| `data/fonts/SUITE-otf/SUITE-Regular.otf` | UI v2 OVERDRIVE 문구·16px·에너지 바 폭 75%에 맞춘 자간 |
 | `data/fonts/Cafe24OhsquareAir-v2.0/Cafe24OhsquareAir-v2.0.otf` | 타이틀·메뉴·버튼 |
 | `data/fonts/Cafe24Ohsquare-v2.0/Cafe24Ohsquare-v2.0.otf` | 일시정지 제목 |
 | `data/fonts/학교안심 운동장/HakgyoansimUndongjangOTFL.otf` | HIT·DAMAGE·이번 피해 숫자 |

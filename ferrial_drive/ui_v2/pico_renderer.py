@@ -17,6 +17,7 @@ class PicoV2Renderer(PicoRenderer):
         self.scanline_textures = OrderedDict()
         self.grain_textures = OrderedDict()
         self.neon_textures = OrderedDict()
+        self.neon_font_sizes = dict(font_sizes)
         super().__init__(font_paths, font_sizes)
 
     def draw_transform(self):
@@ -177,13 +178,52 @@ class PicoV2Renderer(PicoRenderer):
         if self.pico.SDL_RenderCopyF(self.pico.renderer, texture, None, byref(destination)) != 0:
             raise RuntimeError("네온 광 표시 실패")
 
-    def neon_text(self, text, x, y, role, color, opacity=1, *, glow_color, radius_pixels=4, glow_opacity=0.12, bold=False):
+    def _draw_neon_core(self, text, x, y, role, color, opacity, *, bold=False):
+        """본문은 3배 해상도에서 만들어 광과 같은 소수점 좌표에 축소한다."""
+        p = self.pico
+        key = (text, role, color, bold, "neon_core")
+        if key not in self.textures:
+            width, height = self.text_size(text, role, bold=bold)
+            size = self.neon_font_sizes[role]
+            with self._font_style(role, bold) as font:
+                if p.TTF_SetFontSize(font, size * 3) != 0:
+                    raise RuntimeError("네온 본문 확대 실패")
+                try:
+                    surface = p.TTF_RenderUTF8_Blended(font, text.encode("utf-8"), p.SDL_Color(*self.rgba(color)))
+                finally:
+                    if p.TTF_SetFontSize(font, size) != 0:
+                        raise RuntimeError("네온 본문 글꼴 크기 복원 실패")
+            if not surface:
+                raise RuntimeError("네온 본문 생성 실패")
+            try:
+                texture = p.SDL_CreateTextureFromSurface(p.renderer, surface)
+            finally:
+                p.SDL_FreeSurface(surface)
+            if not texture:
+                raise RuntimeError("네온 본문 텍스처 생성 실패")
+            if p.SDL_SetTextureScaleMode(texture, p.SDL_ScaleModeLinear) != 0:
+                p.SDL_DestroyTexture(texture)
+                raise RuntimeError("네온 본문 필터 설정 실패")
+            self.textures[key] = (texture, width, height)
+            if len(self.textures) > 256:
+                _, (old, _, _) = self.textures.popitem(last=False)
+                p.SDL_DestroyTexture(old)
+        self.textures.move_to_end(key)
+        texture, width, height = self.textures[key]
+        p.SDL_SetTextureAlphaMod(texture, self.rgba(color, opacity)[3])
+        destination = p.SDL_FRect(x, y, width, height)
+        if p.SDL_RenderCopyF(p.renderer, texture, None, byref(destination)) != 0:
+            raise RuntimeError("네온 본문 표시 실패")
+
+    def neon_text(self, text, x, y, role, color, opacity=1, *, glow_color, radius_pixels=4, glow_opacity=0.12,
+                  glow_passes=1, bold=False):
         """캐시한 가우시안 광을 먼저 그리고 원래 글자를 같은 위치에 겹친다."""
         if opacity <= 0 or not text:
             return
         if glow_opacity > 0 and radius_pixels > 0:
-            self._draw_neon_glow(text, x, y, role, glow_color, opacity * glow_opacity, radius_pixels, bold=bold)
-        self.text(text, x, y, role, color, opacity, bold=bold)
+            for _ in range(glow_passes):
+                self._draw_neon_glow(text, x, y, role, glow_color, opacity * glow_opacity, radius_pixels, bold=bold)
+        self._draw_neon_core(text, x, y, role, color, opacity, bold=bold)
 
     def _scanline_texture(self, height, spacing, thickness, color):
         """위상과 무관한 세로 반복 패턴. 두 배 해상도로 만들어 선형 보간한다."""

@@ -129,4 +129,4 @@ Scanline 시간은 `effects.py`의 `ScanlineMotion`이 관리한다. 같은 `vis
 
 프레임 출력 전에 `view.prepare_panel_effects(draw_panels)`로 그릴 UI를 한 번 조회한다. 이 단계는 도형을 출력하지 않고 보이는 패널의 Y 구간을 수집하므로 콜백 안에서 입력·시간·게임 상태를 갱신하지 않는다. 실제 출력과 같은 레이아웃·배율·clip을 사용하며 등장/퇴장 중인 패널도 반영한다.
 
-OVERDRIVE 문구는 에너지 채움 영역의 가로·세로 중앙에 SUITE Regular 16px로 표시한다. 전체 문구 폭이 바 중앙 높이의 가로 폭 80%가 되도록 자간을 자동 계산한다. 글꼴은 `fonts.v2_overdrive`, 폭 비율은 `v2.style.overdrive_width_ratio=0.8`에서 조절한다. 에너지 색 Bloom은 `v2.style.overdrive_bloom`의 반경 6px·세기 0.85를 사용하고, 기존 에너지 호흡과 같은 2.4초·65~100% 주기로 변한다.
+OVERDRIVE 문구는 에너지 채움 영역의 가로·세로 중앙에 SUITE Regular 16px로 표시한다. 전체 문구 폭이 바 중앙 높이의 가로 폭 75%가 되도록 자간을 자동 계산한다. 글꼴은 `fonts.v2_overdrive`, 폭 비율은 `v2.style.overdrive_width_ratio=0.75`에서 조절한다. 에너지 색 Bloom은 `v2.style.overdrive_bloom`의 반경 6px·세기 1·2회 겹침을 사용하고, 기존 에너지 호흡과 같은 2.4초·65~100% 주기로 변한다. 네온 본문은 3배 해상도에서 생성해 선형 축소하고 광과 동일한 소수점 좌표로 표시한다.

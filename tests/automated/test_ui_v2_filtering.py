@@ -1,6 +1,6 @@
 """실제 SDL 도형 필터의 경계 픽셀·캐시·렌더 상태 복원을 확인한다."""
 
-from ctypes import byref, c_float, c_ubyte
+from ctypes import byref, c_float, c_int, c_ubyte
 import os
 from pathlib import Path
 import unittest
@@ -148,12 +148,39 @@ class UiV2FilteringTests(unittest.TestCase):
         self.assertFalse(self.renderer.grain_textures)
 
     def test_neon_preserves_crisp_core_and_limits_halo(self):
-        with patch.object(self.renderer, "text") as draw, patch.object(self.renderer, "_draw_neon_glow") as glow:
+        with patch.object(self.renderer, "_draw_neon_core") as draw, patch.object(self.renderer, "_draw_neon_glow") as glow:
             self.renderer.neon_text("45", 20, 30, "ammo", "#FFFFFF", 0.5,
                                      glow_color="#91AEBB", radius_pixels=2, glow_opacity=0.12)
             self.assertEqual(draw.call_args.args, ("45", 20, 30, "ammo", "#FFFFFF", 0.5))
             self.assertEqual(draw.call_count, 1)
             self.assertEqual(glow.call_args.args, ("45", 20, 30, "ammo", "#91AEBB", 0.06, 2))
+
+    def test_neon_core_uses_larger_texture_and_restores_font_after_failure(self):
+        font = Path(__file__).resolve().parents[2] / "data/fonts/SUITE-otf/SUITE-Regular.otf"
+        renderer = PicoV2Renderer({"text": font}, {"text": 16})
+        p = self.pico
+        try:
+            original_height = p.TTF_FontHeight(renderer.fonts["text"].font)
+            original_size = renderer.text_size("OVERDRIVE", "text")
+            renderer.neon_text("OVERDRIVE", 4.25, 20.5, "text", "#FFFFFF", glow_color="#9DDFEA")
+            key = ("OVERDRIVE", "text", "#FFFFFF", False, "neon_core")
+            texture, width, height = renderer.textures[key]
+            texture_width, texture_height, mode = c_int(), c_int(), c_int()
+            self.assertEqual(p.SDL_QueryTexture(texture, None, None, byref(texture_width), byref(texture_height)), 0)
+            self.assertGreater(texture_width.value, width * 2)
+            self.assertGreater(texture_height.value, height * 2)
+            self.assertEqual(p.SDL_GetTextureScaleMode(texture, byref(mode)), 0)
+            self.assertEqual(mode.value, p.SDL_ScaleModeLinear)
+            renderer.neon_text("OVERDRIVE", 4.75, 20.5, "text", "#FFFFFF", 0.65, glow_color="#9DDFEA")
+            self.assertEqual(len(renderer.textures), 1)
+            with patch.object(p, "TTF_RenderUTF8_Blended", side_effect=RuntimeError("의도한 글자 생성 실패")):
+                with self.assertRaises(RuntimeError):
+                    renderer._draw_neon_core("FAILED", 0, 0, "text", "#FFFFFF", 1)
+            self.assertEqual(p.TTF_FontHeight(renderer.fonts["text"].font), original_height)
+            self.assertEqual(renderer.text_size("OVERDRIVE", "text"), original_size)
+        finally:
+            renderer.close()
+        self.assertFalse(renderer.textures)
 
     def test_panel_probe_matches_real_scale_viewport_and_clip_without_drawing(self):
         shape = ((10, 10), (80, 10), (80, 80), (10, 80))

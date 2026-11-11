@@ -812,10 +812,11 @@
             "equipment_scale": 0.9,
             "inactive_weapon_scale": 0.8,
             "resource_label_gap_pixels": 4,
-            "overdrive_width_ratio": 0.8,
+            "overdrive_width_ratio": 0.75,
             "overdrive_bloom": {
                 "radius_pixels": 6,
-                "glow_opacity": 0.85
+                "glow_opacity": 1,
+                "glow_passes": 2
             },
             "ultimate_label_gap_pixels": 4,
             "ultimate_label_padding_pixels": [
