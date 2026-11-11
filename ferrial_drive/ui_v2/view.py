@@ -395,9 +395,11 @@ class UiV2View(UiView):
         label_center = sum(point[0] for point in channel) / 4
         if state.overdrive:
             label, role = "OVERDRIVE", "v2_overdrive"
-            spacing = self.style["overdrive_letter_spacing_pixels"]
             sizes = [r.text_size(letter, role) for letter in label]
-            label_width = sum(size[0] for size in sizes) + spacing * (len(label) - 1)
+            text_width = sum(size[0] for size in sizes)
+            bar_width = ((channel[1][0] - channel[0][0]) + (channel[2][0] - channel[3][0])) / 2
+            spacing = max(0, (bar_width * self.style["overdrive_width_ratio"] - text_width) / (len(label) - 1))
+            label_width = text_width + spacing * (len(label) - 1)
             label_y = sum(point[1] for point in channel) / 4 - max(size[1] for size in sizes) / 2
             label_x = label_center - label_width / 2
             for letter, (letter_width, _) in zip(label, sizes):
