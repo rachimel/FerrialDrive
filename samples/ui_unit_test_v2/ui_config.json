@@ -666,8 +666,9 @@
         "style": {
             "text_flicker": {
                 "minimum_opacity": 0.5,
-                "period_seconds": 0.3,
-                "dim_seconds": 0.15
+                "period_seconds": 0.2,
+                "dim_seconds": 0.1,
+                "transition_seconds": 0.03
             },
             "energy_breathing": {
                 "period_seconds": 2.4,

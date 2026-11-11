@@ -6,15 +6,22 @@ from math import cos, isfinite, tau
 from ferrial_drive.animation import ScalarAnimation
 
 
-def subtle_flicker(elapsed_seconds, *, minimum_opacity=0.5, period_seconds=0.3,
-                   dim_seconds=0.15):
-    """공통 시간의 고정 주기로 평소 밝기와 최소 불투명도를 교대한다."""
-    if (not all(map(isfinite, (elapsed_seconds, minimum_opacity, period_seconds, dim_seconds)))
+def subtle_flicker(elapsed_seconds, *, minimum_opacity=0.5, period_seconds=0.2,
+                   dim_seconds=0.1, transition_seconds=0.03):
+    """공통 주기로 밝기를 교대하고 전환 구간만 부드럽게 보간한다."""
+    if (not all(map(isfinite, (elapsed_seconds, minimum_opacity, period_seconds, dim_seconds, transition_seconds)))
             or elapsed_seconds < 0 or not 0 <= minimum_opacity <= 1
-            or not 0 < dim_seconds < period_seconds):
+            or not 0 < dim_seconds < period_seconds
+            or not 0 < transition_seconds <= min(dim_seconds, period_seconds - dim_seconds)):
         raise ValueError("밝기 시간·범위·주기가 유효하지 않다.")
     position = elapsed_seconds % period_seconds
-    return minimum_opacity if position >= period_seconds - dim_seconds else 1
+    bright_seconds = period_seconds - dim_seconds
+    dimming = position < bright_seconds
+    end_seconds = bright_seconds if dimming else period_seconds
+    progress = max(0, (position - end_seconds + transition_seconds) / transition_seconds)
+    progress = progress * progress * (3 - 2 * progress)
+    change = (1 - minimum_opacity) * progress
+    return 1 - change if dimming else minimum_opacity + change
 
 
 def breathing_opacity(elapsed_seconds, *, period_seconds=2.4, minimum_opacity=0.65):
