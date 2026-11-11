@@ -665,10 +665,10 @@
         ],
         "style": {
             "text_flicker": {
-                "minimum_opacity": 0.75,
+                "minimum_opacity": 0.8,
                 "period_seconds": 0.12,
                 "dim_seconds": 0.06,
-                "transition_seconds": 0.05
+                "transition_seconds": 0.06
             },
             "energy_breathing": {
                 "period_seconds": 2.4,

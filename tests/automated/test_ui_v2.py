@@ -59,16 +59,15 @@ class UiV2Tests(unittest.TestCase):
         self.assertEqual(self.program.selected_target_id, before)
         self.assertIsNone(self.program.auto_target.pending_id)
 
-    def test_text_blinks_regularly_with_smooth_transitions_and_75_percent_floor(self):
+    def test_text_blinks_regularly_with_continuous_transitions_and_80_percent_floor(self):
         samples = [subtle_flicker((index + 0.5) / 100) for index in range(120)]
-        self.assertTrue(all(0.75 <= value <= 1 for value in samples))
-        self.assertTrue(any(0.75 < value < 1 for value in samples))
+        self.assertTrue(all(0.8 <= value <= 1 for value in samples))
+        self.assertTrue(any(0.8 < value < 1 for value in samples))
         for index in range(12, 120):
             self.assertAlmostEqual(samples[index], samples[index - 12])
-        for elapsed, expected in ((0, 1), (0.01, 1), (0.035, 0.875), (0.06, 0.75),
-                                  (0.07, 0.75), (0.095, 0.875), (0.12, 1)):
+        for elapsed, expected in ((0, 1), (0.03, 0.9), (0.06, 0.8), (0.09, 0.9), (0.12, 1)):
             self.assertAlmostEqual(subtle_flicker(elapsed), expected)
-        for edge in (0.01, 0.06, 0.07, 0.12):
+        for edge in (0.06, 0.12):
             self.assertAlmostEqual(subtle_flicker(edge - 1e-7), subtle_flicker(edge + 1e-7), places=7)
         self.assertEqual(samples[60], subtle_flicker(60.5 / 100))
         self.assertEqual(subtle_flicker(0.3, minimum_opacity=1), 1)
@@ -108,10 +107,29 @@ class UiV2Tests(unittest.TestCase):
         renderer.text_size.side_effect = lambda text, role: (len(text) * 16, 24)
         renderer.digit_ink_bottom.return_value = 24
         view = UiV2View(self.program.config, renderer)
+        view._scanline_visual = ScanlineVisual(elapsed_seconds=0.06)
         with patch.object(view, "counter_base") as base:
             view.perspective_counter(CounterVisual(98, 98, 1, 1), "combo_number", "combo", 178, 1)
         self.assertEqual(base.call_args.args[-1], 1)
-        self.assertTrue(all(0.75 <= call.args[6] <= 1 for call in renderer.warped_text.call_args_list))
+        self.assertTrue(all(abs(call.args[6] - 0.8) < 1e-9 for call in renderer.warped_text.call_args_list))
+
+    def test_only_hit_and_damage_counters_use_the_blink_effect(self):
+        renderer = Mock()
+        renderer.text_size.side_effect = lambda text, role: (len(str(text)) * 16, 24)
+        renderer.digit_ink_bottom.return_value = 24
+        renderer.scaled.side_effect = lambda *args: nullcontext()
+        renderer.clip.side_effect = lambda *args: nullcontext()
+        view = UiV2View(self.program.config, renderer)
+        self.program.perform("damage_player")
+        self.program.damage_numbers.update(0.06)
+        with patch.object(view, "text_flicker", return_value=0.8) as flicker:
+            view.combat(self.program.state, self.program.damage_numbers.visuals,
+                        lock_visuals=(), counter_message_opacity=1)
+        self.assertEqual(flicker.call_count, 2)
+        labels = {call.args[0]: call.args[5] for call in renderer.text.call_args_list
+                  if call.args[0] in ("MAP", "HP", "COUNTER!")}
+        for label in ("MAP", "HP", "COUNTER!"):
+            self.assertEqual(labels[label], 1)
 
     def test_hp_flash_keeps_each_real_damage_interval_and_does_not_restart_older_hits(self):
         effect = HealthDamageFlash()

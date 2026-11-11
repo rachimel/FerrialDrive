@@ -19,9 +19,6 @@ class UiV2View(UiView):
     def text_flicker(self):
         return subtle_flicker(self._scanline_visual.elapsed_seconds, **self.style["text_flicker"])
 
-    def damage_number(self, visual, opacity, offset_x):
-        super().damage_number(visual, opacity * self.text_flicker(), offset_x)
-
     def __init__(self, config, renderer):
         super().__init__(config, renderer)
         self._scanline_visual = ScanlineVisual()
@@ -314,7 +311,7 @@ class UiV2View(UiView):
                 if abs(contact.x) <= 1 and abs(contact.y) <= 1:
                     px, py = cx + contact.x * rect.width * 0.43, cy - contact.y * rect.height * 0.43
                     r.rect(Rect(px - 2, py - 2, 4, 4), c["enemy" if contact.kind == "enemy" else "accent"], opacity)
-        r.text("MAP", rect.x, rect.y + rect.height + 6, "hud_small", c["muted"], opacity * self.text_flicker())
+        r.text("MAP", rect.x, rect.y + rect.height + 6, "hud_small", c["muted"], opacity)
 
     def target(self, state, opacity, offset_x, *, draw_marker=True):
         r, c = self.renderer, self.config.colors
@@ -378,7 +375,7 @@ class UiV2View(UiView):
         value_width, value_height = r.text_size(value, "v2_hp")
         x, top = geometry.hp_outline[0]
         gap = self.style["resource_label_gap_pixels"]
-        hp_alpha = opacity * self.text_flicker()
+        hp_alpha = opacity
         r.text(value, x, top - value_height - gap, "v2_hp", c["text"], hp_alpha)
         hp_height = r.text_size("HP", "hud_small")[1]
         r.text("HP", x + value_width + 9, top - hp_height - gap, "hud_small", c["muted"], hp_alpha)
@@ -485,12 +482,12 @@ class UiV2View(UiView):
                 self.stroke(((left + 28, top + 4), (x + width - 4, top + 4)), self.ui_accent, alpha * 0.3)
                 self.weapon_image(weapon, kind, Rect(left + 18, top + 11, width - 112, height - 39), alpha)
                 r.neon_text("MELEE" if kind == "melee" else "RANGED", left + 17, top + height - 23,
-                            "weapon_name", c["text"], alpha * self.style["weapon_text_opacity"] * self.text_flicker(),
+                            "weapon_name", c["text"], alpha * self.style["weapon_text_opacity"],
                             **self.style["weapon_text_neon"])
                 if weapon.rounds is not None:
                     text = str(weapon.rounds)
                     r.neon_text(text, x + width - r.text_size(text, "v2_ammo")[0] - 16,
-                                top + 10, "v2_ammo", c["text"], alpha * self.style["weapon_text_opacity"] * self.text_flicker(),
+                                top + 10, "v2_ammo", c["text"], alpha * self.style["weapon_text_opacity"],
                                 **self.style["weapon_text_neon"])
 
     def absorption(self, trails, opacity):
@@ -622,7 +619,7 @@ class UiV2View(UiView):
             text_scale = self.style["counter_text_scale"]
             with r.scaled(scale, self.layout["counter_message"]):
                 r.text("COUNTER!", *self.layout["counter_message"], "v2_counter", c["warning"],
-                       opacity * counter_alpha * self.text_flicker(), scale_x=text_scale, scale_y=text_scale)
+                       opacity * counter_alpha, scale_x=text_scale, scale_y=text_scale)
         for visual in damage_visuals:
             with r.scaled(scale, (visual.x, visual.y)):
                 self.damage_number(visual, opacity, offset_x)
