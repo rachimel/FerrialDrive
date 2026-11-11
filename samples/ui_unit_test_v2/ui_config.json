@@ -656,6 +656,15 @@
             ]
         ],
         "style": {
+            "dialogue_motion": {
+                "open_seconds": 0.2,
+                "text_seconds": 0,
+                "collapse_seconds": 0.05,
+                "line_seconds": 0.03,
+                "dot_seconds": 0.02,
+                "line_thickness_pixels": 1.2,
+                "dot_width_pixels": 3
+            },
             "panel_film_grain": {
                 "opacity": 0.035,
                 "tile_pixels": 64,

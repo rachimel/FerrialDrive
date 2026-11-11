@@ -19,6 +19,18 @@ class PanelGeometry:
     border_parts: tuple[PanelBorderPart, ...]
 
 
+def scale_panel_geometry(geometry, center, width_ratio, height_ratio):
+    """완성 형상과 분리 테두리를 패널 중앙 기준으로 함께 펼친다."""
+    if width_ratio == height_ratio == 1:
+        return geometry
+    cx, cy = center
+    def points(polygon):
+        return tuple((cx + (x - cx) * width_ratio, cy + (y - cy) * height_ratio) for x, y in polygon)
+    return PanelGeometry(points(geometry.surface), tuple(
+        PanelBorderPart(part.part_id, tuple(points(polygon) for polygon in part.polygons), part.opacity)
+        for part in geometry.border_parts))
+
+
 def clip_panel_band(surface, top_pixels, height_pixels):
     """패널 면을 수평 띠로 자른다. 사선 외곽과 짧은 절단을 유지한다."""
     points = surface

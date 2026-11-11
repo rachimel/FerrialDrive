@@ -28,6 +28,7 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 - 공통 적용 대상: 무기·로드아웃·에너지 바 빈 배경·카운터 받침판·메뉴/일시정지 패널과 버튼. HP·필살기 아이콘/단축키/보조 레벨·에너지 레벨에서는 스캔을 제외하고 투명도만 유지한다.
 - `panel_border.filter_samples=2`: 공통 패널 면/테두리를 2배로 그린 뒤 선형 필터로 축소한다. 2~4의 정수를 받으며 최대 32개의 도형 텍스처를 재사용한다. 게임·Pico2D 원본은 변경하지 않는다.
 - `v2.layout.dialogue`·`v2.style.dialogue_padding_pixels`: 대화창 위치·크기와 안쪽 여백. 위쪽 표적/HUD 일부를 덮는다. 게임에서는 `DialogueInfo`를 표시 상태로 공급한다.
+- `v2.style.dialogue_motion`: 최초 표시·F5·D 재표시에서 중앙 세로 펼침 0.2초 후 글자를 즉시 표시한다(`text_seconds=0`). 닫을 때는 글자를 먼저 숨기고 세로 압축 0.05초·가로선 축소 0.03초·중앙점 소멸 0.02초, 총 0.1초로 종료한다. 열림/닫힘 총시간은 사용자 지정이다. `line_thickness_pixels=1.2`·`dot_width_pixels=3`은 종료 빛의 두께/최소 폭이며 세부 단계와 빛 모양은 1차 시안이다.
 - 패널의 샘플 내용은 `hud_sample.json`의 조작 가이드다. 헤더는 `조작 가이드`이며 `fonts.dialogue_heading`의 24px를 사용한다. 헤더/본문 위 여백은 8px이며 `dialogue_body_role=small`·`dialogue_body_offset_pixels=28`·`dialogue_line_spacing_pixels=20`으로 4줄을 표시한다. 기존 F1 별도 안내창은 제거했다.
 - 최종 배치: 미니맵 (20,20), 논리 크기 240×160·표시 배율 0.9. 대화창 (360,20), 560×130. 위쪽 여백은 같으며 패널 헤더는 `조작 가이드`다.
 - `v2.layout.target_hp_offset_pixels`: 선택한 몸통 중심 기준 HP 위치. HP 폭·높이는 `target_hp`의 마지막 두 값을 사용한다.
@@ -58,7 +59,7 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 | R | 거리 안의 미획득 후보를 커서 각도·거리 순으로 획득. 전부 돌면 같은 입력에서 새 순환 시작 |
 | 우클릭 유지 | R 획득 거리 증가. 발사/탄 퍼짐은 이 샘플에 미연결 |
 | T | 후보 전체 비활성/활성. 비활성 시 표적·획득 이력 초기화 |
-| D | 통신 조작 가이드 표시 유무, 위쪽 표적과 록온 부분 가림 비교 |
+| D | 조작 가이드 패널 열기/TV 종료 닫기, 위쪽 표적과 록온 부분 가림 비교 |
 | C / Space | COUNTER / 대시 가능 표시 변경 |
 | E / F | 활성 무기 / 로드아웃 변경 |
 | F5 | 표시 초기화 |
@@ -74,6 +75,7 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 
 ## 검증
 
+- 이번 대화창 개폐 시안: UI 102개·획득 7개, 총 109개 통과. 0.2초 완성 전 본문 숨기기·완성 즉시 표시·0.1초 닫힘·60fps/단일 시간 갱신 일치·반전 입력·큰 시간 간격·잘못된 시간·중앙 기준 형상과 기존 10개 조각 유지를 검사했다. 실제 SDL에서 열기/닫기 두 순환을 60fps 시간 간격의 180프레임으로 렌더하고 단계별 이미지를 열어 검토했다. 최종 닫힘에서 데이터가 제거되고 텍스처 캐시가 상한 안에 있는 것을 확인했다. 미리보기는 `output/ui_unit_test_v2/dialogue_popup/preview.gif`다. 실제 창 조작·GPU 성능·최종 외관 승인은 미확인이다.
 - 이번 그레인·네온·패널 구간 변경: UI 97개·획득 7개, 총 104개 통과. 실제 SDL 픽셀에서 그레인의 약한 세기·패널 밖 제외·프레임 재사용, 글자 본문 유지·청록 광의 외곽 번짐·캐시 해제를 확인했다. 패널 수집 단계와 실제 배율/viewport/clip, Y 구간 합치기·빈 구간 건너뛰기도 검사했다. 전투 96프레임과 전후/색상 비교·근접 무기/로드아웃 2·일시정지·메뉴를 렌더했고 주요 이미지를 열어 검토했다. 마지막 청록 광은 전투 96프레임과 색상 비교에서 확인했다. 그레인 8개·스캔 패턴 2개가 유지됐다. 최신 GIF는 `output/ui_unit_test_v2/grain_neon/preview.gif`다. 실제 창 사용감·GPU 성능·사용자 외관 승인은 미확인이다.
 - 이번 전역/공통 패널 변경: UI 92개·획득 7개, 총 99개 통과. 실제 SDL 픽셀에서 서로 다른 배율·viewport의 같은 Y에 줄무늬/밝은 띠가 정렬되는지 확인했다. 장면 위상 복원·모든 장면의 한 시계·자원부 제외 범위·반복 패턴 재사용도 검사했다. 12fps 시간 간격으로 전투 156·일시정지 36·메뉴 36, 총 228프레임을 렌더하고 주요 이미지를 열어 검토했다. 패턴 텍스처는 두 개로 유지됐다. 전투 13초 GIF는 `output/ui_unit_test_v2/global_panel_effects/preview.gif`다. 실제 창 사용감·GPU 성능·최종 승인은 미확인이다.
 - 이번 안내 통합/속도 조정: 기존 자동 검사 95개 통과. 실제 폰트로 안내 4줄의 최대 폭 384px가 가용 폭 504px 안에 들어가고 마지막 줄도 패널 높이 안에 있는 것을 확인했다. 기본 전투·F1 입력 후·메뉴를 렌더하고 기본/F1 후 PNG가 같은 것을 확인했다. 기본·메뉴 이미지를 열어 문구와 헤더/본문 상향을 검토했다.
@@ -97,6 +99,8 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 
 `ferrial_drive/ui_v2/panels.py`의 `build_panel_geometry()`는 `surface`와 `border_parts`를 따로 반환한다. 테두리 ID는 `upper_corner`·`upper_rail`·`upper_fragment_0~2`, `lower_corner`·`lower_rail`·`lower_fragment_0~2`다. 면은 `panel_surface()`, 테두리는 `panel_border()`로 그린다. `part_opacities`로 각 조각을 독립 표시할 수 있다. 입력·시간·등장 순서는 형상 모듈에 넣지 않는다.
 
-Scanline 시간은 `effects.py`의 `ScanlineMotion`이 관리한다. 같은 `visual`을 `UiV2View.combat/menu/pause(scanline_visual=...)`에 공급한다. 테스트 실행부는 일시정지 중에도 UI 시계를 갱신하고 게임 갱신만 멈춘다. 패널 자체의 등장 시간/순서는 별도 후속 작업이다.
+Scanline 시간은 `effects.py`의 `ScanlineMotion`이 관리한다. 같은 `visual`을 `UiV2View.combat/menu/pause(scanline_visual=...)`에 공급한다. 테스트 실행부는 일시정지 중에도 UI 시계를 갱신하고 게임 갱신만 멈춘다.
+
+대화창은 `DialoguePanelMotion.request(opened)`·`update(delta_seconds)`로 제어하고 `visual`을 `view.combat(dialogue_visual=...)`에 공급한다. 닫힘 중에는 `DialogueInfo`를 유지하고 `phase == "closed"`가 된 뒤 제거한다. 조회와 실제 출력은 같은 표시값을 사용해 펼쳐지는 패널의 Y 구간도 밝은 띠 경로에 반영한다. 글자를 압축하지 않고 완성 뒤 표시하며, 다른 패널의 개폐와 테두리 조각별 순차 등장은 후속 범위다.
 
 프레임 출력 전에 `view.prepare_panel_effects(draw_panels)`로 그릴 UI를 한 번 조회한다. 이 단계는 도형을 출력하지 않고 보이는 패널의 Y 구간을 수집하므로 콜백 안에서 입력·시간·게임 상태를 갱신하지 않는다. 실제 출력과 같은 레이아웃·배율·clip을 사용하며 등장/퇴장 중인 패널도 반영한다.

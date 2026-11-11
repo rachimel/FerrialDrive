@@ -18,7 +18,8 @@ SPEC = importlib.util.spec_from_file_location("ui_v2_sample", ROOT / "tests/ui_u
 SAMPLE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(SAMPLE)
 
-from ferrial_drive.ui_v2.effects import AbsorptionTrail, EnergyAbsorption, ScanlineMotion, ScanlineVisual
+from ferrial_drive.ui_v2.effects import (AbsorptionTrail, DialoguePanelMotion, DialoguePanelVisual,
+                                        EnergyAbsorption, ScanlineMotion, ScanlineVisual)
 from ferrial_drive.ui_v2.geometry import (PerspectivePlane, body_diamond, counter_plaque,
                                          resource_geometry, scaled_point, slanted_meter, tapered_stroke_mesh)
 from ferrial_drive.ui.counter import CounterVisual
@@ -144,8 +145,99 @@ class UiV2Tests(unittest.TestCase):
         self.program.draw()
         self.assertEqual(self.program.renderer.rect.call_count, 24)  # 플레이어와 적 3기, 각 6부품.
         self.program.perform("dialogue")
+        self.assertEqual(self.program.dialogue_motion.phase, "closing")
+        self.assertIsNotNone(self.program.state.dialogue)
+        self.program.update(0.2)
         self.assertIsNone(self.program.state.dialogue)
         self.assertEqual(self.program.selected_target_id, "enemy_c")
+
+    def test_dialogue_opens_from_center_and_text_waits_for_full_height(self):
+        effect = DialoguePanelMotion()
+        effect.request(True)
+        self.assertEqual(effect.visual, DialoguePanelVisual(0, 1, 0))
+        effect.update(0.1)
+        self.assertGreater(effect.visual.height_ratio, 0)
+        self.assertLess(effect.visual.height_ratio, 1)
+        self.assertEqual(effect.visual.text_opacity, 0)
+        effect.update(0.1)
+        self.assertEqual(effect.visual, DialoguePanelVisual())
+
+    def test_dialogue_total_durations_match_60fps_and_single_step(self):
+        for open_steps, close_steps in ((1, 1), (12, 6)):
+            effect = DialoguePanelMotion()
+            effect.request(True)
+            for _ in range(open_steps):
+                effect.update(0.2 / open_steps)
+            self.assertEqual(effect.phase, "open")
+            self.assertEqual(effect.visual.text_opacity, 1)
+            effect.request(False)
+            for _ in range(close_steps):
+                effect.update(0.1 / close_steps)
+            self.assertEqual(effect.phase, "closed")
+
+    def test_dialogue_shutdown_hides_text_then_collapses_line_and_dot(self):
+        effect = DialoguePanelMotion()
+        effect.reset(True)
+        effect.request(False)
+        self.assertEqual(effect.visual.text_opacity, 0)
+        effect.update(0.025)
+        self.assertGreater(effect.visual.height_ratio, 0)
+        self.assertLess(effect.visual.height_ratio, 1)
+        self.assertGreater(effect.visual.flash_opacity, 0)
+        effect.update(0.04)
+        self.assertEqual(effect.visual.height_ratio, 0)
+        self.assertGreater(effect.visual.width_ratio, 0)
+        self.assertLess(effect.visual.width_ratio, 1)
+        effect.update(0.025)
+        self.assertEqual(effect.visual.width_ratio, 0)
+        self.assertGreater(effect.visual.flash_opacity, 0)
+        effect.update(0.03)
+        self.assertEqual(effect.phase, "closed")
+        self.assertEqual(effect.visual, DialoguePanelVisual(0, 0, 0, 0))
+
+    def test_dialogue_motion_handles_interruption_large_steps_and_invalid_time(self):
+        effect = DialoguePanelMotion()
+        effect.request(True)
+        effect.update(0.1)
+        height = effect.visual.height_ratio
+        effect.request(False)
+        self.assertEqual(effect.visual.height_ratio, height)
+        effect.update(0.02)
+        height = effect.visual.height_ratio
+        effect.request(True)
+        self.assertEqual(effect.visual.height_ratio, height)
+        self.assertEqual(effect.visual.text_opacity, 0)
+        effect.update(1)
+        self.assertEqual(effect.phase, "open")
+        effect.request(False)
+        effect.update(1)
+        self.assertEqual(effect.phase, "closed")
+        for value in (-1, float("nan"), float("inf")):
+            with self.assertRaises(ValueError):
+                effect.update(value)
+        with self.assertRaises(ValueError):
+            DialoguePanelMotion(open_seconds=0)
+
+    def test_dialogue_view_scales_frame_without_squashing_or_revealing_text(self):
+        renderer = SimpleNamespace(filtered_polygons=Mock(), text=Mock())
+        view = UiV2View(self.program.config, renderer)
+        x, y, width, height = view.layout["dialogue"]
+        with patch.object(view, "panel_surface") as surface, patch.object(view, "panel_border") as border, \
+                patch.object(view, "panel_scanlines"):
+            view.dialogue(self.program.state.dialogue, 1, panel_visual=DialoguePanelVisual(0.5, 1, 0))
+            geometry = surface.call_args.args[0]
+            self.assertAlmostEqual(min(py for _, py in geometry.surface), y + height / 4)
+            self.assertAlmostEqual(max(py for _, py in geometry.surface), y + height * 3 / 4)
+            self.assertEqual(min(px for px, _ in geometry.surface), x)
+            self.assertEqual(max(px for px, _ in geometry.surface), x + width)
+            self.assertEqual(len(border.call_args.args[0]), 10)
+            renderer.text.assert_not_called()
+            view.dialogue(self.program.state.dialogue, 1, panel_visual=DialoguePanelVisual())
+            self.assertEqual(renderer.text.call_count, 5)
+        renderer.text.reset_mock()
+        view.dialogue(self.program.state.dialogue, 1, panel_visual=DialoguePanelVisual(0, 0.4, 0, 0.85))
+        renderer.text.assert_not_called()
+        self.assertEqual(renderer.filtered_polygons.call_count, 3)
 
     def test_corner_stroke_tapers_and_shares_join_cross_sections(self):
         quads = tapered_stroke_mesh(((0, 100), (0, 0), (100, 0)), (1,), 1, 5, 20)

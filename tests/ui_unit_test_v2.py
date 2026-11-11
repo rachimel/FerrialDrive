@@ -22,7 +22,7 @@ from ferrial_drive.ui.health import HealthTrail
 from ferrial_drive.ui.pause import PauseState
 from ferrial_drive.ui.state import Health, HudState, LoadoutInfo, RadarContact, TargetInfo, WeaponInfo
 from ferrial_drive.ui.transition import SceneTransition
-from ferrial_drive.ui_v2.effects import EnergyAbsorption, ScanlineMotion
+from ferrial_drive.ui_v2.effects import DialoguePanelMotion, EnergyAbsorption, ScanlineMotion
 from ferrial_drive.ui_v2.geometry import resource_geometry, scaled_point
 from ferrial_drive.ui_v2.pico_renderer import PicoV2Renderer
 from ferrial_drive.ui_v2.state import DialogueInfo, HudV2State
@@ -50,6 +50,8 @@ class UiUnitTestV2:
         scanline_speeds = (scanline["spacing_pixels"], scanline["motion"]["slow_speed_pixels_per_second"],
                            scanline["motion"]["fast_speed_pixels_per_second"])
         self.scanline_motion = ScanlineMotion(*scanline_speeds)
+        motion = self.config.data["v2"]["style"]["dialogue_motion"]
+        self.dialogue_motion = DialoguePanelMotion(**{key: value for key, value in motion.items() if key.endswith("_seconds")})
         self.reset()
 
     def reset(self):
@@ -93,6 +95,7 @@ class UiUnitTestV2:
                                             **self.config.data["damage_popup"])
         self.absorption.clear()
         self.scanline_motion.reset()
+        self.dialogue_motion.reset(opened=True, animate=True)
 
     def damage_text_size(self, text):
         if self.renderer is not None:
@@ -189,9 +192,10 @@ class UiUnitTestV2:
         elif action == "next_target":
             self.acquire_target()
         elif action == "dialogue":
-            data = self.preset["dialogue"]
-            info = None if self.state.dialogue else DialogueInfo(data["speaker"], tuple(data["lines"]))
-            self.state = replace(self.state, dialogue=info)
+            if not self.dialogue_motion.opened and self.state.dialogue is None:
+                data = self.preset["dialogue"]
+                self.state = replace(self.state, dialogue=DialogueInfo(data["speaker"], tuple(data["lines"])))
+            self.dialogue_motion.request(not self.dialogue_motion.opened)
         elif action in ("energy_up", "energy_down"):
             change = 0.1 if action == "energy_up" else -0.1
             self.state = replace(self.state, energy_ratio=round(max(0, min(1, self.state.energy_ratio + change)), 3))
@@ -263,6 +267,9 @@ class UiUnitTestV2:
 
     def update(self, delta_seconds):
         self.scanline_motion.update(delta_seconds)
+        self.dialogue_motion.update(delta_seconds)
+        if self.dialogue_motion.phase == "closed" and self.state.dialogue is not None:
+            self.state = replace(self.state, dialogue=None)
         if self.pause.blocking:
             self.pause.update(delta_seconds)
             return
@@ -311,7 +318,8 @@ class UiUnitTestV2:
                                  player_trailing_ratio=self.player_health.trailing_ratio,
                                  target_trailing_ratio=self.target_health.trailing_ratio,
                                  absorption_trails=self.absorption.trails,
-                                 scanline_visual=self.scanline_motion.visual)
+                                 scanline_visual=self.scanline_motion.visual,
+                                 dialogue_visual=self.dialogue_motion.visual)
         if self.pause.opacity > 0:
             self.view.pause(self.pause.opacity, self.inputs,
                             scanline_visual=self.scanline_motion.visual)

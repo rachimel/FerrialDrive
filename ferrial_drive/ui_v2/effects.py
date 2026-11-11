@@ -1,4 +1,4 @@
-"""흡수 Trail과 패널 Scanline의 시간 상태. 입력·렌더러와 분리한다."""
+"""흡수 Trail·패널 스캔·대화창 개폐의 시간 상태. 입력·렌더러와 분리한다."""
 
 from dataclasses import dataclass
 from math import isfinite
@@ -31,6 +31,79 @@ class ScanlineMotion:
             (self.visual.line_offset_pixels + self.slow_speed_pixels_per_second * delta_seconds) % self.spacing_pixels,
             self.visual.highlight_travel_pixels + self.fast_speed_pixels_per_second * delta_seconds,
             self.visual.elapsed_seconds + delta_seconds)
+
+
+@dataclass(frozen=True)
+class DialoguePanelVisual:
+    height_ratio: float = 1
+    width_ratio: float = 1
+    text_opacity: float = 1
+    flash_opacity: float = 0
+
+
+class DialoguePanelMotion:
+    """중앙 세로 펼침 후 글자 표시, TV 종료처럼 면→가로선→점으로 닫는다."""
+    def __init__(self, open_seconds=0.2, text_seconds=0, collapse_seconds=0.05,
+                 line_seconds=0.03, dot_seconds=0.02):
+        durations = (open_seconds, text_seconds, collapse_seconds, line_seconds, dot_seconds)
+        if (not all(isfinite(value) and value > 0 for value in (open_seconds, collapse_seconds, line_seconds, dot_seconds))
+                or not isfinite(text_seconds) or text_seconds < 0):
+            raise ValueError("대화창 펼침·종료 시간은 양수이며 글자 등장 시간은 0 이상의 초 단위 값이어야 한다.")
+        self.open_seconds, self.text_seconds, self.collapse_seconds, self.line_seconds, self.dot_seconds = durations
+        self.reset()
+
+    def reset(self, opened=False, *, animate=False):
+        self.opened = bool(opened)
+        self.phase = "open" if opened else "closed"
+        self.elapsed_seconds = 0
+        self._start = DialoguePanelVisual() if opened else DialoguePanelVisual(0, 0, 0, 0)
+        if opened and animate:
+            self.phase = "opening"
+            self._start = DialoguePanelVisual(0, 1, 0, 0)
+
+    def request(self, opened):
+        opened = bool(opened)
+        if self.opened == opened:
+            return
+        self._start = self.visual
+        self.opened = opened
+        self.elapsed_seconds = 0
+        self.phase = "opening" if opened else "closing"
+
+    def update(self, delta_seconds):
+        if not isfinite(delta_seconds) or delta_seconds < 0:
+            raise ValueError("대화창 갱신 시간은 0 이상의 유한한 초 단위 값이어야 한다.")
+        self.elapsed_seconds += delta_seconds
+        if self.phase == "opening" and self.elapsed_seconds + 1e-9 >= self.open_seconds + self.text_seconds:
+            self.phase = "open"
+        elif self.phase == "closing" and self.elapsed_seconds + 1e-9 >= self.collapse_seconds + self.line_seconds + self.dot_seconds:
+            self.phase = "closed"
+
+    @property
+    def visual(self):
+        if self.phase == "closed":
+            return DialoguePanelVisual(0, 0, 0, 0)
+        if self.phase == "open":
+            return DialoguePanelVisual()
+        elapsed = self.elapsed_seconds
+        if self.phase == "opening":
+            amount = 1 - (1 - min(1, elapsed / self.open_seconds)) ** 3
+            height = self._start.height_ratio + (1 - self._start.height_ratio) * amount
+            start_width = self._start.width_ratio or 1
+            width = start_width + (1 - start_width) * amount
+            text = (max(0, min(1, (elapsed - self.open_seconds) / self.text_seconds))
+                    if self.text_seconds else float(elapsed >= self.open_seconds))
+            return DialoguePanelVisual(height, width, text)
+        if elapsed < self.collapse_seconds:
+            amount = elapsed / self.collapse_seconds
+            height = self._start.height_ratio * (1 - amount) ** 2
+            return DialoguePanelVisual(height, self._start.width_ratio, 0, 0.85 * amount)
+        elapsed -= self.collapse_seconds
+        if elapsed < self.line_seconds:
+            width = self._start.width_ratio * (1 - elapsed / self.line_seconds) ** 2
+            return DialoguePanelVisual(0, width, 0, 0.85)
+        opacity = max(0, 1 - (elapsed - self.line_seconds) / self.dot_seconds)
+        return DialoguePanelVisual(0, 0, 0, 0.85 * opacity)
 
 
 def _bezier(points, amount):

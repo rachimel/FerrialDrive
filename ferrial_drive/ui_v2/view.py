@@ -8,9 +8,10 @@ from ferrial_drive.ui.counter import CounterVisual
 from ferrial_drive.ui.view import UiView
 from .geometry import (PerspectivePlane, body_diamond, counter_plaque, quad_fill,
                        resource_geometry, slanted_meter, tapered_stroke_mesh)
-from .panels import PanelGeometry, build_panel_geometry, merge_panel_y_ranges, panel_bright_band_top
+from .panels import (PanelGeometry, build_panel_geometry, merge_panel_y_ranges,
+                     panel_bright_band_top, scale_panel_geometry)
 from .panel_probe import PanelProbeRenderer
-from .effects import ScanlineVisual
+from .effects import DialoguePanelVisual, ScanlineVisual
 
 
 class UiV2View(UiView):
@@ -173,13 +174,26 @@ class UiV2View(UiView):
         if draw_border:
             self.panel_border(geometry.border_parts, opacity)
 
-    def dialogue(self, info, opacity, scanline_visual=None):
+    def dialogue(self, info, opacity, scanline_visual=None, *, panel_visual=None):
         if info is None:
             return
+        visual = panel_visual or DialoguePanelVisual()
         x, y, width, height = self.layout["dialogue"]
+        center = x + width / 2, y + height / 2
         settings = self.style["panel_scanlines"]["dialogue"]
-        self.framed_panel((x, y, width, height), opacity, fill_opacity=settings["surface_opacity"],
-                          scanline_settings=settings, scanline_visual=scanline_visual)
+        if visual.height_ratio > 0 and visual.width_ratio > 0:
+            geometry = build_panel_geometry((x, y, width, height), self.style["panel_cut_pixels"],
+                                            self.style["panel_frame"], self.style["panel_border"])
+            geometry = scale_panel_geometry(geometry, center, visual.width_ratio, visual.height_ratio)
+            self.panel_surface(geometry, opacity, fill_opacity=settings["surface_opacity"])
+            self.panel_scanlines(geometry, opacity, settings, scanline_visual)
+            self.panel_border(geometry.border_parts, opacity)
+        if visual.flash_opacity > 0 or (visual.height_ratio == 0 and visual.width_ratio > 0):
+            self.dialogue_shutdown_line(center, width * visual.width_ratio, opacity,
+                                        visual.flash_opacity or 0.4)
+        if visual.text_opacity <= 0:
+            return
+        opacity *= visual.text_opacity
         padding_x, padding_y = self.style["dialogue_padding_pixels"]
         self.renderer.text(info.speaker, x + padding_x, y + padding_y, "dialogue_heading",
                            self.ui_accent, opacity)
@@ -189,6 +203,19 @@ class UiV2View(UiView):
             self.renderer.text(line, x + padding_x, first_line + index * self.style["dialogue_line_spacing_pixels"],
                                role, self.config.colors["text"], opacity,
                                max_width=width - padding_x * 2)
+
+    def dialogue_shutdown_line(self, center, width, opacity, flash):
+        """TV 종료의 얇은 가로 빛과 마지막 점. 면·테두리·본문과 분리한다."""
+        x, y = center
+        width = max(self.style["dialogue_motion"]["dot_width_pixels"], width)
+        thickness = self.style["dialogue_motion"]["line_thickness_pixels"]
+        for spread, alpha, color in ((5, 0.12, self.ui_accent), (2.5, 0.3, self.ui_accent),
+                                      (1, 1, self.config.colors["text"])):
+            half = thickness * spread / 2
+            points = ((x - width / 2, y - half), (x + width / 2, y - half),
+                      (x + width / 2, y + half), (x - width / 2, y + half))
+            self.renderer.filtered_polygons((points,), color, opacity * flash * alpha,
+                                            self.style["panel_border"]["filter_samples"])
 
     def ultimate_label(self, text, right, y, color, opacity, *, scale=1, slant_right=False):
         """필살기 문구와 작은 사선 패널을 같은 위치·투명도로 그린다."""
@@ -492,7 +519,7 @@ class UiV2View(UiView):
     def _combat(self, state, damage_visuals=(), opacity=1, offset_x=0, *,
                counter_visual=None, combo_visual=None, counters_opacity=1,
                cursor_position=None, player_trailing_ratio=None, target_trailing_ratio=None,
-               absorption_trails=(), scanline_visual=None):
+               absorption_trails=(), scanline_visual=None, dialogue_visual=None):
         r, c, hud = self.renderer, self.config.colors, state.hud
         scale = self.style["hud_scale"]
         width, height = self.config.window["width"], self.config.window["height"]
@@ -535,7 +562,7 @@ class UiV2View(UiView):
             with r.scaled(scale, (visual.x, visual.y)):
                 self.damage_number(visual, opacity, offset_x)
         self.absorption(absorption_trails, opacity)
-        self.dialogue(state.dialogue, opacity, scanline_visual)
+        self.dialogue(state.dialogue, opacity, scanline_visual, panel_visual=dialogue_visual)
         if cursor_position is not None:
             x, y = cursor_position
             with r.scaled(scale, (x, y)):
