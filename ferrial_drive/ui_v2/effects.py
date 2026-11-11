@@ -23,9 +23,9 @@ def _flicker_schedule(seed, minimum_seconds, maximum_seconds):
     return tuple(times)
 
 
-def subtle_flicker(elapsed_seconds, *, minimum_opacity=0.65, interval_min_seconds=1.5,
+def subtle_flicker(elapsed_seconds, *, minimum_opacity=0, interval_min_seconds=1.5,
                    interval_max_seconds=2.5, dip_seconds=0.08, seed=1):
-    """불규칙한 간격과 감광 깊이로 짧게 어둡게 한다. 완전히 끄지 않는다."""
+    """불규칙한 간격으로 짧게 점멸한다. 최소 불투명도 0이면 완전히 끈다."""
     if (not all(map(isfinite, (elapsed_seconds, minimum_opacity, interval_min_seconds, interval_max_seconds, dip_seconds)))
             or elapsed_seconds < 0 or not 0 <= minimum_opacity <= 1
             or not 0 < dip_seconds < interval_min_seconds <= interval_max_seconds):
@@ -34,13 +34,7 @@ def subtle_flicker(elapsed_seconds, *, minimum_opacity=0.65, interval_min_second
     position = (elapsed_seconds + _brightness_sample(0, seed) * times[-1]) % times[-1]
     dip_index = bisect_right(times, position) - 1
     elapsed = position - times[dip_index]
-    if elapsed >= dip_seconds:
-        return 1
-    edge_seconds = min(0.012, dip_seconds / 4)
-    amount = min(1, elapsed / edge_seconds, (dip_seconds - elapsed) / edge_seconds)
-    amount = amount * amount * (3 - 2 * amount)
-    depth = 1 - 0.4 * _brightness_sample(dip_index + 1, seed)
-    return 1 - (1 - minimum_opacity) * depth * amount
+    return minimum_opacity if elapsed < dip_seconds else 1
 
 
 def breathing_opacity(elapsed_seconds, *, period_seconds=2.4, minimum_opacity=0.65):
