@@ -285,7 +285,14 @@ class UiUnitTestV2:
             r.rect(Rect(x + dx * sx, y + dy * sy, width * sx, height * sy), color, opacity * 0.7)
 
     def draw(self):
+        self.view.prepare_panel_effects(lambda: self.draw_layers(actors=False))
         self.view.background()
+        self.draw_layers()
+        if self.capture_path:
+            self.renderer.save_frame(self.capture_path, self.config.window["width"], self.config.window["height"])
+            self.capture_path = None
+
+    def draw_layers(self, *, actors=True):
         for scene in ("menu", "combat"):
             pose = self.transition.pose(scene)
             if pose.opacity <= 0:
@@ -294,9 +301,10 @@ class UiUnitTestV2:
                 self.view.menu(pose.opacity, 0, self.inputs,
                                scanline_visual=self.scanline_motion.visual)
             else:
-                self.actor("player", pose.opacity)
-                for enemy_id in self.enemies:
-                    self.actor(enemy_id, pose.opacity)
+                if actors:
+                    self.actor("player", pose.opacity)
+                    for enemy_id in self.enemies:
+                        self.actor(enemy_id, pose.opacity)
                 self.view.combat(self.state, self.damage_numbers.visuals, pose.opacity,
                                  counter_visual=self.damage_counter.visual,
                                  combo_visual=self.hit_counter.visual, cursor_position=self.mouse,
@@ -307,9 +315,6 @@ class UiUnitTestV2:
         if self.pause.opacity > 0:
             self.view.pause(self.pause.opacity, self.inputs,
                             scanline_visual=self.scanline_motion.visual)
-        if self.capture_path:
-            self.renderer.save_frame(self.capture_path, self.config.window["width"], self.config.window["height"])
-            self.capture_path = None
 
     def exit(self):
         if self.renderer is not None:

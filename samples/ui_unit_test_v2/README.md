@@ -22,7 +22,9 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 - `v2.style.panel_border`: 기본/좌상단·우하단 두께 `thin_width_pixels`·`corner_width_pixels`는 1/5px다. `corner_hold_pixels=3`까지 최대 두께를 유지한 뒤 직선으로 가늘어진다. 일반 패널의 변화 구간은 `reach_pixels=180`이며 짧은 변에서는 길이에 맞춘다. 곡선 보간은 제거했다.
 - `v2.style.panel_frame`: 통신 패널 레퍼런스 테두리·공통 면 형상. `bevel_pixels`·`corner_join_pixels`는 꺾임, `upper/lower_side_ratio`·`upper/lower_rail_ratio`는 세로/가로선 길이, `fragment_*`는 분리된 사선 조각을 조절한다. 미니맵은 테두리를 그리지 않는다.
 - `v2.style.panel_scanlines`: 배경 불투명도는 맵 0.42·가이드 0.6, 선 불투명도는 맵 0.07·가이드 0.08·일반 패널 0.06이다. 4px 간격·1px 두께의 가로 패턴이 **화면 전체 좌표에서** 스크롤하고 패널 안에만 표시된다. 패널별 `line_opacity=0`으로 두 스캔 효과를 끈다. 글자·지형·표식에는 적용하지 않는다.
-- `panel_scanlines.motion`: 기본 선 5px/s·밝은 띠 60px/s, 띠 높이 24px·불투명도 0.22다. 속도는 **화면 픽셀/초**이며 배율이 다른 패널도 같은 화면 높이에서 밝아진다. 720px 화면의 한 주기는 12.4초다. 밝은 띠만 끄려면 `highlight_opacity=0`으로 둔다.
+- `panel_scanlines.motion`: 기본 선 5px/s·밝은 띠 60px/s, 띠 높이 24px·불투명도 0.22다. 속도는 **화면 픽셀/초**이며 배율이 다른 패널도 같은 화면 높이에서 밝아진다. 밝은 띠는 현재 보이는 패널의 Y 구간만 이동하고 빈 세로 구간을 건너뛴다. 주기는 `(겹침을 합친 Y 구간 길이 + 24) / 60`이며 기본 전투 샘플에서는 약 5.66초다. 밝은 띠만 끄려면 `highlight_opacity=0`으로 둔다.
+- `v2.style.panel_film_grain`: 무기·로드아웃·에너지 바 빈 배경에만 옅은 흑백 White noise를 표시한다. 불투명도 0.035·64px 화면 타일·입자 1.25px이며 seed 173의 8개 프레임을 10회/초로 반복한다. `opacity=0`으로 끈다.
+- `v2.style.weapon_text_opacity=0.82`: 무기 구분·잔탄·로드아웃 번호의 활성/비활성 불투명도에 곱한다. `weapon_text_neon`은 원래 글자색과 별개인 청록 광 `#65DCC8`·가우시안 반경 4 논리 px·세기 0.12를 조절한다. 광은 흐린 마스크를 재사용하며 `glow_opacity=0`으로 끈다.
 - 공통 적용 대상: 무기·로드아웃·에너지 바 빈 배경·카운터 받침판·메뉴/일시정지 패널과 버튼. HP·필살기 아이콘/단축키/보조 레벨·에너지 레벨에서는 스캔을 제외하고 투명도만 유지한다.
 - `panel_border.filter_samples=2`: 공통 패널 면/테두리를 2배로 그린 뒤 선형 필터로 축소한다. 2~4의 정수를 받으며 최대 32개의 도형 텍스처를 재사용한다. 게임·Pico2D 원본은 변경하지 않는다.
 - `v2.layout.dialogue`·`v2.style.dialogue_padding_pixels`: 대화창 위치·크기와 안쪽 여백. 위쪽 표적/HUD 일부를 덮는다. 게임에서는 `DialogueInfo`를 표시 상태로 공급한다.
@@ -72,6 +74,7 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 
 ## 검증
 
+- 이번 그레인·네온·패널 구간 변경: UI 97개·획득 7개, 총 104개 통과. 실제 SDL 픽셀에서 그레인의 약한 세기·패널 밖 제외·프레임 재사용, 글자 본문 유지·청록 광의 외곽 번짐·캐시 해제를 확인했다. 패널 수집 단계와 실제 배율/viewport/clip, Y 구간 합치기·빈 구간 건너뛰기도 검사했다. 전투 96프레임과 전후/색상 비교·근접 무기/로드아웃 2·일시정지·메뉴를 렌더했고 주요 이미지를 열어 검토했다. 마지막 청록 광은 전투 96프레임과 색상 비교에서 확인했다. 그레인 8개·스캔 패턴 2개가 유지됐다. 최신 GIF는 `output/ui_unit_test_v2/grain_neon/preview.gif`다. 실제 창 사용감·GPU 성능·사용자 외관 승인은 미확인이다.
 - 이번 전역/공통 패널 변경: UI 92개·획득 7개, 총 99개 통과. 실제 SDL 픽셀에서 서로 다른 배율·viewport의 같은 Y에 줄무늬/밝은 띠가 정렬되는지 확인했다. 장면 위상 복원·모든 장면의 한 시계·자원부 제외 범위·반복 패턴 재사용도 검사했다. 12fps 시간 간격으로 전투 156·일시정지 36·메뉴 36, 총 228프레임을 렌더하고 주요 이미지를 열어 검토했다. 패턴 텍스처는 두 개로 유지됐다. 전투 13초 GIF는 `output/ui_unit_test_v2/global_panel_effects/preview.gif`다. 실제 창 사용감·GPU 성능·최종 승인은 미확인이다.
 - 이번 안내 통합/속도 조정: 기존 자동 검사 95개 통과. 실제 폰트로 안내 4줄의 최대 폭 384px가 가용 폭 504px 안에 들어가고 마지막 줄도 패널 높이 안에 있는 것을 확인했다. 기본 전투·F1 입력 후·메뉴를 렌더하고 기본/F1 후 PNG가 같은 것을 확인했다. 기본·메뉴 이미지를 열어 문구와 헤더/본문 상향을 검토했다.
 - 이번 스크롤 변경: UI 88개·획득 7개, 총 95개 통과. 서로 다른 프레임 간격의 같은 위상·일시정지/재개·초기화와 실제 SDL 120프레임의 패턴 재사용을 확인했다. 별도로 24fps 시간 간격의 72개 프레임을 렌더해 3초 GIF를 만들고 주요 프레임을 열어 밝은 띠의 이동을 확인했다. 전투 화면의 패턴 텍스처는 4개로 유지됐다. 실제 창 재생 사용감·최종 외관 승인은 확인 전이다.
@@ -95,3 +98,5 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 `ferrial_drive/ui_v2/panels.py`의 `build_panel_geometry()`는 `surface`와 `border_parts`를 따로 반환한다. 테두리 ID는 `upper_corner`·`upper_rail`·`upper_fragment_0~2`, `lower_corner`·`lower_rail`·`lower_fragment_0~2`다. 면은 `panel_surface()`, 테두리는 `panel_border()`로 그린다. `part_opacities`로 각 조각을 독립 표시할 수 있다. 입력·시간·등장 순서는 형상 모듈에 넣지 않는다.
 
 Scanline 시간은 `effects.py`의 `ScanlineMotion`이 관리한다. 같은 `visual`을 `UiV2View.combat/menu/pause(scanline_visual=...)`에 공급한다. 테스트 실행부는 일시정지 중에도 UI 시계를 갱신하고 게임 갱신만 멈춘다. 패널 자체의 등장 시간/순서는 별도 후속 작업이다.
+
+프레임 출력 전에 `view.prepare_panel_effects(draw_panels)`로 그릴 UI를 한 번 조회한다. 이 단계는 도형을 출력하지 않고 보이는 패널의 Y 구간을 수집하므로 콜백 안에서 입력·시간·게임 상태를 갱신하지 않는다. 실제 출력과 같은 레이아웃·배율·clip을 사용하며 등장/퇴장 중인 패널도 반영한다.

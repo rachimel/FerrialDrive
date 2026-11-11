@@ -39,6 +39,58 @@ def clip_panel_band(surface, top_pixels, height_pixels):
     return points
 
 
+def clip_panel_rect(surface, left, top, width, height):
+    """패널 면을 사각 영역으로 자른다. 화면·반복 타일 마스킹에 사용한다."""
+    points = clip_panel_band(surface, top, height)
+    swapped = clip_panel_band(tuple((y, x) for x, y in points), left, width)
+    return tuple((x, y) for y, x in swapped)
+
+
+def visible_panel_y_range(surface, transform):
+    """배율·viewport·clip 적용 후 실제 화면에 남은 패널의 Y 범위."""
+    (sx, sy), (vx, vy, vw, vh), (width, height), clipping = transform
+    left, top = max(0, vx * sx), max(0, vy * sy)
+    right, bottom = min(width, (vx + vw) * sx), min(height, (vy + vh) * sy)
+    if clipping is not None:
+        cx, cy, cw, ch = clipping
+        left, top = max(left, (vx + cx) * sx), max(top, (vy + cy) * sy)
+        right, bottom = min(right, (vx + cx + cw) * sx), min(bottom, (vy + cy + ch) * sy)
+    if right <= left or bottom <= top:
+        return None
+    screen = tuple(((x + vx) * sx, (y + vy) * sy) for x, y in surface)
+    screen = clip_panel_rect(screen, left, top, right - left, bottom - top)
+    if len(screen) < 3:
+        return None
+    low, high = min(y for _, y in screen), max(y for _, y in screen)
+    return (low, high) if high > low else None
+
+
+def merge_panel_y_ranges(ranges):
+    merged = []
+    for low, high in sorted(ranges):
+        if high <= low:
+            continue
+        if merged and low <= merged[-1][1] + 1e-6:
+            merged[-1] = (merged[-1][0], max(high, merged[-1][1]))
+        else:
+            merged.append((low, high))
+    return tuple(merged)
+
+
+def panel_bright_band_top(ranges, travel_pixels, band_height, panel_y):
+    """빈 Y 구간을 뺀 전역 경로의 띠를 해당 패널의 화면 Y로 환산한다."""
+    length = sum(high - low for low, high in ranges)
+    if not length:
+        return None
+    band_top = travel_pixels % (length + band_height) - band_height
+    prefix = 0
+    for low, high in ranges:
+        if low - 1e-6 <= panel_y <= high + 1e-6:
+            return low + band_top - prefix
+        prefix += high - low
+    return None
+
+
 def build_scanlines(surface, spacing_pixels, thickness_pixels):
     """고정 비교용 수평 줄무늬를 패널의 실제 사선·절단 외곽 안으로 자른다."""
     if (not all(map(isfinite, (spacing_pixels, thickness_pixels)))

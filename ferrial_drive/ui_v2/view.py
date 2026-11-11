@@ -8,7 +8,8 @@ from ferrial_drive.ui.counter import CounterVisual
 from ferrial_drive.ui.view import UiView
 from .geometry import (PerspectivePlane, body_diamond, counter_plaque, quad_fill,
                        resource_geometry, slanted_meter, tapered_stroke_mesh)
-from .panels import PanelGeometry, build_panel_geometry
+from .panels import PanelGeometry, build_panel_geometry, merge_panel_y_ranges, panel_bright_band_top
+from .panel_probe import PanelProbeRenderer
 from .effects import ScanlineVisual
 
 
@@ -16,6 +17,19 @@ class UiV2View(UiView):
     def __init__(self, config, renderer):
         super().__init__(config, renderer)
         self._scanline_visual = ScanlineVisual()
+        self._panel_probe = None
+        self._panel_y_ranges = None
+
+    def prepare_panel_effects(self, draw_panels):
+        """이번 프레임의 같은 UI 경로를 그리기 없이 살펴 전역 띠 경로를 만든다."""
+        original = self.renderer
+        probe = PanelProbeRenderer(original)
+        self.renderer, self._panel_probe = probe, probe
+        try:
+            draw_panels()
+        finally:
+            self.renderer, self._panel_probe = original, None
+        self._panel_y_ranges = merge_panel_y_ranges(probe.ranges)
 
     @contextmanager
     def scanline_frame(self, visual):
@@ -101,11 +115,16 @@ class UiV2View(UiView):
                                         self.config.colors["panel"] if fill_color is None else fill_color,
                                         opacity * fill, self.style["panel_border"]["filter_samples"])
 
-    def panel_layer(self, points, color, opacity, *, fill_opacity=None):
+    def panel_layer(self, points, color, opacity, *, fill_opacity=None, grain=False):
         """임의 패널의 배경만 반투명·스캔 처리한다. 내용은 호출자가 이후 그린다."""
         fill = self.style["surface_opacity"] if fill_opacity is None else min(fill_opacity, self.style["surface_opacity"])
         self.polygon(points, color, opacity * fill, filled=True)
         self.panel_scanlines(PanelGeometry(points, ()), opacity, self.style["panel_scanlines"]["panels"])
+        if grain:
+            settings = self.style["panel_film_grain"]
+            frame = int(self._scanline_visual.elapsed_seconds * settings["frames_per_second"] + 1e-9) % settings["frame_count"]
+            self.renderer.film_grain(points, opacity * settings["opacity"], frame,
+                                     tile_pixels=settings["tile_pixels"], cell_pixels=settings["cell_pixels"], seed=settings["seed"])
 
     def panel_border(self, parts, opacity, *, part_opacities=None):
         """테두리만 그린다. 각 조각의 표시값은 외부 효과 제어부가 공급할 수 있다."""
@@ -121,6 +140,9 @@ class UiV2View(UiView):
         alpha = opacity * settings["line_opacity"]
         if alpha <= 0:
             return
+        if self._panel_probe is not None:
+            self._panel_probe.include(geometry.surface)
+            return
         scanline = self.style["panel_scanlines"]
         visual = visual or self._scanline_visual
         r = self.renderer
@@ -129,6 +151,14 @@ class UiV2View(UiView):
         motion = scanline["motion"]
         band_height = motion["highlight_height_pixels"]
         band_top = visual.highlight_travel_pixels % (self.config.window["height"] + band_height) - band_height
+        if self._panel_y_ranges is not None:
+            bounds = r.panel_y_range(geometry.surface)
+            if bounds is None:
+                return
+            band_top = panel_bright_band_top(self._panel_y_ranges, visual.highlight_travel_pixels,
+                                             band_height, sum(bounds) / 2)
+            if band_top is None:
+                return
         r.scanline_layer(geometry.surface, self.config.colors["text"], opacity * motion["highlight_opacity"],
                          scanline["spacing_pixels"], scanline["thickness_pixels"], visual.line_offset_pixels,
                          bright_band=(band_top, band_height))
@@ -287,7 +317,7 @@ class UiV2View(UiView):
         r.text("HP", x + value_width + 9, top - hp_height - gap, "hud_small", c["muted"], opacity)
         x, y, width, height = self.layout["energy_bar"]
         outline, channel = geometry.energy_outline, geometry.energy_channel
-        self.panel_layer(geometry.energy_body, c["panel"], opacity)
+        self.panel_layer(geometry.energy_body, c["panel"], opacity, grain=True)
         self.polygon(geometry.level_shape, c["panel"], opacity * self.style["surface_opacity"], filled=True)
         self.stroke(outline + outline[:1], c["text"], opacity * 0.75, 1.5)
         self.polygon(channel, c["energy"], opacity * 0.1, filled=True)
@@ -349,9 +379,10 @@ class UiV2View(UiView):
             tx, ty, tw, th = tab
             alpha = opacity * (1 if index == hud.active_loadout_index else 0.35)
             shape = ((tx + 10, ty), (tx + tw, ty), (tx + tw - 9, ty + th), (tx, ty + th))
-            self.panel_layer(shape, c["panel_surface"], alpha, fill_opacity=0.5)
+            self.panel_layer(shape, c["panel_surface"], alpha, fill_opacity=0.5, grain=True)
             self.stroke(shape + shape[:1], self.ui_accent, alpha)
-            r.text(f"{index + 1:02}", tx + 15, ty + 3, "equipment_number", c["text"], alpha)
+            r.neon_text(f"{index + 1:02}", tx + 15, ty + 3, "equipment_number", c["text"], alpha * self.style["weapon_text_opacity"],
+                        **self.style["weapon_text_neon"])
         loadout = hud.loadouts[hud.active_loadout_index]
         for index, (kind, weapon) in enumerate((("melee", loadout.melee), ("ranged", loadout.ranged))):
             top = y + index * (height + 8)
@@ -362,19 +393,21 @@ class UiV2View(UiView):
             with r.scaled(amount, (x + width, top + height / 2)):
                 shape = ((left + 18, top), (x + width, top),
                          (x + width - 18, top + height), (left, top + height))
-                self.panel_layer(shape, c["panel_surface"], alpha)
+                self.panel_layer(shape, c["panel_surface"], alpha, grain=True)
                 self.stroke((shape[0], shape[3], shape[2], shape[1]),
                              self.ui_accent, alpha * 0.85)
                 self.stroke((shape[0], shape[3]), self.ui_accent,
                              alpha * 0.95, self.style["weapon_outer_edge_pixels"])
                 self.stroke(((left + 28, top + 4), (x + width - 4, top + 4)), self.ui_accent, alpha * 0.3)
                 self.weapon_image(weapon, kind, Rect(left + 18, top + 11, width - 112, height - 39), alpha)
-                r.text("MELEE" if kind == "melee" else "RANGED", left + 17, top + height - 23,
-                       "weapon_name", c["text"], alpha)
+                r.neon_text("MELEE" if kind == "melee" else "RANGED", left + 17, top + height - 23,
+                            "weapon_name", c["text"], alpha * self.style["weapon_text_opacity"],
+                            **self.style["weapon_text_neon"])
                 if weapon.rounds is not None:
                     text = str(weapon.rounds)
-                    r.text(text, x + width - r.text_size(text, "v2_ammo")[0] - 16,
-                           top + 10, "v2_ammo", c["text"], alpha)
+                    r.neon_text(text, x + width - r.text_size(text, "v2_ammo")[0] - 16,
+                                top + 10, "v2_ammo", c["text"], alpha * self.style["weapon_text_opacity"],
+                                **self.style["weapon_text_neon"])
 
     def absorption(self, trails, opacity):
         r, color = self.renderer, self.config.colors["energy"]

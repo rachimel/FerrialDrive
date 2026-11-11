@@ -2,12 +2,14 @@
 
 from ctypes import byref, c_float, c_ubyte
 import os
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 
 from ferrial_drive.rendering import PicoCanvas
 from ferrial_drive.ui.components import Rect
 from ferrial_drive.ui_v2.pico_renderer import PicoV2Renderer
+from ferrial_drive.ui_v2.panel_probe import PanelProbeRenderer
 
 
 class UiV2FilteringTests(unittest.TestCase):
@@ -112,6 +114,69 @@ class UiV2FilteringTests(unittest.TestCase):
             self.assertEqual(p.SDL_RenderReadPixels(p.renderer, None, p.SDL_PIXELFORMAT_RGBA32, pixels, 96 * 4), 0)
             for y in range(5, 90):
                 self.assertLessEqual(abs(pixels[(y * 96 + 20) * 4] - pixels[(y * 96 + 70) * 4]), 2)
+
+    def test_film_grain_is_subtle_masked_and_reuses_animation_frames(self):
+        images = []
+        for frame in (0, 1, 0):
+            self.renderer.clear("#000000")
+            self.renderer.film_grain(self.shape[0], 0.08, frame)
+            pixels = (c_ubyte * (96 * 96 * 4))()
+            self.assertEqual(self.pico.SDL_RenderReadPixels(self.pico.renderer, None,
+                             self.pico.SDL_PIXELFORMAT_RGBA32, pixels, 96 * 4), 0)
+            self.assertEqual(pixels[(80 * 96 + 80) * 4], 0)
+            self.assertLessEqual(max(pixels[::4]), 21)
+            self.assertGreater(max(pixels[::4]), 0)
+            images.append(bytes(pixels))
+        self.assertNotEqual(images[0], images[1])
+        self.assertEqual(images[0], images[2])
+        self.assertEqual(len(self.renderer.grain_textures), 2)
+        self.renderer.close()
+        self.assertFalse(self.renderer.grain_textures)
+
+    def test_neon_preserves_crisp_core_and_limits_halo(self):
+        with patch.object(self.renderer, "text") as draw, patch.object(self.renderer, "_draw_neon_glow") as glow:
+            self.renderer.neon_text("45", 20, 30, "ammo", "#FFFFFF", 0.5,
+                                     glow_color="#91AEBB", radius_pixels=2, glow_opacity=0.12)
+            self.assertEqual(draw.call_args.args, ("45", 20, 30, "ammo", "#FFFFFF", 0.5))
+            self.assertEqual(draw.call_count, 1)
+            self.assertEqual(glow.call_args.args, ("45", 20, 30, "ammo", "#91AEBB", 0.06, 2))
+
+    def test_panel_probe_matches_real_scale_viewport_and_clip_without_drawing(self):
+        shape = ((10, 10), (80, 10), (80, 80), (10, 80))
+        probe = PanelProbeRenderer(self.renderer)
+        with self.renderer.scaled(0.8, (48, 96)), probe.scaled(0.8, (48, 96)):
+            with self.renderer.clip(Rect(20, 25, 40, 30)), probe.clip(Rect(20, 25, 40, 30)):
+                actual = self.renderer.panel_y_range(shape)
+                probe.include(shape)
+                self.assertEqual(actual, probe.ranges[0])
+        self.assertFalse(self.renderer.scanline_textures)
+        self.assertFalse(self.renderer.filtered_textures)
+
+    def test_neon_blur_extends_glyph_mask_and_reuses_texture(self):
+        font = Path(__file__).resolve().parents[2] / "data/fonts/Cafe24OhsquareAir-v2.0/Cafe24OhsquareAir-v2.0.otf"
+        renderer = PicoV2Renderer({"text": font}, {"text": 24})
+        p = self.pico
+        def pixels():
+            data = (c_ubyte * (96 * 96 * 4))()
+            self.assertEqual(p.SDL_RenderReadPixels(p.renderer, None, p.SDL_PIXELFORMAT_RGBA32, data, 96 * 4), 0)
+            return tuple(zip(data[::4], data[1::4], data[2::4]))
+        try:
+            renderer.clear("#000000")
+            renderer.text("45", 20, 20, "text", "#FFFFFF", 0.82)
+            normal = pixels()
+            renderer.clear("#000000")
+            renderer.neon_text("45", 20, 20, "text", "#FFFFFF", 0.82,
+                               glow_color="#65DCC8", radius_pixels=4, glow_opacity=0.12)
+            blurred = pixels()
+            halo = [rgb for before, rgb in zip(normal, blurred) if before == (0, 0, 0) and max(rgb) > 0]
+            self.assertTrue(halo)
+            self.assertTrue(any(green > blue > red for red, green, blue in halo))
+            renderer.neon_text("45", 20, 20, "text", "#FFFFFF", 0.82,
+                               glow_color="#65DCC8", radius_pixels=4, glow_opacity=0.12)
+            self.assertEqual(len(renderer.neon_textures), 1)
+        finally:
+            renderer.close()
+        self.assertFalse(renderer.neon_textures)
 
 
 if __name__ == "__main__":

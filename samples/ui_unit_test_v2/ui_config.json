@@ -656,6 +656,20 @@
             ]
         ],
         "style": {
+            "panel_film_grain": {
+                "opacity": 0.035,
+                "tile_pixels": 64,
+                "cell_pixels": 1.25,
+                "frame_count": 8,
+                "frames_per_second": 10,
+                "seed": 173
+            },
+            "weapon_text_neon": {
+                "glow_color": "#65DCC8",
+                "radius_pixels": 4,
+                "glow_opacity": 0.12
+            },
+            "weapon_text_opacity": 0.82,
             "panel_scanlines": {
                 "motion": {
                     "slow_speed_pixels_per_second": 5,

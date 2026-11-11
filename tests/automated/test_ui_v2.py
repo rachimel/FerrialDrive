@@ -23,7 +23,8 @@ from ferrial_drive.ui_v2.geometry import (PerspectivePlane, body_diamond, counte
                                          resource_geometry, scaled_point, slanted_meter, tapered_stroke_mesh)
 from ferrial_drive.ui.counter import CounterVisual
 from ferrial_drive.ui_v2.view import UiV2View
-from ferrial_drive.ui_v2.panels import build_panel_geometry, build_scanlines
+from ferrial_drive.ui_v2.panels import (build_panel_geometry, build_scanlines,
+                                      merge_panel_y_ranges, panel_bright_band_top)
 
 
 class UiV2Tests(unittest.TestCase):
@@ -167,13 +168,14 @@ class UiV2Tests(unittest.TestCase):
     def test_weapon_panels_use_flat_text_and_horizontal_edges(self):
         renderer = SimpleNamespace(text_size=lambda text, role: (len(text) * 16, 24),
                                    scaled=lambda *args: nullcontext(), text=Mock(), warped_text=Mock(),
-                                   scanline_layer=Mock())
+                                   scanline_layer=Mock(), film_grain=Mock(), neon_text=Mock())
         view = UiV2View(self.program.config, renderer)
         with patch.object(view, "polygon") as polygon, patch.object(view, "stroke"), patch.object(view, "weapon_image"):
             view.weapons(self.program.state.hud, 1, 0)
         renderer.warped_text.assert_not_called()
-        self.assertEqual([call.args[0] for call in renderer.text.call_args_list],
+        self.assertEqual([call.args[0] for call in renderer.neon_text.call_args_list],
                          ["01", "02", "MELEE", "RANGED", "45"])
+        self.assertEqual(renderer.film_grain.call_count, 4)
         for call in polygon.call_args_list[-2:]:
             a, b, c, d = call.args[0]
             self.assertEqual(a[1], b[1])
@@ -250,6 +252,7 @@ class UiV2Tests(unittest.TestCase):
         self.assertAlmostEqual(full.visual.highlight_travel_pixels, 180)
         self.assertAlmostEqual(full.visual.line_offset_pixels, stepped.visual.line_offset_pixels)
         self.assertAlmostEqual(full.visual.highlight_travel_pixels, stepped.visual.highlight_travel_pixels)
+        self.assertAlmostEqual(full.visual.elapsed_seconds, stepped.visual.elapsed_seconds)
         with self.assertRaises(ValueError):
             full.update(-0.1)
 
@@ -306,6 +309,16 @@ class UiV2Tests(unittest.TestCase):
         geometry = resource_geometry(self.program.config.data["v2"]["layout"],
                                      self.program.config.data["v2"]["style"]["level_curve_radius_pixels"])
         self.assertEqual(scanlines.call_args.args[0].surface, geometry.energy_body)
+        self.assertEqual(renderer.film_grain.call_count, 1)
+        self.assertEqual(renderer.film_grain.call_args.args[0], geometry.energy_body)
+
+    def test_bright_band_joins_occupied_y_ranges_without_spending_time_in_gaps(self):
+        ranges = merge_panel_y_ranges(((100, 150), (20, 40), (30, 50), (200, 200)))
+        self.assertEqual(ranges, ((20, 50), (100, 150)))
+        self.assertEqual(panel_bright_band_top(ranges, 35, 10, 30), 45)
+        self.assertEqual(panel_bright_band_top(ranges, 35, 10, 120), 95)
+        self.assertIsNone(panel_bright_band_top(ranges, 35, 10, 75))
+        self.assertEqual(panel_bright_band_top(ranges, 125, 10, 120), 95)
 
     def test_pause_blocks_sample_shortcuts(self):
         self.program.pico = SimpleNamespace(SDL_WINDOWEVENT=1, SDL_KEYDOWN=2,

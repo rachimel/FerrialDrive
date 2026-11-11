@@ -2,11 +2,12 @@
 
 from contextlib import contextmanager
 from collections import OrderedDict
-from ctypes import byref, c_float, c_int, c_ubyte, memmove
-from math import ceil, floor, isfinite, log2
+from ctypes import byref, c_float, c_int, c_ubyte, memmove, string_at
+from math import ceil, exp, floor, isfinite, log2
+from random import Random
 
 from ferrial_drive.ui.pico_renderer import PicoRenderer
-from .panels import clip_panel_band
+from .panels import clip_panel_band, clip_panel_rect, visible_panel_y_range
 
 
 class PicoV2Renderer(PicoRenderer):
@@ -14,7 +15,174 @@ class PicoV2Renderer(PicoRenderer):
         self.ink_bottoms = {}
         self.filtered_textures = OrderedDict()
         self.scanline_textures = OrderedDict()
+        self.grain_textures = OrderedDict()
+        self.neon_textures = OrderedDict()
         super().__init__(font_paths, font_sizes)
+
+    def draw_transform(self):
+        p = self.pico
+        sx, sy = c_float(), c_float()
+        viewport, clipping = p.SDL_Rect(), p.SDL_Rect()
+        width, height = c_int(), c_int()
+        p.SDL_RenderGetScale(p.renderer, byref(sx), byref(sy))
+        p.SDL_RenderGetViewport(p.renderer, byref(viewport))
+        p.SDL_GetRendererOutputSize(p.renderer, byref(width), byref(height))
+        p.SDL_RenderGetClipRect(p.renderer, byref(clipping))
+        clip = tuple(getattr(clipping, key) for key in ("x", "y", "w", "h")) if p.SDL_RenderIsClipEnabled(p.renderer) else None
+        return ((sx.value, sy.value), tuple(getattr(viewport, key) for key in ("x", "y", "w", "h")),
+                (width.value, height.value), clip)
+
+    def panel_y_range(self, surface):
+        return visible_panel_y_range(surface, self.draw_transform())
+
+    def _grain_texture(self, cells, seed, frame_index):
+        p = self.pico
+        key = (cells, seed, frame_index)
+        if key not in self.grain_textures:
+            surface = p.SDL_CreateRGBSurfaceWithFormat(0, cells, cells, 32, p.SDL_PIXELFORMAT_RGBA32)
+            if not surface:
+                raise RuntimeError("Film grain surface 생성 실패")
+            try:
+                if p.SDL_LockSurface(surface) != 0:
+                    raise RuntimeError("Film grain surface 잠금 실패")
+                try:
+                    random = Random(seed + frame_index * 104729)
+                    for y in range(cells):
+                        row = bytearray()
+                        for _ in range(cells):
+                            shade = random.randrange(256)
+                            row.extend((shade, shade, shade, 255))
+                        memmove(surface.contents.pixels + y * surface.contents.pitch, bytes(row), cells * 4)
+                finally:
+                    p.SDL_UnlockSurface(surface)
+                texture = p.SDL_CreateTextureFromSurface(p.renderer, surface)
+            finally:
+                p.SDL_FreeSurface(surface)
+            if not texture:
+                raise RuntimeError("Film grain 텍스처 생성 실패")
+            if (p.SDL_SetTextureBlendMode(texture, p.SDL_BLENDMODE_BLEND) != 0
+                    or p.SDL_SetTextureScaleMode(texture, p.SDL_ScaleModeLinear) != 0):
+                p.SDL_DestroyTexture(texture)
+                raise RuntimeError("Film grain 필터 설정 실패")
+            self.grain_textures[key] = texture
+            if len(self.grain_textures) > 16:
+                _, old = self.grain_textures.popitem(last=False)
+                p.SDL_DestroyTexture(old)
+        self.grain_textures.move_to_end(key)
+        return self.grain_textures[key]
+
+    def film_grain(self, surface, opacity, frame_index, *, tile_pixels=64, cell_pixels=1.25, seed=173):
+        """화면 좌표의 작은 흑백 타일을 패널 면 안에서만 반복한다."""
+        if opacity <= 0:
+            return
+        if not all(map(isfinite, (tile_pixels, cell_pixels))) or not 0 < cell_pixels <= tile_pixels:
+            raise ValueError("Film grain 입자·타일 크기는 양수이며 입자가 타일보다 클 수 없다.")
+        p = self.pico
+        sx, sy = c_float(), c_float()
+        viewport, output_width, output_height = p.SDL_Rect(), c_int(), c_int()
+        p.SDL_RenderGetScale(p.renderer, byref(sx), byref(sy))
+        p.SDL_RenderGetViewport(p.renderer, byref(viewport))
+        p.SDL_GetRendererOutputSize(p.renderer, byref(output_width), byref(output_height))
+        screen = tuple(((x + viewport.x) * sx.value, (y + viewport.y) * sy.value) for x, y in surface)
+        screen = clip_panel_rect(screen, 0, 0, output_width.value, output_height.value)
+        if len(screen) < 3:
+            return
+        texture = self._grain_texture(ceil(tile_pixels / cell_pixels), seed, frame_index)
+        p.SDL_SetTextureAlphaMod(texture, 255)
+        color = p.SDL_Color(255, 255, 255, self.rgba("#FFFFFF", opacity)[3])
+        for row in range(floor(min(y for _, y in screen) / tile_pixels), ceil(max(y for _, y in screen) / tile_pixels)):
+            for column in range(floor(min(x for x, _ in screen) / tile_pixels), ceil(max(x for x, _ in screen) / tile_pixels)):
+                left, top = column * tile_pixels, row * tile_pixels
+                polygon = clip_panel_rect(screen, left, top, tile_pixels, tile_pixels)
+                if len(polygon) < 3:
+                    continue
+                vertices = tuple(p.SDL_Vertex(p.SDL_FPoint(x / sx.value - viewport.x, y / sy.value - viewport.y),
+                                              color, p.SDL_FPoint((x - left) / tile_pixels, (y - top) / tile_pixels))
+                                 for x, y in polygon)
+                for index in range(1, len(vertices) - 1):
+                    triangle = (p.SDL_Vertex * 3)(vertices[0], vertices[index], vertices[index + 1])
+                    if p.SDL_RenderGeometry(p.renderer, texture, triangle, 3, None, 0) != 0:
+                        raise RuntimeError("Film grain 표시 실패")
+
+    def _neon_texture(self, text, role, color, radius):
+        p = self.pico
+        key = (text, role, color, radius)
+        if key not in self.neon_textures:
+            original = p.TTF_RenderUTF8_Blended(self.fonts[role].font, text.encode("utf-8"), p.SDL_Color(255, 255, 255, 255))
+            if not original:
+                raise RuntimeError("네온 글자 마스크 생성 실패")
+            try:
+                source = p.SDL_ConvertSurfaceFormat(original, p.SDL_PIXELFORMAT_RGBA32, 0)
+            finally:
+                p.SDL_FreeSurface(original)
+            if not source:
+                raise RuntimeError("네온 글자 마스크 변환 실패")
+            pad = ceil(radius)
+            width, height = source.contents.w + pad * 2, source.contents.h + pad * 2
+            mask = [0] * (width * height)
+            try:
+                if p.SDL_LockSurface(source) != 0:
+                    raise RuntimeError("네온 글자 마스크 잠금 실패")
+                try:
+                    for y in range(source.contents.h):
+                        row = string_at(source.contents.pixels + y * source.contents.pitch, source.contents.w * 4)
+                        start = (y + pad) * width + pad
+                        mask[start:start + source.contents.w] = row[3::4]
+                finally:
+                    p.SDL_UnlockSurface(source)
+            finally:
+                p.SDL_FreeSurface(source)
+            sigma = max(0.5, radius / 2)
+            weights = [exp(-offset * offset / (2 * sigma * sigma)) for offset in range(-pad, pad + 1)]
+            total = sum(weights)
+            kernel = tuple((offset, weight / total) for offset, weight in zip(range(-pad, pad + 1), weights))
+            horizontal = [sum(mask[y * width + x + offset] * weight for offset, weight in kernel if 0 <= x + offset < width)
+                          for y in range(height) for x in range(width)]
+            blurred = [sum(horizontal[(y + offset) * width + x] * weight for offset, weight in kernel if 0 <= y + offset < height)
+                       for y in range(height) for x in range(width)]
+            surface = p.SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, p.SDL_PIXELFORMAT_RGBA32)
+            if not surface:
+                raise RuntimeError("네온 광 surface 생성 실패")
+            try:
+                if p.SDL_LockSurface(surface) != 0:
+                    raise RuntimeError("네온 광 surface 잠금 실패")
+                try:
+                    rgb = self.rgba(color)[:3]
+                    for y in range(height):
+                        row = b"".join(bytes((*rgb, round(alpha))) for alpha in blurred[y * width:(y + 1) * width])
+                        memmove(surface.contents.pixels + y * surface.contents.pitch, row, width * 4)
+                finally:
+                    p.SDL_UnlockSurface(surface)
+                texture = p.SDL_CreateTextureFromSurface(p.renderer, surface)
+            finally:
+                p.SDL_FreeSurface(surface)
+            if not texture:
+                raise RuntimeError("네온 광 텍스처 생성 실패")
+            if (p.SDL_SetTextureBlendMode(texture, p.SDL_BLENDMODE_BLEND) != 0
+                    or p.SDL_SetTextureScaleMode(texture, p.SDL_ScaleModeLinear) != 0):
+                p.SDL_DestroyTexture(texture)
+                raise RuntimeError("네온 광 필터 설정 실패")
+            self.neon_textures[key] = (texture, width, height, pad)
+            if len(self.neon_textures) > 64:
+                _, (old, _, _, _) = self.neon_textures.popitem(last=False)
+                p.SDL_DestroyTexture(old)
+        self.neon_textures.move_to_end(key)
+        return self.neon_textures[key]
+
+    def _draw_neon_glow(self, text, x, y, role, color, opacity, radius):
+        texture, width, height, pad = self._neon_texture(text, role, color, radius)
+        self.pico.SDL_SetTextureAlphaMod(texture, self.rgba(color, opacity)[3])
+        destination = self.pico.SDL_FRect(x - pad, y - pad, width, height)
+        if self.pico.SDL_RenderCopyF(self.pico.renderer, texture, None, byref(destination)) != 0:
+            raise RuntimeError("네온 광 표시 실패")
+
+    def neon_text(self, text, x, y, role, color, opacity=1, *, glow_color, radius_pixels=4, glow_opacity=0.12):
+        """캐시한 가우시안 광을 먼저 그리고 원래 글자를 같은 위치에 겹친다."""
+        if opacity <= 0 or not text:
+            return
+        if glow_opacity > 0 and radius_pixels > 0:
+            self._draw_neon_glow(text, x, y, role, glow_color, opacity * glow_opacity, radius_pixels)
+        self.text(text, x, y, role, color, opacity)
 
     def _scanline_texture(self, height, spacing, thickness, color):
         """위상과 무관한 세로 반복 패턴. 두 배 해상도로 만들어 선형 보간한다."""
@@ -172,6 +340,12 @@ class PicoV2Renderer(PicoRenderer):
         return texture
 
     def close(self):
+        for texture, _, _, _ in self.neon_textures.values():
+            self.pico.SDL_DestroyTexture(texture)
+        self.neon_textures.clear()
+        for texture in self.grain_textures.values():
+            self.pico.SDL_DestroyTexture(texture)
+        self.grain_textures.clear()
         for texture in self.scanline_textures.values():
             self.pico.SDL_DestroyTexture(texture)
         self.scanline_textures.clear()

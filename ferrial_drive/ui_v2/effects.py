@@ -8,6 +8,7 @@ from math import isfinite
 class ScanlineVisual:
     line_offset_pixels: float = 0
     highlight_travel_pixels: float = 0
+    elapsed_seconds: float = 0
 
 
 class ScanlineMotion:
@@ -28,7 +29,8 @@ class ScanlineMotion:
             raise ValueError("Scanline 갱신 시간은 0 이상의 유한한 초 단위 값이어야 한다.")
         self.visual = ScanlineVisual(
             (self.visual.line_offset_pixels + self.slow_speed_pixels_per_second * delta_seconds) % self.spacing_pixels,
-            self.visual.highlight_travel_pixels + self.fast_speed_pixels_per_second * delta_seconds)
+            self.visual.highlight_travel_pixels + self.fast_speed_pixels_per_second * delta_seconds,
+            self.visual.elapsed_seconds + delta_seconds)
 
 
 def _bezier(points, amount):
