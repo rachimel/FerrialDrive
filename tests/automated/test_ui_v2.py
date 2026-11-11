@@ -60,16 +60,12 @@ class UiV2Tests(unittest.TestCase):
         self.assertIsNone(self.program.auto_target.pending_id)
 
     def test_text_blinks_regularly_at_half_opacity_and_is_deterministic(self):
-        for seed in (1, 4, 7, 10):
-            samples = [subtle_flicker(index / 60, seed=seed) for index in range(600)]
-            self.assertEqual(set(samples), {0.5, 1})
-            self.assertEqual(sum(value < 1 for value in samples), 300)
-            starts = [index for index in range(1, len(samples)) if samples[index] < 1 and samples[index - 1] == 1]
-            self.assertTrue(all(b - a == 30 for a, b in zip(starts, starts[1:])))
-            for index in starts:
-                self.assertTrue(all(value == 0.5 for value in samples[index:index + 15]))
-                self.assertTrue(all(value == 1 for value in samples[index + 15:index + 30]))
-            self.assertEqual(samples[60], subtle_flicker(1, seed=seed))
+        samples = [subtle_flicker((index + 0.5) / 60) for index in range(180)]
+        self.assertEqual(set(samples), {0.5, 1})
+        self.assertEqual(sum(value < 1 for value in samples), 90)
+        for index in range(0, 180, 18):
+            self.assertEqual(samples[index:index + 18], [1] * 9 + [0.5] * 9)
+        self.assertEqual(samples[60], subtle_flicker(60.5 / 60))
         self.assertEqual(subtle_flicker(0.3, minimum_opacity=1), 1)
 
     def test_energy_breathing_period_and_indicator_transition_reversal(self):

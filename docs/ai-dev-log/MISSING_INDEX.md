@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [UI v2 공통 점멸·GIF 수정](2026-11-11-ui-v2-synchronized-blink.md): TIME(scope). 공통 타이밍·짧은 주기 요청과 타겟 HP/GIF 정정·진단·검증 보고의 정확한 시각을 확인한다.
+
 - [UI v2 규칙적인 50% 점멸](2026-11-11-ui-v2-regular-blink.md): TIME(scope). 규칙적 반복·50% 하한 요청과 주기 시안·구현·검증 보고의 정확한 시각을 확인한다.
 
 - [UI v2 글자 점멸 정정](2026-11-11-ui-v2-text-blink.md): TIME(scope). 점멸 정정과 구현·검증 보고의 정확한 시각을 확인한다.
