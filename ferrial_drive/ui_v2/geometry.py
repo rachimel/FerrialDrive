@@ -1,7 +1,64 @@
 """UI의 가벼운 원근·기울기 투영. 렌더러와 게임 상태에 의존하지 않는다."""
 
 from dataclasses import dataclass
-from math import isfinite
+from math import hypot, isfinite
+
+
+def tapered_stroke_mesh(points, corner_indices, thin_width, corner_width, reach, curve_steps=8, corner_hold_pixels=0):
+    """지정한 꼭짓점으로 갈수록 곡선으로 두꺼워지는 선. 이음부 단면을 공유한다."""
+    if (not all(map(isfinite, (thin_width, corner_width, reach)))
+            or not 0 < thin_width <= corner_width or reach <= 0):
+        raise ValueError("테두리 두께와 변화 거리는 양수이며 꼭짓점 두께가 더 작을 수 없다.")
+    if type(curve_steps) is not int or curve_steps < 2:
+        raise ValueError("테두리 곡선 분할은 2 이상의 정수여야 한다.")
+    if not isfinite(corner_hold_pixels) or corner_hold_pixels < 0:
+        raise ValueError("최대 두께 유지 거리는 0 이상의 유한한 픽셀 값이어야 한다.")
+    normals, lengths = [], []
+    for a, b in zip(points, points[1:]):
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        length = hypot(dx, dy)
+        if length == 0:
+            raise ValueError("테두리에 길이 0인 선분을 사용할 수 없다.")
+        normals.append((-dy / length, dx / length))
+        lengths.append(length)
+    joins = []
+    for index in range(len(points)):
+        if index == 0 or index == len(points) - 1:
+            joins.append(normals[0 if index == 0 else -1])
+        else:
+            a, b = normals[index - 1], normals[index]
+            denominator = 1 + a[0] * b[0] + a[1] * b[1]
+            if denominator < 0.25:
+                raise ValueError("테두리의 접힘 각도가 너무 좁다.")
+            joins.append(((a[0] + b[0]) / denominator, (a[1] + b[1]) / denominator))
+    quads = []
+    for index, (a, b, length, normal) in enumerate(zip(points, points[1:], lengths, normals)):
+        both_corners = index in corner_indices and index + 1 in corner_indices
+        ramp = min(reach, length / 2 if both_corners else length)
+        hold = min(corner_hold_pixels, ramp)
+        nodes = []
+        samples = {0, 1}
+        for step in range(curve_steps + 1):
+            distance = (hold + (ramp - hold) * step / curve_steps) / length
+            if index in corner_indices:
+                samples.add(distance)
+            if index + 1 in corner_indices:
+                samples.add(1 - distance)
+        def influence(distance):
+            if distance <= hold:
+                return 1
+            return max(0, (ramp - distance) / (ramp - hold)) if ramp > hold else 0
+        for t in sorted(samples):
+            strength = max(influence(t * length) if index in corner_indices else 0,
+                           influence((1 - t) * length) if index + 1 in corner_indices else 0)
+            strength = strength * strength * (3 - 2 * strength)
+            half = (thin_width + (corner_width - thin_width) * strength) / 2
+            nx, ny = joins[index] if t == 0 else joins[index + 1] if t == 1 else normal
+            x, y = a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t
+            nodes.append(((x + nx * half, y + ny * half), (x - nx * half, y - ny * half)))
+        for first, second in zip(nodes, nodes[1:]):
+            quads.append((first[0], second[0], second[1], first[1]))
+    return tuple(quads)
 
 
 def scaled_point(point, anchor, amount):

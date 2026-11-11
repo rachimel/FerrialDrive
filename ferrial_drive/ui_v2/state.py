@@ -8,6 +8,12 @@ from ferrial_drive.ui.components import Rect
 
 
 @dataclass(frozen=True)
+class DialogueInfo:
+    speaker: str
+    lines: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class HudV2State:
     hud: HudState
     energy_ratio: float
@@ -16,6 +22,7 @@ class HudV2State:
     counter: bool = False
     dash_ready: bool = True
     target_body: Rect | None = None
+    dialogue: DialogueInfo | None = None
 
     def __post_init__(self):
         if not isfinite(self.energy_ratio) or not 0 <= self.energy_ratio <= 1:

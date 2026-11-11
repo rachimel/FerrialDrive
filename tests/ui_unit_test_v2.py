@@ -14,6 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from ferrial_drive.ui.components import ButtonInput, Rect
+from ferrial_drive.combat.targeting import TargetAcquisition, TargetCandidate
 from ferrial_drive.ui.config import UiConfig
 from ferrial_drive.ui.counter import RollingCounter
 from ferrial_drive.ui.damage import DamageNumbers
@@ -24,7 +25,7 @@ from ferrial_drive.ui.transition import SceneTransition
 from ferrial_drive.ui_v2.effects import EnergyAbsorption
 from ferrial_drive.ui_v2.geometry import resource_geometry, scaled_point
 from ferrial_drive.ui_v2.pico_renderer import PicoV2Renderer
-from ferrial_drive.ui_v2.state import HudV2State
+from ferrial_drive.ui_v2.state import DialogueInfo, HudV2State
 from ferrial_drive.ui_v2.view import UiV2View
 
 
@@ -50,15 +51,29 @@ class UiUnitTestV2:
 
     def reset(self):
         data = self.preset
-        self.saved_target = TargetInfo(data["target"]["name"], Health(**data["target"]["health"]))
+        self.enemies = {entry["id"]: {**entry, "position": tuple(entry["position_pixels"]),
+                                       "health": Health(**entry["health"])} for entry in data["enemies"]}
+        settings = self.config.data["v2"]["targeting_sample"]
+        self.acquisition = TargetAcquisition(settings["range_pixels"], settings["aim_range_pixels"],
+                                             settings["angle_tolerance_degrees"])
+        self.targets_enabled, self.aiming = True, False
+        self.selected_target_id = data["initial_target_id"]
+        self.acquisition.acquired_ids.add(self.selected_target_id)
+        enemy = self.enemies[self.selected_target_id]
+        target = TargetInfo(enemy["name"], enemy["health"])
+        px, py = self.config.actor_anchor("player")
+        contacts = tuple(RadarContact((entry["position"][0] - px) / settings["aim_range_pixels"],
+                                      (py - entry["position"][1]) / settings["aim_range_pixels"],
+                                      *entry["position"]) for entry in self.enemies.values())
         loadouts = tuple(LoadoutInfo(WeaponInfo(**entry["melee"]), WeaponInfo(**entry["ranged"]))
                          for entry in data["loadouts"])
-        hud = HudState(Health(**data["player_health"]), self.saved_target, data["combo_count"],
-                       data["total_damage_dealt"], tuple(RadarContact(**entry) for entry in data["radar_contacts"]),
+        hud = HudState(Health(**data["player_health"]), target, data["combo_count"],
+                       data["total_damage_dealt"], contacts,
                        loadouts=loadouts, active_loadout_index=data["active_loadout_index"],
                        active_weapon_kind=data["active_weapon_kind"])
         self.state = HudV2State(hud, data["energy_ratio"], data["energy_level"],
-                                data["overdrive"], data["counter"], data["dash_ready"])
+                                data["overdrive"], data["counter"], data["dash_ready"],
+                                dialogue=DialogueInfo(data["dialogue"]["speaker"], tuple(data["dialogue"]["lines"])))
         self.target_size_index = 0
         self.set_target_size(1)
         duration = self.config.data["damage_counter"]["duration_seconds"]
@@ -82,11 +97,26 @@ class UiUnitTestV2:
         return len(text) * size, size
 
     def set_target_size(self, amount):
+        self.target_scale = amount
+        if self.selected_target_id is None:
+            self.state = replace(self.state, target_body=None)
+            return
         width, height = self.preset["target_body_size_pixels"]
         width, height = width * amount, height * amount
-        x, y = self.config.actor_anchor("target")
+        x, y = self.enemies[self.selected_target_id]["position"]
         body = Rect(x - width / 2, y - 12 * amount, width, height)
         self.state = replace(self.state, target_body=body)
+
+    def acquire_target(self):
+        origin = self.config.actor_anchor("player")
+        cursor = self.mouse if self.mouse is not None else (origin[0] + 1, origin[1])
+        candidates = (TargetCandidate(key, entry["position"]) for key, entry in self.enemies.items()
+                      if self.targets_enabled and entry["health"].current > 0)
+        self.selected_target_id = self.acquisition.acquire(candidates, origin, cursor, aiming=self.aiming)
+        enemy = self.enemies.get(self.selected_target_id)
+        self.set_hud(target=TargetInfo(enemy["name"], enemy["health"]) if enemy else None)
+        self.set_target_size(self.target_scale)
+        self.target_health.reset(enemy["health"].ratio if enemy else 0)
 
     def enter(self):
         import pico2d.pico2d as pico
@@ -106,7 +136,8 @@ class UiUnitTestV2:
         anchor = (self.config.window["width"] / 2, self.config.window["height"])
         icon = scaled_point(icon, anchor, scale)
         destination = scaled_point(destination, anchor, scale)
-        start = self.config.actor_anchor("target")
+        enemy = self.enemies.get(self.selected_target_id)
+        start = enemy["position"] if enemy else self.config.actor_anchor("target")
         for offset in (-15, 0, 15):
             self.absorption.add((start[0] + offset, start[1] - offset), icon, destination)
 
@@ -115,6 +146,7 @@ class UiUnitTestV2:
         if action == "quit":
             self.running = False
         elif action in ("show_hud", "show_menu"):
+            self.aiming = False
             self.pause.reset()
             self.inputs.reset()
             self.transition.request("combat" if action == "show_hud" else "menu")
@@ -133,8 +165,8 @@ class UiUnitTestV2:
                 return
             health = replace(health, current=health.current - applied)
             if target:
-                self.saved_target = replace(hud.target, health=health)
-                self.set_hud(target=self.saved_target, combo_count=hud.combo_count + 1,
+                self.enemies[self.selected_target_id]["health"] = health
+                self.set_hud(target=replace(hud.target, health=health), combo_count=hud.combo_count + 1,
                              total_damage_dealt=hud.total_damage_dealt + int(applied))
                 self.target_health.set_ratio(health.ratio)
                 self.hit_counter.set_value(self.state.hud.combo_count)
@@ -142,23 +174,20 @@ class UiUnitTestV2:
             else:
                 self.set_hud(player_health=health)
                 self.player_health.set_ratio(health.ratio)
-            owner = "target" if target else "player"
-            self.damage_numbers.add(owner, int(applied), *self.config.actor_anchor(owner),
-                                    direction=(1, 0) if target else None)
+            owner = self.selected_target_id if target else "player"
+            origin = self.config.actor_anchor("player")
+            position = self.enemies[owner]["position"] if target else origin
+            direction = (position[0] - origin[0], position[1] - origin[1]) if target else None
+            self.damage_numbers.add(owner, int(applied), *position, direction=direction)
         elif action == "toggle_target":
-            target = self.saved_target if hud.target is None else None
-            self.set_hud(target=target)
-            self.target_health.reset(target.health.ratio if target else 0)
-            self.damage_numbers.clear("target")
+            self.targets_enabled = not self.targets_enabled
+            self.acquire_target()
         elif action == "next_target":
-            # 표시 확인용 고정 표적 교체다. 본편의 거리·각도 획득 규칙과 구분한다.
-            names = self.preset["target_names"]
-            current = hud.target.name if hud.target else self.saved_target.name
-            name = names[(names.index(current) + 1) % len(names)]
-            self.saved_target = replace(self.saved_target, name=name)
-            self.set_hud(target=self.saved_target)
-            self.target_health.reset(self.saved_target.health.ratio)
-            self.damage_numbers.clear("target")
+            self.acquire_target()
+        elif action == "dialogue":
+            data = self.preset["dialogue"]
+            info = None if self.state.dialogue else DialogueInfo(data["speaker"], tuple(data["lines"]))
+            self.state = replace(self.state, dialogue=info)
         elif action in ("energy_up", "energy_down"):
             change = 0.1 if action == "energy_up" else -0.1
             self.state = replace(self.state, energy_ratio=round(max(0, min(1, self.state.energy_ratio + change)), 3))
@@ -187,6 +216,7 @@ class UiUnitTestV2:
         if event.type == p.SDL_WINDOWEVENT:
             if event.window_event in (p.SDL_WINDOWEVENT_LEAVE, p.SDL_WINDOWEVENT_FOCUS_LOST):
                 self.mouse = None
+                self.aiming = False
                 self.inputs.reset()
             return
         if event.type == p.SDL_KEYDOWN and not getattr(event, "repeat", False):
@@ -197,6 +227,7 @@ class UiUnitTestV2:
                 return
             if event.key == p.SDLK_ESCAPE:
                 if self.transition.target == "combat":
+                    self.aiming = False
                     self.inputs.reset()
                     self.pause.request(not self.pause.opened)
                 return
@@ -206,7 +237,7 @@ class UiUnitTestV2:
                        p.SDLK_3: "energy_down", p.SDLK_4: "energy_up", p.SDLK_5: "level",
                        p.SDLK_6: "overdrive", p.SDLK_7: "target_size", p.SDLK_c: "counter", p.SDLK_t: "toggle_target",
                        p.SDLK_e: "swap", p.SDLK_f: "loadout", p.SDLK_r: "next_target", p.SDLK_F5: "reset",
-                       p.SDLK_g: "absorb", p.SDLK_SPACE: "dash"}
+                       p.SDLK_g: "absorb", p.SDLK_SPACE: "dash", p.SDLK_d: "dialogue"}
             if event.key in actions:
                 self.perform(actions[event.key])
             return
@@ -214,6 +245,10 @@ class UiUnitTestV2:
         if not pointer:
             return
         self.mouse = (event.x, event.y)
+        if event.type != p.SDL_MOUSEMOTION and event.button == p.SDL_BUTTON_RIGHT:
+            self.aiming = (event.type == p.SDL_MOUSEBUTTONDOWN and not self.pause.blocking
+                           and not self.transition.active and self.transition.target == "combat")
+            return
         if self.transition.active or self.pause.transitioning:
             return
         scene = "pause" if self.pause.opened else self.transition.target
@@ -239,12 +274,8 @@ class UiUnitTestV2:
 
     def actor(self, owner, opacity):
         r, c = self.renderer, self.config.colors
-        x, y = self.config.actor_anchor(owner)
-        sx = sy = 1
-        if owner == "target" and self.state.target_body is not None:
-            body = self.state.target_body
-            sx, sy = body.width / 30, body.height / 27
-            x, y = body.x + body.width / 2, body.y + 12 * sy
+        x, y = self.config.actor_anchor("player") if owner == "player" else self.enemies[owner]["position"]
+        sx = sy = self.target_scale if owner == self.selected_target_id else 1
         color = c["accent" if owner == "player" else "enemy"]
         for dx, dy, width, height in ((-8, -27, 16, 13), (-15, -12, 30, 27),
                                        (-26, -8, 8, 24), (18, -8, 8, 24),
@@ -261,8 +292,8 @@ class UiUnitTestV2:
                 self.view.menu(pose.opacity, 0, self.inputs)
             else:
                 self.actor("player", pose.opacity)
-                if self.state.hud.target is not None:
-                    self.actor("target", pose.opacity)
+                for enemy_id in self.enemies:
+                    self.actor(enemy_id, pose.opacity)
                 self.view.combat(self.state, self.damage_numbers.visuals, pose.opacity,
                                  counter_visual=self.damage_counter.visual,
                                  combo_visual=self.hit_counter.visual, cursor_position=self.mouse,
@@ -280,8 +311,8 @@ class UiUnitTestV2:
     def draw_help(self):
         self.view.panel((262, 32, 655, 134), 1, fill_opacity=0.98)
         for index, text in enumerate(("1 / 2 적·플레이어 피해   3 / 4 에너지   5 레벨   6 Overdrive   7 표적 크기",
-                                      "E 무기 교체   F 로드아웃   T 타겟   C COUNTER   SPACE 대시 표시",
-                                      "G 흡수 Trail   R 샘플 표적 교체   F5 초기화   Esc 일시정지   F1 도움말 닫기")):
+                                      "E 무기   F 로드아웃   T 후보 유무   D 대화창   C COUNTER   SPACE 대시",
+                                      "G 흡수   R 표적 획득   우클릭 조준 거리 증가   F5 초기화   Esc 정지")):
             self.renderer.text(text, 290, 48 + index * 36, "small", self.config.colors["text"])
 
     def exit(self):

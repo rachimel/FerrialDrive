@@ -558,15 +558,22 @@
     },
     "v2": {
         "absorption_duration_seconds": 0.85,
+        "targeting_sample": {
+            "range_pixels": 330,
+            "aim_range_pixels": 460,
+            "angle_tolerance_degrees": 1
+        },
         "labels": {
             "ultimate_key": "V"
         },
         "layout": {
+            "dialogue": [360, 28, 560, 130],
+            "target_hp_offset_pixels": [11, -62.5],
             "minimap": [
-                28,
-                28,
-                210,
-                140
+                20,
+                20,
+                240,
+                160
             ],
             "target_hp": [
                 344,
@@ -645,6 +652,15 @@
             ]
         ],
         "style": {
+            "panel_border": {
+                "thin_width_pixels": 1,
+                "corner_width_pixels": 5,
+                "reach_pixels": 180,
+                "curve_steps": 8,
+                "corner_hold_pixels": 3,
+                "filter_samples": 2
+            },
+            "dialogue_padding_pixels": [28, 16],
             "panel_cut_pixels": 20,
             "surface_opacity": 0.9,
             "counters": {

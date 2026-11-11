@@ -1,6 +1,7 @@
 """v2 독립 실행 계약·표시 데이터·흡수 경로·일시정지 경계 검사."""
 
 from dataclasses import replace
+from contextlib import nullcontext
 import importlib.util
 from pathlib import Path
 import subprocess
@@ -19,7 +20,7 @@ SPEC.loader.exec_module(SAMPLE)
 
 from ferrial_drive.ui_v2.effects import AbsorptionTrail, EnergyAbsorption
 from ferrial_drive.ui_v2.geometry import (PerspectivePlane, body_diamond, counter_plaque,
-                                         resource_geometry, scaled_point, slanted_meter)
+                                         resource_geometry, scaled_point, slanted_meter, tapered_stroke_mesh)
 from ferrial_drive.ui.counter import CounterVisual
 from ferrial_drive.ui_v2.view import UiV2View
 
@@ -92,6 +93,87 @@ class UiV2Tests(unittest.TestCase):
         self.program.perform("reset")
         self.assertEqual(self.program.state, before)
         self.assertFalse(self.program.absorption.trails)
+
+    def test_three_enemies_have_separate_health_and_selected_body_positions(self):
+        self.assertEqual(len(self.program.enemies), 3)
+        self.assertEqual(len(self.program.state.hud.radar_contacts), 3)
+        self.program.perform("damage_target")
+        damaged = self.program.state.hud.target.health
+        self.program.perform("next_target")
+        self.assertEqual(self.program.selected_target_id, "enemy_b")
+        body = self.program.state.target_body
+        self.assertEqual(body.x + body.width / 2, 920)
+        self.assertEqual(self.program.state.hud.target.health.current, 680)
+        for _ in range(4):
+            self.program.perform("next_target")
+        self.assertEqual(self.program.selected_target_id, "enemy_a")
+        self.assertEqual(self.program.state.hud.target.health, damaged)
+
+    def test_empty_candidate_toggle_clears_history_and_reacquires_from_cursor(self):
+        self.program.perform("toggle_target")
+        self.assertIsNone(self.program.state.hud.target)
+        self.assertIsNone(self.program.state.target_body)
+        self.assertFalse(self.program.acquisition.acquired_ids)
+        self.program.mouse = (640, 0)
+        self.program.perform("toggle_target")
+        self.assertEqual(self.program.selected_target_id, "enemy_c")
+
+    def test_right_mouse_aiming_range_and_release(self):
+        p = SimpleNamespace(SDL_WINDOWEVENT=1, SDL_KEYDOWN=2, SDL_MOUSEMOTION=3,
+                            SDL_MOUSEBUTTONDOWN=4, SDL_MOUSEBUTTONUP=5, SDL_BUTTON_RIGHT=3)
+        self.program.pico = p
+        self.program.enemies["enemy_b"]["position"] = (1050, 360)
+        self.program.mouse = (1050, 360)
+        self.program.perform("next_target")
+        self.assertEqual(self.program.selected_target_id, "enemy_c")
+        self.program.handle_event(SimpleNamespace(type=4, button=3, x=1050, y=360))
+        self.assertTrue(self.program.aiming)
+        self.program.perform("next_target")
+        self.assertEqual(self.program.selected_target_id, "enemy_b")
+        self.program.handle_event(SimpleNamespace(type=5, button=3, x=1050, y=360))
+        self.assertFalse(self.program.aiming)
+
+    def test_dialogue_toggle_preserves_selection_and_three_enemy_drawing(self):
+        self.program.mouse = (640, 0)
+        self.program.perform("next_target")
+        self.assertEqual(self.program.selected_target_id, "enemy_c")
+        self.program.renderer = Mock()
+        self.program.view = Mock()
+        self.program.draw()
+        self.assertEqual(self.program.renderer.rect.call_count, 24)  # 플레이어와 적 3기, 각 6부품.
+        self.program.perform("dialogue")
+        self.assertIsNone(self.program.state.dialogue)
+        self.assertEqual(self.program.selected_target_id, "enemy_c")
+
+    def test_corner_stroke_tapers_and_shares_join_cross_sections(self):
+        quads = tapered_stroke_mesh(((0, 100), (0, 0), (100, 0)), (1,), 1, 5, 20)
+        self.assertAlmostEqual(abs(quads[0][0][0] - quads[0][3][0]), 1)
+        self.assertAlmostEqual(abs(quads[-1][1][1] - quads[-1][2][1]), 1)
+        # 앞뒤 선분은 같은 꼭짓점 단면을 공유한다.
+        join = len(quads) // 2
+        self.assertEqual(quads[join - 1][1], quads[join][0])
+        self.assertEqual(quads[join - 1][2], quads[join][3])
+        self.assertGreater(abs(quads[join - 1][1][0] - quads[join - 1][2][0]), 1)
+        # 꼭짓점에서 5px 떨어진 곳은 선형 4px와 다른 곡선 두께다.
+        section = next(quad for quad in quads if abs((quad[1][1] + quad[2][1]) / 2 - 5) < 1e-8)
+        self.assertAlmostEqual(abs(section[1][0] - section[2][0]), 4.375)
+        plateau = tapered_stroke_mesh(((0, 100), (0, 0), (100, 0)), (1,), 1, 5, 20, corner_hold_pixels=3)
+        section = next(quad for quad in plateau if abs((quad[1][1] + quad[2][1]) / 2 - 3) < 1e-8)
+        self.assertAlmostEqual(abs(section[1][0] - section[2][0]), 5)
+
+    def test_weapon_panels_use_flat_text_and_horizontal_edges(self):
+        renderer = SimpleNamespace(text_size=lambda text, role: (len(text) * 16, 24),
+                                   scaled=lambda *args: nullcontext(), text=Mock(), warped_text=Mock())
+        view = UiV2View(self.program.config, renderer)
+        with patch.object(view, "polygon") as polygon, patch.object(view, "stroke"), patch.object(view, "weapon_image"):
+            view.weapons(self.program.state.hud, 1, 0)
+        renderer.warped_text.assert_not_called()
+        self.assertEqual([call.args[0] for call in renderer.text.call_args_list],
+                         ["01", "02", "MELEE", "RANGED", "45"])
+        for call in polygon.call_args_list[-2:]:
+            a, b, c, d = call.args[0]
+            self.assertEqual(a[1], b[1])
+            self.assertEqual(c[1], d[1])
 
     def test_pause_blocks_sample_shortcuts(self):
         self.program.pico = SimpleNamespace(SDL_WINDOWEVENT=1, SDL_KEYDOWN=2,

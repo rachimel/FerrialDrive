@@ -5,7 +5,8 @@ from math import atan2, cos, hypot, pi, sin
 from ferrial_drive.ui.components import Rect
 from ferrial_drive.ui.counter import CounterVisual
 from ferrial_drive.ui.view import UiView
-from .geometry import PerspectivePlane, body_diamond, counter_plaque, quad_fill, resource_geometry, slanted_meter
+from .geometry import (PerspectivePlane, body_diamond, counter_plaque, quad_fill,
+                       resource_geometry, slanted_meter, tapered_stroke_mesh)
 
 
 class UiV2View(UiView):
@@ -53,10 +54,31 @@ class UiV2View(UiView):
                   if slant_right else
                   ((x + cut, y), (x + width, y), (x + width - cut, y + height), (x, y + height)))
         fill = self.style["surface_opacity"] if fill_opacity is None else fill_opacity
-        self.polygon(points, c["panel"] if fill_color is None else fill_color, opacity * fill, filled=True)
+        settings = self.style["panel_border"]
+        self.renderer.filtered_polygons((points,), c["panel"] if fill_color is None else fill_color,
+                                        opacity * fill, settings["filter_samples"])
         if draw_border:
-            self.stroke((points[3], points[0], (x + width * 0.45, y)), self.ui_accent, opacity * 0.8, 1.5)
-            self.stroke(((x + width * 0.55, y + height), points[2], points[1]), self.ui_accent, opacity * 0.5)
+            for path, corners, alpha in (
+                    ((points[3], points[0], (x + width * 0.45, y)), (1,), 0.8),
+                    (((x + width * 0.55, y + height), points[2], points[1]), (1,), 0.5)):
+                quads = tapered_stroke_mesh(path, corners, settings["thin_width_pixels"],
+                                            settings["corner_width_pixels"], settings["reach_pixels"],
+                                            settings["curve_steps"], settings["corner_hold_pixels"])
+                self.renderer.filtered_polygons(quads, self.ui_accent, opacity * alpha,
+                                                settings["filter_samples"])
+
+    def dialogue(self, info, opacity):
+        if info is None:
+            return
+        x, y, width, height = self.layout["dialogue"]
+        self.panel((x, y, width, height), opacity, fill_opacity=1)
+        padding_x, padding_y = self.style["dialogue_padding_pixels"]
+        self.renderer.text(info.speaker, x + padding_x, y + padding_y, "target_name",
+                           self.ui_accent, opacity)
+        for index, line in enumerate(info.lines):
+            self.renderer.text(line, x + padding_x, y + padding_y + 30 + index * 26,
+                               "body", self.config.colors["text"], opacity,
+                               max_width=width - padding_x * 2)
 
     def ultimate_label(self, text, right, y, color, opacity, *, scale=1, slant_right=False):
         """필살기 문구와 작은 사선 패널을 같은 위치·투명도로 그린다."""
@@ -98,10 +120,10 @@ class UiV2View(UiView):
             for first, second in zip(points, points[1:] + points[:1]):
                 self.renderer.line(*first, *second, color, opacity)
 
-    def meter(self, key, ratio, color, opacity, trailing_ratio=None, *, shape=None, border=None):
+    def meter(self, key, ratio, color, opacity, trailing_ratio=None, *, shape=None, border=None, rect=None):
         """형상은 고정하고 채움만 자른다. 실제 자원 규칙은 계산하지 않는다."""
         r, c = self.renderer, self.config.colors
-        x, y, width, height = self.layout[key]
+        x, y, width, height = self.layout[key] if rect is None else rect
         cut = min(18, height * 0.65)
         points = slanted_meter((x, y, width, height)) if shape is None else shape
         self.polygon(points, c["panel_surface"], opacity * 0.7, filled=True)
@@ -245,7 +267,7 @@ class UiV2View(UiView):
             shape = ((tx + 10, ty), (tx + tw, ty), (tx + tw - 9, ty + th), (tx, ty + th))
             self.polygon(shape, c["panel_surface"], alpha * 0.5, filled=True)
             self.stroke(shape + shape[:1], self.ui_accent, alpha)
-            self.slanted_text(f"{index + 1:02}", tx + 15, ty + 3, "equipment_number", c["text"], alpha)
+            r.text(f"{index + 1:02}", tx + 15, ty + 3, "equipment_number", c["text"], alpha)
         loadout = hud.loadouts[hud.active_loadout_index]
         for index, (kind, weapon) in enumerate((("melee", loadout.melee), ("ranged", loadout.ranged))):
             top = y + index * (height + 8)
@@ -254,21 +276,21 @@ class UiV2View(UiView):
             left = x + (0 if active else 22)
             amount = 1 if active else self.style["inactive_weapon_scale"]
             with r.scaled(amount, (x + width, top + height / 2)):
-                shape = ((left + 18, top), (x + width, top + 5),
-                         (x + width - 10, top + height), (left - 4, top + height - 6))
+                shape = ((left + 18, top), (x + width, top),
+                         (x + width - 18, top + height), (left, top + height))
                 self.polygon(shape, c["panel_surface"], alpha * 0.65, filled=True)
-                self.stroke((shape[0], (left - 8, top + height - 6), shape[2], shape[1]),
+                self.stroke((shape[0], shape[3], shape[2], shape[1]),
                              self.ui_accent, alpha * 0.85)
-                self.stroke((shape[0], (left - 8, top + height - 6)), self.ui_accent,
+                self.stroke((shape[0], shape[3]), self.ui_accent,
                              alpha * 0.95, self.style["weapon_outer_edge_pixels"])
-                self.stroke(((left + 28, top + 4), (x + width - 3, top + 8)), self.ui_accent, alpha * 0.3)
+                self.stroke(((left + 28, top + 4), (x + width - 4, top + 4)), self.ui_accent, alpha * 0.3)
                 self.weapon_image(weapon, kind, Rect(left + 18, top + 11, width - 112, height - 39), alpha)
-                self.slanted_text("MELEE" if kind == "melee" else "RANGED", left + 17, top + height - 23,
-                                  "weapon_name", c["text"], alpha)
+                r.text("MELEE" if kind == "melee" else "RANGED", left + 17, top + height - 23,
+                       "weapon_name", c["text"], alpha)
                 if weapon.rounds is not None:
                     text = str(weapon.rounds)
-                    self.slanted_text(text, x + width - r.text_size(text, "v2_ammo")[0] - 16,
-                                      top + 10, "v2_ammo", c["text"], alpha, lean=0.2)
+                    r.text(text, x + width - r.text_size(text, "v2_ammo")[0] - 16,
+                           top + 10, "v2_ammo", c["text"], alpha)
 
     def absorption(self, trails, opacity):
         r, color = self.renderer, self.config.colors["energy"]
@@ -361,11 +383,15 @@ class UiV2View(UiView):
                          if body is not None else self.config.actor_anchor("target"))
         with r.scaled(scale, target_anchor):
             self.target(state, opacity, offset_x)
-            if hud.target:
-                self.meter("target_hp", hud.target.health.ratio, "enemy", opacity, target_trailing_ratio)
-            else:
-                self.meter("target_hp", 0, "enemy", opacity)
             x, y, bar_width, bar_height = self.layout["target_hp"]
+            dx, dy = self.layout["target_hp_offset_pixels"]
+            x, y = target_anchor[0] + dx, target_anchor[1] + dy
+            target_rect = (x, y, bar_width, bar_height)
+            if hud.target:
+                self.meter("target_hp", hud.target.health.ratio, "enemy", opacity, target_trailing_ratio,
+                           rect=target_rect)
+            else:
+                self.meter("target_hp", 0, "enemy", opacity, rect=target_rect)
             r.text("TARGET", x + bar_width, y + bar_height + 4, "target_heading", c["muted"], opacity, align="right")
         with r.scaled(scale, (width / 2, height)):
             self.resources(state, opacity, offset_x, player_trailing_ratio)
@@ -388,6 +414,7 @@ class UiV2View(UiView):
             with r.scaled(scale, (visual.x, visual.y)):
                 self.damage_number(visual, opacity, offset_x)
         self.absorption(absorption_trails, opacity)
+        self.dialogue(state.dialogue, opacity)
         if cursor_position is not None:
             x, y = cursor_position
             with r.scaled(scale, (x, y)):
