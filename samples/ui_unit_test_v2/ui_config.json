@@ -652,11 +652,23 @@
             ]
         ],
         "style": {
+            "panel_frame": {
+                "bevel_pixels": 5,
+                "corner_join_pixels": 12,
+                "upper_side_ratio": 0.3,
+                "lower_side_ratio": 0.45,
+                "upper_rail_ratio": 0.27,
+                "lower_rail_ratio": 0.16,
+                "rail_width_pixels": 3,
+                "fragment_lengths_pixels": [12, 9, 6],
+                "fragment_gap_pixels": 4,
+                "fragment_height_pixels": 2,
+                "fragment_slant_pixels": 3
+            },
             "panel_border": {
                 "thin_width_pixels": 1,
                 "corner_width_pixels": 5,
                 "reach_pixels": 180,
-                "curve_steps": 8,
                 "corner_hold_pixels": 3,
                 "filter_samples": 2
             },

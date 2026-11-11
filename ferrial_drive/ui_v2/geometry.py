@@ -4,13 +4,11 @@ from dataclasses import dataclass
 from math import hypot, isfinite
 
 
-def tapered_stroke_mesh(points, corner_indices, thin_width, corner_width, reach, curve_steps=8, corner_hold_pixels=0):
-    """지정한 꼭짓점으로 갈수록 곡선으로 두꺼워지는 선. 이음부 단면을 공유한다."""
+def tapered_stroke_mesh(points, corner_indices, thin_width, corner_width, reach, corner_hold_pixels=0):
+    """지정한 꼭짓점으로 갈수록 직선으로 두꺼워지는 선. 이음부 단면을 공유한다."""
     if (not all(map(isfinite, (thin_width, corner_width, reach)))
             or not 0 < thin_width <= corner_width or reach <= 0):
         raise ValueError("테두리 두께와 변화 거리는 양수이며 꼭짓점 두께가 더 작을 수 없다.")
-    if type(curve_steps) is not int or curve_steps < 2:
-        raise ValueError("테두리 곡선 분할은 2 이상의 정수여야 한다.")
     if not isfinite(corner_hold_pixels) or corner_hold_pixels < 0:
         raise ValueError("최대 두께 유지 거리는 0 이상의 유한한 픽셀 값이어야 한다.")
     normals, lengths = [], []
@@ -38,8 +36,7 @@ def tapered_stroke_mesh(points, corner_indices, thin_width, corner_width, reach,
         hold = min(corner_hold_pixels, ramp)
         nodes = []
         samples = {0, 1}
-        for step in range(curve_steps + 1):
-            distance = (hold + (ramp - hold) * step / curve_steps) / length
+        for distance in (hold / length, ramp / length):
             if index in corner_indices:
                 samples.add(distance)
             if index + 1 in corner_indices:
@@ -51,7 +48,6 @@ def tapered_stroke_mesh(points, corner_indices, thin_width, corner_width, reach,
         for t in sorted(samples):
             strength = max(influence(t * length) if index in corner_indices else 0,
                            influence((1 - t) * length) if index + 1 in corner_indices else 0)
-            strength = strength * strength * (3 - 2 * strength)
             half = (thin_width + (corner_width - thin_width) * strength) / 2
             nx, ny = joins[index] if t == 0 else joins[index + 1] if t == 1 else normal
             x, y = a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t

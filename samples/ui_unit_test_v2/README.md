@@ -19,7 +19,8 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 - `v2.layout.energy_level_width_pixels`·`v2.style.level_curve_radius_pixels`: HP 옆에 붙는 레벨 영역의 폭과 곡선 강도. HP/에너지 공유 경계와 레벨 왼쪽 사선은 함께 계산한다.
 - `v2.style.counters`: HIT/DAMAGE의 원근 `depth`(0~1)·기울기 `lean`/`slope`·고정 `text_scale`·원근 기준 폭 `perspective_width_pixels`·오른쪽 여백. 기준 폭은 최대 표시 폭이 아니다. 숫자를 축소하지 않고 받침판과 잔상 조각을 왼쪽으로 확장한다. 오른쪽 기준 투영은 자릿수와 무관하게 유지한다.
 - `v2.style.panel_cut_pixels`·`surface_opacity`: 사선 외곽과 면의 기본 표현. 기존 금속 사각 패널을 사용하지 않는다.
-- `v2.style.panel_border`: 기본/좌상단·우하단 두께 `thin_width_pixels`·`corner_width_pixels`는 1/5px다. `corner_hold_pixels=3`까지 최대 두께를 유지하며 `reach_pixels=180`까지 8분할 SmoothStep 곡선으로 가늘어진다. 짧은 변에서는 변화 구간을 변 길이에 맞춘다. 우상단·좌하단은 얇고 열린 외곽을 유지한다.
+- `v2.style.panel_border`: 기본/좌상단·우하단 두께 `thin_width_pixels`·`corner_width_pixels`는 1/5px다. `corner_hold_pixels=3`까지 최대 두께를 유지한 뒤 직선으로 가늘어진다. 일반 패널의 변화 구간은 `reach_pixels=180`이며 짧은 변에서는 길이에 맞춘다. 곡선 보간은 제거했다.
+- `v2.style.panel_frame`: 미니맵·대화창 레퍼런스 형상. `bevel_pixels`·`corner_join_pixels`는 꺾임, `upper/lower_side_ratio`·`upper/lower_rail_ratio`는 세로/가로선 길이, `fragment_*`는 분리된 사선 조각을 조절한다. 긴 세로 테두리를 제거하고 좌상단·우하단에 짧은 꺾임만 둔다.
 - `panel_border.filter_samples=2`: 공통 패널 면/테두리를 2배로 그린 뒤 선형 필터로 축소한다. 2~4의 정수를 받으며 최대 32개의 도형 텍스처를 재사용한다. 게임·Pico2D 원본은 변경하지 않는다.
 - `v2.layout.dialogue`·`v2.style.dialogue_padding_pixels`: 대화창 위치·크기와 안쪽 여백. 위쪽 표적/HUD 일부를 덮는다. 게임에서는 `DialogueInfo`를 표시 상태로 공급한다.
 - 최종 배치: 미니맵 (20,20), 논리 크기 240×160·표시 배율 0.9. 대화창 (360,28), 560×130. 미니맵의 화면 여백이 조금 더 작다.
@@ -68,6 +69,7 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 
 ## 검증
 
+- 이번 레퍼런스/등장 효과 준비 변경: UI 83개와 획득 7개, 총 90개 통과. 면만 그리기·테두리 한 조각만 그리기·조각별 표시 투명도·짧은 세로 꺾임·분리된 조각을 확인했다. SDL dummy에서 면만/테두리만/좌상단 꺾임만/기본 전투/위쪽 표적/대화창 없음의 6개 상태를 렌더했다. 등장 효과의 시간·순서·재생은 미구현이며 실제 창 조작·수정본 외관 승인과 구분한다.
 - 이번 꼭짓점/3기/R 변경: UI 81개와 표적 획득 7개, 합계 88개 통과. 각도/거리·근접각 동률·거리 경계·우클릭 확대·후보 소진/없음·적별 HP·곡선/3px 유지·무기 수평 표현을 확인했다. 실제 SDL 필터의 중간 밝기 픽셀·이동/투명도 캐시 재사용·예외 시 렌더 상태 복원·종료 해제도 확인했다. Pico2D/SDL dummy에서 좌/우/상단 선택·대화창 유무·후보 없음·도움말·일시정지·타이틀의 8개 상태를 렌더했다. R/D/T/F1/Esc 합성 입력과 정지 중 R 차단도 확인했다. 우/상단 가림 전후/도움말 이미지를 직접 열어 겹침과 표시 순서를 확인했다.
 - 아래 검증은 이전 변경 당시 결과다. 이번 직접 창 조작·Runner 드롭·사용자 외관 승인은 아직 확인하지 않았다.
 - v2 자동 검사 17개, 기존 UI 포함 72개 통과: 기존 경계 검사와 함께 마름모 공통 접점·레벨/HP 비침범·몸통 비례·받침판 평행 조건, 자릿수 증가 시 오른쪽 숫자의 크기·위치 유지와 받침판·잔상 이동을 확인했다.
@@ -80,3 +82,7 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 - 고정 배율 카운터·필살기 LV 패널 사선·에너지 레벨 색상·비활성 무기 카드 80% 반영 후 자동 72개와 기본/1~4·8자리/자리 올림 중간/근접 무기 활성/0의 10개 상태 렌더를 확인했다. 기본·1자리·8자리·자리 올림 중간·근접 무기 활성 이미지를 열어 검토했고 중첩 배율·viewport·clip 복원을 확인했다. COUNTER는 사용자 지시에 따라 샘플 위치를 유지한다.
 - 실제 창 키·클릭 조작, Runner GUI 드롭, 애니메이션 사용감과 사용자 외관 승인은 미확인이다.
 - 진입점의 `--scene menu`·`--frames 2`·`--capture output/ui_unit_test_v2/combat.png`는 장면 선택·프레임 제한·재생성 가능한 화면 저장용이다.
+
+## 등장 효과 연결 지점
+
+`ferrial_drive/ui_v2/panels.py`의 `build_panel_geometry()`는 `surface`와 `border_parts`를 따로 반환한다. 테두리 ID는 `upper_corner`·`upper_rail`·`upper_fragment_0~2`, `lower_corner`·`lower_rail`·`lower_fragment_0~2`다. 면은 `panel_surface()`, 테두리는 `panel_border()`로 그린다. `part_opacities`로 각 조각을 독립 표시할 수 있다. 입력·시간·등장 순서는 형상 모듈에 넣지 않는다.

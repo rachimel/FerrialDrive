@@ -23,6 +23,7 @@ from ferrial_drive.ui_v2.geometry import (PerspectivePlane, body_diamond, counte
                                          resource_geometry, scaled_point, slanted_meter, tapered_stroke_mesh)
 from ferrial_drive.ui.counter import CounterVisual
 from ferrial_drive.ui_v2.view import UiV2View
+from ferrial_drive.ui_v2.panels import build_panel_geometry
 
 
 class UiV2Tests(unittest.TestCase):
@@ -154,9 +155,11 @@ class UiV2Tests(unittest.TestCase):
         self.assertEqual(quads[join - 1][1], quads[join][0])
         self.assertEqual(quads[join - 1][2], quads[join][3])
         self.assertGreater(abs(quads[join - 1][1][0] - quads[join - 1][2][0]), 1)
-        # 꼭짓점에서 5px 떨어진 곳은 선형 4px와 다른 곡선 두께다.
-        section = next(quad for quad in quads if abs((quad[1][1] + quad[2][1]) / 2 - 5) < 1e-8)
-        self.assertAlmostEqual(abs(section[1][0] - section[2][0]), 4.375)
+        # 가늘어지는 구간의 양 끝을 이은 직선은 5px 지점에서 4px 두께다.
+        first, last = quads[1][0], quads[1][1]
+        first_back, last_back = quads[1][3], quads[1][2]
+        self.assertAlmostEqual((first[0] - first_back[0]) * 0.25
+                               + (last[0] - last_back[0]) * 0.75, 4)
         plateau = tapered_stroke_mesh(((0, 100), (0, 0), (100, 0)), (1,), 1, 5, 20, corner_hold_pixels=3)
         section = next(quad for quad in plateau if abs((quad[1][1] + quad[2][1]) / 2 - 3) < 1e-8)
         self.assertAlmostEqual(abs(section[1][0] - section[2][0]), 5)
@@ -174,6 +177,38 @@ class UiV2Tests(unittest.TestCase):
             a, b, c, d = call.args[0]
             self.assertEqual(a[1], b[1])
             self.assertEqual(c[1], d[1])
+
+    def test_panel_surface_and_individual_border_parts_draw_independently(self):
+        style = self.program.config.data["v2"]["style"]
+        geometry = build_panel_geometry((360, 28, 560, 130), style["panel_cut_pixels"],
+                                        style["panel_frame"], style["panel_border"])
+        renderer = SimpleNamespace(filtered_polygons=Mock())
+        view = UiV2View(self.program.config, renderer)
+        view.panel_surface(geometry, 0.5)
+        self.assertEqual(renderer.filtered_polygons.call_count, 1)
+        self.assertEqual(renderer.filtered_polygons.call_args.args[0], (geometry.surface,))
+        renderer.filtered_polygons.reset_mock()
+        visibility = {part.part_id: 0 for part in geometry.border_parts}
+        visibility["upper_corner"] = 0.25
+        view.panel_border(geometry.border_parts, 0.5, part_opacities=visibility)
+        self.assertEqual(renderer.filtered_polygons.call_count, 1)
+        call = renderer.filtered_polygons.call_args
+        self.assertEqual(call.args[0], geometry.border_parts[0].polygons)
+        self.assertAlmostEqual(call.args[2], 0.5 * 0.8 * 0.25)
+
+    def test_reference_frame_has_short_side_brackets_and_detached_fragments(self):
+        style = self.program.config.data["v2"]["style"]
+        for rect in ((360, 28, 560, 130), (20, 20, 240, 160)):
+            geometry = build_panel_geometry(rect, style["panel_cut_pixels"],
+                                            style["panel_frame"], style["panel_border"])
+            parts = {part.part_id: part for part in geometry.border_parts}
+            upper_y = [y for polygon in parts["upper_corner"].polygons for _, y in polygon]
+            lower_y = [y for polygon in parts["lower_corner"].polygons for _, y in polygon]
+            self.assertLess(max(upper_y), rect[1] + rect[3] * 0.4)
+            self.assertGreater(min(lower_y), rect[1] + rect[3] * 0.5)
+            rail_x = [x for polygon in parts["upper_rail"].polygons for x, _ in polygon]
+            fragment_x = [x for polygon in parts["upper_fragment_0"].polygons for x, _ in polygon]
+            self.assertGreater(min(fragment_x), max(rail_x))
 
     def test_pause_blocks_sample_shortcuts(self):
         self.program.pico = SimpleNamespace(SDL_WINDOWEVENT=1, SDL_KEYDOWN=2,

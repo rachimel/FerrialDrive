@@ -7,6 +7,7 @@ from ferrial_drive.ui.counter import CounterVisual
 from ferrial_drive.ui.view import UiView
 from .geometry import (PerspectivePlane, body_diamond, counter_plaque, quad_fill,
                        resource_geometry, slanted_meter, tapered_stroke_mesh)
+from .panels import build_panel_geometry
 
 
 class UiV2View(UiView):
@@ -63,15 +64,37 @@ class UiV2View(UiView):
                     (((x + width * 0.55, y + height), points[2], points[1]), (1,), 0.5)):
                 quads = tapered_stroke_mesh(path, corners, settings["thin_width_pixels"],
                                             settings["corner_width_pixels"], settings["reach_pixels"],
-                                            settings["curve_steps"], settings["corner_hold_pixels"])
+                                            settings["corner_hold_pixels"])
                 self.renderer.filtered_polygons(quads, self.ui_accent, opacity * alpha,
                                                 settings["filter_samples"])
+
+    def panel_surface(self, geometry, opacity, *, fill_opacity=None, fill_color=None):
+        """패널 면만 그린다. 테두리 표시와 독립이다."""
+        fill = self.style["surface_opacity"] if fill_opacity is None else fill_opacity
+        self.renderer.filtered_polygons((geometry.surface,),
+                                        self.config.colors["panel"] if fill_color is None else fill_color,
+                                        opacity * fill, self.style["panel_border"]["filter_samples"])
+
+    def panel_border(self, parts, opacity, *, part_opacities=None):
+        """테두리만 그린다. 각 조각의 표시값은 외부 효과 제어부가 공급할 수 있다."""
+        for part in parts:
+            visibility = 1 if part_opacities is None else part_opacities.get(part.part_id, 1)
+            alpha = opacity * part.opacity * visibility
+            if alpha > 0:
+                self.renderer.filtered_polygons(part.polygons, self.ui_accent, alpha,
+                                                self.style["panel_border"]["filter_samples"])
+
+    def framed_panel(self, rect, opacity, *, fill_opacity=None):
+        geometry = build_panel_geometry(rect, self.style["panel_cut_pixels"],
+                                        self.style["panel_frame"], self.style["panel_border"])
+        self.panel_surface(geometry, opacity, fill_opacity=fill_opacity)
+        self.panel_border(geometry.border_parts, opacity)
 
     def dialogue(self, info, opacity):
         if info is None:
             return
         x, y, width, height = self.layout["dialogue"]
-        self.panel((x, y, width, height), opacity, fill_opacity=1)
+        self.framed_panel((x, y, width, height), opacity, fill_opacity=1)
         padding_x, padding_y = self.style["dialogue_padding_pixels"]
         self.renderer.text(info.speaker, x + padding_x, y + padding_y, "target_name",
                            self.ui_accent, opacity)
@@ -143,7 +166,7 @@ class UiV2View(UiView):
     def minimap(self, hud, opacity):
         r, c = self.renderer, self.config.colors
         rect = Rect(*self.layout["minimap"])
-        self.panel((rect.x, rect.y, rect.width, rect.height), opacity, fill_opacity=0.85)
+        self.framed_panel((rect.x, rect.y, rect.width, rect.height), opacity, fill_opacity=0.85)
         with r.clip(rect):
             for wall in self.config.data["v2"]["map_walls"]:
                 a, b, d, e = wall
