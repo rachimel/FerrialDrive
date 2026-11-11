@@ -124,9 +124,11 @@ class UiV2View(UiView):
         padding_x, padding_y = self.style["dialogue_padding_pixels"]
         self.renderer.text(info.speaker, x + padding_x, y + padding_y, "target_name",
                            self.ui_accent, opacity)
+        role = self.style["dialogue_body_role"]
+        first_line = y + padding_y + self.style["dialogue_body_offset_pixels"]
         for index, line in enumerate(info.lines):
-            self.renderer.text(line, x + padding_x, y + padding_y + 30 + index * 26,
-                               "body", self.config.colors["text"], opacity,
+            self.renderer.text(line, x + padding_x, first_line + index * self.style["dialogue_line_spacing_pixels"],
+                               role, self.config.colors["text"], opacity,
                                max_width=width - padding_x * 2)
 
     def ultimate_label(self, text, right, y, color, opacity, *, scale=1, slant_right=False):

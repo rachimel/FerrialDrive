@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [UI v2 통신 조작 가이드·속도 조정](2026-11-11-ui-v2-communication-guide.md): TIME(scope). 현재 대화의 밝은 띠 감속·기본 5px/s·통신 가이드 통합·삭제 대상 정정·헤더/본문 상향 발언의 정확한 시각을 확인한다.
+
 - [UI v2 느린 Scanline·빠른 밝기 띠](2026-11-11-ui-v2-dual-scanline-motion.md): TIME(scope). 현재 대화의 느린 Scanline·빠른 밝은 영역 추가 요청의 정확한 시각을 확인한다.
 
 - [UI v2 맵·통신 반투명 Scanline](2026-11-11-ui-v2-transparent-scanlines.md): TIME(scope). 현재 대화의 맵 테두리 구분·맵/통신 투명도·Scanline 시험 적용 요청의 정확한 시각을 확인한다.

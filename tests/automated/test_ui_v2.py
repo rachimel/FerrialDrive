@@ -268,7 +268,7 @@ class UiV2Tests(unittest.TestCase):
 
     def test_pause_blocks_sample_shortcuts(self):
         self.program.pico = SimpleNamespace(SDL_WINDOWEVENT=1, SDL_KEYDOWN=2,
-                                            SDLK_F1=1001, SDLK_ESCAPE=27)
+                                            SDLK_ESCAPE=27)
         self.program.pause.request(True)
         self.program.update(1)
         before = self.program.state

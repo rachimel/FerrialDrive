@@ -42,7 +42,6 @@ class UiUnitTestV2:
         self.inputs = ButtonInput()
         self.mouse = None
         self.capture_path = Path(capture_path) if capture_path else None
-        self.help_visible = False
         self.transition = SceneTransition("menu", "combat", initial_scene or self.config.window["initial_scene"],
                                           self.config.data["animation"]["duration_seconds"], 0)
         self.pause = PauseState(self.config.data["pause"]["duration_seconds"])
@@ -225,9 +224,6 @@ class UiUnitTestV2:
                 self.inputs.reset()
             return
         if event.type == p.SDL_KEYDOWN and not getattr(event, "repeat", False):
-            if event.key == p.SDLK_F1:
-                self.help_visible = not self.help_visible
-                return
             if self.transition.active or self.pause.transitioning:
                 return
             if event.key == p.SDLK_ESCAPE:
@@ -310,18 +306,9 @@ class UiUnitTestV2:
                                  scanline_visual=self.scanline_motion.visual)
         if self.pause.opacity > 0:
             self.view.pause(self.pause.opacity, self.inputs)
-        if self.help_visible:
-            self.draw_help()
         if self.capture_path:
             self.renderer.save_frame(self.capture_path, self.config.window["width"], self.config.window["height"])
             self.capture_path = None
-
-    def draw_help(self):
-        self.view.panel((262, 32, 655, 134), 1, fill_opacity=0.98)
-        for index, text in enumerate(("1 / 2 적·플레이어 피해   3 / 4 에너지   5 레벨   6 Overdrive   7 표적 크기",
-                                      "E 무기   F 로드아웃   T 후보 유무   D 대화창   C COUNTER   SPACE 대시",
-                                      "G 흡수   R 표적 획득   우클릭 조준 거리 증가   F5 초기화   Esc 정지")):
-            self.renderer.text(text, 290, 48 + index * 36, "small", self.config.colors["text"])
 
     def exit(self):
         if self.renderer is not None:

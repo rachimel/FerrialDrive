@@ -263,7 +263,7 @@
         "menu_subtitle": "ui-unit-test-v2 / UI 배치와 스타일 확인",
         "menu_heading": "UI UNIT TEST V2",
         "menu_description": "사용자 도안 기반 독립 미리보기",
-        "menu_notice": "F1 조작 안내 / 실제 전투 규칙과 분리",
+        "menu_notice": "조작 안내는 전투 통신 패널에 표시한다.",
         "combat_heading": "전투 HUD",
         "combat_subtitle": "샘플 상태",
         "target": "TARGET",
@@ -654,8 +654,8 @@
         "style": {
             "panel_scanlines": {
                 "motion": {
-                    "slow_speed_pixels_per_second": 3,
-                    "fast_speed_pixels_per_second": 120,
+                    "slow_speed_pixels_per_second": 5,
+                    "fast_speed_pixels_per_second": 60,
                     "highlight_height_pixels": 24,
                     "highlight_opacity": 0.22
                 },
@@ -690,7 +690,10 @@
                 "corner_hold_pixels": 3,
                 "filter_samples": 2
             },
-            "dialogue_padding_pixels": [28, 16],
+            "dialogue_padding_pixels": [28, 8],
+            "dialogue_body_role": "small",
+            "dialogue_body_offset_pixels": 28,
+            "dialogue_line_spacing_pixels": 20,
             "panel_cut_pixels": 20,
             "surface_opacity": 0.9,
             "counters": {
