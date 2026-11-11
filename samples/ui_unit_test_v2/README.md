@@ -115,7 +115,7 @@ HP flash는 `HealthDamageFlash.trigger(피해 전 비율, 피해 후 비율)`·`
 
 록온은 `LockOnMotion.select(target_id, body)`·`update(delta_seconds)`로 제어하고 `visuals`를 `view.combat(lock_visuals=...)`에 공급한다. 몸통 Rect는 카메라 투영 후 좌표다. 선택 유지 중과 퇴장 중에도 적의 월드 위치를 현재 카메라로 투영한다. 자동 선택 규칙은 `MouseAutoTargeting`, 좌표 변환은 `LookAheadCamera`가 맡는다. 새 선택 ID에서 기존 표시 퇴장과 신규 등장을 재생한다. `view.combat(player_screen=...)`는 레이더 중심을 실제 플레이어 화면 위치에 맞춘다.
 
-`v2.style.lock_motion`은 등장 0.4초·캐럿 0.2초·퇴장 0.25초·강조선 이동 0.4초/정지 0.25초·시작 배율 0.25/퇴장 배율 1.5를 조절한다. 기본형은 정사각형이며 등장 완료 45°는 마름모다. 가이드 조작키 색/설명 투명도는 `dialogue_key_color`·`dialogue_description_opacity`다.
+`v2.style.lock_motion`은 등장 0.32초·캐럿 0.16초·퇴장 0.2초·강조선 이동 0.32초/정지 0.2초·시작 배율 0.25/퇴장 배율 1.5를 조절한다. 기본형은 정사각형이며 등장 완료 45°는 마름모다. 가이드 조작키 색/설명 투명도는 `dialogue_key_color`·`dialogue_description_opacity`다.
 
 등장 중 취소도 역재생하지 않는다. 취소 시점의 실제 회전값/배율을 저장해 그 값부터 회전은 2배, 크기는 `exit_scale`배까지 확대하며 흐려진다. 완료 뒤 취소는 기존 45→90°·1→1.5배와 같다.
 
