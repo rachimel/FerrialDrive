@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [UI v2 대시 꺾쇠·하단 정렬](2026-11-11-ui-v2-dash-chevrons.md): TIME(scope). 재제작/하단 정렬 요청·꺾쇠/가로 위치 선택과 구현·검증 보고의 정확한 시각을 확인한다.
+
 - [UI v2 HP 피해 구간 flash](2026-11-11-ui-v2-health-damage-flash.md): TIME(scope). HP 순간 감소 구간 지정·빨간 Trail 유지 요청과 구현·검증 보고의 정확한 시각을 확인한다.
 
 - [UI v2 등장 중 취소 퇴장](2026-11-11-ui-v2-lock-cancel-exit.md): TIME(scope). 현재 t 기준 두 배 각도와 등장 도중 적용 정정·구현/검증 보고의 정확한 시각을 확인한다.

@@ -597,10 +597,7 @@
                 390,
                 26
             ],
-            "dash_label": [
-                870,
-                682
-            ],
+            "dash_x": 870,
             "weapons": [
                 1004,
                 556,
@@ -656,6 +653,15 @@
             ]
         ],
         "style": {
+            "dash_icon": {
+                "chevron_width_pixels": 24,
+                "height_pixels": 26,
+                "spacing_pixels": 18,
+                "thickness_pixels": 6,
+                "label_gap_pixels": 7,
+                "bottom_margin_pixels": 12,
+                "key_scale": 0.9
+            },
             "health_damage_flash": {
                 "color": "#FFFFFF",
                 "hold_seconds": 0.04,

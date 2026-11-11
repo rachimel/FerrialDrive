@@ -420,12 +420,28 @@ class UiV2View(UiView):
                             c["text"], opacity)
         self.ultimate_label(level, label_right, cy + radius / 2 + gap,
                             c["muted"], opacity, scale=0.85, slant_right=True)
-        x, y = self.layout["dash_label"]
+        self.dash_indicator(state, opacity)
+
+    def dash_indicator(self, state, opacity):
+        """현재 가로 위치에서 아이콘·키 안내를 화면 하단 기준으로 배치한다."""
+        r, c, settings = self.renderer, self.config.colors, self.style["dash_icon"]
+        x = self.layout["dash_x"]
+        label_width, label_height = r.text_size("SPACE", "hud_small")
+        key_scale = settings["key_scale"]
+        y = (self.config.window["height"] - settings["bottom_margin_pixels"] / self.style["hud_scale"]
+             - label_height * key_scale)
+        width, height = settings["chevron_width_pixels"], settings["height_pixels"]
+        step, thickness = settings["spacing_pixels"], settings["thickness_pixels"]
+        left = x + (label_width * key_scale - width - step) / 2
+        top = y - settings["label_gap_pixels"] - height
         alpha = opacity * (1 if state.dash_ready else 0.25)
-        self.stroke(((x + 16, y - 24), (x + 25, y - 43), (x + 32, y - 39), (x + 21, y - 18),
-                     (x + 32, y - 15)), c["text"], alpha, 2)
-        self.stroke(((x + 10, y - 31), (x + 7, y - 19), (x + 2, y - 14)), self.ui_accent, alpha)
-        self.slanted_text("SPACE", x, y, "hud_small", c["text"], alpha, scale=0.9)
+        for index, color in enumerate((self.ui_accent, c["text"])):
+            px = left + step * index
+            middle, bottom = top + height / 2, top + height
+            quads = (((px, top), (px + thickness, top), (px + width, middle), (px + width - thickness, middle)),
+                     ((px + width - thickness, middle), (px + width, middle), (px + thickness, bottom), (px, bottom)))
+            r.filtered_polygons(quads, color, alpha, self.style["panel_border"]["filter_samples"])
+        self.slanted_text("SPACE", x, y, "hud_small", c["text"], alpha, scale=key_scale)
 
     def weapons(self, hud, opacity, offset_x):
         if not hud.loadouts:
