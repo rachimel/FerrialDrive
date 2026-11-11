@@ -30,6 +30,35 @@ from ferrial_drive.ui_v2.panels import (build_panel_geometry, build_scanlines,
 
 
 class UiV2Tests(unittest.TestCase):
+    def test_camera_projection_and_mouse_auto_target_share_world_coordinates(self):
+        self.program.mouse = (1000, 360)
+        self.program.update(0)
+        self.program.update(0.5)
+        self.assertEqual(self.program.selected_target_id, "enemy_a")
+        self.program.update(0.5)
+        self.assertEqual(self.program.selected_target_id, "enemy_b")
+        enemy_screen = self.program.camera.world_to_screen(self.program.enemies["enemy_b"]["position"])
+        body = self.program.state.target_body
+        self.assertAlmostEqual(body.x + body.width / 2, enemy_screen[0])
+        self.assertLess(self.program.camera.world_to_screen(self.program.player_world)[0], 640)
+        self.program.perform("damage_target")
+        popup = self.program.damage_numbers.visuals[0]
+        self.program.renderer, self.program.view = Mock(), Mock()
+        self.program.draw()
+        shown = self.program.view.combat.call_args.args[1][0]
+        self.assertEqual((shown.x, shown.y), self.program.camera.world_to_screen((popup.x, popup.y)))
+
+    def test_r_key_does_not_select_a_target(self):
+        names = ("SDL_WINDOWEVENT", "SDL_KEYDOWN", "SDLK_ESCAPE", "SDLK_r", "SDLK_1", "SDLK_2", "SDLK_3",
+                 "SDLK_4", "SDLK_5", "SDLK_6", "SDLK_7", "SDLK_c", "SDLK_t", "SDLK_e", "SDLK_f",
+                 "SDLK_F5", "SDLK_g", "SDLK_SPACE", "SDLK_d")
+        p = SimpleNamespace(**{name: index for index, name in enumerate(names)})
+        self.program.pico = p
+        before = self.program.selected_target_id
+        self.program.handle_event(SimpleNamespace(type=p.SDL_KEYDOWN, key=p.SDLK_r, repeat=False))
+        self.assertEqual(self.program.selected_target_id, before)
+        self.assertIsNone(self.program.auto_target.pending_id)
+
     def test_text_brightness_has_short_separated_dips_and_is_deterministic(self):
         for seed in (1, 4, 7, 10):
             samples = [subtle_flicker(index / 60, seed=seed) for index in range(600)]
@@ -86,17 +115,20 @@ class UiV2Tests(unittest.TestCase):
     def test_hp_flash_keeps_each_real_damage_interval_and_does_not_restart_older_hits(self):
         effect = HealthDamageFlash()
         effect.trigger(1, 0.8)
-        effect.update(0.08)
+        self.assertEqual(effect.visuals[0].opacity, 0)
+        effect.update(0.02)
+        self.assertEqual(effect.visuals[0].opacity, 1)
+        effect.update(0.02)
         effect.trigger(0.8, 0.7)
         self.assertEqual([(v.start_ratio, v.end_ratio) for v in effect.visuals], [(0.8, 1), (0.7, 0.8)])
         self.assertAlmostEqual(effect.visuals[0].opacity, 0.5)
-        self.assertEqual(effect.visuals[1].opacity, 1)
-        effect.update(0.04)
+        self.assertEqual(effect.visuals[1].opacity, 0)
+        effect.update(0.02)
         self.assertEqual(len(effect.visuals), 1)
         effect.trigger(0.7, 0.7)
         effect.trigger(0.7, 1)
         self.assertEqual(len(effect.visuals), 1)
-        effect.update(0.08)
+        effect.update(0.04)
         self.assertFalse(effect.visuals)
 
     def test_hp_flash_leaves_original_red_trail_time_and_damage_width_unchanged(self):
@@ -104,7 +136,7 @@ class UiV2Tests(unittest.TestCase):
         previous = self.program.state.hud.player_health.ratio
         self.program.perform("damage_player")
         current = self.program.state.hud.player_health.ratio
-        self.assertEqual(self.program.player_flash.visuals, (HealthFlashVisual(current, previous, 1),))
+        self.assertEqual(self.program.player_flash.visuals, (HealthFlashVisual(current, previous, 0),))
         reference = HealthTrail(self.program.player_health.duration_seconds, previous)
         reference.set_ratio(current)
         for delta in (0.04, 0.04, 0.08, 0.2):
@@ -134,7 +166,7 @@ class UiV2Tests(unittest.TestCase):
         self.program.perform("damage_player")
         self.program.perform("damage_target")
         player_flash = self.program.player_flash.visuals
-        self.program.perform("next_target")
+        self.program.apply_target("enemy_b")
         self.assertFalse(self.program.target_flash.visuals)
         self.assertEqual(self.program.player_flash.visuals, player_flash)
         self.program.pause.request(True)
@@ -203,7 +235,7 @@ class UiV2Tests(unittest.TestCase):
 
     def test_target_switch_and_reset_do_not_share_v1_state(self):
         before = self.program.state
-        self.program.perform("next_target")
+        self.program.apply_target("enemy_b")
         self.assertNotEqual(self.program.state.hud.target.name, before.hud.target.name)
         self.program.perform("energy_up")
         self.assertTrue(self.program.absorption.trails)
@@ -216,23 +248,26 @@ class UiV2Tests(unittest.TestCase):
         self.assertEqual(len(self.program.state.hud.radar_contacts), 3)
         self.program.perform("damage_target")
         damaged = self.program.state.hud.target.health
-        self.program.perform("next_target")
+        self.program.apply_target("enemy_b")
         self.assertEqual(self.program.selected_target_id, "enemy_b")
         body = self.program.state.target_body
         self.assertEqual(body.x + body.width / 2, 920)
         self.assertEqual(self.program.state.hud.target.health.current, 680)
-        for _ in range(4):
-            self.program.perform("next_target")
+        self.program.apply_target("enemy_c")
+        self.program.apply_target("enemy_a")
         self.assertEqual(self.program.selected_target_id, "enemy_a")
         self.assertEqual(self.program.state.hud.target.health, damaged)
 
-    def test_empty_candidate_toggle_clears_history_and_reacquires_from_cursor(self):
+    def test_empty_candidate_toggle_clears_pending_and_reacquires_after_margin(self):
         self.program.perform("toggle_target")
         self.assertIsNone(self.program.state.hud.target)
         self.assertIsNone(self.program.state.target_body)
-        self.assertFalse(self.program.acquisition.acquired_ids)
-        self.program.mouse = (640, 0)
+        self.assertIsNone(self.program.auto_target.pending_id)
         self.program.perform("toggle_target")
+        self.program.mouse = (640, 0)
+        self.program.update(0)
+        self.assertIsNone(self.program.selected_target_id)
+        self.program.update(1)
         self.assertEqual(self.program.selected_target_id, "enemy_c")
 
     def test_right_mouse_aiming_range_and_release(self):
@@ -241,18 +276,20 @@ class UiV2Tests(unittest.TestCase):
         self.program.pico = p
         self.program.enemies["enemy_b"]["position"] = (1050, 360)
         self.program.mouse = (1050, 360)
-        self.program.perform("next_target")
+        self.program.update(0)
+        self.program.update(1)
         self.assertEqual(self.program.selected_target_id, "enemy_c")
         self.program.handle_event(SimpleNamespace(type=4, button=3, x=1050, y=360))
         self.assertTrue(self.program.aiming)
-        self.program.perform("next_target")
+        self.program.update(0)
+        self.program.update(1)
         self.assertEqual(self.program.selected_target_id, "enemy_b")
         self.program.handle_event(SimpleNamespace(type=5, button=3, x=1050, y=360))
         self.assertFalse(self.program.aiming)
 
     def test_dialogue_toggle_preserves_selection_and_three_enemy_drawing(self):
         self.program.mouse = (640, 0)
-        self.program.perform("next_target")
+        self.program.apply_target("enemy_c")
         self.assertEqual(self.program.selected_target_id, "enemy_c")
         self.program.renderer = Mock()
         self.program.view = Mock()
@@ -518,9 +555,9 @@ class UiV2Tests(unittest.TestCase):
         self.assertEqual(scanlines.call_count, 1)
         geometry = resource_geometry(self.program.config.data["v2"]["layout"],
                                      self.program.config.data["v2"]["style"]["level_curve_radius_pixels"])
-        self.assertEqual(scanlines.call_args.args[0].surface, geometry.energy_body)
+        self.assertEqual(scanlines.call_args.args[0].surface, geometry.energy_channel)
         self.assertEqual(renderer.film_grain.call_count, 1)
-        self.assertEqual(renderer.film_grain.call_args.args[0], geometry.energy_body)
+        self.assertEqual(renderer.film_grain.call_args.args[0], geometry.energy_channel)
 
     def test_bright_band_joins_occupied_y_ranges_without_spending_time_in_gaps(self):
         ranges = merge_panel_y_ranges(((100, 150), (20, 40), (30, 50), (200, 200)))

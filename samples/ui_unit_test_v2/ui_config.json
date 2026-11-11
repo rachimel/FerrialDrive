@@ -563,6 +563,15 @@
         "combat": []
     },
     "v2": {
+        "camera": {
+            "dead_zone_pixels": 80,
+            "offset_ratio": 0.2,
+            "max_offset_units": 120,
+            "response_seconds": 0.15
+        },
+        "auto_targeting": {
+            "switch_margin_seconds": 1
+        },
         "absorption_duration_seconds": 0.85,
         "targeting_sample": {
             "range_pixels": 330,
@@ -680,8 +689,9 @@
             },
             "health_damage_flash": {
                 "color": "#FFFFFF",
-                "hold_seconds": 0.04,
-                "fade_seconds": 0.08
+                "attack_seconds": 0.02,
+                "hold_seconds": 0,
+                "fade_seconds": 0.04
             },
             "dialogue_key_color": "#F0FCFF",
             "dialogue_description_opacity": 0.78,

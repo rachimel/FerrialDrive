@@ -14,7 +14,9 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from ferrial_drive.ui.components import ButtonInput, Rect
-from ferrial_drive.combat.targeting import TargetAcquisition, TargetCandidate
+from ferrial_drive.combat.targeting import TargetCandidate
+from ferrial_drive.combat.mouse_targeting import MouseAutoTargeting
+from ferrial_drive.combat.camera import LookAheadCamera
 from ferrial_drive.ui.config import UiConfig
 from ferrial_drive.ui.counter import RollingCounter
 from ferrial_drive.ui.damage import DamageNumbers
@@ -58,14 +60,19 @@ class UiUnitTestV2:
 
     def reset(self):
         data = self.preset
+        self.mouse = None
+        self.player_world = self.config.actor_anchor("player")
+        self.camera = LookAheadCamera(self.config.window["width"], self.config.window["height"],
+                                      **self.config.data["v2"]["camera"])
+        self.camera.reset(self.player_world)
         self.enemies = {entry["id"]: {**entry, "position": tuple(entry["position_pixels"]),
                                        "health": Health(**entry["health"])} for entry in data["enemies"]}
         settings = self.config.data["v2"]["targeting_sample"]
-        self.acquisition = TargetAcquisition(settings["range_pixels"], settings["aim_range_pixels"],
-                                             settings["angle_tolerance_degrees"])
+        self.auto_target = MouseAutoTargeting(settings["range_pixels"], settings["aim_range_pixels"],
+                                               **self.config.data["v2"]["auto_targeting"])
         self.targets_enabled, self.aiming = True, False
         self.selected_target_id = data["initial_target_id"]
-        self.acquisition.acquired_ids.add(self.selected_target_id)
+        self.auto_target.reset(self.selected_target_id)
         enemy = self.enemies[self.selected_target_id]
         target = TargetInfo(enemy["name"], enemy["health"])
         px, py = self.config.actor_anchor("player")
@@ -90,8 +97,8 @@ class UiUnitTestV2:
         self.player_health = HealthTrail(duration, hud.player_health.ratio)
         self.target_health = HealthTrail(duration, hud.target.health.ratio)
         flash = self.config.data["v2"]["style"]["health_damage_flash"]
-        self.player_flash = HealthDamageFlash(flash["hold_seconds"], flash["fade_seconds"])
-        self.target_flash = HealthDamageFlash(flash["hold_seconds"], flash["fade_seconds"])
+        self.player_flash = HealthDamageFlash(flash["hold_seconds"], flash["fade_seconds"], attack_seconds=flash["attack_seconds"])
+        self.target_flash = HealthDamageFlash(flash["hold_seconds"], flash["fade_seconds"], attack_seconds=flash["attack_seconds"])
         animation = self.config.data["animation"]
         self.damage_numbers = DamageNumbers(animation["damage_duration_seconds"],
                                             animation["damage_scatter_x_pixels"],
@@ -118,22 +125,43 @@ class UiUnitTestV2:
             return
         width, height = self.preset["target_body_size_pixels"]
         width, height = width * amount, height * amount
-        x, y = self.enemies[self.selected_target_id]["position"]
+        x, y = self.camera.world_to_screen(self.enemies[self.selected_target_id]["position"])
         body = Rect(x - width / 2, y - 12 * amount, width, height)
         self.state = replace(self.state, target_body=body)
 
-    def acquire_target(self):
-        origin = self.config.actor_anchor("player")
-        cursor = self.mouse if self.mouse is not None else (origin[0] + 1, origin[1])
-        candidates = (TargetCandidate(key, entry["position"]) for key, entry in self.enemies.items()
-                      if self.targets_enabled and entry["health"].current > 0)
-        self.selected_target_id = self.acquisition.acquire(candidates, origin, cursor, aiming=self.aiming)
+    def apply_target(self, target_id):
+        if target_id == self.selected_target_id:
+            return
+        self.selected_target_id = target_id
+        if self.auto_target.selected_id != target_id:
+            self.auto_target.reset(target_id)
         enemy = self.enemies.get(self.selected_target_id)
         self.set_hud(target=TargetInfo(enemy["name"], enemy["health"]) if enemy else None)
         self.set_target_size(self.target_scale)
         self.target_health.reset(enemy["health"].ratio if enemy else 0)
         self.target_flash.clear()
         self.lock_motion.select(self.selected_target_id, self.state.target_body)
+
+    def update_world_view(self, delta_seconds):
+        self.camera.update(self.player_world, self.mouse, delta_seconds)
+        candidates = tuple(TargetCandidate(key, entry["position"]) for key, entry in self.enemies.items()
+                           if self.targets_enabled and entry["health"].current > 0)
+        current = self.enemies.get(self.selected_target_id)
+        mouse_world = (self.camera.screen_to_world(self.mouse) if self.mouse is not None else
+                       current["position"] if current is not None else self.player_world)
+        target_id = self.auto_target.update(candidates, self.player_world, mouse_world, delta_seconds, aiming=self.aiming)
+        self.apply_target(target_id)
+        self.set_target_size(self.target_scale)
+        limit = self.config.data["v2"]["targeting_sample"]["aim_range_pixels"]
+        px, py = self.player_world
+        contacts = tuple(RadarContact((entry["position"][0] - px) / limit, (py - entry["position"][1]) / limit,
+                                      *self.camera.world_to_screen(entry["position"])) for entry in self.enemies.values())
+        self.set_hud(radar_contacts=contacts)
+        for track in self.lock_motion.tracks:
+            if track.target_id in self.enemies:
+                x, y = self.camera.world_to_screen(self.enemies[track.target_id]["position"])
+                width, height = track.body.width, track.body.height
+                track.body = Rect(x - width / 2, y - 12 * width / self.preset["target_body_size_pixels"][0], width, height)
 
     def enter(self):
         import pico2d.pico2d as pico
@@ -154,7 +182,7 @@ class UiUnitTestV2:
         icon = scaled_point(icon, anchor, scale)
         destination = scaled_point(destination, anchor, scale)
         enemy = self.enemies.get(self.selected_target_id)
-        start = enemy["position"] if enemy else self.config.actor_anchor("target")
+        start = self.camera.world_to_screen(enemy["position"]) if enemy else self.config.actor_anchor("target")
         for offset in (-15, 0, 15):
             self.absorption.add((start[0] + offset, start[1] - offset), icon, destination)
 
@@ -195,15 +223,14 @@ class UiUnitTestV2:
                 self.player_health.set_ratio(health.ratio)
                 self.player_flash.trigger(previous_ratio, health.ratio)
             owner = self.selected_target_id if target else "player"
-            origin = self.config.actor_anchor("player")
+            origin = self.player_world
             position = self.enemies[owner]["position"] if target else origin
             direction = (position[0] - origin[0], position[1] - origin[1]) if target else None
             self.damage_numbers.add(owner, int(applied), *position, direction=direction)
         elif action == "toggle_target":
             self.targets_enabled = not self.targets_enabled
-            self.acquire_target()
-        elif action == "next_target":
-            self.acquire_target()
+            self.auto_target.reset()
+            self.apply_target(None)
         elif action == "dialogue":
             if not self.dialogue_motion.opened and self.state.dialogue is None:
                 data = self.preset["dialogue"]
@@ -237,6 +264,7 @@ class UiUnitTestV2:
         if event.type == p.SDL_WINDOWEVENT:
             if event.window_event in (p.SDL_WINDOWEVENT_LEAVE, p.SDL_WINDOWEVENT_FOCUS_LOST):
                 self.mouse = None
+                self.auto_target.reset(self.selected_target_id)
                 self.aiming = False
                 self.inputs.reset()
             return
@@ -254,7 +282,7 @@ class UiUnitTestV2:
             actions = {p.SDLK_1: "damage_target", p.SDLK_2: "damage_player",
                        p.SDLK_3: "energy_down", p.SDLK_4: "energy_up", p.SDLK_5: "level",
                        p.SDLK_6: "overdrive", p.SDLK_7: "target_size", p.SDLK_c: "counter", p.SDLK_t: "toggle_target",
-                       p.SDLK_e: "swap", p.SDLK_f: "loadout", p.SDLK_r: "next_target", p.SDLK_F5: "reset",
+                       p.SDLK_e: "swap", p.SDLK_f: "loadout", p.SDLK_F5: "reset",
                        p.SDLK_g: "absorb", p.SDLK_SPACE: "dash", p.SDLK_d: "dialogue"}
             if event.key in actions:
                 self.perform(actions[event.key])
@@ -291,6 +319,8 @@ class UiUnitTestV2:
             self.pause.update(delta_seconds)
             return
         self.transition.update(delta_seconds)
+        if self.transition.target == "combat" and not self.transition.active:
+            self.update_world_view(delta_seconds)
         self.hit_counter.update(delta_seconds)
         self.damage_counter.update(delta_seconds)
         self.player_health.update(delta_seconds)
@@ -302,7 +332,7 @@ class UiUnitTestV2:
 
     def actor(self, owner, opacity):
         r, c = self.renderer, self.config.colors
-        x, y = self.config.actor_anchor("player") if owner == "player" else self.enemies[owner]["position"]
+        x, y = self.camera.world_to_screen(self.player_world if owner == "player" else self.enemies[owner]["position"])
         sx = sy = self.target_scale if owner == self.selected_target_id else 1
         color = c["accent" if owner == "player" else "enemy"]
         for dx, dy, width, height in ((-8, -27, 16, 13), (-15, -12, 30, 27),
@@ -331,7 +361,10 @@ class UiUnitTestV2:
                     self.actor("player", pose.opacity)
                     for enemy_id in self.enemies:
                         self.actor(enemy_id, pose.opacity)
-                self.view.combat(self.state, self.damage_numbers.visuals, pose.opacity,
+                damage_visuals = tuple(replace(visual, x=self.camera.world_to_screen((visual.x, visual.y))[0],
+                                               y=self.camera.world_to_screen((visual.x, visual.y))[1])
+                                       for visual in self.damage_numbers.visuals)
+                self.view.combat(self.state, damage_visuals, pose.opacity,
                                  counter_visual=self.damage_counter.visual,
                                  combo_visual=self.hit_counter.visual, cursor_position=self.mouse,
                                  player_trailing_ratio=self.player_health.trailing_ratio,
@@ -342,7 +375,8 @@ class UiUnitTestV2:
                                  lock_visuals=self.lock_motion.visuals,
                                  player_damage_flashes=self.player_flash.visuals,
                                  target_damage_flashes=self.target_flash.visuals,
-                                 counter_message_opacity=self.counter_message.opacity)
+                                 counter_message_opacity=self.counter_message.opacity,
+                                 player_screen=self.camera.world_to_screen(self.player_world))
         if self.pause.opacity > 0:
             self.view.pause(self.pause.opacity, self.inputs,
                             scanline_visual=self.scanline_motion.visual)

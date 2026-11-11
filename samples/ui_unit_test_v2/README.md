@@ -33,7 +33,7 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 - 본문 문자열에서 `**R**`처럼 표시한 조작키만 볼드로 출력한다. `rich_text()`는 일반/볼드 구간을 실제 글자 폭과 같은 기준선으로 배치하고, `rich_text_size()`는 표시된 전체 폭을 반환한다. 본문 최대 폭은 볼드 적용 후 392px이며 가용 폭은 504px다. 설명과 헤더의 굵기는 유지한다. 개별 텍스트는 공통 `text(..., bold=True)`·`text_size(..., bold=True)`를 사용하며 v2의 투영/네온 텍스트도 같은 옵션을 지원한다. 별도 Bold 폰트 파일 대신 SDL_ttf 합성 볼드를 사용한다.
 - 최종 배치: 미니맵 (20,20), 논리 크기 240×160·표시 배율 0.9. 대화창 (360,20), 560×130. 위쪽 여백은 같으며 패널 헤더는 `조작 가이드`다.
 - `v2.layout.target_hp_offset_pixels`: 선택한 몸통 중심 기준 HP 위치. HP 폭·높이는 `target_hp`의 마지막 두 값을 사용한다.
-- `v2.targeting_sample`: 샘플 획득 거리 330px, 우클릭 거리 460px, 각도 동률 범위 1도. 본편 밸런스 확정값이 아니다.
+- `v2.targeting_sample`: 샘플 획득 거리 330·우클릭 거리 460이다. 줌 없는 1:1 월드 단위를 사용하며 각도 동률 값은 자동 선택에 사용하지 않는다. `v2.auto_targeting.switch_margin_seconds=1`은 새 후보의 유지 대기다. `v2.camera`는 데드존 80px·변위 20%·최대 오프셋 120·응답 시정수 0.15초다. 본편 밸런스 확정값이 아니다.
 - `v2.style.hud_scale`: 일반 전투 HUD 배율 0.81. `map_scale`·`equipment_scale`은 0.9로 미니맵·웨폰·로드아웃의 현재 크기를 유지한다. 레이더는 별도로 반경 144px와 표시 치수를 조정했다. 기체·메뉴는 조정 대상이 아니다.
 - `v2.style.inactive_weapon_scale`: 비활성 무기 카드를 오른쪽 중앙 기준으로 추가 축소하는 배율 0.8. 카드의 면·외곽·무기 그림·문구를 함께 줄이며 활성 카드는 기본 크기다.
 - `v2.style.resource_label_gap_pixels`·`ultimate_label_gap_pixels`: 바 위 HP 표기와 마름모 왼쪽 문구의 간격. 에너지 레벨은 오른쪽 정렬, V와 `LV. 01`은 각각 마름모 왼쪽 위/왼쪽 아래에 두고 오른쪽 끝을 맞춘다.
@@ -58,9 +58,9 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 | 5 / 6 | 에너지 레벨 / Overdrive 표기 변경 |
 | 7 | 몸통 크기와 록온 테두리의 비례 비교: 1→1.5→0.75배 |
 | G | 필살기 아이콘을 통과해 에너지 바로 향하는 흡수 Trail |
-| R | 거리 안의 미획득 후보를 커서 각도·거리 순으로 획득. 전부 돌면 같은 입력에서 새 순환 시작 |
-| 우클릭 유지 | R 획득 거리 증가. 발사/탄 퍼짐은 이 샘플에 미연결 |
-| T | 후보 전체 비활성/활성. 비활성 시 표적·획득 이력 초기화 |
+| 마우스 이동 | 시선 카메라 오프셋·마우스 월드 좌표 최근접 후보가 1초 유지되면 자동 선택 |
+| 우클릭 유지 | 자동 획득거리 증가. 발사/탄 퍼짐은 이 샘플에 미연결 |
+| T | 후보 전체 비활성/활성. 표적·대기 후보 초기화, 활성 뒤 새 후보를 1초 확인 |
 | D | 조작 가이드 패널 열기/TV 종료 닫기, 위쪽 표적과 록온 부분 가림 비교 |
 | C / Space | COUNTER / 대시 가능 표시 변경 |
 | E / F | 활성 무기 / 로드아웃 변경 |
@@ -69,7 +69,7 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 
 도안 배치를 바로 볼 수 있도록 최초부터 98 HIT·12,004 DAMAGE·COUNTER를 표시한다. 이 값은 전투 규칙·자동 카운터 판정이 아니다. 에너지 조절·레벨·Overdrive 표기도 서로 독립적인 샘플 조작이다. V는 필살기 키 **후보 표기**이며 필살기를 발동하지 않는다. 무기 전환은 표시 상태를 바꾸며 v1의 전환 궤도 애니메이션을 복제하지 않았다.
 
-미니맵 지형과 플레이어·적은 기본 도형이다. 접촉점은 실제 샘플 적 3기의 위치에서 계산한다. 최초 A는 획득한 상태이며, R은 현재 커서를 기준으로 미획득 후보를 선택한다. 첫 커서 입력 전에는 오른쪽 방향을 사용한다. 커서 이동만으로 자동 교체하지 않는다. 적의 HP는 교체 후에도 보존하며 피해 숫자는 적별 실제 위치에 표시한다. 합의한 규칙과 게임 연결 범위는 [원거리 표적 획득 명세](../../docs/ranged_targeting.md)를 따른다.
+미니맵 지형과 플레이어·적은 기본 도형이다. 최초 A는 시연용 선택이며 첫 마우스 입력 전에는 유지한다. 마우스를 움직이면 월드 좌표 최근접 후보를 자동 확인하고 1초 뒤 교체한다. R 선택은 제거했다. 기체·록온·레이더·피해 숫자는 같은 카메라로 투영하고 HUD는 고정한다. 적별 HP는 보존한다. 합의한 규칙과 연결 범위는 [자동 표적 명세](../../docs/ranged_targeting.md)를 따른다.
 
 대화창은 표시용 샘플이다. 위쪽 적·록온·HP 위에 그려 UI 가림을 재현하며, 후보 선택은 유지한다. 실제 대화 진행·선택지·월드 장애물의 시야 차단은 포함하지 않는다.
 
@@ -77,6 +77,7 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 
 ## 검증
 
+- 이번 카메라/자동 선택/마스크/flash: UI 127개·기존 획득 7개, 총 134개 통과. 데드존·방향·최대 오프셋·역변환·프레임 분할·월드 최근접·범위/조준·1초 대기/초기화·무효 표적 해제·R 무반응·피해 숫자 투영과 빠른 flash를 검사했다. 360프레임 실제 렌더에서 마우스 변경 30→90·150→210프레임, 임시 적 출현 225→285프레임으로 각 1초 대기를 확인했다. 에너지 패턴 1,505픽셀은 패널 외곽 밖에 없었다. 출력은 `output/ui_unit_test_v2/camera_auto_target/`다. 실제 창 조작·전투 본편·GPU 성능·최종 외관 승인은 미확인이다.
 - 이번 감광/호흡 강조: 자동 126개 통과. 글자별 감광 범위·간격 1.5~2.5초·짧은 지속/복귀·결정성과 호흡 65~100%/2.4초를 검사했다. 실제 SDL에서 360프레임을 렌더해 명도 차이를 비교했다. 출력은 `output/ui_unit_test_v2/clearer_hud_motion/`다. 실제 창 사용감·개인별 시각 반응·최종 외관 승인은 미확인이다.
 - 이번 미세 명도/호흡/전환: UI 119개·획득 7개, 총 126개 통과. 글자 명도 범위·60fps 인접 변화량·경계 연속성·결정성, 호흡 주기/범위, COUNTER 중간 반전/종료, 피해 펼침 단축/수명 유지, 카운터 받침판 투명도 유지를 검사했다. 실제 SDL에서 피해·COUNTER 전환과 호흡 240프레임을 렌더하고 주요 이미지를 검토했다. 출력은 `output/ui_unit_test_v2/subtle_hud_motion/`다. 실제 창 사용감·개인별 시각 반응·GPU 성능·최종 외관 승인은 미확인이다.
 - 이번 대시 아이콘/하단 정렬: 기존 자동 122개 통과. 실제 SDL에서 창 높이 720/900 각각 전투 화면·대시 준비·비활성, 총 6개 상태를 렌더했다. 주요 이미지를 열어 꺾쇠와 SPACE 배치를 검토했다. 두 높이에서 잉크 좌우 범위는 825~873px로 같고 실제 잉크 아래 여백도 15px로 같았다. 출력은 `output/ui_unit_test_v2/dash_chevrons/`다. 실제 창 조작·외관 승인은 미확인이다.
@@ -110,9 +111,9 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 
 피해 숫자의 실제 펼침 설정은 `damage_popup.width_expand_seconds=0.025`·`height_expand_seconds=0.035`다. 각 등장/퇴장 0.06초이며 총 표시 시간은 유지한다. COUNTER는 `IndicatorFade`를 갱신해 `view.combat(counter_message_opacity=...)`로 공급한다. 시간은 `counter_message_motion`의 등장 0.06초·퇴장 0.05초다. 이는 HIT/DAMAGE의 숫자 자리 갱신 시간이나 록온 개폐 시간과 별개다.
 
-HP flash는 `HealthDamageFlash.trigger(피해 전 비율, 피해 후 비율)`·`update(delta_seconds)`로 관리하고 `visuals`를 `view.combat(player_damage_flashes=..., target_damage_flashes=...)`에 공급한다. 실제 피해가 0이면 발생시키지 않는다. 상태는 실제 HP·빨간 Trail과 분리하며 샘플에서는 Trail과 함께 일시정지한다. 표적 교체와 F5는 해당 flash를 비운다. 색/유지/감소 시간은 `v2.style.health_damage_flash`의 흰색/0.04초/0.08초다. 흰 구간은 이번 실제 피해량이며, 남은 HP나 이전 피해 Trail 전체를 빛내지 않는다.
+HP flash는 `HealthDamageFlash.trigger(피해 전 비율, 피해 후 비율)`·`update(delta_seconds)`로 관리하고 `visuals`를 `view.combat(player_damage_flashes=..., target_damage_flashes=...)`에 공급한다. 실제 피해가 0이면 발생시키지 않는다. 상태는 실제 HP·빨간 Trail과 분리하며 샘플에서는 Trail과 함께 일시정지한다. 표적 교체와 F5는 해당 flash를 비운다. `v2.style.health_damage_flash`의 등장/유지/퇴장은 0.02/0/0.04초다. 흰 구간은 이번 실제 피해량이다. 에너지의 스캔·밝은 띠·노이즈는 `panel_layer(effect_surface=...)`로 사선 채널 마스크를 공유한다.
 
-록온은 `LockOnMotion.select(target_id, body)`·`update(delta_seconds)`로 제어하고 `visuals`를 `view.combat(lock_visuals=...)`에 공급한다. 몸통 Rect는 카메라 투영 후 좌표다. 선택 유지 중에는 `update_body(body)`로 위치/크기를 갱신한다. 이전 표시의 퇴장은 보존한 Rect에서 수행하며 획득 규칙은 `TargetAcquisition`이 계속 담당한다. 샘플은 F5에서 초기 등장, R의 실제 표적 변경에서 개별 교체를 재생한다.
+록온은 `LockOnMotion.select(target_id, body)`·`update(delta_seconds)`로 제어하고 `visuals`를 `view.combat(lock_visuals=...)`에 공급한다. 몸통 Rect는 카메라 투영 후 좌표다. 선택 유지 중과 퇴장 중에도 적의 월드 위치를 현재 카메라로 투영한다. 자동 선택 규칙은 `MouseAutoTargeting`, 좌표 변환은 `LookAheadCamera`가 맡는다. 새 선택 ID에서 기존 표시 퇴장과 신규 등장을 재생한다. `view.combat(player_screen=...)`는 레이더 중심을 실제 플레이어 화면 위치에 맞춘다.
 
 `v2.style.lock_motion`은 등장 0.4초·캐럿 0.2초·퇴장 0.25초·강조선 이동 0.4초/정지 0.25초·시작 배율 0.25/퇴장 배율 1.5를 조절한다. 기본형은 정사각형이며 등장 완료 45°는 마름모다. 가이드 조작키 색/설명 투명도는 `dialogue_key_color`·`dialogue_description_opacity`다.
 

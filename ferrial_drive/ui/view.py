@@ -122,10 +122,10 @@ class UiView:
             r.rect(Rect(rect.x, rect.y, rect.width * ratio, rect.height), c[color], opacity)
         r.rect(rect, c["line"], opacity, filled=False)
 
-    def radar(self, contacts, opacity):
+    def radar(self, contacts, opacity, *, center=None):
         r, c = self.renderer, self.config
         settings = c.data["radar"]
-        x, y = c.actor_anchor("player")
+        x, y = c.actor_anchor("player") if center is None else center
         radius = settings["radius_pixels"]
         distance_limit = settings["range_units"]
         length = settings["arrow_length_pixels"]

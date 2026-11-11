@@ -83,11 +83,12 @@ class HealthFlashVisual:
 
 class HealthDamageFlash:
     """각 피해의 실제 HP 감소 구간만 잠시 강조한다. 빨간 Trail과 독립이다."""
-    def __init__(self, hold_seconds=0.04, fade_seconds=0.08):
-        if (not all(map(isfinite, (hold_seconds, fade_seconds)))
-                or hold_seconds < 0 or fade_seconds <= 0):
-            raise ValueError("HP flash 유지 시간은 0 이상, 감소 시간은 양수인 초 단위 값이어야 한다.")
+    def __init__(self, hold_seconds=0, fade_seconds=0.04, *, attack_seconds=0.02):
+        if (not all(map(isfinite, (hold_seconds, fade_seconds, attack_seconds)))
+                or hold_seconds < 0 or fade_seconds <= 0 or attack_seconds <= 0):
+            raise ValueError("HP flash 유지 시간은 0 이상, 등장/퇴장 시간은 양수인 초 단위 값이어야 한다.")
         self.hold_seconds, self.fade_seconds = hold_seconds, fade_seconds
+        self.attack_seconds = attack_seconds
         self.clear()
 
     def clear(self):
@@ -102,13 +103,14 @@ class HealthDamageFlash:
     def update(self, delta_seconds):
         if not isfinite(delta_seconds) or delta_seconds < 0:
             raise ValueError("HP flash 갱신 시간은 0 이상의 유한한 초 단위 값이어야 한다.")
-        duration = self.hold_seconds + self.fade_seconds
+        duration = self.attack_seconds + self.hold_seconds + self.fade_seconds
         self._flashes = [(low, high, elapsed + delta_seconds) for low, high, elapsed in self._flashes
                          if elapsed + delta_seconds + 1e-9 < duration]
 
     @property
     def visuals(self):
-        return tuple(HealthFlashVisual(low, high, 1 - max(0, elapsed - self.hold_seconds) / self.fade_seconds)
+        return tuple(HealthFlashVisual(low, high, min(elapsed / self.attack_seconds,
+                     1 - max(0, elapsed - self.attack_seconds - self.hold_seconds) / self.fade_seconds))
                      for low, high, elapsed in self._flashes)
 
 

@@ -123,15 +123,16 @@ class UiV2View(UiView):
                                         self.config.colors["panel"] if fill_color is None else fill_color,
                                         opacity * fill, self.style["panel_border"]["filter_samples"])
 
-    def panel_layer(self, points, color, opacity, *, fill_opacity=None, grain=False):
+    def panel_layer(self, points, color, opacity, *, fill_opacity=None, grain=False, effect_surface=None):
         """임의 패널의 배경만 반투명·스캔 처리한다. 내용은 호출자가 이후 그린다."""
         fill = self.style["surface_opacity"] if fill_opacity is None else min(fill_opacity, self.style["surface_opacity"])
         self.polygon(points, color, opacity * fill, filled=True)
-        self.panel_scanlines(PanelGeometry(points, ()), opacity, self.style["panel_scanlines"]["panels"])
+        mask = points if effect_surface is None else effect_surface
+        self.panel_scanlines(PanelGeometry(mask, ()), opacity, self.style["panel_scanlines"]["panels"])
         if grain:
             settings = self.style["panel_film_grain"]
             frame = int(self._scanline_visual.elapsed_seconds * settings["frames_per_second"] + 1e-9) % settings["frame_count"]
-            self.renderer.film_grain(points, opacity * settings["opacity"], frame,
+            self.renderer.film_grain(mask, opacity * settings["opacity"], frame,
                                      tile_pixels=settings["tile_pixels"], cell_pixels=settings["cell_pixels"], seed=settings["seed"])
 
     def panel_border(self, parts, opacity, *, part_opacities=None):
@@ -383,7 +384,7 @@ class UiV2View(UiView):
         r.text("HP", x + value_width + 9, top - hp_height - gap, "hud_small", c["muted"], hp_alpha)
         x, y, width, height = self.layout["energy_bar"]
         outline, channel = geometry.energy_outline, geometry.energy_channel
-        self.panel_layer(geometry.energy_body, c["panel"], opacity, grain=True)
+        self.panel_layer(geometry.energy_body, c["panel"], opacity, grain=True, effect_surface=channel)
         self.polygon(geometry.level_shape, c["panel"], opacity * self.style["surface_opacity"], filled=True)
         self.stroke(outline + outline[:1], c["text"], opacity * 0.75, 1.5)
         self.polygon(channel, c["energy"], opacity * 0.1, filled=True)
@@ -577,13 +578,13 @@ class UiV2View(UiView):
                counter_visual=None, combo_visual=None, counters_opacity=1,
                cursor_position=None, player_trailing_ratio=None, target_trailing_ratio=None,
                absorption_trails=(), scanline_visual=None, dialogue_visual=None, lock_visuals=None,
-               player_damage_flashes=(), target_damage_flashes=(), counter_message_opacity=None):
+               player_damage_flashes=(), target_damage_flashes=(), counter_message_opacity=None, player_screen=None):
         r, c, hud = self.renderer, self.config.colors, state.hud
         scale = self.style["hud_scale"]
         width, height = self.config.window["width"], self.config.window["height"]
         with r.scaled(self.style["map_scale"], self.layout["minimap"][:2]):
             self.minimap(hud, opacity, scanline_visual)
-        self.radar(hud.radar_contacts, opacity)
+        self.radar(hud.radar_contacts, opacity, center=player_screen)
         body = state.target_body
         target_anchor = ((body.x + body.width / 2, body.y + body.height / 2)
                          if body is not None else self.config.actor_anchor("target"))
