@@ -2,39 +2,20 @@
 
 from dataclasses import dataclass
 from math import cos, isfinite, tau
-from bisect import bisect_right
-from functools import lru_cache
-from random import Random
 
 from ferrial_drive.animation import ScalarAnimation
 
 
-@lru_cache(maxsize=128)
-def _brightness_sample(index, seed):
-    return Random(index + seed * 65537).random()
-
-
-@lru_cache(maxsize=32)
-def _flicker_schedule(seed, minimum_seconds, maximum_seconds):
-    random = Random(seed * 193)
-    times = [0]
-    for _ in range(32):
-        times.append(times[-1] + random.uniform(minimum_seconds, maximum_seconds))
-    return tuple(times)
-
-
-def subtle_flicker(elapsed_seconds, *, minimum_opacity=0, interval_min_seconds=1.5,
-                   interval_max_seconds=2.5, dip_seconds=0.08, seed=1):
-    """불규칙한 간격으로 짧게 점멸한다. 최소 불투명도 0이면 완전히 끈다."""
-    if (not all(map(isfinite, (elapsed_seconds, minimum_opacity, interval_min_seconds, interval_max_seconds, dip_seconds)))
+def subtle_flicker(elapsed_seconds, *, minimum_opacity=0.5, period_seconds=0.5,
+                   dim_seconds=0.25, seed=1):
+    """고정 주기로 평소 밝기와 최소 불투명도를 교대한다. seed는 위상만 나눈다."""
+    if (not all(map(isfinite, (elapsed_seconds, minimum_opacity, period_seconds, dim_seconds)))
             or elapsed_seconds < 0 or not 0 <= minimum_opacity <= 1
-            or not 0 < dip_seconds < interval_min_seconds <= interval_max_seconds):
-        raise ValueError("밝기 시간·범위·간격이 유효하지 않다.")
-    times = _flicker_schedule(seed, interval_min_seconds, interval_max_seconds)
-    position = (elapsed_seconds + _brightness_sample(0, seed) * times[-1]) % times[-1]
-    dip_index = bisect_right(times, position) - 1
-    elapsed = position - times[dip_index]
-    return minimum_opacity if elapsed < dip_seconds else 1
+            or not 0 < dim_seconds < period_seconds):
+        raise ValueError("밝기 시간·범위·주기가 유효하지 않다.")
+    phase_seconds = (seed % 16) / 16 * period_seconds
+    position = (elapsed_seconds + phase_seconds) % period_seconds
+    return minimum_opacity if position < dim_seconds else 1
 
 
 def breathing_opacity(elapsed_seconds, *, period_seconds=2.4, minimum_opacity=0.65):

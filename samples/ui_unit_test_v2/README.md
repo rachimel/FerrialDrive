@@ -107,7 +107,7 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 
 ## 등장 효과 연결 지점
 
-글자 점멸은 `v2.style.text_flicker`의 최소 불투명도 0·간격 1.5~2.5초·소등 0.08초다. 페이드 없이 완전히 꺼졌다 켜진다. 고정 seed의 32개 간격을 순환하고 글자별 위상을 분리한다. 호흡은 `energy_breathing`의 최소 0.65·주기 2.4초다. 각각 최소 불투명도를 1로 두면 해당 변화가 정지한다. 기존 `ScanlineVisual.elapsed_seconds`를 사용하며 글자 명도는 패널에 적용하지 않는다.
+글자 점멸은 `v2.style.text_flicker`의 최소 불투명도 0.5·주기 `period_seconds=0.5`·감광 시간 `dim_seconds=0.25`다. 평소 밝기 0.25초와 50% 밝기 0.25초를 페이드 없이 반복한다. 수치는 시험값이며 고정 seed는 글자별 위상만 분리한다. 호흡은 `energy_breathing`의 최소 0.65·주기 2.4초다. 각각 최소 불투명도를 1로 두면 해당 변화가 정지한다. 기존 `ScanlineVisual.elapsed_seconds`를 사용하며 글자 명도는 패널에 적용하지 않는다.
 
 피해 숫자의 실제 펼침 설정은 `damage_popup.width_expand_seconds=0.025`·`height_expand_seconds=0.035`다. 각 등장/퇴장 0.06초이며 총 표시 시간은 유지한다. COUNTER는 `IndicatorFade`를 갱신해 `view.combat(counter_message_opacity=...)`로 공급한다. 시간은 `counter_message_motion`의 등장 0.06초·퇴장 0.05초다. 이는 HIT/DAMAGE의 숫자 자리 갱신 시간이나 록온 개폐 시간과 별개다.
 
