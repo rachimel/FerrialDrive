@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [UI v2 OVERDRIVE Bloom·호흡·굵기](2026-11-11-ui-v2-overdrive-bloom.md): TIME(scope). 에너지 색 Bloom·호흡·자간 확대·굵기 조정 요청의 개별 시각을 확인한다.
+
 - [UI v2 OVERDRIVE 중앙 정렬·SUITE Light](2026-11-11-ui-v2-overdrive-suite.md): TIME(scope). 중앙 정렬·가는 SUITE·넓은 자간 요청 발언의 정확한 시각을 확인한다.
 
 - [UI v2 록온 25% 가속](2026-11-11-ui-v2-lock-on-speed.md): TIME(scope). 가속 요청 발언의 정확한 시각을 확인한다.

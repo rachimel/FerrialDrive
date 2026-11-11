@@ -401,7 +401,8 @@ class UiV2View(UiView):
             label_y = sum(point[1] for point in channel) / 4 - max(size[1] for size in sizes) / 2
             label_x = label_center - label_width / 2
             for letter, (letter_width, _) in zip(label, sizes):
-                r.text(letter, label_x, label_y, role, c["text"], energy_alpha)
+                r.neon_text(letter, label_x, label_y, role, c["text"], energy_alpha,
+                            glow_color=c["energy"], **self.style["overdrive_bloom"])
                 label_x += letter_width + spacing
         else:
             label = "E N E R G Y"

@@ -108,7 +108,7 @@
             "size": 16
         },
         "v2_overdrive": {
-            "path": "../../data/fonts/SUITE-otf/SUITE-Light.otf",
+            "path": "../../data/fonts/SUITE-otf/SUITE-Regular.otf",
             "size": 16
         },
         "v2_level": {
@@ -812,7 +812,11 @@
             "equipment_scale": 0.9,
             "inactive_weapon_scale": 0.8,
             "resource_label_gap_pixels": 4,
-            "overdrive_letter_spacing_pixels": 6,
+            "overdrive_letter_spacing_pixels": 8,
+            "overdrive_bloom": {
+                "radius_pixels": 6,
+                "glow_opacity": 0.85
+            },
             "ultimate_label_gap_pixels": 4,
             "ultimate_label_padding_pixels": [
                 4,
