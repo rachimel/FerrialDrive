@@ -686,8 +686,9 @@ class UiV2View(UiView):
         counter_visual = counter_visual or CounterVisual(hud.total_damage_dealt, hud.total_damage_dealt, 1, 1)
         for visual, role, label, y in ((combo_visual, "combo_number", "combo", self.layout["hit_y"]),
                                      (counter_visual, "damage_total", "damage", self.layout["damage_y"])):
-            right = width - self.style["counters"][label]["right_margin_pixels"]
-            with r.scaled(scale, (right, y)):
+            settings = self.style["counters"][label]
+            right = width - settings["right_margin_pixels"]
+            with r.scaled(scale * settings["ui_scale"], (right, y)):
                 self.perspective_counter(visual, role, label, y, alpha)
         counter_alpha = float(state.counter) if counter_message_opacity is None else counter_message_opacity
         if counter_alpha > 0:

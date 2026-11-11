@@ -619,8 +619,8 @@
                 260,
                 70
             ],
-            "hit_y": 178,
-            "damage_y": 318,
+            "hit_y": 266,
+            "damage_y": 376,
             "counter_message": [
                 810,
                 342
@@ -780,6 +780,7 @@
             "surface_opacity": 0.55,
             "counters": {
                 "combo": {
+                    "ui_scale": 0.9,
                     "depth": 0.16,
                     "lean": 0.14,
                     "slope": 0.055,
@@ -788,6 +789,7 @@
                     "right_margin_pixels": 14
                 },
                 "damage": {
+                    "ui_scale": 0.9,
                     "depth": 0.16,
                     "lean": 0.14,
                     "slope": 0.055,
