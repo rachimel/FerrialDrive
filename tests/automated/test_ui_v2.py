@@ -219,7 +219,7 @@ class UiV2Tests(unittest.TestCase):
             DialoguePanelMotion(open_seconds=0)
 
     def test_dialogue_view_scales_frame_without_squashing_or_revealing_text(self):
-        renderer = SimpleNamespace(filtered_polygons=Mock(), text=Mock())
+        renderer = SimpleNamespace(filtered_polygons=Mock(), text=Mock(), rich_text=Mock())
         view = UiV2View(self.program.config, renderer)
         x, y, width, height = view.layout["dialogue"]
         with patch.object(view, "panel_surface") as surface, patch.object(view, "panel_border") as border, \
@@ -232,11 +232,15 @@ class UiV2Tests(unittest.TestCase):
             self.assertEqual(max(px for px, _ in geometry.surface), x + width)
             self.assertEqual(len(border.call_args.args[0]), 10)
             renderer.text.assert_not_called()
+            renderer.rich_text.assert_not_called()
             view.dialogue(self.program.state.dialogue, 1, panel_visual=DialoguePanelVisual())
-            self.assertEqual(renderer.text.call_count, 5)
+            self.assertEqual(renderer.text.call_count, 1)
+            self.assertEqual(renderer.rich_text.call_count, 4)
         renderer.text.reset_mock()
+        renderer.rich_text.reset_mock()
         view.dialogue(self.program.state.dialogue, 1, panel_visual=DialoguePanelVisual(0, 0.4, 0, 0.85))
         renderer.text.assert_not_called()
+        renderer.rich_text.assert_not_called()
         self.assertEqual(renderer.filtered_polygons.call_count, 3)
 
     def test_corner_stroke_tapers_and_shares_join_cross_sections(self):

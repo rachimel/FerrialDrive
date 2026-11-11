@@ -200,9 +200,9 @@ class UiV2View(UiView):
         role = self.style["dialogue_body_role"]
         first_line = y + padding_y + self.style["dialogue_body_offset_pixels"]
         for index, line in enumerate(info.lines):
-            self.renderer.text(line, x + padding_x, first_line + index * self.style["dialogue_line_spacing_pixels"],
-                               role, self.config.colors["text"], opacity,
-                               max_width=width - padding_x * 2)
+            self.renderer.rich_text(line, x + padding_x, first_line + index * self.style["dialogue_line_spacing_pixels"],
+                                    role, self.config.colors["text"], opacity,
+                                    max_width=width - padding_x * 2)
 
     def dialogue_shutdown_line(self, center, width, opacity, flash):
         """TV 종료의 얇은 가로 빛과 마지막 점. 면·테두리·본문과 분리한다."""

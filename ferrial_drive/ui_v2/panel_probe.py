@@ -16,7 +16,7 @@ class PanelProbeRenderer:
     def __getattr__(self, name):
         if name in ("text_size", "text_ascent", "digit_ink_bottom"):
             return getattr(self.source, name)
-        if name in ("clear", "text", "neon_text", "line", "rect", "ring", "filled_triangle",
+        if name in ("clear", "text", "rich_text", "neon_text", "line", "rect", "ring", "filled_triangle",
                     "warped_text", "filtered_polygons", "scanline_layer", "film_grain",
                     "weapon_silhouette", "image", "metallic_rect"):
             return lambda *args, **kwargs: None

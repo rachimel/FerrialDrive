@@ -178,6 +178,59 @@ class UiV2FilteringTests(unittest.TestCase):
             renderer.close()
         self.assertFalse(renderer.neon_textures)
 
+    def test_bold_changes_ink_and_metrics_without_leaking_font_style_or_cache(self):
+        font = Path(__file__).resolve().parents[2] / "data/fonts/Cafe24OhsquareAir-v2.0/Cafe24OhsquareAir-v2.0.otf"
+        renderer = PicoV2Renderer({"text": font}, {"text": 24})
+        p = self.pico
+        def pixels():
+            data = (c_ubyte * (96 * 96 * 4))()
+            self.assertEqual(p.SDL_RenderReadPixels(p.renderer, None, p.SDL_PIXELFORMAT_RGBA32, data, 96 * 4), 0)
+            return bytes(data)
+        try:
+            original_style = p.TTF_GetFontStyle(renderer.fonts["text"].font)
+            images = []
+            widths = []
+            for bold in (False, True, False):
+                renderer.clear("#000000")
+                renderer.text("RF5", 8, 20, "text", "#FFFFFF", bold=bold)
+                images.append(pixels())
+                widths.append(renderer.text_size("RF5", "text", bold=bold)[0])
+                self.assertEqual(p.TTF_GetFontStyle(renderer.fonts["text"].font), original_style)
+            self.assertNotEqual(images[0], images[1])
+            self.assertEqual(images[0], images[2])
+            self.assertGreaterEqual(widths[1], widths[0])
+            self.assertEqual(len(renderer.textures), 2)
+            self.assertEqual(len(renderer.measurements), 2)
+            with patch.object(p, "TTF_SizeUTF8", return_value=-1), self.assertRaises(RuntimeError):
+                renderer.text_size("failure", "text", bold=True)
+            self.assertEqual(p.TTF_GetFontStyle(renderer.fonts["text"].font), original_style)
+        finally:
+            renderer.close()
+
+    def test_inline_bold_uses_styled_advances_baselines_and_width_limit(self):
+        font = Path(__file__).resolve().parents[2] / "data/fonts/Cafe24OhsquareAir-v2.0/Cafe24OhsquareAir-v2.0.otf"
+        renderer = PicoV2Renderer({"text": font}, {"text": 24})
+        try:
+            text = "**R** target **F5** reset"
+            with patch.object(renderer, "text") as draw:
+                renderer.rich_text(text, 5, 10, "text", "#FFFFFF")
+                calls = draw.call_args_list
+                self.assertEqual([call.args[0] for call in calls], ["R", " target ", "F5", " reset"])
+                self.assertEqual([call.kwargs["bold"] for call in calls], [True, False, True, False])
+                cursor = 5
+                for call in calls:
+                    self.assertEqual(call.args[1], cursor)
+                    cursor += renderer.text_size(call.args[0], "text", bold=call.kwargs["bold"])[0]
+                self.assertEqual(renderer.rich_text_size(text, "text")[0], cursor - 5)
+                draw.reset_mock()
+                renderer.rich_text(text, 5, 10, "text", "#FFFFFF", max_width=1)
+                self.assertEqual(draw.call_count, 1)
+                self.assertEqual(draw.call_args.kwargs["max_width"], 1)
+            self.assertEqual(renderer._bold_runs("unclosed **key"), (("unclosed **key", False),))
+            self.assertEqual(renderer._bold_runs("**"), (("**", False),))
+        finally:
+            renderer.close()
+
 
 if __name__ == "__main__":
     unittest.main()

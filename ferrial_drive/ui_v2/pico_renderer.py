@@ -104,11 +104,12 @@ class PicoV2Renderer(PicoRenderer):
                     if p.SDL_RenderGeometry(p.renderer, texture, triangle, 3, None, 0) != 0:
                         raise RuntimeError("Film grain 표시 실패")
 
-    def _neon_texture(self, text, role, color, radius):
+    def _neon_texture(self, text, role, color, radius, *, bold=False):
         p = self.pico
-        key = (text, role, color, radius)
+        key = (text, role, color, radius, bold)
         if key not in self.neon_textures:
-            original = p.TTF_RenderUTF8_Blended(self.fonts[role].font, text.encode("utf-8"), p.SDL_Color(255, 255, 255, 255))
+            with self._font_style(role, bold) as font:
+                original = p.TTF_RenderUTF8_Blended(font, text.encode("utf-8"), p.SDL_Color(255, 255, 255, 255))
             if not original:
                 raise RuntimeError("네온 글자 마스크 생성 실패")
             try:
@@ -169,20 +170,20 @@ class PicoV2Renderer(PicoRenderer):
         self.neon_textures.move_to_end(key)
         return self.neon_textures[key]
 
-    def _draw_neon_glow(self, text, x, y, role, color, opacity, radius):
-        texture, width, height, pad = self._neon_texture(text, role, color, radius)
+    def _draw_neon_glow(self, text, x, y, role, color, opacity, radius, *, bold=False):
+        texture, width, height, pad = self._neon_texture(text, role, color, radius, bold=bold)
         self.pico.SDL_SetTextureAlphaMod(texture, self.rgba(color, opacity)[3])
         destination = self.pico.SDL_FRect(x - pad, y - pad, width, height)
         if self.pico.SDL_RenderCopyF(self.pico.renderer, texture, None, byref(destination)) != 0:
             raise RuntimeError("네온 광 표시 실패")
 
-    def neon_text(self, text, x, y, role, color, opacity=1, *, glow_color, radius_pixels=4, glow_opacity=0.12):
+    def neon_text(self, text, x, y, role, color, opacity=1, *, glow_color, radius_pixels=4, glow_opacity=0.12, bold=False):
         """캐시한 가우시안 광을 먼저 그리고 원래 글자를 같은 위치에 겹친다."""
         if opacity <= 0 or not text:
             return
         if glow_opacity > 0 and radius_pixels > 0:
-            self._draw_neon_glow(text, x, y, role, glow_color, opacity * glow_opacity, radius_pixels)
-        self.text(text, x, y, role, color, opacity)
+            self._draw_neon_glow(text, x, y, role, glow_color, opacity * glow_opacity, radius_pixels, bold=bold)
+        self.text(text, x, y, role, color, opacity, bold=bold)
 
     def _scanline_texture(self, height, spacing, thickness, color):
         """위상과 무관한 세로 반복 패턴. 두 배 해상도로 만들어 선형 보간한다."""
@@ -405,11 +406,11 @@ class PicoV2Renderer(PicoRenderer):
             raise RuntimeError("v2 도형 채움 실패: " + p.SDL_GetError().decode("utf-8", errors="replace"))
 
     def warped_text(self, text, x, y, role, color, project, opacity=1, *,
-                    scale_x=1, scale_y=1, clip_rect=None):
+                    scale_x=1, scale_y=1, clip_rect=None, bold=False):
         """평면에서 글자를 자른 뒤 투영해 회전 카운터의 경계를 유지한다."""
         if not text or opacity <= 0 or scale_x <= 0 or scale_y <= 0:
             return
-        texture, width, height = self._text_texture(text, role, color)
+        texture, width, height = self._text_texture(text, role, color, bold=bold)
         draw_width, draw_height = width * scale_x, height * scale_y
         left, top, right, bottom = x, y, x + draw_width, y + draw_height
         if clip_rect is not None:

@@ -6,6 +6,7 @@ from ctypes import byref, c_int, memmove
 from functools import lru_cache
 from math import ceil, cos, exp, floor, sin, sqrt, tau
 from pathlib import Path
+import re
 
 from .components import Rect
 from .weapon_icons import weapon_icon_pixels
@@ -201,41 +202,83 @@ class PicoRenderer:
             if left <= right:
                 pico.SDL_RenderDrawLine(pico.renderer, left, pixel_y, right, pixel_y)
 
-    def _measure(self, text: str, role: str) -> tuple[int, int]:
-        key = (text, role)
+    @contextmanager
+    def _font_style(self, role, bold=False):
+        font = self.fonts[role].font
+        original = self.pico.TTF_GetFontStyle(font)
+        style = original | self.pico.TTF_STYLE_BOLD if bold else original & ~self.pico.TTF_STYLE_BOLD
+        if style != original:
+            self.pico.TTF_SetFontStyle(font, style)
+        try:
+            yield font
+        finally:
+            if style != original:
+                self.pico.TTF_SetFontStyle(font, original)
+
+    def _measure(self, text: str, role: str, *, bold=False) -> tuple[int, int]:
+        key = (text, role, bold)
         if key in self.measurements:
             self.measurements.move_to_end(key)
             return self.measurements[key]
         width, height = c_int(), c_int()
-        if self.pico.TTF_SizeUTF8(self.fonts[role].font, text.encode("utf-8"),
-                                  byref(width), byref(height)) != 0:
-            raise RuntimeError("텍스트 크기를 계산할 수 없다.")
+        with self._font_style(role, bold) as font:
+            if self.pico.TTF_SizeUTF8(font, text.encode("utf-8"), byref(width), byref(height)) != 0:
+                raise RuntimeError("텍스트 크기를 계산할 수 없다.")
         size = (width.value, height.value)
         self.measurements[key] = size
         if len(self.measurements) > 512:
             self.measurements.popitem(last=False)
         return size
 
-    def text_size(self, text: str, role: str) -> tuple[int, int]:
-        return self._measure(text, role)
+    def text_size(self, text: str, role: str, *, bold=False) -> tuple[int, int]:
+        return self._measure(text, role, bold=bold)
 
-    def text_ascent(self, role: str) -> int:
-        if role not in self.ascents:
-            self.ascents[role] = self.pico.TTF_FontAscent(self.fonts[role].font)
-        return self.ascents[role]
+    def text_ascent(self, role: str, *, bold=False) -> int:
+        key = (role, bold)
+        if key not in self.ascents:
+            with self._font_style(role, bold) as font:
+                self.ascents[key] = self.pico.TTF_FontAscent(font)
+        return self.ascents[key]
+
+    @staticmethod
+    @lru_cache(maxsize=128)
+    def _bold_runs(text):
+        """**표기** 구간만 굵게 해석한다. 닫히지 않은 표기는 원문으로 둔다."""
+        return tuple((part[2:-2], True) if len(part) > 4 and part.startswith("**") and part.endswith("**") else (part, False)
+                     for part in re.split(r"(\*\*[^*]+\*\*)", text) if part)
+
+    def rich_text_size(self, text, role):
+        sizes = [self.text_size(part, role, bold=bold) for part, bold in self._bold_runs(text)]
+        return sum(width for width, _ in sizes), max((height for _, height in sizes), default=0)
+
+    def rich_text(self, text, x, y, role, color, opacity=1, *, max_width=None):
+        """한 줄의 일반/볼드 구간을 같은 기준선에 배치한다. 초과 구간은 말줄임한다."""
+        if opacity <= 0 or not text:
+            return
+        cursor, ascent = x, self.text_ascent(role)
+        for part, bold in self._bold_runs(text):
+            width, _ = self.text_size(part, role, bold=bold)
+            remaining = None if max_width is None else max_width - (cursor - x)
+            if remaining is not None and remaining <= 0:
+                break
+            self.text(part, cursor, y + ascent - self.text_ascent(role, bold=bold), role, color, opacity,
+                      max_width=remaining, bold=bold)
+            if remaining is not None and width > remaining:
+                break
+            cursor += width
 
     def text(self, text: str, x: float, y: float, role: str, color: str,
              opacity: float = 1, max_width: float | None = None, align: str = "left",
-             scale_x: float = 1, scale_y: float = 1, clip_rect: Rect | None = None):
+             scale_x: float = 1, scale_y: float = 1, clip_rect: Rect | None = None, *, bold=False):
         if opacity <= 0 or not text or scale_x <= 0 or scale_y <= 0:
             return
-        if max_width is not None and self._measure(text, role)[0] > max_width:
-            while text and self._measure(text + "…", role)[0] > max_width:
+        if max_width is not None and self._measure(text, role, bold=bold)[0] > max_width:
+            while text and self._measure(text + "…", role, bold=bold)[0] > max_width:
                 text = text[:-1]
             if not text:
                 return
             text += "…"
-        texture, width, height = self._text_texture(text, role, color)
+        texture, width, height = self._text_texture(text, role, color, bold=bold)
         pico = self.pico
         draw_width, draw_height = round(width * scale_x), round(height * scale_y)
         if draw_width <= 0 or draw_height <= 0:
@@ -264,13 +307,13 @@ class PicoRenderer:
         pico.SDL_RenderCopy(pico.renderer, texture, byref(source) if source is not None else None,
                             byref(destination))
 
-    def _text_texture(self, text: str, role: str, color: str):
-        key = (text, role, color)
+    def _text_texture(self, text: str, role: str, color: str, *, bold=False):
+        key = (text, role, color, bold)
         pico = self.pico
         if key not in self.textures:
             red, green, blue, _ = self.rgba(color)
-            surface = pico.TTF_RenderUTF8_Blended(
-                self.fonts[role].font, text.encode("utf-8"), pico.SDL_Color(red, green, blue, 255))
+            with self._font_style(role, bold) as font:
+                surface = pico.TTF_RenderUTF8_Blended(font, text.encode("utf-8"), pico.SDL_Color(red, green, blue, 255))
             if not surface:
                 raise RuntimeError(f"텍스트 렌더링 실패: {text}")
             width, height = surface.contents.w, surface.contents.h
