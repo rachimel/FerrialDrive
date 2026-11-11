@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [UI v2 HP flash·불규칙 감광](2026-11-11-ui-v2-theater-flicker.md): TIME(scope). 퇴장 시간 요청·프로젝터식 감광 선택·구현과 검증 보고의 정확한 시각을 확인한다.
+
 - [UI v2 시선 카메라·자동 표적](2026-11-11-ui-v2-camera-auto-target.md): TIME(scope). 마스크/flash·카메라/자동 선택 요청·범위 추천/선택·R 제거·1초 유지·데드존 답변과 검증 보고의 정확한 시각을 확인한다.
 
 - [성능 프로파일러·py-spy 연결](2026-11-11-performance-profiler.md): TIME(scope). 도구 명칭·사용률/Flame Graph·기존 프로파일러 연결 제안과 수용의 개별 발언 시각을 확인한다.

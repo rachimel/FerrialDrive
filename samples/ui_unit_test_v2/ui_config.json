@@ -665,7 +665,7 @@
         ],
         "style": {
             "text_flicker": {
-                "minimum_opacity": 0.88,
+                "minimum_opacity": 0.65,
                 "interval_min_seconds": 1.5,
                 "interval_max_seconds": 2.5,
                 "dip_seconds": 0.08
@@ -691,7 +691,7 @@
                 "color": "#FFFFFF",
                 "attack_seconds": 0.02,
                 "hold_seconds": 0,
-                "fade_seconds": 0.04
+                "fade_seconds": 0.08
             },
             "dialogue_key_color": "#F0FCFF",
             "dialogue_description_opacity": 0.78,

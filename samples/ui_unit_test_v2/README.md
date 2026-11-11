@@ -107,11 +107,11 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 
 ## 등장 효과 연결 지점
 
-글자 감광은 `v2.style.text_flicker`의 최소 불투명도 0.88·간격 1.5~2.5초·지속 0.08초다. 고정 seed의 32개 간격을 순환하고 글자별 위상을 분리한다. 호흡은 `energy_breathing`의 최소 0.65·주기 2.4초다. 각각 최소 불투명도를 1로 두면 해당 변화가 정지한다. 기존 `ScanlineVisual.elapsed_seconds`를 사용하며 글자 명도는 패널에 적용하지 않는다.
+글자 감광은 `v2.style.text_flicker`의 최소 불투명도 0.65·간격 1.5~2.5초·지속 0.08초다. 각 감광의 최저 밝기는 65~79% 사이에서 달라진다. 고정 seed의 32개 간격을 순환하고 글자별 위상을 분리한다. 호흡은 `energy_breathing`의 최소 0.65·주기 2.4초다. 각각 최소 불투명도를 1로 두면 해당 변화가 정지한다. 기존 `ScanlineVisual.elapsed_seconds`를 사용하며 글자 명도는 패널에 적용하지 않는다.
 
 피해 숫자의 실제 펼침 설정은 `damage_popup.width_expand_seconds=0.025`·`height_expand_seconds=0.035`다. 각 등장/퇴장 0.06초이며 총 표시 시간은 유지한다. COUNTER는 `IndicatorFade`를 갱신해 `view.combat(counter_message_opacity=...)`로 공급한다. 시간은 `counter_message_motion`의 등장 0.06초·퇴장 0.05초다. 이는 HIT/DAMAGE의 숫자 자리 갱신 시간이나 록온 개폐 시간과 별개다.
 
-HP flash는 `HealthDamageFlash.trigger(피해 전 비율, 피해 후 비율)`·`update(delta_seconds)`로 관리하고 `visuals`를 `view.combat(player_damage_flashes=..., target_damage_flashes=...)`에 공급한다. 실제 피해가 0이면 발생시키지 않는다. 상태는 실제 HP·빨간 Trail과 분리하며 샘플에서는 Trail과 함께 일시정지한다. 표적 교체와 F5는 해당 flash를 비운다. `v2.style.health_damage_flash`의 등장/유지/퇴장은 0.02/0/0.04초다. 흰 구간은 이번 실제 피해량이다. 에너지의 스캔·밝은 띠·노이즈는 `panel_layer(effect_surface=...)`로 사선 채널 마스크를 공유한다.
+HP flash는 `HealthDamageFlash.trigger(피해 전 비율, 피해 후 비율)`·`update(delta_seconds)`로 관리하고 `visuals`를 `view.combat(player_damage_flashes=..., target_damage_flashes=...)`에 공급한다. 실제 피해가 0이면 발생시키지 않는다. 상태는 실제 HP·빨간 Trail과 분리하며 샘플에서는 Trail과 함께 일시정지한다. 표적 교체와 F5는 해당 flash를 비운다. `v2.style.health_damage_flash`의 등장/유지/퇴장은 0.02/0/0.08초다. 흰 구간은 이번 실제 피해량이다. 에너지의 스캔·밝은 띠·노이즈는 `panel_layer(effect_surface=...)`로 사선 채널 마스크를 공유한다.
 
 록온은 `LockOnMotion.select(target_id, body)`·`update(delta_seconds)`로 제어하고 `visuals`를 `view.combat(lock_visuals=...)`에 공급한다. 몸통 Rect는 카메라 투영 후 좌표다. 선택 유지 중과 퇴장 중에도 적의 월드 위치를 현재 카메라로 투영한다. 자동 선택 규칙은 `MouseAutoTargeting`, 좌표 변환은 `LookAheadCamera`가 맡는다. 새 선택 ID에서 기존 표시 퇴장과 신규 등장을 재생한다. `view.combat(player_screen=...)`는 레이더 중심을 실제 플레이어 화면 위치에 맞춘다.
 

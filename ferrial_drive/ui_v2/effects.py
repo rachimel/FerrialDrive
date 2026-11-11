@@ -23,22 +23,24 @@ def _flicker_schedule(seed, minimum_seconds, maximum_seconds):
     return tuple(times)
 
 
-def subtle_flicker(elapsed_seconds, *, minimum_opacity=0.88, interval_min_seconds=1.5,
+def subtle_flicker(elapsed_seconds, *, minimum_opacity=0.65, interval_min_seconds=1.5,
                    interval_max_seconds=2.5, dip_seconds=0.08, seed=1):
-    """평소 밝기를 유지하다가 간격을 두고 한 번씩 짧게 어둡게 한다."""
+    """불규칙한 간격과 감광 깊이로 짧게 어둡게 한다. 완전히 끄지 않는다."""
     if (not all(map(isfinite, (elapsed_seconds, minimum_opacity, interval_min_seconds, interval_max_seconds, dip_seconds)))
             or elapsed_seconds < 0 or not 0 <= minimum_opacity <= 1
             or not 0 < dip_seconds < interval_min_seconds <= interval_max_seconds):
         raise ValueError("밝기 시간·범위·간격이 유효하지 않다.")
     times = _flicker_schedule(seed, interval_min_seconds, interval_max_seconds)
     position = (elapsed_seconds + _brightness_sample(0, seed) * times[-1]) % times[-1]
-    elapsed = position - times[bisect_right(times, position) - 1]
+    dip_index = bisect_right(times, position) - 1
+    elapsed = position - times[dip_index]
     if elapsed >= dip_seconds:
         return 1
     edge_seconds = min(0.012, dip_seconds / 4)
     amount = min(1, elapsed / edge_seconds, (dip_seconds - elapsed) / edge_seconds)
     amount = amount * amount * (3 - 2 * amount)
-    return 1 - (1 - minimum_opacity) * amount
+    depth = 1 - 0.4 * _brightness_sample(dip_index + 1, seed)
+    return 1 - (1 - minimum_opacity) * depth * amount
 
 
 def breathing_opacity(elapsed_seconds, *, period_seconds=2.4, minimum_opacity=0.65):
@@ -83,7 +85,7 @@ class HealthFlashVisual:
 
 class HealthDamageFlash:
     """각 피해의 실제 HP 감소 구간만 잠시 강조한다. 빨간 Trail과 독립이다."""
-    def __init__(self, hold_seconds=0, fade_seconds=0.04, *, attack_seconds=0.02):
+    def __init__(self, hold_seconds=0, fade_seconds=0.08, *, attack_seconds=0.02):
         if (not all(map(isfinite, (hold_seconds, fade_seconds, attack_seconds)))
                 or hold_seconds < 0 or fade_seconds <= 0 or attack_seconds <= 0):
             raise ValueError("HP flash 유지 시간은 0 이상, 등장/퇴장 시간은 양수인 초 단위 값이어야 한다.")
