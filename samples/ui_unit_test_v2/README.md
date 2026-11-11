@@ -26,7 +26,7 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 - `panel_border.filter_samples=2`: 공통 패널 면/테두리를 2배로 그린 뒤 선형 필터로 축소한다. 2~4의 정수를 받으며 최대 32개의 도형 텍스처를 재사용한다. 게임·Pico2D 원본은 변경하지 않는다.
 - `v2.layout.dialogue`·`v2.style.dialogue_padding_pixels`: 대화창 위치·크기와 안쪽 여백. 위쪽 표적/HUD 일부를 덮는다. 게임에서는 `DialogueInfo`를 표시 상태로 공급한다.
 - 통신 패널의 샘플 내용은 `hud_sample.json`의 조작 가이드다. 헤더/본문 위 여백은 8px이며 `dialogue_body_role=small`·`dialogue_body_offset_pixels=28`·`dialogue_line_spacing_pixels=20`으로 4줄을 표시한다. 기존 F1 별도 안내창은 제거했다.
-- 최종 배치: 미니맵 (20,20), 논리 크기 240×160·표시 배율 0.9. 대화창 (360,28), 560×130. 미니맵의 화면 여백이 조금 더 작다.
+- 최종 배치: 미니맵 (20,20), 논리 크기 240×160·표시 배율 0.9. 대화창 (360,20), 560×130. 위쪽 여백은 같으며 패널 헤더는 `조작 가이드`다.
 - `v2.layout.target_hp_offset_pixels`: 선택한 몸통 중심 기준 HP 위치. HP 폭·높이는 `target_hp`의 마지막 두 값을 사용한다.
 - `v2.targeting_sample`: 샘플 획득 거리 330px, 우클릭 거리 460px, 각도 동률 범위 1도. 본편 밸런스 확정값이 아니다.
 - `v2.style.hud_scale`: 일반 전투 HUD 배율 0.81. `map_scale`·`equipment_scale`은 0.9로 미니맵·웨폰·로드아웃의 현재 크기를 유지한다. 레이더는 별도로 반경 144px와 표시 치수를 조정했다. 기체·메뉴는 조정 대상이 아니다.

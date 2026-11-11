@@ -567,7 +567,7 @@
             "ultimate_key": "V"
         },
         "layout": {
-            "dialogue": [360, 28, 560, 130],
+            "dialogue": [360, 20, 560, 130],
             "target_hp_offset_pixels": [11, -62.5],
             "minimap": [
                 20,
