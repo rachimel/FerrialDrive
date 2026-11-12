@@ -891,7 +891,7 @@
             "level_text": {"number_scale": 0.85, "label_scale": 0.65, "right_inset_pixels": 12, "gap_pixels": 6},
             "counter_label_right_inset_pixels": 3,
             "counter_label_gap_pixels": 4,
-            "counter_motion_blur": {"shutter_seconds": 0.075, "strength": 0.85, "samples": 49,
+            "counter_motion_blur": {"shutter_seconds": 0.06, "strength": 0.85, "samples": 49,
                 "max_length_pixels": 128, "displacement_scale": 1.3, "overscan_pixels": 48, "forward_bias": 1},
             "lock_body_scale": 1.8,
             "counter_plaque_height_pixels": 8,
