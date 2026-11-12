@@ -216,7 +216,7 @@ class UiV2Tests(unittest.TestCase):
     def test_r_key_does_not_select_a_target(self):
         names = ("SDL_WINDOWEVENT", "SDL_KEYDOWN", "SDLK_ESCAPE", "SDLK_r", "SDLK_1", "SDLK_2", "SDLK_3",
                  "SDLK_4", "SDLK_5", "SDLK_6", "SDLK_7", "SDLK_c", "SDLK_t", "SDLK_e", "SDLK_f",
-                 "SDLK_F5", "SDLK_g", "SDLK_SPACE", "SDLK_d")
+                 "SDLK_F5", "SDLK_g", "SDLK_SPACE", "SDLK_d", "SDLK_v")
         p = SimpleNamespace(**{name: index for index, name in enumerate(names)})
         self.program.pico = p
         before = self.program.selected_target_id

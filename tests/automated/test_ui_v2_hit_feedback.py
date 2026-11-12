@@ -86,7 +86,7 @@ class HealthHitTests(unittest.TestCase):
             self.assertAlmostEqual((new[1] - old[1]) * view.style["hud_scale"], 4)
         blur = renderer.directional_blur.call_args.args[1]
         self.assertEqual(blur[0], 0)
-        self.assertAlmostEqual(blur[1] * view.style["hud_scale"], 3)
+        self.assertAlmostEqual(blur[1] * view.style["hud_scale"], view.style['player_health_blur']['max_length_pixels'])
         self.assertEqual(geometry, resource_geometry(view.layout, view.style["level_bevel_pixels"]))
 
 

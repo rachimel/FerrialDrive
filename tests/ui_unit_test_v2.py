@@ -27,8 +27,9 @@ from ferrial_drive.ui.pause import PauseState
 from ferrial_drive.ui.state import Health, HudState, LoadoutInfo, RadarContact, TargetInfo, WeaponInfo
 from ferrial_drive.ui.transition import SceneTransition
 from ferrial_drive.ui.weapon_swap import WeaponSwap
-from ferrial_drive.ui_v2.effects import (DefeatedTargetMotion, DialoguePanelMotion, EnergyAbsorption, EnergyRecoveryFlash, HealthDamageFlash,
-                                       HealthHitMotion, IndicatorFade, ScanlineMotion)
+from ferrial_drive.ui_v2.effects import (BoundaryParticleEmitter, DefeatedTargetMotion, DialoguePanelMotion,
+                                       EnergyAbsorption, EnergyRecoveryFlash, HealthDamageFlash, HealthHitMotion,
+                                       IndicatorFade, OverdriveMotion, ScanlineMotion, UltimateReadyMotion)
 from ferrial_drive.ui_v2.lock_on import LockOnMotion
 from ferrial_drive.ui_v2.geometry import resource_geometry, scaled_point
 from ferrial_drive.ui_v2.pico_renderer import PicoV2Renderer
@@ -121,6 +122,11 @@ class UiUnitTestV2:
         self.target_hit = HealthHitMotion(**hit_settings["target"])
         absorption = self.config.data['v2']['energy_absorption']
         self.energy_flash = EnergyRecoveryFlash(absorption['flash_seconds'])
+        self.boundary_emitter = BoundaryParticleEmitter(self.config.data['v2']['style']['energy_boundary']['rate_per_second'])
+        self.overdrive_motion = OverdriveMotion(**self.config.data['v2']['style']['overdrive_motion'])
+        self.overdrive_motion.reset(self.state.overdrive)
+        self.ultimate_motion = UltimateReadyMotion(self.config.data['v2']['ultimate_sample']['flash_seconds'])
+        self.ultimate_motion.reset(self.state.ultimate_ready)
         self.defeated_targets = DefeatedTargetMotion(absorption['target_fade_seconds'])
         animation = self.config.data["animation"]
         self.damage_numbers = DamageNumbers(animation["damage_duration_seconds"],
@@ -237,7 +243,22 @@ class UiUnitTestV2:
         self.state = replace(self.state, energy_level=charge.level, energy_ratio=charge.ratio,
                              overdrive_charge_ratio=charge.overdrive_ratio, overdrive=charge.active)
         self.level_counter.set_value(charge.level)
+        self.overdrive_motion.request(charge.active)
+        self.ultimate_motion.request(self.state.ultimate_ready)
         self.sync_energy_target()
+
+    def emit_boundary_particles(self, delta_seconds):
+        ratio = EnergyCharge.from_state(self.state).arrival_ratio
+        enabled = (self.particle_system is not None and 0 < ratio < 1
+                   and self.transition.target == 'combat' and not self.transition.active)
+        count = self.boundary_emitter.update(delta_seconds, enabled)
+        if count:
+            channel, _, _ = self.energy_geometry()
+            top = tuple(a + (b - a) * ratio for a, b in zip(channel[0], channel[1]))
+            bottom = tuple(a + (b - a) * ratio for a, b in zip(channel[3], channel[2]))
+            settings = self.config.data['v2']['style']['energy_boundary']
+            self.particle_system.emit_sparks(top, bottom, count=count,
+                duration_seconds=settings['duration_seconds'], spread_pixels=settings['spread_pixels'])
 
     def absorb(self):
         settings = self.config.data['v2']['energy_absorption']
@@ -333,6 +354,10 @@ class UiUnitTestV2:
             self.set_target_size(sizes[self.target_size_index])
         elif action == 'overdrive':
             self.set_energy_charge(EnergyCharge(3 if self.state.overdrive else 4))
+        elif action == 'ultimate':
+            if self.state.ultimate_ready:
+                self.state = replace(self.state, ultimate_cooldown_seconds=self.config.data['v2']['ultimate_sample']['cooldown_seconds'])
+                self.ultimate_motion.request(False)
         elif action in ("counter", "dash"):
             field = {"counter": "counter", "dash": "dash_ready"}[action]
             self.state = replace(self.state, **{field: not getattr(self.state, field)})
@@ -369,7 +394,7 @@ class UiUnitTestV2:
                        p.SDLK_3: "energy_down", p.SDLK_4: "energy_up", p.SDLK_5: "level",
                        p.SDLK_6: "overdrive", p.SDLK_7: "target_size", p.SDLK_c: "counter", p.SDLK_t: "toggle_target",
                        p.SDLK_e: "swap", p.SDLK_f: "loadout", p.SDLK_F5: "reset",
-                       p.SDLK_g: "absorb", p.SDLK_SPACE: "dash", p.SDLK_d: "dialogue"}
+                       p.SDLK_g: "absorb", p.SDLK_SPACE: "dash", p.SDLK_d: "dialogue", p.SDLK_v: 'ultimate'}
             if event.key in actions:
                 self.perform(actions[event.key])
             return
@@ -405,6 +430,11 @@ class UiUnitTestV2:
             self.pause.update(delta_seconds)
             return
         self.transition.update(delta_seconds)
+        self.ultimate_motion.update(delta_seconds)
+        self.state = replace(self.state, ultimate_cooldown_seconds=max(0, self.state.ultimate_cooldown_seconds - delta_seconds))
+        self.ultimate_motion.request(self.state.ultimate_ready)
+        self.overdrive_motion.request(self.state.overdrive)
+        self.overdrive_motion.update(delta_seconds)
         self.loadout_slide.request(self.state.hud.active_loadout_index)
         self.loadout_slide.update(delta_seconds)
         self.weapon_swap.request(self.state.hud.active_weapon_kind)
@@ -434,6 +464,7 @@ class UiUnitTestV2:
                     self.energy_flash.trigger()
                 self.set_energy_charge(recovered)
             self.sync_energy_target()
+            self.emit_boundary_particles(delta_seconds)
             self.particle_system.update(delta_seconds)
         else:
             self.absorption.update(delta_seconds)
@@ -482,6 +513,8 @@ class UiUnitTestV2:
                                  defeated_targets=self.defeated_targets.visuals,
                                  energy_flash=self.energy_flash.opacity,
                                  level_visual=self.level_counter.visual,
+                                 overdrive_visual=self.overdrive_motion.visual,
+                                 ultimate_visual=self.ultimate_motion.visual,
                                  scanline_visual=self.scanline_motion.visual,
                                  dialogue_visual=self.dialogue_motion.visual,
                                  lock_visuals=self.lock_motion.visuals,

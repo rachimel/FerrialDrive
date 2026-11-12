@@ -116,8 +116,8 @@ def resource_geometry(layout, bevel_pixels=10):
     hp_outline = ((cx + radius - hh, top), (cap_x(top), top), neck, (cx + radius, cy))
     hp_shape = hp_outline
     right = ex + ew + layout["energy_level_width_pixels"]
-    upper = (right - bevel_pixels * 2, level_top)
-    side = (right + 6, level_top + bevel_pixels * 1.8)
+    upper = (right - bevel_pixels, level_top)
+    side = (right + 6, level_top + bevel_pixels)
     level_shape = (neck, shoulder, (level_left + bevel_pixels, level_top), upper,
                    side, (side[0], bottom - bevel_pixels), (right - bevel_pixels, bottom),
                    (neck[0], bottom))

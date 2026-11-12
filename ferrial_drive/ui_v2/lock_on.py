@@ -1,7 +1,9 @@
 """록온 표시 시간·곡선·외곽 경로. 획득 규칙과 렌더러에는 의존하지 않는다."""
 
 from dataclasses import dataclass
-from math import floor, isfinite, pi, sin
+from math import exp, floor, isfinite, pi, sin
+
+from .effects import damped_oscillation
 
 
 def cubic(t, x1, y1, x2, y2):
@@ -48,6 +50,13 @@ def outline_segment(points, start, length=0.65):
             outline_point(points, end))
 
 
+def accent_position(age, move_seconds, hold_seconds):
+    """마주 보는 강조선 두 개의 위치. 록온·필살기가 같은 이동/정지를 사용한다."""
+    step, local = divmod(max(0, age), move_seconds + hold_seconds)
+    move = cubic(min(1, local / move_seconds), 0.42, 0, 0.58, 1)
+    return 3.5 + 2 * (step + move)
+
+
 @dataclass(frozen=True)
 class LockOnVisual:
     target_id: str
@@ -75,7 +84,7 @@ class LockOnTrack:
 class LockOnMotion:
     def __init__(self, enter_seconds=0.4, label_seconds=0.2, exit_seconds=0.25,
                  move_seconds=0.4, hold_seconds=0.25, start_scale=0.25, exit_scale=1.5,
-                 hit_seconds=0.18, hit_scale=1.12, hit_shake_pixels=1.5):
+                 hit_seconds=0.18, hit_scale=1.12, hit_shake_pixels=1.5, hit_damping=1.8):
         values = (enter_seconds, label_seconds, exit_seconds, move_seconds, hold_seconds, start_scale, exit_scale)
         if not all(isfinite(value) and value > 0 for value in values) or start_scale >= 1 or exit_scale <= 1:
             raise ValueError("록온 시간은 양수이며 등장 배율은 1 미만, 퇴장 배율은 1 초과여야 한다.")
@@ -84,6 +93,9 @@ class LockOnMotion:
         if not all(map(isfinite, (hit_seconds, hit_scale, hit_shake_pixels))) or hit_seconds <= 0 or hit_scale <= 1 or hit_shake_pixels < 0:
             raise ValueError('피격 마커의 시간·확대 배율·진폭이 유효하지 않다.')
         self.hit_seconds, self.hit_scale, self.hit_shake_pixels = hit_seconds, hit_scale, hit_shake_pixels
+        if not isfinite(hit_damping) or hit_damping < 0:
+            raise ValueError('록온 피격 감쇠는 0 이상의 유한한 값이어야 한다.')
+        self.hit_damping = hit_damping
         self.tracks = []
         self.selected_id = None
 
@@ -141,10 +153,9 @@ class LockOnMotion:
             label = max(0, min(1, (track.age - self.enter_seconds) / self.label_seconds))
             if not track.leaving and track.hit_age < self.hit_seconds:
                 t = track.hit_age / self.hit_seconds
-                scale *= 1 + (self.hit_scale - 1) * sin(pi * t)
-                amplitude = self.hit_shake_pixels * (1 - t)
-                offset = (sin(track.hit_age * 2 * pi * 20) * amplitude,
-                          sin(track.hit_age * 2 * pi * 24) * amplitude)
+                scale *= 1 + (self.hit_scale - 1) * sin(pi * t) * exp(-self.hit_damping * t)
+                offset = tuple(self.hit_shake_pixels * damped_oscillation(track.hit_age, self.hit_seconds,
+                               frequency, self.hit_damping)[0] for frequency in (20, 24))
             if track.leaving:
                 label = 0
                 t = min(1, track.exit_age / self.exit_seconds)
@@ -152,9 +163,6 @@ class LockOnMotion:
                 scale = track.exit_start_scale * (1 + (self.exit_scale - 1) * emphasized(t))
                 opacity = 1 - t
             patrol_age = max(0, track.age - self.enter_seconds - self.label_seconds)
-            cycle = self.move_seconds + self.hold_seconds
-            step, local = divmod(patrol_age, cycle)
-            move = cubic(min(1, local / self.move_seconds), 0.42, 0, 0.58, 1)
             result.append(LockOnVisual(track.target_id, track.body, angle, scale, opacity,
-                                       label, 3.5 + 2 * (step + move), offset))
+                                       label, accent_position(patrol_age, self.move_seconds, self.hold_seconds), offset))
         return tuple(result)

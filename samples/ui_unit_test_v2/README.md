@@ -1,5 +1,12 @@
 # ui-unit-test-v2
 
+- 오른쪽 LV 외곽의 위·아래 사선은 같은 가로/세로 변화량을 사용한다. 가운데 수직선은 전체 높이에서 두 사선 높이를 뺀 길이다.
+- `v2.style.energy_boundary`: 채움과 빈 공간의 경계에 선·별 모양 반짝임과 GPU 불꽃을 표시한다. 초당 40개·수명 0.8초이며 위로 상승하고 옆으로 흩어진다. 생성/갱신 Compute의 효과 종류 1을 사용하며 CPU는 요청 주기만 관리한다. 회복량은 0이고 빈 게이지·완충 때 새 불꽃을 만들지 않는다. Overdrive 추가 충전 중에는 그 추가 채움 경계를 사용한다.
+- `HealthHitMotion.damping`·`lock_motion.hit_damping`의 기본값은 1.8이다. 지수 감쇠와 종료 구간 완화를 함께 사용하며 위치·속도는 종료 때 0이다. 0이면 지수 감쇠만 끈다. 피격·연타는 진폭 상한을 누적하지 않는다.
+- 필살기 준비 조건은 `energy_level == 3`과 `ultimate_cooldown_seconds == 0`이다. `HudV2State.ultimate_ready`로 확인하며 준비 중에만 마름모에 강조선 두 개를 그린다. 록온과 같은 `accent_position`·`outline_segment` 및 `lock_motion.move_seconds/hold_seconds`를 공유한다. 준비 상태로 바뀌면 0.28초 flash가 한 번 재생된다.
+- 샘플의 **V**는 준비됐을 때만 필살기를 사용하며 에너지는 유지하고 5초 쿨다운을 시작한다. 재입력으로 남은 시간을 초기화하지 않는다. `v2.ultimate_sample.cooldown_seconds/flash_seconds`는 예제 수치다. 본편은 실제 남은 쿨다운을 상태로 공급한다. 쿨다운·피격·Overdrive 전환·입자 시간은 일시정지 중 멈춘다.
+
+
 - 에너지는 `EnergyCharge`의 누적 충전량으로 계산한다. 한 게이지마다 LV1→LV2→LV3으로 오르고, **LV3 게이지 완충 후 추가 한 게이지**를 채워야 Overdrive에 진입한다. 추가 충전은 기본 채움 위의 밝은 영역으로 표시하며 `overdrive_charge_ratio` 0→1에 따라 바·흡수 오브·리본·회복 flash가 청록→빨강으로 변한다. 빨강은 `v2.style.overdrive_red`다. 샘플 기본 상태는 LV3·72%이며 Overdrive 전이다. 6은 완충/Overdrive 비교용 조작이다.
 - HIT·DAMAGE와 LV 상승 숫자는 v01의 탄성 이동·방향성 잔상을 사용한다. `damage_counter.duration_seconds=0.12`이며 `vertical_easing`·`elastic_*`·`blur_*`·`outgoing_fade_power`를 공유한다. COUNTER! 메시지는 이 숫자 전환과 별개다.
 - HP·LV 접합부는 곡선 없이 사선으로 연결하고 오른쪽 외곽은 `\`·`|`·`/` 순서다. `v2.style.level_bevel_pixels`는 모서리 크기, `level_text`는 LV와 숫자의 가로 정렬, `counter_label_*`는 HIT/DAMAGE 레이블의 오른쪽 여백·받침판 아래 간격이다.
@@ -20,10 +27,10 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 
 ## 조절 위치
 
-- `v2.style.health_hit_motion`: 타겟 HP `(0, ±3px)`·플레이어의 연결된 자원 UI 묶음 `(0, ±4px)`의 피격 진동이다. HP·에너지·레벨·필살기 아이콘/문구가 함께 움직이며 분리된 대시는 고정한다. HP의 약한 블러는 `player_health_blur`에서 조절한다.
+- `v2.style.health_hit_motion`: 타겟 HP `(0, ±5px)`·플레이어의 연결된 자원 UI 묶음 `(0, ±7px)`의 피격 진동이다. HP·에너지·레벨·필살기 아이콘/문구가 함께 움직이며 분리된 대시는 고정한다. HP의 약한 블러는 `player_health_blur`에서 조절한다.
 - `v2.absorption_routes.paths_by_side`: 왼쪽·오른쪽 각 6개 고정 경로다. 양쪽 모두 바 아래를 지나며 필살기 아이콘을 필수 경유하지 않는다. 경로 번호는 생성 때 선택하고 최신 에너지 채움 끝점에 맞춰 진입 구간을 변형한다.
 - `v2.energy_absorption`: 예제 입자 수 6개·총 회복량 10%·도착 간격 0.055초·풀 256개·회복 flash 0.16초·처치 HP 퇴장 0.32초다. 회복량은 예제 수치다. 입자별 도착 때만 분할 회복하며 CPU UI는 완료된 비동기 집계를 받은 프레임에 반영한다. `4`/`G`도 도착을 기다리며 `3`의 감소는 즉시 반영한다.
-- `v2.style.lock_motion.hit_seconds/hit_scale/hit_shake_pixels`: 일반 피격의 록온 마커 확대·진동이다. 기본은 0.18초·최대 1.12배·1.5 화면 px다. 처치 때는 기존 퇴장 효과를 유지한다.
+- `v2.style.lock_motion.hit_seconds/hit_scale/hit_shake_pixels`: 일반 피격의 록온 마커 확대·진동이다. 기본은 0.26초·상한 1.18배·2.2 화면 px이며 `hit_damping=1.8`의 지수 감쇠를 적용한다. 처치 때는 기존 퇴장 효과를 유지한다.
 - `v2.style.absorption_trail`: 필압 꼬리·오브 크기·오른쪽 경유 여백을 조절한다. 기본 `renderer=compute`는 OpenGL 4.3 이상을 요구한다. CPU는 생성 요청과 프레임 시간만 보내며 GPU의 생성/갱신 Ubershader 두 개가 입자 생성·경로 선택·수명·이동·Trail을 처리한다. 활성 목록·간접 Instancing을 사용해 프레임 중 입자 상태를 CPU로 읽지 않는다. 프로그램은 로딩 중 한 번 컴파일·링크한다.
 - `1`은 적 피해·HP바/록온 피격 반응·오브 6개 회복, `2`는 플레이어 피해·자원 UI 진동/HP 블러다. 적 HP가 0이면 HP바는 페이드아웃하고 마커는 기존 효과로 퇴장한다. `G`는 피해 없이 흡수·회복을 시연한다. `Esc`는 효과 정지/재개, `F5`는 초기화다. 좌클릭 모션의 실제 피해 판정·본편 에너지 규칙 연결은 별도다.
 - 대량 생성·갱신·렌더 계측은 [Massive Energy Particle Stress](../massive_energy_particle_stress/README.md)에서 별도로 실행한다.
@@ -128,11 +135,13 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 
 피해 숫자의 실제 펼침 설정은 `damage_popup.width_expand_seconds=0.025`·`height_expand_seconds=0.035`다. 각 등장/퇴장 0.06초이며 총 표시 시간은 유지한다. COUNTER는 `IndicatorFade`를 갱신해 `view.combat(counter_message_opacity=...)`로 공급한다. 시간은 `counter_message_motion`의 등장 0.06초·퇴장 0.05초다. 이는 HIT/DAMAGE의 숫자 자리 갱신 시간이나 록온 개폐 시간과 별개다.
 
-HP flash는 `HealthDamageFlash.trigger(피해 전 비율, 피해 후 비율)`·`update(delta_seconds)`로 관리하고 `visuals`를 `view.combat(player_damage_flashes=..., target_damage_flashes=...)`에 공급한다. 실제 피해가 0이면 발생시키지 않는다. 상태는 실제 HP·빨간 Trail과 분리하며 샘플에서는 Trail과 함께 일시정지한다. 표적 교체와 F5는 해당 flash를 비운다. `v2.style.health_damage_flash`의 등장/유지/퇴장은 0.02/0/0.08초다. 흰 구간은 이번 실제 피해량이다. 에너지의 스캔·밝은 띠·노이즈는 `panel_layer(effect_surface=...)`로 사선 채널 마스크를 공유한다.
+HP flash는 `HealthDamageFlash.trigger(피해 전 비율, 피해 후 비율)`·`update(delta_seconds)`로 관리하고 `visuals`를 `view.combat(player_damage_flashes=..., target_damage_flashes=...)`에 공급한다. 실제 피해가 0이면 발생시키지 않는다. 상태는 실제 HP·빨간 Trail과 분리하며 샘플에서는 Trail과 함께 일시정지한다. 표적 교체와 F5는 해당 flash를 비운다. `v2.style.health_damage_flash`의 등장/유지/퇴장은 0.012/0/0.14초다. 흰 구간은 이번 실제 피해량이다. 에너지의 스캔·밝은 띠·노이즈는 `panel_layer(effect_surface=...)`로 사선 채널 마스크를 공유한다.
 
 록온은 `LockOnMotion.select(target_id, body)`·`update(delta_seconds)`로 제어하고 `visuals`를 `view.combat(lock_visuals=...)`에 공급한다. 몸통 Rect는 카메라 투영 후 좌표다. 선택 유지 중과 퇴장 중에도 적의 월드 위치를 현재 카메라로 투영한다. 자동 선택 규칙은 `MouseAutoTargeting`, 좌표 변환은 `LookAheadCamera`가 맡는다. 새 선택 ID에서 기존 표시 퇴장과 신규 등장을 재생한다. `view.combat(player_screen=...)`는 레이더 중심을 실제 플레이어 화면 위치에 맞춘다.
 
 `v2.style.lock_motion`은 등장 0.32초·캐럿 0.16초·퇴장 0.2초·강조선 이동 0.32초/정지 0.2초·시작 배율 0.25/퇴장 배율 1.5를 조절한다. 기본형은 정사각형이며 등장 완료 45°는 마름모다. 가이드 조작키 색/설명 투명도는 `dialogue_key_color`·`dialogue_description_opacity`다.
+
+OVERDRIVE 문구만 SUITE Regular 12px로 게이지 중앙에 표시한다. ENERGY 문구는 표시하지 않는다. 문구 폭은 바 폭의 40%(`overdrive_width_ratio=0.4`)다. 등장 때 불투명도는 0.065초에 올라가고 0.42초 동안 글자가 중앙에서 퍼지며 개별 반짝임·에너지색 Bloom을 낸다. 퇴장은 0.18초 fade-out만 사용한다. 시간은 `v2.style.overdrive_motion`, Bloom은 `overdrive_bloom`으로 조절한다. 준비된 네온 텍스처를 재사용한다.
 
 등장 중 취소도 역재생하지 않는다. 취소 시점의 실제 회전값/배율을 저장해 그 값부터 회전은 2배, 크기는 `exit_scale`배까지 확대하며 흐려진다. 완료 뒤 취소는 기존 45→90°·1→1.5배와 같다.
 

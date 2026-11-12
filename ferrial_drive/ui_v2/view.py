@@ -12,8 +12,9 @@ from .geometry import (PerspectivePlane, body_diamond, counter_plaque, quad_fill
 from .panels import (PanelGeometry, build_panel_geometry, merge_panel_y_ranges,
                      panel_bright_band_top, scale_panel_geometry)
 from .panel_probe import PanelProbeRenderer
-from .effects import DialoguePanelVisual, HealthHitVisual, ScanlineVisual, breathing_opacity, subtle_flicker
-from .lock_on import LockOnVisual, outline_segment
+from .effects import (DialoguePanelVisual, HealthHitVisual, OverdriveVisual, ScanlineVisual,
+                      UltimateReadyVisual, breathing_opacity, subtle_flicker)
+from .lock_on import LockOnVisual, accent_position, outline_segment
 
 
 class UiV2View(UiView):
@@ -400,17 +401,20 @@ class UiV2View(UiView):
             r.text("HP", x + value_width + 9, top - hp_height - gap, "hud_small", c["muted"], opacity)
 
     def resources(self, state, opacity, offset_x, player_trailing_ratio, *, damage_flashes=(),
-                  hit_visual=HealthHitVisual(), energy_flash=0, level_visual=None):
+                  hit_visual=HealthHitVisual(), energy_flash=0, level_visual=None,
+                  overdrive_visual=None, ultimate_visual=None):
         dx, dy = self.health_hit_offset(hit_visual)
         scope = self.renderer.translated(dx, dy) if dx or dy else nullcontext()
         with scope:
             self._resource_contents(state, opacity, offset_x, player_trailing_ratio, damage_flashes=damage_flashes,
                                     hit_visual=HealthHitVisual((0, 0), hit_visual.velocity_pixels_per_second),
-                                    energy_flash=energy_flash, level_visual=level_visual)
+                                    energy_flash=energy_flash, level_visual=level_visual,
+                                    overdrive_visual=overdrive_visual, ultimate_visual=ultimate_visual)
         self.dash_indicator(state, opacity)
 
     def _resource_contents(self, state, opacity, offset_x, player_trailing_ratio, *, damage_flashes=(),
-                           hit_visual=HealthHitVisual(), energy_flash=0, level_visual=None):
+                           hit_visual=HealthHitVisual(), energy_flash=0, level_visual=None,
+                           overdrive_visual=None, ultimate_visual=None):
         r, c = self.renderer, self.config.colors
         geometry = resource_geometry(self.layout, self.style["level_bevel_pixels"])
         self.player_health(state.hud, geometry, opacity, player_trailing_ratio, damage_flashes, hit_visual)
@@ -436,25 +440,10 @@ class UiV2View(UiView):
             self.polygon(channel, color, opacity * energy_flash * 0.55, filled=True)
         self.stroke((outline[-1], geometry.level_shape[-2]),
                      color if charge > 0 else self.ui_accent, opacity, 2)
-        label_center = sum(point[0] for point in channel) / 4
-        if state.overdrive:
-            label, role = "OVERDRIVE", "v2_overdrive"
-            sizes = [r.text_size(letter, role) for letter in label]
-            text_width = sum(size[0] for size in sizes)
-            bar_width = ((channel[1][0] - channel[0][0]) + (channel[2][0] - channel[3][0])) / 2
-            spacing = max(0, (bar_width * self.style["overdrive_width_ratio"] - text_width) / (len(label) - 1))
-            label_width = text_width + spacing * (len(label) - 1)
-            label_y = sum(point[1] for point in channel) / 4 - max(size[1] for size in sizes) / 2
-            label_x = label_center - label_width / 2
-            for letter, (letter_width, _) in zip(label, sizes):
-                r.neon_text(letter, label_x, label_y, role, c["text"], energy_alpha,
-                            glow_color=color, **self.style["overdrive_bloom"])
-                label_x += letter_width + spacing
-        else:
-            label = "E N E R G Y"
-            label_width = r.text_size(label, "v2_meter_label")[0]
-            self.slanted_text(label, label_center - label_width / 2, y + 2,
-                              "v2_meter_label", c["text"], energy_alpha)
+        ratio = charge if state.energy_level == 3 and state.energy_ratio == 1 else state.energy_ratio
+        self.energy_boundary(channel, ratio, color, energy_alpha)
+        overdrive_visual = overdrive_visual or OverdriveVisual(float(state.overdrive))
+        self.overdrive_label(channel, overdrive_visual, energy_alpha)
         level_right = x + width + self.layout["energy_level_width_pixels"]
         settings = self.style['level_text']
         number_scale = settings['number_scale']
@@ -479,6 +468,17 @@ class UiV2View(UiView):
         diamond = ((cx, cy - radius), (cx + radius, cy), (cx, cy + radius), (cx - radius, cy))
         self.polygon(diamond, c["panel"], opacity * self.style["surface_opacity"], filled=True)
         self.stroke(diamond + diamond[:1], c["text"], opacity * 0.9, 1.5)
+        if state.ultimate_ready:
+            visual = ultimate_visual or UltimateReadyVisual()
+            settings = self.style['lock_motion']
+            position = accent_position(visual.age, settings['move_seconds'], settings['hold_seconds'])
+            for start in (position, position + 2):
+                self.stroke(outline_segment(diamond, start - 0.325), color, opacity * visual.opacity,
+                            self.style['lock_accent_pixels'])
+            if visual.flash > 0:
+                self.polygon(diamond, c['text'], opacity * visual.flash * 0.45, filled=True)
+                self.stroke(diamond + diamond[:1], c['text'], opacity * visual.flash,
+                            self.style['lock_accent_pixels'] + 1)
         # 기본 도형으로 만든 비대칭 네 갈래 칼날. 원본 아이콘 아트는 별도 제작한다.
         for angle in (-0.3, pi / 2 - 0.3, pi - 0.3, 3 * pi / 2 - 0.3):
             def blade_point(dx, dy):
@@ -489,7 +489,7 @@ class UiV2View(UiView):
             self.polygon(blade, c["energy_fill"], opacity * 0.75, filled=True)
             self.stroke(blade + blade[:1], c["text"], opacity * 0.9, 1.5)
         key = self.config.data["v2"]["labels"]["ultimate_key"]
-        level = "LV. 01"
+        level = "LV. 03"
         key_height = r.text_size(key, "hud_small")[1]
         gap = self.style["ultimate_label_gap_pixels"]
         label_right = cx - radius / 2 - gap
@@ -497,6 +497,53 @@ class UiV2View(UiView):
                             c["text"], opacity)
         self.ultimate_label(level, label_right, cy + radius / 2 + gap,
                             c["muted"], opacity, scale=0.85, slant_right=True)
+
+    def overdrive_label(self, channel, visual, opacity):
+        if visual.opacity <= 0:
+            return
+        r, c = self.renderer, self.config.colors
+        label, role = 'OVERDRIVE', 'v2_overdrive'
+        sizes = [r.text_size(letter, role) for letter in label]
+        text_width = sum(size[0] for size in sizes)
+        center_x, center_y = (sum(point[i] for point in channel) / 4 for i in (0, 1))
+        bar_width = ((channel[1][0] - channel[0][0]) + (channel[2][0] - channel[3][0])) / 2
+        spacing = max(0, (bar_width * self.style['overdrive_width_ratio'] - text_width) / (len(label) - 1))
+        width = text_width + spacing * (len(label) - 1)
+        cursor = -width / 2
+        glow_color = energy_color(c['energy'], self.style['overdrive_red'], 1)
+        for index, (letter, (letter_width, letter_height)) in enumerate(zip(label, sizes)):
+            x = center_x + (cursor + letter_width / 2) * visual.spread - letter_width / 2
+            flash = visual.flash * (0.5 + 0.5 * sin(index * 2.4 + visual.spread * 18) ** 2)
+            bloom = dict(self.style['overdrive_bloom'])
+            bloom['glow_opacity'] *= 1 + 2 * flash
+            r.neon_text(letter, x, center_y - letter_height / 2, role, c['text'],
+                        opacity * visual.opacity * (1 - 0.4 * visual.flash + 0.4 * flash),
+                        glow_color=glow_color, **bloom)
+            if flash > 0.15:
+                spark_x = x + letter_width / 2
+                spark_y = center_y + (1 if index % 2 else -1) * letter_height * 0.45
+                length = 3.5 * flash
+                alpha = opacity * visual.opacity * flash
+                self.stroke(((spark_x - length, spark_y), (spark_x + length, spark_y)), c['text'], alpha, 1)
+                self.stroke(((spark_x, spark_y - length), (spark_x, spark_y + length)), c['text'], alpha, 1)
+            cursor += letter_width + spacing
+
+    def energy_boundary(self, channel, ratio, color, opacity):
+        if not 0 < ratio < 1:
+            return
+        edge = quad_fill(channel, ratio)[1:3]
+        time = self._scanline_visual.elapsed_seconds
+        settings = self.style['energy_boundary']
+        pulse = 0.5 + 0.5 * sin(time * 17) ** 2
+        self.stroke(edge, color, opacity * 0.25 * pulse, settings['glow_width_pixels'])
+        self.stroke(edge, self.config.colors['text'], opacity * 0.85 * pulse, 1)
+        for index in range(2):
+            t = (time * 0.8 + index * 0.5) % 1
+            x, y = (a + (b - a) * t for a, b in zip(*edge))
+            size = settings['sparkle_size_pixels'] * sin(pi * t) * pulse
+            self.stroke(((x - size, y), (x + size, y)), color, opacity * pulse, 1)
+            self.stroke(((x, y - size * 1.6), (x, y + size * 1.6)),
+                        self.config.colors['text'], opacity * pulse, 1)
 
     def dash_indicator(self, state, opacity):
         """현재 가로 위치에서 아이콘·키 안내를 화면 하단 기준으로 배치한다."""
@@ -739,7 +786,7 @@ class UiV2View(UiView):
                player_damage_flashes=(), target_damage_flashes=(), counter_message_opacity=None, player_screen=None,
                loadout_visual=None, weapon_swap_visual=None,
                player_hit_visual=HealthHitVisual(), target_hit_visual=HealthHitVisual(), particle_system=None,
-               defeated_targets=(), energy_flash=0, level_visual=None):
+               defeated_targets=(), energy_flash=0, level_visual=None, overdrive_visual=None, ultimate_visual=None):
         r, c, hud = self.renderer, self.config.colors, state.hud
         scale = self.style["hud_scale"]
         width, height = self.config.window["width"], self.config.window["height"]
@@ -779,7 +826,8 @@ class UiV2View(UiView):
                     self.lock_marker(visual, opacity, offset_x)
         with r.scaled(scale, (width / 2, height)):
             self.resources(state, opacity, offset_x, player_trailing_ratio, damage_flashes=player_damage_flashes,
-                           hit_visual=player_hit_visual, energy_flash=energy_flash, level_visual=level_visual)
+                           hit_visual=player_hit_visual, energy_flash=energy_flash, level_visual=level_visual,
+                           overdrive_visual=overdrive_visual, ultimate_visual=ultimate_visual)
         with r.scaled(self.style["equipment_scale"], (width, height)):
             self.weapons(hud, opacity, offset_x, loadout_visual=loadout_visual,
                          weapon_swap_visual=weapon_swap_visual)

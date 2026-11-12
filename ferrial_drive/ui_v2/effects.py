@@ -1,7 +1,7 @@
 """흡수 Trail·패널 스캔·대화창 개폐의 시간 상태. 입력·렌더러와 분리한다."""
 
 from dataclasses import dataclass, field
-from math import cos, hypot, isfinite, sin, tau
+from math import cos, exp, hypot, isfinite, sin, tau
 from random import Random
 
 from ferrial_drive.animation import ScalarAnimation
@@ -104,15 +104,30 @@ class HealthHitVisual:
     velocity_pixels_per_second: tuple[float, float] = (0, 0)
 
 
+def damped_oscillation(time, duration, frequency_hz, damping):
+    """진폭 상한 안의 지수 감쇠와 정확한 속도. 종료점은 위치·속도 모두 0이다."""
+    if time >= duration:
+        return 0, 0
+    t = time / duration
+    decay, remaining = exp(-damping * t), 1 - t
+    envelope = decay * remaining ** 2
+    derivative = -decay * (damping * remaining ** 2 + 2 * remaining) / duration
+    angle, omega = tau * frequency_hz * time, tau * frequency_hz
+    return envelope * sin(angle), derivative * sin(angle) + envelope * omega * cos(angle)
+
+
 class HealthHitMotion:
     """피격마다 제한된 진폭으로 재시작하는 감쇠 진동. 좌표는 화면 px다."""
-    def __init__(self, duration_seconds=0.28, frequency_hz=18, max_offset_pixels=(0, 4)):
+    def __init__(self, duration_seconds=0.28, frequency_hz=18, max_offset_pixels=(0, 4), damping=1.8):
         if (not all(isfinite(value) and value > 0 for value in (duration_seconds, frequency_hz))
                 or len(max_offset_pixels) != 2
                 or not all(isfinite(value) and value >= 0 for value in max_offset_pixels)):
             raise ValueError("피격 시간·진동수는 양수이며 최대 오프셋은 0 이상의 화면 px여야 한다.")
         self.duration_seconds, self.frequency_hz = duration_seconds, frequency_hz
         self.max_offset_pixels = tuple(max_offset_pixels)
+        if not isfinite(damping) or damping < 0:
+            raise ValueError('피격 감쇠 계수는 0 이상의 유한한 값이어야 한다.')
+        self.damping = damping
         self.clear()
 
     def clear(self):
@@ -130,12 +145,8 @@ class HealthHitMotion:
     def visual(self):
         if self.elapsed_seconds >= self.duration_seconds:
             return HealthHitVisual()
-        time = self.elapsed_seconds
-        remaining = 1 - time / self.duration_seconds
-        angle = tau * self.frequency_hz * time
-        offset = remaining ** 2 * sin(angle)
-        velocity = (remaining ** 2 * tau * self.frequency_hz * cos(angle)
-                    - 2 * remaining / self.duration_seconds * sin(angle))
+        offset, velocity = damped_oscillation(self.elapsed_seconds, self.duration_seconds,
+                                             self.frequency_hz, self.damping)
         return HealthHitVisual(tuple(limit * offset for limit in self.max_offset_pixels),
                                tuple(limit * velocity for limit in self.max_offset_pixels))
 
@@ -158,6 +169,104 @@ class EnergyRecoveryFlash:
     @property
     def opacity(self):
         return (1 - self.elapsed_seconds / self.duration_seconds) ** 2
+
+
+@dataclass(frozen=True)
+class OverdriveVisual:
+    opacity: float = 0
+    spread: float = 1
+    flash: float = 0
+
+
+class OverdriveMotion:
+    """글자 확산과 등장 반짝임. 퇴장 때 위치는 유지하고 투명도만 줄인다."""
+    def __init__(self, enter_seconds=0.42, exit_seconds=0.18, fade_in_seconds=0.065):
+        if not all(isfinite(v) and v > 0 for v in (enter_seconds, exit_seconds, fade_in_seconds)):
+            raise ValueError('Overdrive 등장·퇴장 시간은 양수여야 한다.')
+        self.enter_seconds, self.exit_seconds = enter_seconds, exit_seconds
+        self.fade_in_seconds = fade_in_seconds
+        self.reset(False)
+
+    def reset(self, visible):
+        self.visible = bool(visible)
+        self.age = self.enter_seconds
+        self.animation = ScalarAnimation(float(visible), float(visible), self.enter_seconds)
+
+    def request(self, visible):
+        if bool(visible) == self.visible:
+            return
+        self.visible = bool(visible)
+        duration = self.fade_in_seconds if visible else self.exit_seconds
+        self.animation = ScalarAnimation(self.animation.value, float(visible), duration)
+        if visible:
+            self.age = 0
+
+    def update(self, delta_seconds):
+        self.animation.update(delta_seconds)
+        if self.visible:
+            self.age = min(self.enter_seconds, self.age + delta_seconds)
+
+    @property
+    def visual(self):
+        t = min(1, self.age / self.enter_seconds)
+        spread = 0.16 + 0.84 * (1 - (1 - t) ** 3)
+        flash = (1 - t) * (0.35 + 0.65 * sin(tau * t * 2.5) ** 2) if self.visible else 0
+        return OverdriveVisual(self.animation.value, spread, flash)
+
+
+@dataclass(frozen=True)
+class UltimateReadyVisual:
+    age: float = 0
+    opacity: float = 1
+    flash: float = 0
+
+
+class UltimateReadyMotion:
+    """준비 상태 진입 때 한 번 flash하고 강조선 시간을 유지한다."""
+    def __init__(self, flash_seconds=0.28):
+        self.flash = EnergyRecoveryFlash(flash_seconds)
+        self.reset(False)
+
+    def reset(self, ready):
+        self.ready, self.age = bool(ready), 0
+        self.flash.elapsed_seconds = self.flash.duration_seconds
+
+    def request(self, ready):
+        if ready and not self.ready:
+            self.age = 0
+            self.flash.trigger()
+        if not ready:
+            self.flash.elapsed_seconds = self.flash.duration_seconds
+        self.ready = bool(ready)
+
+    def update(self, delta_seconds):
+        self.flash.update(delta_seconds)
+        if self.ready:
+            self.age += delta_seconds
+
+    @property
+    def visual(self):
+        return UltimateReadyVisual(self.age, float(self.ready), self.flash.opacity)
+
+
+class BoundaryParticleEmitter:
+    """CPU에는 생성 요청의 주기만 보관한다. 입자별 상태는 GPU가 소유한다."""
+    def __init__(self, rate_per_second=32):
+        if not isfinite(rate_per_second) or rate_per_second <= 0:
+            raise ValueError('경계 입자 발생률은 양수여야 한다.')
+        self.rate_per_second, self.elapsed_seconds = rate_per_second, 0
+
+    def update(self, delta_seconds, enabled):
+        if not isfinite(delta_seconds) or delta_seconds < 0:
+            raise ValueError('경계 입자 갱신 시간은 0 이상이어야 한다.')
+        if not enabled:
+            self.elapsed_seconds = 0
+            return 0
+        # 긴 프레임 뒤 과도한 생성 요청이 한꺼번에 쌓이지 않도록 제한한다.
+        self.elapsed_seconds += min(delta_seconds, 0.15)
+        count = int(self.elapsed_seconds * self.rate_per_second)
+        self.elapsed_seconds -= count / self.rate_per_second
+        return count
 
 
 @dataclass(frozen=True)

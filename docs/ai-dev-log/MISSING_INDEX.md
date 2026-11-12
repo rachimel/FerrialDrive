@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [에너지 경계 VFX·필살기 준비](2026-11-12-energy-boundary-and-ultimate-ready.md): TIME(scope). ENERGY 제거·5초 예제 수용·V키 정정·감쇠/준비 조건 요청의 개별 시각을 확인한다.
+
 - [에너지 도착별 회복·피격/처치 반응](2026-11-12-energy-arrival-and-hit-feedback.md): TIME(scope). 아래쪽 경유·분할 회복·예제 10%·피격/퇴장 정정·LV3 추가 충전·붉은색·숫자/사선 요청의 개별 발언 시각을 확인한다.
 
 - [파티클 Compute Ubershader·대량 벤치마크](2026-11-12-particle-compute-ubershaders.md): TIME(scope). 생성/갱신 Ubershader·Stress 요청·삭제 범위 수용·UI 왜곡·옵티머스 후보 발언의 개별 시각을 확인한다.
