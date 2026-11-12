@@ -438,9 +438,25 @@ class PicoV2Renderer(PicoRenderer):
         if right <= left or bottom <= top:
             return
         source = p.SDL_Rect(left, top, right - left, bottom - top)
-        destination = p.SDL_FRect(left / sx - vx, top / sy - vy, source.w / sx, source.h / sy)
-        self.motion_sampler.draw_blurred(self.motion_texture, output_size, source, destination,
-                                         (displacement[0] * sx, displacement[1] * sy), strength, samples)
+        # 이미 화면 배율로 그린 레이어는 화면 픽셀에 1:1로 합성한다.
+        # 논리 좌표로 되돌려 재확대하면 SDL viewport의 정수 반올림과 겹쳐
+        # 가로 블러에서도 세로 방향으로 소수 픽셀만큼 재필터링된다.
+        destination = p.SDL_FRect(left, top, source.w, source.h)
+        try:
+            p.SDL_RenderSetScale(p.renderer, 1, 1)
+            p.SDL_RenderSetViewport(p.renderer, None)
+            screen_clip = None
+            if clipping is not None:
+                cx, cy, cw, ch = clipping
+                screen_clip = p.SDL_Rect(round((cx + vx) * sx), round((cy + vy) * sy),
+                                         round(cw * sx), round(ch * sy))
+            p.SDL_RenderSetClipRect(p.renderer, byref(screen_clip) if screen_clip is not None else None)
+            self.motion_sampler.draw_blurred(self.motion_texture, output_size, source, destination,
+                                             (displacement[0] * sx, displacement[1] * sy), strength, samples)
+        finally:
+            p.SDL_RenderSetScale(p.renderer, *scale)
+            p.SDL_RenderSetViewport(p.renderer, byref(viewport))
+            p.SDL_RenderSetClipRect(p.renderer, byref(clip) if clip is not None else None)
 
     def close(self):
         if self.motion_sampler is not None:

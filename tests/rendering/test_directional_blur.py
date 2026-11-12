@@ -75,6 +75,30 @@ class DirectionalBlurTests(unittest.TestCase):
         self.assertGreaterEqual(red, 120)
         self.assertLessEqual(red, 130)
 
+    def test_scaled_blur_keeps_vertical_profile_of_direct_drawing(self):
+        for scale in (0.9, 0.81):
+            profiles = []
+            transforms = []
+            from contextlib import nullcontext
+            for filtered in (False, True):
+                self.renderer.clear('#000000')
+                with self.renderer.scaled(scale, (96, 64)):
+                    before = self.renderer.draw_transform()
+                    scope = (self.renderer.directional_blur(Rect(30, 21, 24, 12), (12, 0), 0.9, 49)
+                             if filtered else nullcontext())
+                    with scope:
+                        self.renderer.filled_triangle((30, 21), (54, 21), (54, 33), '#FFFFFF')
+                        self.renderer.filled_triangle((30, 21), (54, 33), (30, 33), '#FFFFFF')
+                    transforms.append((before, self.renderer.draw_transform()))
+                data = self.pixels()
+                profiles.append([sum(data[(y * 96 + x) * 4] for x in range(96)) for y in range(64)])
+            with self.subTest(scale=scale):
+                self.assertEqual(transforms[1][0], transforms[1][1])
+                centers = [sum(y * value for y, value in enumerate(row)) / sum(row) for row in profiles]
+                self.assertAlmostEqual(*centers, delta=0.1)
+                supports = [[y for y, value in enumerate(row) if value > 0] for row in profiles]
+                self.assertEqual(supports[0], supports[1])
+
     def test_sdl_state_is_restored_on_success_and_failure(self):
         with self.renderer.scaled(0.8, (48, 32)), self.renderer.clip(Rect(2, 3, 90, 55)):
             before = self.renderer.draw_transform()
