@@ -1,5 +1,7 @@
 # 직접 실행 확인
 
+`massive_energy_particle_stress.py`는 **Massive Energy Particle Stress** 독립 Unit Test다. 생성·갱신 Compute Ubershader의 입자 수별 CPU 제출/GPU 단계 시간을 비교하며 Runner에서도 실행한다. [실행·입력·벤치마크](../samples/massive_energy_particle_stress/README.md)를 따른다.
+
 `combat_test.py`는 도형 기체로 이동·검/기관단총·적 한 기와의 교전·승패를 확인하는 독립 전투 프로토타입이다. `python tests/combat_test.py`로 직접 실행하거나 Runner에서 선택·드롭한다. Enter 시작, WASD 이동, Shift 달리기, Space 대시, E 검/총 전환, 좌클릭 공격, 총 장착 중 우클릭 조준, Esc 일시정지, R 재시작, F10 종료다. [샘플과 조작 안내](../samples/combat_prototype/README.md)와 [구현·검증 범위](../docs/unit-tests/combat_prototype.md)를 따른다.
 
 1. `Unit Test Runner.lnk`를 더블클릭해 Python GUI를 연다.

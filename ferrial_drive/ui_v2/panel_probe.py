@@ -28,6 +28,9 @@ class PanelProbeRenderer:
     def draw_instanced_particles(self, *args):
         return True
 
+    def draw_compute_particles(self, *args):
+        pass
+
     def include(self, surface):
         bounds = visible_panel_y_range(surface, self.draw_transform())
         if bounds is not None:

@@ -16,8 +16,9 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 
 - `v2.style.health_hit_motion`: 유효 피격의 감쇠 진동. 타겟 `(0, ±3px)`·플레이어 HP `(0, ±4px)`가 화면 기준 상한이며 연타에도 누적하지 않는다. 플레이어 HP의 약한 블러는 `player_health_blur`에서 조절한다.
 - `v2.absorption_routes.paths_by_side`: 사전에 지정한 왼쪽·오른쪽 각 6개 경로. 후보당 제어점 4개이며 접근 구간 2개·바 진입 구간 2개의 화면 px 오프셋이다. 경로 번호만 무작위 선택하고 도착까지 고정한다. 왼쪽 적은 필살기 아이콘, 오른쪽 적은 에너지 채널 오른쪽을 경유한다.
-- `v2.style.absorption_trail`: 필압 꼬리·오브 크기·오른쪽 경유 여백을 조절한다. 기본 `renderer=instanced`는 아틀라스와 고정 경로를 GPU에 올려 재사용하고 매 프레임 오브당 진행률/슬롯 16바이트만 전송한다. GPU가 리본을 펼치며 오브·Trail 두 번의 Instancing으로 그린다. `batched`는 CPU 꼭짓점 묶음 비교용이며 OpenGL 3.3 미만·소프트웨어에서도 이 경로를 사용한다.
+- `v2.style.absorption_trail`: 필압 꼬리·오브 크기·오른쪽 경유 여백을 조절한다. 기본 `renderer=compute`는 OpenGL 4.3 이상을 요구한다. CPU는 생성 요청과 프레임 시간만 보내며 GPU의 생성/갱신 Ubershader 두 개가 입자 생성·경로 선택·수명·이동·Trail을 처리한다. 활성 목록·간접 Instancing을 사용해 프레임 중 입자 상태를 CPU로 읽지 않는다. 프로그램은 로딩 중 한 번 컴파일·링크한다.
 - `1`로 적 피해·타겟 HP 진동·오브 3개 흡수를, `2`로 플레이어 피해·HP UI의 세로 진동/약한 블러를 확인한다. 마우스로 좌우 표적을 선택한 뒤 비교한다. `G`는 피해 없이 흡수만 시연한다. `Esc`는 효과 정지/재개, `F5`는 초기화다. 좌클릭 모션의 실제 피해 판정·에너지 획득량은 별도다.
+- 대량 생성·갱신·렌더 계측은 [Massive Energy Particle Stress](../massive_energy_particle_stress/README.md)에서 별도로 실행한다.
 
 - `ui_config.json`의 `v2.layout`: 미니맵·록온·타겟 HP·플레이어 HP·에너지·필살기 아이콘·레벨·무장·카운터 배치.
 - `v2.layout.hp_bar`·`energy_bar`·`ultimate_center_x`·`ultimate_radius_pixels`: 바의 높이/오른쪽 끝과 아이콘 위치·크기. 두 바의 왼쪽 경계는 마름모 변에 맞춰 계산한다. HP 안쪽 여백은 없고 수치/HP는 바 위에 자동 정렬한다.

@@ -33,6 +33,7 @@ from ferrial_drive.ui_v2.geometry import resource_geometry, scaled_point
 from ferrial_drive.ui_v2.pico_renderer import PicoV2Renderer
 from ferrial_drive.ui_v2.state import DialogueInfo, HudV2State
 from ferrial_drive.ui_v2.view import UiV2View
+from ferrial_drive.particles import GpuParticleSystem
 
 
 UNIT_TEST_ENTRYPOINT = "standalone"
@@ -40,8 +41,10 @@ SAMPLE_DIRECTORY = PROJECT_ROOT / "samples/ui_unit_test_v2"
 
 
 class UiUnitTestV2:
-    def __init__(self, config_path=None, *, initial_scene=None, capture_path=None):
+    def __init__(self, config_path=None, *, initial_scene=None, capture_path=None, particle_backend=None):
         self.config = UiConfig(Path(config_path) if config_path else SAMPLE_DIRECTORY / "ui_config.json")
+        if particle_backend is not None:
+            self.config.data['v2']['style']['absorption_trail']['renderer'] = particle_backend
         self.preset = json.loads((SAMPLE_DIRECTORY / "hud_sample.json").read_text(encoding="utf-8"))
         self.running = True
         self.pico = self.renderer = self.view = None
@@ -51,6 +54,10 @@ class UiUnitTestV2:
         self.transition = SceneTransition("menu", "combat", initial_scene or self.config.window["initial_scene"],
                                           self.config.data["animation"]["duration_seconds"], 0)
         self.pause = PauseState(self.config.data["pause"]["duration_seconds"])
+        self.particle_system = (GpuParticleSystem(self.config.data['v2']['absorption_duration_seconds'],
+                                 tail_fraction=self.config.data['v2']['style']['absorption_trail']['tail_fraction'],
+                                 **self.config.data['v2']['absorption_routes'])
+                                if self.config.data['v2']['style']['absorption_trail']['renderer'] == 'compute' else None)
         self.absorption = EnergyAbsorption(self.config.data["v2"]["absorption_duration_seconds"],
                                            tail_fraction=self.config.data["v2"]["style"]["absorption_trail"]["tail_fraction"],
                                            **self.config.data["v2"]["absorption_routes"])
@@ -114,6 +121,8 @@ class UiUnitTestV2:
                                             measure_text=self.damage_text_size,
                                             **self.config.data["damage_popup"])
         self.absorption.clear()
+        if self.particle_system is not None:
+            self.particle_system.clear()
         self.scanline_motion.reset()
         self.dialogue_motion.reset(opened=True, animate=True)
         self.lock_motion.reset(self.selected_target_id, self.state.target_body)
@@ -182,6 +191,8 @@ class UiUnitTestV2:
         self.pico = pico
         self.renderer = PicoV2Renderer(self.config.font_paths, self.config.font_sizes)
         self.view = UiV2View(self.config, self.renderer)
+        if self.particle_system is not None:
+            self.renderer.prepare_compute_particles(self.particle_system)
 
     def set_hud(self, **changes):
         self.state = replace(self.state, hud=replace(self.state.hud, **changes))
@@ -202,8 +213,11 @@ class UiUnitTestV2:
             gap = self.config.data["v2"]["style"]["absorption_trail"]["right_entry_gap_pixels"]
             right = max(point[0] for point in geometry.energy_channel) + gap
             icon = scaled_point((right, geometry.energy_tip(self.state.energy_ratio)[1]), anchor, scale)
-        for offset in (-15, 0, 15):
-            self.absorption.add((start[0] + offset, start[1] - offset), icon, destination, approach_side=side)
+        if self.particle_system is not None:
+            self.particle_system.emit(start, icon, destination, count=3, side=side, spread_pixels=15)
+        else:
+            for offset in (-15, 0, 15):
+                self.absorption.add((start[0] + offset, start[1] - offset), icon, destination, approach_side=side)
 
     def perform(self, action):
         hud = self.state.hud
@@ -358,7 +372,10 @@ class UiUnitTestV2:
         self.player_hit.update(delta_seconds)
         self.target_hit.update(delta_seconds)
         self.damage_numbers.update(delta_seconds)
-        self.absorption.update(delta_seconds)
+        if self.particle_system is not None:
+            self.particle_system.update(delta_seconds)
+        else:
+            self.absorption.update(delta_seconds)
 
     def actor(self, owner, opacity):
         r, c = self.renderer, self.config.colors
@@ -400,6 +417,7 @@ class UiUnitTestV2:
                                  player_trailing_ratio=self.player_health.trailing_ratio,
                                  target_trailing_ratio=self.target_health.trailing_ratio,
                                  absorption_trails=self.absorption.trails,
+                                 particle_system=self.particle_system,
                                  scanline_visual=self.scanline_motion.visual,
                                  dialogue_visual=self.dialogue_motion.visual,
                                  lock_visuals=self.lock_motion.visuals,

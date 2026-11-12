@@ -28,6 +28,7 @@ class PicoV2Renderer(PicoRenderer):
         self.particle_texture = None
         self.particle_indices = None
         self.particle_instances = None
+        self.compute_particles = None
         self.particle_instancing_supported = None
         super().__init__(font_paths, font_sizes)
 
@@ -466,6 +467,35 @@ class PicoV2Renderer(PicoRenderer):
             p.SDL_RenderSetViewport(p.renderer, byref(viewport))
             p.SDL_RenderSetClipRect(p.renderer, byref(clip) if clip is not None else None)
 
+    def prepare_compute_particles(self, system, *, profiling=False):
+        if self.compute_particles is not None and self.compute_particles.system is system:
+            if profiling:
+                self.compute_particles.profiling = True
+            return self.compute_particles
+        import ctypes as ct
+        import os
+        from ferrial_drive.rendering.canvas import renderer_info
+        if renderer_info(self.pico).name != 'opengl':
+            raise RuntimeError('Compute 파티클은 OpenGL 4.3 이상이 필요하다.')
+        prototype = ct.WINFUNCTYPE if os.name == 'nt' else ct.CFUNCTYPE
+        query = prototype(ct.c_char_p, ct.c_uint)(self.pico.SDL_GL_GetProcAddress(b'glGetString'))
+        version = query(0x1F02).decode().split()[0].split('.')
+        if not all(v.isdigit() for v in version[:2]) or tuple(map(int, version[:2])) < (4, 3):
+            raise RuntimeError('Compute 파티클은 OpenGL 4.3 이상이 필요하다.')
+        if self.compute_particles is not None and self.compute_particles.system is not system:
+            self.compute_particles.close()
+            self.compute_particles = None
+        if self.compute_particles is None:
+            from ferrial_drive.rendering.compute_particles import ComputeParticles
+            self.compute_particles = ComputeParticles(self.pico, system, profiling=profiling)
+        return self.compute_particles
+
+    def draw_compute_particles(self, system, settings, color, core_color, opacity):
+        backend = self.prepare_compute_particles(system)
+        scale, _, _, _ = self.draw_transform()
+        backend.render(settings, tuple(v / 255 for v in self.rgba(color, opacity)),
+                       tuple(v / 255 for v in self.rgba(core_color, opacity)), scale)
+
     def draw_instanced_particles(self, trails, settings, color, core_color, opacity):
         from ferrial_drive.rendering.canvas import renderer_info
         if settings.get("renderer") != "instanced" or renderer_info(self.pico).name != "opengl":
@@ -544,6 +574,9 @@ class PicoV2Renderer(PicoRenderer):
             raise RuntimeError("파티클 묶음 렌더 실패: " + p.SDL_GetError().decode("utf-8", errors="replace"))
 
     def close(self):
+        if self.compute_particles is not None:
+            self.compute_particles.close()
+            self.compute_particles = None
         if self.particle_instances is not None:
             self.particle_instances.close()
             self.particle_instances = None

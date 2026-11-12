@@ -18,8 +18,8 @@ SPEC = importlib.util.spec_from_file_location("ui_v2_sample", ROOT / "tests/ui_u
 SAMPLE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(SAMPLE)
 
-from ferrial_drive.ui_v2.effects import (AbsorptionTrail, DialoguePanelMotion, DialoguePanelVisual,
-                                        EnergyAbsorption, HealthDamageFlash, HealthFlashVisual, IndicatorFade,
+from ferrial_drive.ui_v2.effects import (DialoguePanelMotion, DialoguePanelVisual,
+                                        HealthDamageFlash, HealthFlashVisual, IndicatorFade,
                                         ScanlineMotion, ScanlineVisual, breathing_opacity, subtle_flicker)
 from ferrial_drive.ui_v2.geometry import (PerspectivePlane, body_diamond, counter_plaque,
                                          resource_geometry, scaled_point, slanted_meter, tapered_stroke_mesh)
@@ -386,29 +386,6 @@ class UiV2Tests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 replace(self.program.state, energy_level=level)
 
-    def test_absorption_passes_through_icon_then_reaches_bar(self):
-        trail = AbsorptionTrail((600, 360), (300, 660), (650, 680), 1)
-        self.assertEqual(trail.point(0), (600, 360))
-        self.assertEqual(trail.point(0.72), (300, 660))
-        self.assertEqual(trail.point(1), (650, 680))
-        effect = EnergyAbsorption(0.8)
-        effect.add(trail.start, trail.icon, trail.destination)
-        effect.update(0.8)
-        self.assertTrue(effect.trails)
-        effect.update(0.25)
-        self.assertFalse(effect.trails)
-
-    def test_pause_freezes_trail_and_resumes_from_same_time(self):
-        self.program.absorb()
-        self.program.pause.request(True)
-        self.program.update(1)
-        self.assertEqual(self.program.absorption.trails[0].elapsed_seconds, 0)
-        self.program.perform("resume")
-        self.program.update(1)
-        self.assertEqual(self.program.absorption.trails[0].elapsed_seconds, 0)
-        self.program.update(0.1)
-        self.assertAlmostEqual(self.program.absorption.trails[0].elapsed_seconds, 0.1)
-
     def test_player_damage_does_not_increment_attack_counters(self):
         before = self.program.state.hud
         self.program.perform("damage_player")
@@ -422,10 +399,10 @@ class UiV2Tests(unittest.TestCase):
         self.program.apply_target("enemy_b")
         self.assertNotEqual(self.program.state.hud.target.name, before.hud.target.name)
         self.program.perform("energy_up")
-        self.assertTrue(self.program.absorption.trails)
+        self.assertTrue(self.program.particle_system.commands)
         self.program.perform("reset")
         self.assertEqual(self.program.state, before)
-        self.assertFalse(self.program.absorption.trails)
+        self.assertFalse(self.program.particle_system.commands)
 
     def test_three_enemies_have_separate_health_and_selected_body_positions(self):
         self.assertEqual(len(self.program.enemies), 3)
@@ -790,18 +767,6 @@ class UiV2Tests(unittest.TestCase):
         self.assertEqual(half[2][1] - half[1][1], bar[3])
         self.assertEqual(half[2][0] - half[1][0], full[2][0] - full[1][0])
         self.assertEqual(half[1][0] - half[0][0], bar[2] / 2)
-
-    def test_absorption_keeps_world_start_and_reaches_scaled_icon_and_bar(self):
-        self.program.absorb()
-        trail = self.program.absorption.trails[1]
-        layout = self.program.config.data["v2"]["layout"]
-        anchor = (640, 720)
-        scale = self.program.config.data["v2"]["style"]["hud_scale"]
-        self.assertEqual(trail.start, self.program.config.actor_anchor("target"))
-        geometry = resource_geometry(layout, self.program.config.data["v2"]["style"]["level_curve_radius_pixels"])
-        self.assertEqual(trail.icon, scaled_point(geometry.icon_center, anchor, scale))
-        destination = geometry.energy_tip(self.program.state.energy_ratio)
-        self.assertEqual(trail.destination, scaled_point(destination, anchor, scale))
 
     def test_resource_borders_share_large_diamond_edges_without_hp_padding(self):
         geometry = resource_geometry(self.program.config.data["v2"]["layout"])

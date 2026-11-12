@@ -1,6 +1,6 @@
 # UI Unit Test v2
 
-상태: **독립 샘플의 HP 피격 반응·좌우 흡수 경로·텍스처 파티클 구현. 직접 조작·본편 연결·최종 외관 검토는 별도다.**
+상태: **HP 피격 반응·좌우 흡수 VFX와 생성/갱신 Compute Ubershader 연결. 직접 조작·본편 연결·최종 외관 검토는 별도다.**
 
 사용자가 요소와 큰 배치를 정하고 실행 화면에서 UI를 다듬는다. 기준 입력은 로컬 `concept/ui-concept-v2.png`이며, 도안을 이미지로 붙이는 대신 개별 표시 요소를 그린다. v1의 승인·검증 상태를 v2에 적용하지 않는다.
 
@@ -18,8 +18,9 @@
 - 무기 행과 필살기 단축키·레벨 패널의 면은 `colors.panel_surface`(`#22343F`)를 사용한다. 일반 패널의 `colors.panel`(`#101E27`)보다 한 단계 밝은 색이며 활성/비활성 투명도는 유지한다.
 - 실제 HP 감소 시 `HealthHitMotion`을 재시작한다. 타겟 HP바는 0.22초·20Hz·화면 `(0, ±3px)`, 플레이어 HP 게이지·수치·HP 글자는 0.28초·18Hz·화면 `(0, ±4px)` 범위에서 감쇠 진동한다. `v2.style.health_hit_motion`으로 조절하며 연타로 진폭을 누적하지 않는다. 플레이어 HP에만 약한 수직 GPU 블러를 적용한다. `player_health_blur`는 셔터 0.012초·세기 0.22·최대 길이 3 화면 px다. 에너지 바·필살기 아이콘은 진동하지 않는다. 표적 교체는 타겟 효과만 비우고 F5는 모두 초기화한다. 피격 효과는 일시정지 중 멈춘다.
 - **에너지 오브·흡수 Trail**은 유효 적 피해당 3개를 생성하며 동시 24개로 제한한다. 왼쪽 적은 필살기 아이콘, 오른쪽 적은 에너지 채널 오른쪽의 경유점을 지나 채움 끝점에 흡수된다. 좌우는 적과 플레이어의 가로 위치로 판정한다. 오른쪽 경유 여백은 `v2.style.absorption_trail.right_entry_gap_pixels=24` 논리 px다. 게임의 에너지 획득량은 계산하지 않는다.
-- `v2.absorption_routes.paths_by_side`에 왼쪽·오른쪽 각각 6개의 경로 제어점을 미리 지정한다. 무작위로 경로를 생성하지 않고 생성 시 경로 번호만 선택하며, 직전과 같은 후보는 피한다. 후보의 제어점 4개는 접근 구간 2개·바 진입 구간 2개의 화면 px 오프셋이다. 시작·경유·도착점을 보존한 경로 좌표 201개를 오브 생성 시 계산해 고정한다. 이동 시간은 0.85초다. Trail은 24개 구간의 리본이며 오브까지의 경로 거리에 따라 폭·밝기를 줄여 필압 펜 같은 꼬리를 만든다. 오브 반경 3.5px·머리 폭 4px·꼬리 비율 0.3은 `v2.style.absorption_trail`에서 조절한다.
-- `v2.style.absorption_trail.renderer=instanced`는 오브와 리본을 GPU Instancing으로 출력한다. 외부 이미지 없이 생성하는 128×64 RGBA 공용 아틀라스를 최초 한 번, 각 오브의 고정 경로를 생성 시 한 번 업로드한다. 매 프레임에는 진행률·경로 슬롯만 오브당 16바이트로 보내고 GPU에서 리본의 좌표·폭·거리 기반 필압을 계산한다. 오브/리본의 두 instanced draw로 출력하며 Bindless는 사용하지 않는다. OpenGL 3.3 미만·소프트웨어에서는 같은 아틀라스와 CPU 꼭짓점 묶음으로 출력한다. 종료 시 텍스처·셰이더를 해제한다. 방향성 블러의 최종 합성은 화면 픽셀 기준 1:1로 수행해 HUD 축소 후 다시 확대하는 좌표 오차를 막는다.
+- `v2.absorption_routes.paths_by_side`에 왼쪽·오른쪽 각각 6개 경로의 제어점을 미리 지정한다. 후보별 제어점 4개는 접근 구간 2개·바 진입 구간 2개의 화면 px 오프셋이다. 생성 Compute가 경로 번호를 선택하고 경로 좌표 201개를 GPU에서 계산해 고정한다. 이동 시간은 0.85초다. 갱신 Compute가 수명·현재 위치·24개 구간 리본의 좌표·거리 기반 필압을 계산한다. 오브 반경 3.5px·머리 폭 4px·꼬리 비율 0.3은 `v2.style.absorption_trail`에서 조절한다.
+- 기본 `v2.style.absorption_trail.renderer=compute`는 OpenGL 4.3 이상을 요구한다. CPU의 `GpuParticleSystem`은 생성 요청·시간만 전달하며, 생성/갱신 Compute Ubershader 두 개가 GPU 풀 24개의 상태를 관리한다. 각 프로그램은 `effect_type` switch를 사용하고 현재 에너지 오브 0을 지원한다. 효과별 프로그램 분리는 실제 분기 병목 확인 뒤 검토한다. GPU 활성 목록과 간접 그리기 명령을 이용해 오브·리본을 두 번의 Instancing으로 출력하며 프레임 중 입자 수 readback은 하지 않는다. 풀은 순환 재사용하며 가득 차면 오래된 생성 슬롯부터 덮어쓴다.
+- 공용 128×64 아틀라스·좌우 경로 제어점은 로딩 시 한 번 업로드한다. 생성/갱신 셰이더도 로딩 시 컴파일·링크한다. 캐시는 현재 프로세스의 프로그램 재사용이며 디스크 바이너리 캐시는 구현하지 않는다. 일시정지는 시간 요청을 중단하고 F5는 다음 GPU 처리 때 풀과 생성 카운터를 비운다. 버퍼·텍스처·셰이더·타이머 쿼리는 종료 시 해제한다. 방향성 블러 최종 합성은 화면 픽셀 기준 1:1이다.
 - 히트(HIT)·누적 데미지(DAMAGE) 카운터의 숫자/레이블만 0.12초 주기로 100%와 90% 불투명도를 공통 타이밍으로 왕복한다. 각 전환은 0.06초 smoothstep으로 이어지며 유지 구간은 없다. `minimum_opacity=0.9`·`period_seconds=0.12`·`dim_seconds=0.06`·`transition_seconds=0.06`이다. MAP·HP 글자·무기/잔탄·COUNTER 메시지·개별 피해 숫자·패널·HP 채움·받침판에는 이 점멸을 적용하지 않는다. `text_flicker.minimum_opacity=1`이면 정지한다.
 - 에너지 채움·끝선·ENERGY/OVERDRIVE 문구는 2.4초 주기로 불투명도 65~100%를 왕복한다. 게이지 길이·에너지 값·레벨·필살기 아이콘은 바꾸지 않는다. `energy_breathing.minimum_opacity=1`이면 정지한다. 두 장식은 기존 UI 시계를 공유해 일시정지 중에도 갱신한다.
 - OVERDRIVE 문구는 에너지 채움 영역의 가로·세로 중앙에 SUITE Regular 16px로 표시한다. 전체 문구 폭이 바 중앙 높이의 가로 폭 75%를 차지하도록 실제 글자 폭에서 자간을 계산한다. 비율은 `v2.style.overdrive_width_ratio=0.75`이며 글꼴은 전용 `v2_overdrive` 역할이다. 에너지 색(`colors.energy`) Bloom은 `v2.style.overdrive_bloom`의 가우시안 반경 6px·세기 1·2회 겹침을 사용하며, 글자와 함께 기존 에너지 호흡 2.4초·65~100% 불투명도를 따른다. 네온 본문은 3배 해상도에서 생성해 선형 축소하고 광과 동일한 소수점 좌표로 표시한다.
@@ -70,7 +71,9 @@
 | `ferrial_drive/ui/pico_renderer.py` | 공통 일반/볼드 텍스트·폭/기준선 측정·한 줄 혼합 굵기 출력과 캐시 |
 | `ferrial_drive/ui_v2/effects.py` | HP 피해 구간 flash·흡수 Trail·Scanline·대화창 개폐 시간 상태, 입력·게임 규칙과 분리 |
 | `ferrial_drive/ui_v2/particle_texture.py` | 오브·필압 Trail 공용 알파 아틀라스의 수치 생성 |
-| `ferrial_drive/rendering/instanced_particles.py` | 고정 경로 업로드·진행률 전송·GPU 리본/오브 Instancing과 GL 상태 복원 |
+| `ferrial_drive/particles/system.py` | 창과 독립된 생성 요청·시간 전달·초기화 세대 관리 |
+| `ferrial_drive/rendering/compute_particles.py` | GPU 풀·생성/갱신 dispatch·간접 Instancing·상태 복원·선택적 GPU 타이머 |
+| `ferrial_drive/rendering/particle_compute_shaders.py` | 생성·갱신 Ubershader 두 개와 렌더 셰이더 |
 | `ferrial_drive/ui_v2/lock_on.py` | 록온별 등장/퇴장·캐럿·강조선 시간 상태와 곡선·외곽 경로 |
 | `samples/ui_unit_test_v2/` | 독립 수치·도형·배치·폰트 설정·실행 안내 |
 

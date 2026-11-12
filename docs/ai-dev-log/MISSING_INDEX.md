@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [파티클 Compute Ubershader·대량 벤치마크](2026-11-12-particle-compute-ubershaders.md): TIME(scope). 생성/갱신 Ubershader·Stress 요청·삭제 범위 수용·UI 왜곡·옵티머스 후보 발언의 개별 시각을 확인한다.
+
 - [UI 피격·고정 흡수 경로·GPU Instancing](2026-11-12-ui-hit-feedback-instancing.md): TIME(scope). 축소 확인·피격 반응·좌우 분기 수용·Instancing·방향별 6개 고정 경로 지시의 개별 발언 시각을 확인한다.
 
 - [UI v2 간격·블러·흔들림 보정](2026-11-12-ui-v2-motion-stability.md): TIME(scope). 간격 축소·방향성 강화·전환 흔들림 지적의 개별 시각을 확인한다.

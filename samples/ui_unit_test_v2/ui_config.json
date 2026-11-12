@@ -740,7 +740,7 @@
                 "samples": 33
             },
             "absorption_trail": {
-                "renderer": "instanced",
+                "renderer": "compute",
                 "tail_fraction": 0.3,
                 "samples": 24,
                 "head_width_pixels": 4,

@@ -570,9 +570,12 @@ class UiV2View(UiView):
                                     top + 10, "v2_ammo", c["text"], alpha * self.style["weapon_text_opacity"],
                                     **self.style["weapon_text_neon"])
 
-    def absorption(self, trails, opacity):
+    def absorption(self, trails, opacity, particle_system=None):
         color = self.config.colors["energy"]
         settings = self.style["absorption_trail"]
+        if particle_system is not None:
+            self.renderer.draw_compute_particles(particle_system, settings, color, self.config.colors["text"], opacity)
+            return
         if self.renderer.draw_instanced_particles(trails, settings, color, self.config.colors["text"], opacity):
             return
         quads = []
@@ -678,7 +681,7 @@ class UiV2View(UiView):
                absorption_trails=(), scanline_visual=None, dialogue_visual=None, lock_visuals=None,
                player_damage_flashes=(), target_damage_flashes=(), counter_message_opacity=None, player_screen=None,
                loadout_visual=None, weapon_swap_visual=None,
-               player_hit_visual=HealthHitVisual(), target_hit_visual=HealthHitVisual()):
+               player_hit_visual=HealthHitVisual(), target_hit_visual=HealthHitVisual(), particle_system=None):
         r, c, hud = self.renderer, self.config.colors, state.hud
         scale = self.style["hud_scale"]
         width, height = self.config.window["width"], self.config.window["height"]
@@ -731,7 +734,7 @@ class UiV2View(UiView):
         for visual in damage_visuals:
             with r.scaled(scale, (visual.x, visual.y)):
                 self.damage_number(visual, opacity, offset_x)
-        self.absorption(absorption_trails, opacity)
+        self.absorption(absorption_trails, opacity, particle_system)
         self.dialogue(state.dialogue, opacity, scanline_visual, panel_visual=dialogue_visual)
         if cursor_position is not None:
             x, y = cursor_position

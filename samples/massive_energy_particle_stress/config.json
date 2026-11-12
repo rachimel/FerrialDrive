@@ -1,0 +1,27 @@
+{
+    "width": 1280,
+    "height": 720,
+    "capacity": 16384,
+    "counts": [1024, 4096, 8192, 16384],
+    "duration_seconds": 1.5,
+    "tail_fraction": 0.3,
+    "seed": 773,
+    "font": "../../data/fonts/Cafe24OhsquareAir-v2.0/Cafe24OhsquareAir-v2.0.otf",
+    "font_size": 18,
+    "colors": {
+        "background": "#0A141A",
+        "energy": "#65DCC8",
+        "text": "#D8E6ED",
+        "muted": "#91AEBB"
+    },
+    "style": {
+        "samples": 24,
+        "head_width_pixels": 4,
+        "orb_radius_pixels": 3.5
+    },
+    "benchmark": {
+        "warmup_frames": 30,
+        "measured_frames": 120,
+        "fixed_delta_seconds": 0.016666666666666666
+    }
+}

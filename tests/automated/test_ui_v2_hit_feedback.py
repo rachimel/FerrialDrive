@@ -3,7 +3,6 @@
 from contextlib import nullcontext
 from dataclasses import replace
 import importlib.util
-from math import hypot
 from pathlib import Path
 import sys
 import unittest
@@ -15,7 +14,7 @@ SPEC = importlib.util.spec_from_file_location("feedback_ui_sample", ROOT / "test
 SAMPLE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(SAMPLE)
 
-from ferrial_drive.ui_v2.effects import EnergyAbsorption, HealthHitMotion, HealthHitVisual
+from ferrial_drive.ui_v2.effects import HealthHitMotion, HealthHitVisual
 from ferrial_drive.ui_v2.geometry import resource_geometry
 from ferrial_drive.ui_v2.view import UiV2View
 
@@ -52,7 +51,7 @@ class HealthHitTests(unittest.TestCase):
     def test_damage_pause_target_switch_zero_damage_and_reset(self):
         program = SAMPLE.UiUnitTestV2(initial_scene="combat")
         program.perform("damage_target")
-        self.assertEqual(len(program.absorption.trails), 3)
+        self.assertEqual(program.particle_system.commands[0].count, 3)
         self.assertEqual(program.target_hit.elapsed_seconds, 0)
         self.assertEqual(program.player_hit.visual, HealthHitVisual())
         program.perform("damage_player")
@@ -67,7 +66,7 @@ class HealthHitTests(unittest.TestCase):
         self.assertEqual(program.player_hit.visual, player)
         program.reset()
         self.assertEqual(program.player_hit.visual, HealthHitVisual())
-        self.assertFalse(program.absorption.trails)
+        self.assertFalse(program.particle_system.commands)
         program.set_hud(player_health=replace(program.state.hud.player_health, current=0))
         program.perform("damage_player")
         self.assertEqual(program.player_hit.visual, HealthHitVisual())
@@ -91,75 +90,6 @@ class HealthHitTests(unittest.TestCase):
         self.assertEqual(geometry, resource_geometry(view.layout, view.style["level_curve_radius_pixels"]))
 
 
-class AbsorptionRouteTests(unittest.TestCase):
-    def make_effect(self):
-        return EnergyAbsorption(1, seed=51)
-
-    def test_paths_vary_between_orbs_stay_fixed_and_keep_all_endpoints(self):
-        effect = self.make_effect()
-        self.assertEqual({side: len(paths) for side, paths in effect.routes.items()}, {-1: 6, 1: 6})
-        for _ in range(12):
-            effect.add((650, 350), (320, 620), (650, 650))
-        routes = {trail.point(0.35) for trail in effect.trails}
-        self.assertGreater(len(routes), 3)
-        for trail in effect.trails:
-            self.assertIn(trail.route_offsets, effect.routes[-1])
-            self.assertEqual(trail.point(0), trail.start)
-            self.assertEqual(trail.point(0.72), trail.icon)
-            self.assertEqual(trail.point(1), trail.destination)
-            saved = trail.point(0.35)
-            effect.update(0.001)
-            self.assertEqual(trail.point(0.35), saved)
-            self.assertLessEqual(max(abs(v) for point in trail.route_offsets for v in point), 70)
-        repeated = self.make_effect()
-        repeated.add((650, 350), (320, 620), (650, 650))
-        self.assertEqual(effect.trails[0].route_offsets, repeated.trails[0].route_offsets)
-
-    def test_pen_pressure_increases_with_distance_along_tail_toward_orb(self):
-        effect = self.make_effect()
-        effect.add((650, 350), (320, 620), (650, 650))
-        trail = effect.trails[0]
-        trail.elapsed_seconds = 0.5
-        ribbon = trail.ribbon()
-        self.assertEqual(ribbon[0][1], 0)
-        self.assertEqual(ribbon[-1][1], 1)
-        self.assertEqual(ribbon[-1][0], trail.point(trail.progress))
-        distances = [0]
-        for a, b in zip(ribbon, ribbon[1:]):
-            self.assertLessEqual(a[1], b[1])
-            distances.append(distances[-1] + hypot(b[0][0] - a[0][0], b[0][1] - a[0][1]))
-        for (_, pressure), distance in zip(ribbon, distances):
-            self.assertAlmostEqual(pressure, (distance / distances[-1]) ** 1.5)
-        trail.elapsed_seconds = 1.15
-        self.assertAlmostEqual(trail.ribbon()[-1][1], 0.5)
-        trail.elapsed_seconds = 1.3
-        self.assertFalse(trail.ribbon())
-
-    def test_zero_hp_does_not_spawn_more_orbs_and_effect_count_is_bounded(self):
-        program = SAMPLE.UiUnitTestV2(initial_scene="combat")
-        for _ in range(100):
-            program.perform("damage_target")
-        self.assertGreater(len(program.absorption.trails), 0)
-        self.assertLessEqual(len(program.absorption.trails), 24)
-        old = tuple(program.absorption.trails)
-        program.perform("damage_target")
-        self.assertEqual(tuple(program.absorption.trails), old)
-        for _ in range(100):
-            program.absorb()
-        self.assertEqual(len(program.absorption.trails), 24)
-
-    def test_right_enemy_uses_right_waypoint_and_enters_bar_from_right(self):
-        program = SAMPLE.UiUnitTestV2(initial_scene="combat")
-        program.apply_target("enemy_b")
-        program.perform("damage_target")
-        trail = program.absorption.trails[1]
-        self.assertEqual(trail.approach_side, 1)
-        self.assertGreater(trail.icon[0], program.camera.world_to_screen(program.player_world)[0])
-        self.assertGreater(trail.point(0.95)[0], trail.destination[0])
-        self.assertEqual(trail.point(1), trail.destination)
-        program.apply_target("enemy_a")
-        program.perform("damage_target")
-        self.assertEqual(program.absorption.trails[-1].approach_side, -1)
 
 
 if __name__ == "__main__":
