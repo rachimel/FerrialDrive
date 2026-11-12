@@ -35,6 +35,14 @@ class WeaponSwapVisual:
         progress = smooth_step((self.elapsed_seconds - seconds_ago) / self.duration_seconds)
         return self.start_weight + (self.end_weight - self.start_weight) * progress
 
+    @property
+    def velocity(self):
+        """가중치의 초당 순간 변화량. 시작·끝에서 부드럽게 0이 된다."""
+        if not self.moving:
+            return 0.0
+        progress = max(0, min(1, self.elapsed_seconds / self.duration_seconds))
+        return (self.end_weight - self.start_weight) * 6 * progress * (1 - progress) / self.duration_seconds
+
 
 class WeaponSwap:
     def __init__(self, initial_kind, duration_seconds):

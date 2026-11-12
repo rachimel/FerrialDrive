@@ -35,7 +35,7 @@ class UiV2Tests(unittest.TestCase):
         renderer.clip.side_effect = lambda *args: nullcontext()
         renderer.text_size.return_value = (20, 18)
         view = UiV2View(self.program.config, renderer)
-        self.program.config.data["equipment_motion_blur"]["samples"] = 0
+        self.program.config.data["v2"]["style"]["loadout_blur"]["samples"] = 0
         old_index = self.program.state.hud.active_loadout_index
         self.program.perform("loadout")
         hud = self.program.state.hud
@@ -169,13 +169,31 @@ class UiV2Tests(unittest.TestCase):
             self.assertLess(calls[0].args[1][0] * calls[1].args[1][0], 0)
             for call in calls:
                 self.assertLessEqual(abs(call.args[1][0]), view.style["weapon_swap_blur"]["max_length_pixels"])
-                self.assertEqual(call.args[3], 33)
+                self.assertEqual(call.args[3], view.style["weapon_swap_blur"]["samples"])
             self.program.update(self.program.weapon_swap.duration_seconds)
             renderer.directional_blur.reset_mock()
             with patch.object(view, "weapon_cards", wraps=view.weapon_cards) as cards, patch.object(view, "panel_layer"):
                 view.weapons(self.program.state.hud, 1, 0, weapon_swap_visual=self.program.weapon_swap.visual)
             cards.assert_called_once()
             renderer.directional_blur.assert_not_called()
+
+    def test_motion_blur_velocity_fades_at_endpoints_and_loadout_turnaround(self):
+        from ferrial_drive.ui.loadout_slide import LoadoutVisual
+        from ferrial_drive.ui.weapon_swap import WeaponSwapVisual
+        from dataclasses import replace
+        swap = WeaponSwapVisual(1, 0, 0, 0.12)
+        for elapsed in (0, 0.12):
+            self.assertAlmostEqual(replace(swap, elapsed_seconds=elapsed).velocity, 0)
+        self.assertLess(abs(replace(swap, elapsed_seconds=0.1199).velocity), 0.05)
+        slide = LoadoutVisual(0, 1, 0, 0.5)
+        for elapsed in (0, 0.25, 0.5):
+            self.assertAlmostEqual(replace(slide, elapsed_seconds=elapsed).velocity(300), 0)
+        for elapsed in (0.04, 0.125, 0.21, 0.29, 0.375, 0.46):
+            current = replace(slide, elapsed_seconds=elapsed)
+            epsilon = 1e-8
+            before = replace(slide, elapsed_seconds=elapsed - epsilon).pose(300)[0]
+            after = replace(slide, elapsed_seconds=elapsed + epsilon).pose(300)[0]
+            self.assertAlmostEqual(current.velocity(300), (after - before) / (2 * epsilon), delta=0.01)
 
     def test_camera_projection_and_mouse_auto_target_share_world_coordinates(self):
         self.program.mouse = (1000, 360)

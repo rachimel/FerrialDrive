@@ -486,7 +486,7 @@ class UiV2View(UiView):
         shift, fade = 0, 1
         motion, strength, maximum, samples = (0, 0), 0, 0, 33
         if sliding or swapping:
-            settings = self.config.data["equipment_motion_blur"] if sliding else self.style["weapon_swap_blur"]
+            settings = self.style["loadout_blur"] if sliding else self.style["weapon_swap_blur"]
             shutter, maximum = settings["shutter_seconds"], settings["max_length_pixels"]
             strength = settings["opacity"] if settings["samples"] else 0
             samples = max(33, settings["samples"])
@@ -496,10 +496,9 @@ class UiV2View(UiView):
                                 if self.style["weapon_card_shape"] == "trapezoid" else 0)
                 distance = self.config.window["width"] - leftmost + self.config.data["loadout_slide"]["exit_padding_pixels"]
                 shift, fade, index = loadout_visual.pose(distance)
-                previous_shift, _, previous_index = loadout_visual.pose(distance, loadout_visual.progress_before(shutter))
-                shift_delta = shift - (previous_shift if previous_index == index else distance)
-            old_weight = weapon_swap_visual.weight_before(shutter) if swapping else ranged_weight
-            motion = shift_delta, ranged_weight - old_weight
+                shift_delta = loadout_visual.velocity(distance) * shutter
+            weight_delta = weapon_swap_visual.velocity * shutter if swapping else 0
+            motion = shift_delta, weight_delta
         if fade > 0:
             self.weapon_cards(hud, hud.loadouts[index], opacity * fade, offset_x + shift,
                               ranged_weight=ranged_weight, blur_motion=motion, blur_strength=strength,

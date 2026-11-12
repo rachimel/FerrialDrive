@@ -34,6 +34,16 @@ class LoadoutVisual:
         index = self.outgoing_index if leaving else self.incoming_index
         return exit_distance * travel, 1 - travel, index
 
+    def velocity(self, exit_distance):
+        """현재 퇴장/등장 곡선의 순간 속도. 구간 경계와 정지 시에는 0이다."""
+        if not self.moving:
+            return 0.0
+        progress = self.progress_before()
+        leaving = progress < 0.5
+        local = 2 * progress if leaving else 2 * (1 - progress)
+        derivative = 80 * min(local, 1 - local) ** 4
+        return exit_distance * derivative * (2 if leaving else -2) / self.duration_seconds
+
 
 class LoadoutSlide:
     def __init__(self, initial_index, duration_seconds):

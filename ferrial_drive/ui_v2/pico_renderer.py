@@ -3,7 +3,7 @@
 from contextlib import contextmanager
 from collections import OrderedDict
 from ctypes import byref, c_float, c_int, c_ubyte, memmove, string_at
-from math import ceil, exp, floor, hypot, isfinite, log2
+from math import ceil, exp, floor, isfinite, log2
 from random import Random
 
 from ferrial_drive.ui.pico_renderer import PicoRenderer
@@ -387,7 +387,7 @@ class PicoV2Renderer(PicoRenderer):
     def directional_blur(self, bounds, displacement, strength, samples=33):
         """현재 카드 한 장을 같은 화면 좌표에 렌더한 뒤 연속 방향성 필터로 합성한다."""
         from ferrial_drive.rendering.canvas import renderer_info
-        if strength <= 0 or hypot(*displacement) < 0.01 or renderer_info(self.pico).name != 'opengl':
+        if strength <= 0 or renderer_info(self.pico).name != 'opengl':
             yield
             return
         p = self.pico

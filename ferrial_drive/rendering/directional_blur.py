@@ -22,8 +22,8 @@ void main() {
     for (int i = 0; i < 65; ++i) {
         if (i >= sampleCount) break;
         float t = float(i) / float(sampleCount - 1);
-        float weight = 1.0 - 0.75 * t;
-        blurred += sampleLayer(texel + motionVector * t) * weight;
+        float weight = 1.0 - 0.75 * abs(2.0 * t - 1.0);
+        blurred += sampleLayer(texel + motionVector * (t - 0.5)) * weight;
         total += weight;
     }
     vec4 result = mix(sampleLayer(texel), blurred / total, blurStrength);

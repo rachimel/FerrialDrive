@@ -41,7 +41,7 @@ class DirectionalBlurTests(unittest.TestCase):
                                                    data, 96 * 4), 0)
         return bytes(data)
 
-    def test_both_directions_form_continuous_streak_without_repeated_shapes(self):
+    def test_both_directions_form_centered_continuous_streak_without_repeated_shapes(self):
         for displacement in (12, -12):
             self.renderer.clear('#000000')
             with self.renderer.directional_blur(Rect(40, 24, 6, 8), (displacement, 0), 1):
@@ -51,12 +51,21 @@ class DirectionalBlurTests(unittest.TestCase):
             support = [x for x, value in enumerate(row) if value > 0]
             self.assertGreater(len(support), 6)
             self.assertEqual(support, list(range(min(support), max(support) + 1)))
-            if displacement > 0:
-                self.assertLess(min(support), 40)
-                self.assertLessEqual(max(support), 46)
-            else:
-                self.assertGreater(max(support), 46)
-                self.assertGreaterEqual(min(support), 39)
+            self.assertLess(min(support), 40)
+            self.assertGreater(max(support), 45)
+            center = sum(x * value for x, value in enumerate(row)) / sum(row)
+            self.assertAlmostEqual(center, 42.5, delta=0.05)
+
+    def test_changing_blur_width_does_not_move_visible_center(self):
+        centers = []
+        for displacement in (0, 0.1, 1, 8, 24, 48, 8, 0):
+            self.renderer.clear('#000000')
+            with self.renderer.directional_blur(Rect(40, 24, 6, 8), (displacement, 0), 0.9, 49):
+                self.renderer.rect(Rect(40, 24, 6, 8), '#FFFFFF')
+            data = self.pixels()
+            row = [data[(28 * 96 + x) * 4] for x in range(96)]
+            centers.append(sum(x * value for x, value in enumerate(row)) / sum(row))
+        self.assertLess(max(centers) - min(centers), 0.1)
 
     def test_translucent_layer_is_not_multiplied_by_alpha_twice(self):
         with self.renderer.directional_blur(Rect(24, 20, 40, 20), (8, 0), 1):

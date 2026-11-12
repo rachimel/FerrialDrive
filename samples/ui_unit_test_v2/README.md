@@ -17,7 +17,7 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 - `ui_config.json`의 `v2.layout`: 미니맵·록온·타겟 HP·플레이어 HP·에너지·필살기 아이콘·레벨·무장·카운터 배치.
 - `v2.layout.hp_bar`·`energy_bar`·`ultimate_center_x`·`ultimate_radius_pixels`: 바의 높이/오른쪽 끝과 아이콘 위치·크기. 두 바의 왼쪽 경계는 마름모 변에 맞춰 계산한다. HP 안쪽 여백은 없고 수치/HP는 바 위에 자동 정렬한다.
 - `v2.layout.energy_level_width_pixels`·`v2.style.level_curve_radius_pixels`: HP 옆에 붙는 레벨 영역의 폭과 곡선 강도. HP/에너지 공유 경계와 레벨 왼쪽 사선은 함께 계산한다.
-- HIT·누적 데미지 전체 크기는 각각 `v2.style.counters.*.ui_scale=0.9`로 조절한다. 숫자·레이블·받침판·정적 잔상을 함께 10% 축소한다. `v2.layout.hit_y=266`·`damage_y=376`으로 간격을 110px로 맞추고 기본 샘플의 묶음을 화면 오른쪽 중앙에 배치한다. 오른쪽 여백은 14px다.
+- HIT·누적 데미지 전체 크기는 각각 `v2.style.counters.*.ui_scale=0.9`로 조절한다. 숫자·레이블·받침판·정적 잔상을 함께 10% 축소한다. `v2.layout.hit_y=276`·`damage_y=366`으로 간격을 90px로 맞추고 기본 샘플의 묶음을 화면 오른쪽 중앙에 배치한다. 오른쪽 여백은 14px다.
 - `v2.style.counters`: HIT/DAMAGE의 원근 `depth`(0~1)·기울기 `lean`/`slope`·고정 `text_scale`·원근 기준 폭 `perspective_width_pixels`·오른쪽 여백. 기준 폭은 최대 표시 폭이 아니다. 숫자를 축소하지 않고 받침판과 잔상 조각을 왼쪽으로 확장한다. 오른쪽 기준 투영은 자릿수와 무관하게 유지한다.
 - `v2.style.panel_cut_pixels`·`surface_opacity`: 사선 외곽과 일반 패널의 최대 배경 불투명도 0.55. 활성/비활성·버튼 상태의 기존 투명도도 함께 적용한다.
 - `v2.style.panel_border`: 기본/좌상단·우하단 두께 `thin_width_pixels`·`corner_width_pixels`는 1/5px다. `corner_hold_pixels=3`까지 최대 두께를 유지한 뒤 직선으로 가늘어진다. 일반 패널의 변화 구간은 `reach_pixels=180`이며 짧은 변에서는 길이에 맞춘다. 곡선 보간은 제거했다.
@@ -37,7 +37,7 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 - `v2.targeting_sample`: 샘플 획득 거리 330·우클릭 거리 460이다. 줌 없는 1:1 월드 단위를 사용하며 각도 동률 값은 자동 선택에 사용하지 않는다. `v2.auto_targeting.switch_margin_seconds=1`은 새 후보의 유지 대기다. `v2.camera`는 데드존 80px·변위 20%·최대 오프셋 120·응답 시정수 0.15초다. 본편 밸런스 확정값이 아니다.
 - `v2.style.hud_scale`: 일반 전투 HUD 배율 0.81. `map_scale`·`equipment_scale`은 0.9로 미니맵·웨폰·로드아웃의 현재 크기를 유지한다. 레이더는 별도로 반경 144px와 표시 치수를 조정했다. 기체·메뉴는 조정 대상이 아니다.
 - `v2.style.weapon_card_shape=trapezoid`: 위아래 행을 유지하며 오른쪽 변이 수직이고 왼쪽만 기울어진 사다리꼴 카드다. 두 높이는 70 논리 px(화면 63px)로 같다. 위 카드 밑변과 아래 카드 윗변은 260px로 맞추고 `weapon_card_cut_pixels=18`만큼 아래 카드 밑변을 더 넓힌다. 활성 카드는 왼쪽·밝게, 비활성 카드는 오른쪽·어둡게 표시하며 `weapon_depth_offset_pixels=22`로 위치 차이를 조절한다. `slanted`로 바꾸면 기존 사선·비활성 축소 형태를 복원하며 그때 `inactive_weapon_scale=0.8`을 사용한다.
-- `weapon_swap.duration_seconds=0.12`: E 무기 교체 시 가로 위치·밝기 전환 시간이다. `v2.style.weapon_swap_blur`는 GPU 필터 샘플 33개·셔터 0.06초·세기 0.75·최대 길이 16px를 제어한다. 카드를 한 번 렌더한 투명 레이어를 이동 방향으로 연속 필터링한다. `loadout_slide.duration_seconds=0.5`와 `equipment_motion_blur`는 F 로드아웃 카드 퇴장/등장의 셔터·세기·길이를 제어하며 두 전환이 겹치면 함께 계산한다. 01·02는 필터에서 제외한다. 두 전환은 일시정지 시 멈추고 F5로 초기화한다. 방향성 필터는 OpenGL에서 사용하며 소프트웨어 렌더러는 필터 없이 그린다.
+- `weapon_swap.duration_seconds=0.12`: E 무기 교체 시 가로 위치·밝기 전환 시간이다. `v2.style.weapon_swap_blur`는 GPU 필터 샘플 49개·셔터 0.075초·세기 0.9·최대 길이 24px를 제어한다. F 전환은 0.5초이며 `v2.style.loadout_blur`의 샘플 49개·셔터 0.075초·세기 0.85·최대 길이 48px를 사용한다. 순간 속도에 따른 중심 고정 방향성 블러로 시작·끝·반환 지점의 튐을 줄인다. 01·02는 필터에서 제외한다. 두 전환은 일시정지 시 멈추고 F5로 초기화한다. 방향성 필터는 OpenGL에서 사용하며 소프트웨어 렌더러는 필터 없이 그린다.
 - `v2.style.resource_label_gap_pixels`·`ultimate_label_gap_pixels`: 바 위 HP 표기와 마름모 왼쪽 문구의 간격. 에너지 레벨은 오른쪽 정렬, V와 `LV. 01`은 각각 마름모 왼쪽 위/왼쪽 아래에 두고 오른쪽 끝을 맞춘다.
 - `v2.layout.dash_x=870`: 대시/SPACE의 기존 가로 위치다. `v2.style.dash_icon`은 겹친 꺾쇠 2개의 크기·간격·두께와 키 안내 간격을 조절한다. `bottom_margin_pixels=12`는 글자 영역 아래 끝에서 윈도우 아래까지의 화면 픽셀 거리다. 높이와 HUD 배율을 반영해 배치하며 현재 글꼴의 실제 잉크 여백은 15px다. 비활성은 기존 불투명도 0.25를 유지한다.
 - `v2.style.ultimate_label_padding_pixels`: 필살기 단축키·레벨 뒤 사선 패널의 가로/세로 안쪽 여백. 기본값은 4/2 논리 px이며 글자 크기에 맞춰 테두리 없이 면만 그린다. 필살기 LV 패널은 아래쪽이 오른쪽으로 뻗는 ＼ 방향이며 패널과 글자는 위치·투명도를 공유한다.

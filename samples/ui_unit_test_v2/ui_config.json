@@ -623,8 +623,8 @@
                 260,
                 70
             ],
-            "hit_y": 266,
-            "damage_y": 376,
+            "hit_y": 276,
+            "damage_y": 366,
             "counter_message": [
                 810,
                 342
@@ -821,10 +821,16 @@
             "weapon_card_cut_pixels": 18,
             "weapon_depth_offset_pixels": 22,
             "weapon_swap_blur": {
-                "samples": 33,
-                "shutter_seconds": 0.06,
-                "opacity": 0.75,
-                "max_length_pixels": 16
+                "samples": 49,
+                "shutter_seconds": 0.075,
+                "opacity": 0.9,
+                "max_length_pixels": 24
+            },
+            "loadout_blur": {
+                "samples": 49,
+                "shutter_seconds": 0.075,
+                "opacity": 0.85,
+                "max_length_pixels": 48
             },
             "resource_label_gap_pixels": 4,
             "overdrive_width_ratio": 0.75,
