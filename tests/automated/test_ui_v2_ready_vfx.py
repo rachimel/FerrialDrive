@@ -82,7 +82,7 @@ class ReadyVfxTests(unittest.TestCase):
         renderer.clip.side_effect = lambda rect: nullcontext()
         active, drawn = [], []
         @contextmanager
-        def blur(*args):
+        def blur(*args, **kwargs):
             active.append(True)
             yield
             active.pop()
@@ -97,6 +97,7 @@ class ReadyVfxTests(unittest.TestCase):
         self.assertGreater(abs(motion[1]), abs(motion[0]))
         self.assertGreater(strength, 0)
         self.assertEqual(samples, 49)
+        self.assertEqual(renderer.directional_blur.call_args.kwargs['forward_bias'], 1)
         self.assertTrue(any(not filtered and char == '9' and role == 'combo_number' for filtered, char, role in drawn))
         self.assertTrue(all(role == 'combo_number' for filtered, _, role in drawn if filtered))
         self.assertFalse(active)
@@ -126,7 +127,7 @@ class ReadyVfxTests(unittest.TestCase):
     def test_counter_exposure_uses_instantaneous_speed_and_keeps_streak_margin(self):
         renderer = Mock()
         renderer.clip.side_effect = lambda rect: nullcontext()
-        renderer.directional_blur.side_effect = lambda *args: nullcontext()
+        renderer.directional_blur.side_effect = lambda *args, **kwargs: nullcontext()
         view = UiV2View(self.program.config, renderer)
         lengths = []
         for elapsed in (0.001, 0.09, 0.179):

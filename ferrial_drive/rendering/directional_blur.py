@@ -9,6 +9,7 @@ uniform vec2 atlasSize;
 uniform vec4 modulation;
 uniform vec2 motionVector;
 uniform float blurStrength;
+uniform float forwardBias;
 uniform int sampleCount;
 varying vec2 texel;
 vec4 sampleLayer(vec2 pixel) {
@@ -23,7 +24,7 @@ void main() {
         if (i >= sampleCount) break;
         float t = float(i) / float(sampleCount - 1);
         float weight = 1.0 - 0.75 * abs(2.0 * t - 1.0);
-        blurred += sampleLayer(texel + motionVector * (t - 0.5)) * weight;
+        blurred += sampleLayer(texel + motionVector * (t - 0.5 - forwardBias * 0.5)) * weight;
         total += weight;
     }
     vec4 result = mix(sampleLayer(texel), blurred / total, blurStrength);
@@ -36,12 +37,15 @@ void main() {
 class DirectionalBlurSampler(BicubicSampler):
     def __init__(self, pico):
         super().__init__(pico, None, fragment_shader=FRAGMENT_SHADER,
-                         extra_uniforms=('motionVector', 'blurStrength', 'sampleCount'))
+                         extra_uniforms=('motionVector', 'blurStrength', 'sampleCount', 'forwardBias'))
 
-    def draw_blurred(self, texture, size, source, destination, displacement, strength, samples=33):
+    def draw_blurred(self, texture, size, source, destination, displacement, strength, samples=33, *, forward_bias=0):
+        if not 0 <= forward_bias <= 1:
+            raise ValueError('방향성 블러의 이동 방향 치우침은 0~1이어야 한다.')
         with self.batch():
             self.glUniform2f(self.uniforms['motionVector'], *displacement)
             self.glUniform1f(self.uniforms['blurStrength'], strength)
+            self.glUniform1f(self.uniforms['forwardBias'], forward_bias)
             self.glUniform1i(self.uniforms['sampleCount'], max(2, min(65, samples)))
             self.draw(texture, size, source, destination)
 

@@ -814,11 +814,13 @@ class UiV2View(UiView):
         corners = tuple(project(x, y) for x, y in ((0, 0), (width, 0), (width, ink_bottom), (0, ink_bottom)))
         xs, ys = zip(*corners)
         bounds = Rect(min(xs) - 2, min(ys) - 2, max(xs) - min(xs) + 7, max(ys) - min(ys) + 7)
-        pad_x = max(settings['overscan_pixels'], abs(motion[0]) / 2 + 8)
-        pad_y = max(settings['overscan_pixels'], abs(motion[1]) / 2 + 8)
+        bias = settings['forward_bias']
+        reach = (1 + bias) / 2
+        pad_x = max(settings['overscan_pixels'], abs(motion[0]) * reach + 8)
+        pad_y = max(settings['overscan_pixels'], abs(motion[1]) * reach + 8)
         clip = Rect(bounds.x - pad_x, bounds.y - pad_y, bounds.width + pad_x * 2, bounds.height + pad_y * 2)
         with self.renderer.clip(clip):
-            with self.renderer.directional_blur(bounds, motion, strength, settings['samples']):
+            with self.renderer.directional_blur(bounds, motion, strength, settings['samples'], forward_bias=bias):
                 yield
 
     def rolling_digit(self, visual, before, after, x, height, role, color, project, opacity, scale, viewport,

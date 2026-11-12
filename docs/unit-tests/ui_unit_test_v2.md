@@ -1,7 +1,9 @@
 # UI Unit Test v2
 
+- 카운터 블러는 `counter_motion_blur.forward_bias=1`로 이동 방향 쪽에 치우쳐 표시한다. 기본 여백은 사방 48px이며 편향을 반영한 전체 번짐 길이+8px까지 자동으로 넓힌다. 최대 길이는 128px·이동량 배율은 1.3이다. 노출 0.075초·전환 0.18초는 유지한다. 로드아웃·무기·HP 블러는 기본 `forward_bias=0`의 중심형을 유지한다.
+
 - 에너지 오브의 평균 이동시간은 0.9875초다. 고정 도착 간격 대신 `v2.energy_absorption.duration_variation=0.18`로 최대 ±18% 변동을 생성 Compute에서 적용한다. 짝의 증감을 상쇄하고 홀수 요청의 마지막은 평균값을 사용해 요청당 평균을 보존한다. 개별 도착 시 분할 회복·동적 목표는 유지하며 추가 입자 상태 버퍼나 프로그램은 없다.
-- HIT·DAMAGE는 로드아웃과 같은 순간 속도×노출 시간으로 연속 GPU 블러를 계산한다. 노출 0.075초·세기 0.85·최대 96px, 숫자 전환은 0.18초다. `counter_motion_blur.overscan_pixels=24`는 최소 여백이며 실제 번짐 반경에 따라 사방으로 늘려 합성 결과가 숫자 상자에 잘리지 않게 한다. 원래 숫자 전환의 문자 마스크는 유지하며 레이블·고정 자릿수는 필터 밖이다.
+- HIT·DAMAGE는 로드아웃과 같은 순간 속도×노출 시간으로 연속 GPU 블러를 계산한다. 노출 0.075초·세기 0.85·최대 128px, 숫자 전환은 0.18초다. `counter_motion_blur.overscan_pixels=48`는 최소 여백이며 실제 번짐 반경에 따라 사방으로 늘려 합성 결과가 숫자 상자에 잘리지 않게 한다. 원래 숫자 전환의 문자 마스크는 유지하며 레이블·고정 자릿수는 필터 밖이다.
 
 - 필살기 쿨다운 동안 아이콘·외곽은 밝기 22%로 어둡게 표시한다. `ultimate_cooldown_seconds / ultimate_cooldown_duration_seconds`로 남은 비율을 계산해 아래에서 위로 원래 밝기를 드러낸다. 남은/전체 시간은 게임이 공급하며 예제는 5초다. 완료 flash·LV3/쿨다운 0 강조선 조건은 유지한다.
 - `v2.style.ultimate_border_width_pixels`·`resource_border_width_pixels`는 필살기 외곽·HP/에너지/LV 외곽의 3px 두께다. 쿨다운 밝기는 `ultimate_cooldown_dim_opacity=0.22`다. 내부 아이콘 그림·채움 끝선의 기존 두께와 구분한다.
@@ -10,7 +12,7 @@
 - `v2.style.accent_hatching`은 록온·필살기 강조선의 빗금이다. 강조선 띠 안으로 잘라 모양을 맞추며, 진행 방향의 뒤쪽 8px→앞쪽 2.5px로 간격을 좁힌다. `enabled=false`로 끈다. 공통 순환은 5차 보간으로 시작/끝 속도 0·중간 t=0.5에서 최대 속도다. 이동 0.5초·정지 0.2초를 공유한다.
 - `EnergyTintMotion`은 논리 충전량과 별개로 표시 색을 0.24초 동안 보간한다. 바·회복 flash·흡수 입자에 같은 `energy_tint_ratio`를 공급한다. `v2.style.energy_tint_seconds`로 시간을 조절하며 정지 중 멈춘다. 충전/Overdrive 판정은 지연하지 않는다.
 - Overdrive 완충 뒤에도 채움 끝의 불꽃을 유지한다. 일반 40개/초·0.8초 수명에서 Overdrive 96개/초·1초·강도 1.8로 전환한다. `energy_boundary.overdrive_*`로 조절한다. 생성 강도는 GPU 속도·크기에 적용하며 생성/갱신 Compute 두 개를 유지한다.
-- HIT·DAMAGE의 바뀌는 자릿수는 별도 투명 레이어에 그리고 실제 원근 투영 이동축을 따라 연속 GPU 방향성 필터를 적용한다. 고정 자릿수·레이블·받침판은 필터 밖이다. `v2.style.counter_motion_blur`는 노출 0.075초·세기 0.85·49샘플·최대 96px·이동량 배율 1이다. LV 숫자의 기존 잔상은 유지한다.
+- HIT·DAMAGE의 바뀌는 자릿수는 별도 투명 레이어에 그리고 실제 원근 투영 이동축을 따라 연속 GPU 방향성 필터를 적용한다. 고정 자릿수·레이블·받침판은 필터 밖이다. `v2.style.counter_motion_blur`는 노출 0.075초·세기 0.85·49샘플·최대 128px·이동량 배율 1.3이다. LV 숫자의 기존 잔상은 유지한다.
 
 - `v2.style.overdrive_entry_streak`: 등장 순간 중앙에서 수평으로 뻗는 빛을 한 번 표시한다. 0.045초 확장·0.025초 유지·0.17초 fade-out, 최대 길이는 바 폭의 88%다. Overdrive 퇴장 투명도를 함께 적용하며 일시정지 때 등장 시계도 멈춘다.
 

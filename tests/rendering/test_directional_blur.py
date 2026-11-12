@@ -56,6 +56,20 @@ class DirectionalBlurTests(unittest.TestCase):
             center = sum(x * value for x, value in enumerate(row)) / sum(row)
             self.assertAlmostEqual(center, 42.5, delta=0.05)
 
+    def test_forward_bias_pulls_vertical_streak_up_and_resets_for_other_effects(self):
+        for bias, expected_center in ((1, 19.5), (0, 27.5)):
+            self.renderer.clear('#000000')
+            with self.renderer.directional_blur(Rect(40, 24, 6, 8), (0, -16), 1, 49, forward_bias=bias):
+                self.renderer.rect(Rect(40, 24, 6, 8), '#FFFFFF')
+            data = self.pixels()
+            column = [data[(y * 96 + 43) * 4] for y in range(64)]
+            center = sum(y * value for y, value in enumerate(column)) / sum(column)
+            self.assertAlmostEqual(center, expected_center, delta=0.15)
+            if bias:
+                support = [y for y, value in enumerate(column) if value]
+                self.assertLess(min(support), 24)
+                self.assertLessEqual(max(support), 32)
+
     def test_changing_blur_width_does_not_move_visible_center(self):
         centers = []
         for displacement in (0, 0.1, 1, 8, 24, 48, 8, 0):

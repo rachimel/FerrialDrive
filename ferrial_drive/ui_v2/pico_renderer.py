@@ -393,8 +393,8 @@ class PicoV2Renderer(PicoRenderer):
         return texture
 
     @contextmanager
-    def directional_blur(self, bounds, displacement, strength, samples=33):
-        """현재 카드 한 장을 같은 화면 좌표에 렌더한 뒤 연속 방향성 필터로 합성한다."""
+    def directional_blur(self, bounds, displacement, strength, samples=33, *, forward_bias=0):
+        """UI 레이어를 같은 화면 좌표에 렌더한 뒤 방향성 필터로 합성한다."""
         from ferrial_drive.rendering.canvas import renderer_info
         if strength <= 0 or renderer_info(self.pico).name != 'opengl':
             yield
@@ -461,7 +461,8 @@ class PicoV2Renderer(PicoRenderer):
                                          round(cw * sx), round(ch * sy))
             p.SDL_RenderSetClipRect(p.renderer, byref(screen_clip) if screen_clip is not None else None)
             self.motion_sampler.draw_blurred(self.motion_texture, output_size, source, destination,
-                                             (displacement[0] * sx, displacement[1] * sy), strength, samples)
+                                             (displacement[0] * sx, displacement[1] * sy), strength, samples,
+                                             forward_bias=forward_bias)
         finally:
             p.SDL_RenderSetScale(p.renderer, *scale)
             p.SDL_RenderSetViewport(p.renderer, byref(viewport))

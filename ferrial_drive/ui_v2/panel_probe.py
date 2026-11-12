@@ -37,7 +37,7 @@ class PanelProbeRenderer:
             self.ranges.append(bounds)
 
     @contextmanager
-    def directional_blur(self, bounds, displacement, strength, samples=33):
+    def directional_blur(self, bounds, displacement, strength, samples=33, *, forward_bias=0):
         yield
 
     @contextmanager
