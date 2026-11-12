@@ -20,6 +20,7 @@ from ferrial_drive.combat.camera import LookAheadCamera
 from ferrial_drive.ui.config import UiConfig
 from ferrial_drive.ui.counter import RollingCounter
 from ferrial_drive.ui.energy import EnergyCharge
+from ferrial_drive.ui.energy_fill import EnergyFillMotion
 from ferrial_drive.ui.damage import DamageNumbers
 from ferrial_drive.ui.health import HealthTrail
 from ferrial_drive.ui.loadout_slide import LoadoutSlide
@@ -122,6 +123,8 @@ class UiUnitTestV2:
         self.player_hit = HealthHitMotion(**hit_settings["player"])
         self.target_hit = HealthHitMotion(**hit_settings["target"])
         absorption = self.config.data['v2']['energy_absorption']
+        self.energy_fill = EnergyFillMotion(self.config.data['v2'].get('energy_fill_seconds', 0.12))
+        self.energy_fill.reset(EnergyCharge.from_state(self.state).total)
         self.energy_flash = EnergyRecoveryFlash(absorption['flash_seconds'])
         self.energy_tint = EnergyTintMotion(self.config.data['v2']['style']['energy_tint_seconds'])
         self.energy_tint.reset(EnergyCharge.from_state(self.state).overdrive_ratio)
@@ -245,6 +248,7 @@ class UiUnitTestV2:
     def set_energy_charge(self, charge):
         self.state = replace(self.state, energy_level=charge.level, energy_ratio=charge.ratio,
                              overdrive_charge_ratio=charge.overdrive_ratio, overdrive=charge.active)
+        self.energy_fill.request(charge.total)
         self.level_counter.set_value(charge.level)
         self.energy_tint.request(charge.overdrive_ratio)
         self.overdrive_motion.request(charge.active)
@@ -261,8 +265,9 @@ class UiUnitTestV2:
         count = self.boundary_emitter.update(delta_seconds, enabled)
         if count:
             channel, _, _ = self.energy_geometry()
-            top = tuple(a + (b - a) * ratio for a, b in zip(channel[0], channel[1]))
-            bottom = tuple(a + (b - a) * ratio for a, b in zip(channel[3], channel[2]))
+            display_ratio = self.energy_fill.visual.arrival_ratio
+            top = tuple(a + (b - a) * display_ratio for a, b in zip(channel[0], channel[1]))
+            bottom = tuple(a + (b - a) * display_ratio for a, b in zip(channel[3], channel[2]))
             self.particle_system.emit_sparks(top, bottom, count=count,
                 duration_seconds=settings['overdrive_duration_seconds'] if overdrive else settings['duration_seconds'],
                 spread_pixels=settings['spread_pixels'], intensity=settings['overdrive_intensity'] if overdrive else 1)
@@ -446,6 +451,8 @@ class UiUnitTestV2:
         self.overdrive_motion.update(delta_seconds)
         self.energy_tint.request(EnergyCharge.from_state(self.state).overdrive_ratio)
         self.energy_tint.update(delta_seconds)
+        self.energy_fill.request(EnergyCharge.from_state(self.state).total)
+        self.energy_fill.update(delta_seconds)
         self.loadout_slide.request(self.state.hud.active_loadout_index)
         self.loadout_slide.update(delta_seconds)
         self.weapon_swap.request(self.state.hud.active_weapon_kind)
@@ -530,6 +537,7 @@ class UiUnitTestV2:
                                  overdrive_visual=self.overdrive_motion.visual,
                                  ultimate_visual=self.ultimate_motion.visual,
                                  energy_tint_ratio=self.energy_tint.ratio,
+                                 energy_visual=self.energy_fill.visual,
                                  scanline_visual=self.scanline_motion.visual,
                                  dialogue_visual=self.dialogue_motion.visual,
                                  lock_visuals=self.lock_motion.visuals,

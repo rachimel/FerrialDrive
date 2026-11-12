@@ -457,7 +457,7 @@ class UiV2View(UiView):
 
     def resources(self, state, opacity, offset_x, player_trailing_ratio, *, damage_flashes=(),
                   hit_visual=HealthHitVisual(), energy_flash=0, level_visual=None,
-                  overdrive_visual=None, ultimate_visual=None, energy_tint_ratio=None):
+                  overdrive_visual=None, ultimate_visual=None, energy_tint_ratio=None, energy_visual=None):
         dx, dy = self.health_hit_offset(hit_visual)
         scope = self.renderer.translated(dx, dy) if dx or dy else nullcontext()
         with scope:
@@ -467,18 +467,24 @@ class UiV2View(UiView):
                 self._resource_contents(state, opacity, offset_x, player_trailing_ratio, damage_flashes=damage_flashes,
                                         hit_visual=HealthHitVisual(), energy_flash=energy_flash, level_visual=level_visual,
                                         overdrive_visual=overdrive_visual, ultimate_visual=ultimate_visual,
-                                        energy_tint_ratio=energy_tint_ratio)
+                                        energy_tint_ratio=energy_tint_ratio, energy_visual=energy_visual)
         self.dash_indicator(state, opacity)
 
     def _resource_contents(self, state, opacity, offset_x, player_trailing_ratio, *, damage_flashes=(),
                            hit_visual=HealthHitVisual(), energy_flash=0, level_visual=None,
-                           overdrive_visual=None, ultimate_visual=None, energy_tint_ratio=None):
+                           overdrive_visual=None, ultimate_visual=None, energy_tint_ratio=None, energy_visual=None):
         r, c = self.renderer, self.config.colors
         geometry = resource_geometry(self.layout, self.style["level_bevel_pixels"])
         self.player_health(state.hud, geometry, opacity, player_trailing_ratio, damage_flashes, hit_visual)
         x, y, width, height = self.layout["energy_bar"]
         outline, channel = geometry.energy_outline, geometry.energy_channel
         charge = 1 if state.overdrive else state.overdrive_charge_ratio
+        fill_ratio = state.energy_ratio
+        boundary_ratio = charge if state.energy_level == 3 and state.energy_ratio == 1 else fill_ratio
+        if energy_visual is not None:
+            fill_ratio = energy_visual.ratio
+            charge = energy_visual.overdrive_ratio
+            boundary_ratio = energy_visual.arrival_ratio
         tint = charge if energy_tint_ratio is None else energy_tint_ratio
         color = energy_color(c['energy'], self.style['overdrive_red'], tint)
         fill_color = energy_color(c['energy_fill'], self.style['overdrive_red'], tint)
@@ -488,8 +494,8 @@ class UiV2View(UiView):
         self.stroke(outline + outline[:1], c["text"], opacity * 0.75, self.style['resource_border_width_pixels'])
         self.polygon(channel, color, opacity * 0.1, filled=True)
         energy_alpha = opacity * breathing_opacity(self._scanline_visual.elapsed_seconds, **self.style["energy_breathing"])
-        if state.energy_ratio > 0:
-            filled = quad_fill(channel, state.energy_ratio)
+        if fill_ratio > 0:
+            filled = quad_fill(channel, fill_ratio)
             self.polygon(filled, fill_color, energy_alpha, filled=True)
             self.stroke((filled[1], filled[2]), boundary_color, energy_alpha, 2)
         if charge > 0:
@@ -500,8 +506,7 @@ class UiV2View(UiView):
             self.polygon(channel, color, opacity * energy_flash * 0.55, filled=True)
         self.stroke((outline[-1], geometry.level_shape[-2]),
                      color if charge > 0 else self.ui_accent, opacity, self.style['resource_border_width_pixels'])
-        ratio = charge if state.energy_level == 3 and state.energy_ratio == 1 else state.energy_ratio
-        self.energy_boundary(channel, ratio, energy_alpha, overdrive=state.overdrive)
+        self.energy_boundary(channel, boundary_ratio, energy_alpha, overdrive=state.overdrive)
         overdrive_visual = overdrive_visual or OverdriveVisual(float(state.overdrive))
         self.overdrive_label(channel, overdrive_visual, energy_alpha)
         level_right = x + width + self.layout["energy_level_width_pixels"]
@@ -917,7 +922,7 @@ class UiV2View(UiView):
                loadout_visual=None, weapon_swap_visual=None,
                player_hit_visual=HealthHitVisual(), target_hit_visual=HealthHitVisual(), particle_system=None,
                defeated_targets=(), energy_flash=0, level_visual=None, overdrive_visual=None, ultimate_visual=None,
-               energy_tint_ratio=None):
+               energy_tint_ratio=None, energy_visual=None):
         r, c, hud = self.renderer, self.config.colors, state.hud
         scale = self.style["hud_scale"]
         width, height = self.config.window["width"], self.config.window["height"]
@@ -959,7 +964,7 @@ class UiV2View(UiView):
             self.resources(state, opacity, offset_x, player_trailing_ratio, damage_flashes=player_damage_flashes,
                            hit_visual=player_hit_visual, energy_flash=energy_flash, level_visual=level_visual,
                            overdrive_visual=overdrive_visual, ultimate_visual=ultimate_visual,
-                           energy_tint_ratio=energy_tint_ratio)
+                           energy_tint_ratio=energy_tint_ratio, energy_visual=energy_visual)
         with r.scaled(self.style["equipment_scale"], (width, height)):
             self.weapons(hud, opacity, offset_x, loadout_visual=loadout_visual,
                          weapon_swap_visual=weapon_swap_visual)

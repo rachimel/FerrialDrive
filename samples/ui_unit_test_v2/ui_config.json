@@ -588,6 +588,7 @@
             "samples": 33
         },
         "absorption_duration_seconds": 0.9875,
+        "energy_fill_seconds": 0.12,
         "ultimate_sample": {"cooldown_seconds": 5.0, "flash_seconds": 0.28},
         "energy_absorption": {
             "count": 6,
