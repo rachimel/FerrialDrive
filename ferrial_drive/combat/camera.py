@@ -17,6 +17,7 @@ class LookAheadCamera:
 
     def reset(self, player_world):
         self.position = tuple(player_world)
+        self.velocity_pixels_per_second = (0, 0)
 
     def world_to_screen(self, point):
         return tuple(value - camera + center for value, camera, center in zip(point, self.position, self.screen_center))
@@ -37,4 +38,7 @@ class LookAheadCamera:
         offset = (dx * amount / distance, dy * amount / distance) if distance else (0, 0)
         weight = 1 - exp(-delta_seconds / self.response_seconds)
         desired = tuple(a + b for a, b in zip(player_world, offset))
-        self.position = tuple(a + (b - a) * weight for a, b in zip(self.position, desired))
+        previous = self.position
+        self.position = tuple(a + (b - a) * weight for a, b in zip(previous, desired))
+        self.velocity_pixels_per_second = (tuple((b - a) / delta_seconds for a, b in zip(previous, self.position))
+                                          if delta_seconds > 0 else (0, 0))

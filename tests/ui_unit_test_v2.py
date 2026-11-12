@@ -508,9 +508,12 @@ class UiUnitTestV2:
                                scanline_visual=self.scanline_motion.visual)
             else:
                 if actors:
-                    self.actor("player", pose.opacity)
-                    for enemy_id in self.enemies:
-                        self.actor(enemy_id, pose.opacity)
+                    with self.view.world_motion_blur(
+                            self.camera.velocity_pixels_per_second,
+                            enabled=not self.pause.blocking and not self.transition.active):
+                        self.actor("player", pose.opacity)
+                        for enemy_id in self.enemies:
+                            self.actor(enemy_id, pose.opacity)
                 damage_visuals = tuple(replace(visual, x=self.camera.world_to_screen((visual.x, visual.y))[0],
                                                y=self.camera.world_to_screen((visual.x, visual.y))[1])
                                        for visual in self.damage_numbers.visuals)

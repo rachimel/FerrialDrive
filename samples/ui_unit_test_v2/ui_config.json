@@ -580,6 +580,13 @@
         "auto_targeting": {
             "switch_margin_seconds": 1
         },
+        "camera_motion_blur": {
+            "enabled": true,
+            "amount": 0.75,
+            "target_fps": 60,
+            "max_length_pixels": 24,
+            "samples": 33
+        },
         "absorption_duration_seconds": 0.9875,
         "ultimate_sample": {"cooldown_seconds": 5.0, "flash_seconds": 0.28},
         "energy_absorption": {

@@ -8,7 +8,7 @@ import subprocess
 import sys
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -30,6 +30,58 @@ from ferrial_drive.ui_v2.panels import (build_panel_geometry, build_scanlines,
 
 
 class UiV2Tests(unittest.TestCase):
+    def test_camera_blur_caps_length_and_skips_stationary_or_disabled_draws(self):
+        renderer = Mock()
+        renderer.directional_blur.side_effect = lambda *args: nullcontext()
+        view = UiV2View(self.program.config, renderer)
+        for velocity, enabled in (((0, 0), True), ((1000, 0), False)):
+            with view.world_motion_blur(velocity, enabled=enabled):
+                pass
+        renderer.directional_blur.assert_not_called()
+        with view.world_motion_blur((10000, 0)):
+            pass
+        bounds, displacement, strength, samples = renderer.directional_blur.call_args.args
+        self.assertEqual((bounds.x, bounds.y, bounds.width, bounds.height),
+                         (0, 0, self.program.config.window["width"], self.program.config.window["height"]))
+        self.assertEqual(displacement, (-24, 0))
+        self.assertEqual(strength, 1.0)
+        self.assertEqual(samples, 33)
+        with view.world_motion_blur((100, 0)):
+            pass
+        self.assertEqual(renderer.directional_blur.call_args.args[1], (-1.25, 0))
+        view.config.data['v2']['camera_motion_blur']['target_fps'] = 120
+        with view.world_motion_blur((100, 0)):
+            pass
+        self.assertEqual(renderer.directional_blur.call_args.args[1], (-0.625, 0))
+        view.config.data['v2']['camera_motion_blur']['amount'] = 0
+        renderer.directional_blur.reset_mock()
+        with view.world_motion_blur((100, 0)):
+            pass
+        renderer.directional_blur.assert_not_called()
+
+    def test_camera_blur_wraps_actors_and_leaves_combat_hud_outside(self):
+        from contextlib import contextmanager
+
+        filtered = []
+        @contextmanager
+        def blur(*args, **kwargs):
+            filtered.append(True)
+            try:
+                yield
+            finally:
+                filtered.pop()
+
+        self.program.view = MagicMock()
+        self.program.view.world_motion_blur.side_effect = blur
+        self.program.actor = Mock(side_effect=lambda *args: self.assertTrue(filtered))
+        self.program.view.combat.side_effect = lambda *args, **kwargs: self.assertFalse(filtered)
+        self.program.draw_layers()
+        self.program.actor.assert_called()
+        self.program.view.combat.assert_called_once()
+        self.program.pause.request(True)
+        self.program.draw_layers()
+        self.assertFalse(self.program.view.world_motion_blur.call_args.kwargs["enabled"])
+
     def test_loadout_cards_exit_then_enter_while_number_tabs_stay_fixed(self):
         renderer = Mock()
         renderer.clip.side_effect = lambda *args: nullcontext()
@@ -208,7 +260,7 @@ class UiV2Tests(unittest.TestCase):
         self.assertLess(self.program.camera.world_to_screen(self.program.player_world)[0], 640)
         self.program.perform("damage_target")
         popup = self.program.damage_numbers.visuals[0]
-        self.program.renderer, self.program.view = Mock(), Mock()
+        self.program.renderer, self.program.view = Mock(), MagicMock()
         self.program.draw()
         shown = self.program.view.combat.call_args.args[1][0]
         self.assertEqual((shown.x, shown.y), self.program.camera.world_to_screen((popup.x, popup.y)))
@@ -453,7 +505,7 @@ class UiV2Tests(unittest.TestCase):
         self.program.apply_target("enemy_c")
         self.assertEqual(self.program.selected_target_id, "enemy_c")
         self.program.renderer = Mock()
-        self.program.view = Mock()
+        self.program.view = MagicMock()
         self.program.draw()
         self.assertEqual(self.program.renderer.rect.call_count, 24)  # 플레이어와 적 3기, 각 6부품.
         self.program.perform("dialogue")
@@ -681,7 +733,7 @@ class UiV2Tests(unittest.TestCase):
         self.assertEqual(self.program.scanline_motion.visual, ScanlineVisual())
 
     def test_one_scanline_clock_is_supplied_to_all_visible_scenes(self):
-        self.program.view = Mock()
+        self.program.view = MagicMock()
         self.program.renderer = Mock()
         self.program.pause.request(True)
         self.program.update(1)

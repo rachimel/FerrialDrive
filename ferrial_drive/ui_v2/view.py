@@ -68,6 +68,22 @@ class UiV2View(UiView):
     def background(self):
         self.renderer.clear(self.config.colors["background"])
 
+    def world_motion_blur(self, camera_velocity, *, enabled=True):
+        """카메라 이동 필터를 월드 그리기 구간에만 적용한다."""
+        settings = self.config.data["v2"].get("camera_motion_blur", {})
+        if not enabled or not settings.get("enabled", False):
+            return nullcontext()
+        maximum = settings["max_length_pixels"]
+        speed = hypot(*camera_velocity)
+        shutter_seconds = settings["amount"] / settings["target_fps"]
+        length = min(maximum, speed * shutter_seconds)
+        if length <= 0.01:
+            return nullcontext()
+        displacement = tuple(-value / speed * length for value in camera_velocity)
+        return self.renderer.directional_blur(
+            Rect(0, 0, self.config.window["width"], self.config.window["height"]),
+            displacement, 1.0, settings["samples"])
+
     def stroke(self, points, color, opacity=1, width=1):
         for a, b in zip(points, points[1:]):
             if width <= 1:

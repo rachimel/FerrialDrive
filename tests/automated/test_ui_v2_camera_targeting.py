@@ -9,6 +9,17 @@ from ferrial_drive.combat.targeting import TargetCandidate
 
 
 class CameraTargetingTests(unittest.TestCase):
+    def test_camera_velocity_tracks_displacement_and_clears_on_reset_or_zero_time(self):
+        camera = LookAheadCamera(1920, 1080)
+        camera.reset((640, 360))
+        camera.update((640, 360), (1500, 540), 0.02)
+        self.assertAlmostEqual(camera.velocity_pixels_per_second[0], (camera.position[0] - 640) / 0.02)
+        self.assertEqual(camera.velocity_pixels_per_second[1], 0)
+        camera.update((640, 360), (1500, 540), 0)
+        self.assertEqual(camera.velocity_pixels_per_second, (0, 0))
+        camera.reset((640, 360))
+        self.assertEqual(camera.velocity_pixels_per_second, (0, 0))
+
     def test_camera_deadzone_direction_limit_and_inverse_transform(self):
         camera = LookAheadCamera(1280, 720)
         player = (1000, 2000)

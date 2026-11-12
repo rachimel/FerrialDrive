@@ -6,7 +6,7 @@ import importlib.util
 from pathlib import Path
 import sys
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
@@ -109,7 +109,7 @@ class ReadyVfxTests(unittest.TestCase):
         self.assertEqual(self.program.energy_tint.ratio, 0)
         self.program.update(0.12)
         self.assertAlmostEqual(self.program.energy_tint.ratio, 0.5)
-        self.program.renderer, self.program.view = Mock(), Mock()
+        self.program.renderer, self.program.view = Mock(), MagicMock()
         self.program.draw_layers()
         self.assertAlmostEqual(self.program.view.combat.call_args.kwargs['energy_tint_ratio'], 0.5)
         self.program.pause.request(True)
