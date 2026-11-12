@@ -2,10 +2,25 @@
 
 import unittest
 from ferrial_drive.ui.components import Rect
-from ferrial_drive.ui_v2.lock_on import LockOnMotion, cubic, emphasized, elastic_out, outline_point, outline_segment
+from ferrial_drive.ui_v2.lock_on import LockOnMotion, accent_position, cubic, emphasized, elastic_out, outline_point, outline_segment
 
 
 class LockOnTests(unittest.TestCase):
+    def test_minimum_patrol_speed_stays_positive_across_cycle_boundary(self):
+        duration, step = 0.5, 0.00001
+        def speed(age):
+            return (accent_position(age + step, duration, 0, 0.25)
+                    - accent_position(age, duration, 0, 0.25)) / step
+        for age in (0, 0.5 - step, 0.5, 1):
+            self.assertAlmostEqual(speed(age), 1, delta=0.001)
+        self.assertGreater(speed(0.25), speed(0.125))
+        self.assertGreater(speed(0.125), speed(0))
+        self.assertAlmostEqual(speed(0.125), speed(0.375), delta=0.001)
+        motion = LockOnMotion(move_seconds=duration, hold_seconds=0, minimum_speed_ratio=0.25)
+        motion.select('a', Rect(0, 0, 20, 20))
+        motion.update(motion.enter_seconds + motion.label_seconds + duration + 0.05)
+        self.assertAlmostEqual(motion.visuals[0].border_position, accent_position(0.55, duration, 0, 0.25))
+
     def test_zero_hold_restarts_immediately_without_changing_easing(self):
         motion = LockOnMotion(move_seconds=0.5, hold_seconds=0)
         motion.select('a', Rect(0, 0, 20, 20))

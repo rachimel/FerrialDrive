@@ -568,7 +568,8 @@ class UiV2View(UiView):
                 face(opacity)
         if state.ultimate_ready:
             settings = self.style['lock_motion']
-            position = accent_position(visual.age, settings['move_seconds'], settings['hold_seconds'])
+            position = accent_position(visual.age, settings['move_seconds'], settings['hold_seconds'],
+                                       settings.get('minimum_speed_ratio', 0))
             length = self.style.get('accent_profile', {}).get('length_sides', 0.65)
             for start in (position, position + 2):
                 self.accent_stroke(outline_segment(diamond, start - length / 2, length), color, opacity * visual.opacity)

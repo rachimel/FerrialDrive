@@ -249,7 +249,8 @@ class ReadyVfxTests(unittest.TestCase):
         diamond = ((x, y - radius), (x + radius, y), (x, y + radius), (x - radius, y))
         settings = view.style['lock_motion']
         age = 0.17
-        position = accent_position(age, settings['move_seconds'], settings['hold_seconds'])
+        position = accent_position(age, settings['move_seconds'], settings['hold_seconds'],
+                                   settings.get('minimum_speed_ratio', 0))
         length = view.style['accent_profile']['length_sides']
         segments = [outline_segment(diamond, p - length / 2, length) for p in (position, position + 2)]
         for seconds, count in ((0, 2), (1, 0)):

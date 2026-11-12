@@ -50,12 +50,13 @@ def outline_segment(points, start, length=0.65):
             outline_point(points, end))
 
 
-def accent_position(age, move_seconds, hold_seconds):
+def accent_position(age, move_seconds, hold_seconds, minimum_speed_ratio=0):
     """마주 보는 강조선 두 개의 위치. 록온·필살기가 같은 이동/정지를 사용한다."""
     step, local = divmod(max(0, age), move_seconds + hold_seconds)
     t = min(1, local / move_seconds)
-    # 이동 속도가 t=0.5에서 최대가 되는 대칭 5차 보간이다.
-    move = t ** 3 * (t * (6 * t - 15) + 10)
+    # 등속 성분을 섞어 양끝의 최저 속도와 t=0.5의 최대 속도를 유지한다.
+    eased = t ** 3 * (t * (6 * t - 15) + 10)
+    move = minimum_speed_ratio * t + (1 - minimum_speed_ratio) * eased
     return 3.5 + 2 * (step + move)
 
 
@@ -86,7 +87,8 @@ class LockOnTrack:
 class LockOnMotion:
     def __init__(self, enter_seconds=0.4, label_seconds=0.2, exit_seconds=0.25,
                  move_seconds=0.4, hold_seconds=0.25, start_scale=0.25, exit_scale=1.5,
-                 hit_seconds=0.18, hit_scale=1.12, hit_shake_pixels=1.5, hit_damping=1.8):
+                 hit_seconds=0.18, hit_scale=1.12, hit_shake_pixels=1.5, hit_damping=1.8,
+                 minimum_speed_ratio=0):
         values = (enter_seconds, label_seconds, exit_seconds, move_seconds, start_scale, exit_scale)
         if (not all(isfinite(value) and value > 0 for value in values)
                 or not isfinite(hold_seconds) or hold_seconds < 0 or start_scale >= 1 or exit_scale <= 1):
@@ -94,6 +96,9 @@ class LockOnMotion:
         self.enter_seconds, self.label_seconds, self.exit_seconds = values[:3]
         self.move_seconds, self.hold_seconds = move_seconds, hold_seconds
         self.start_scale, self.exit_scale = start_scale, exit_scale
+        if not isfinite(minimum_speed_ratio) or not 0 <= minimum_speed_ratio <= 1:
+            raise ValueError('강조선 최저 속도 비율은 평균 속도의 0~1이어야 한다.')
+        self.minimum_speed_ratio = minimum_speed_ratio
         if not all(map(isfinite, (hit_seconds, hit_scale, hit_shake_pixels))) or hit_seconds <= 0 or hit_scale <= 1 or hit_shake_pixels < 0:
             raise ValueError('피격 마커의 시간·확대 배율·진폭이 유효하지 않다.')
         self.hit_seconds, self.hit_scale, self.hit_shake_pixels = hit_seconds, hit_scale, hit_shake_pixels
@@ -168,5 +173,6 @@ class LockOnMotion:
                 opacity = 1 - t
             patrol_age = max(0, track.age - self.enter_seconds - self.label_seconds)
             result.append(LockOnVisual(track.target_id, track.body, angle, scale, opacity,
-                                       label, accent_position(patrol_age, self.move_seconds, self.hold_seconds), offset))
+                                       label, accent_position(patrol_age, self.move_seconds, self.hold_seconds,
+                                                              self.minimum_speed_ratio), offset))
         return tuple(result)

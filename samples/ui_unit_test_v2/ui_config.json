@@ -786,6 +786,7 @@
                 "exit_seconds": 0.2,
                 "move_seconds": 0.5,
                 "hold_seconds": 0,
+                "minimum_speed_ratio": 0.25,
                 "start_scale": 0.25,
                 "exit_scale": 1.5,
                 "hit_damping": 1.8
