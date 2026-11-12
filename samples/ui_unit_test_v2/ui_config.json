@@ -206,7 +206,7 @@
         "max_length_pixels": 28
     },
     "damage_counter": {
-        "duration_seconds": 0.2,
+        "duration_seconds": 0.12,
         "blur_samples": 9,
         "vertical_easing": "elastic_in_out",
         "elastic_strength": 0.35,
@@ -581,23 +581,33 @@
             "switch_margin_seconds": 1
         },
         "absorption_duration_seconds": 0.85,
+        "energy_absorption": {
+            "count": 6,
+            "gain_ratio": 0.1,
+            "capacity": 256,
+            "arrival_spacing_seconds": 0.055,
+            "under_bar_gap_pixels": 10,
+            "approach_offset_pixels": 85,
+            "flash_seconds": 0.16,
+            "target_fade_seconds": 0.32
+        },
         "absorption_routes": {
             "paths_by_side": {
                 "left": [
-                    [[30, -45], [-30, 30], [15, -15], [-15, -5]],
-                    [[-45, -20], [35, -50], [25, -30], [-10, -10]],
-                    [[55, 30], [20, -55], [-15, -20], [20, -5]],
-                    [[-30, 50], [-55, -15], [30, -10], [-20, -20]],
-                    [[65, -25], [-10, 45], [10, -35], [-25, -5]],
-                    [[-60, 5], [55, 25], [-20, -25], [15, -15]]
+                    [[30, -45], [-30, 30], [15, 0], [-15, 0]],
+                    [[-45, -20], [35, -50], [25, 2], [-10, 1]],
+                    [[55, 30], [20, -55], [-15, 0], [20, 2]],
+                    [[-30, 50], [-55, -15], [30, 3], [-20, 1]],
+                    [[65, -25], [-10, 45], [10, 1], [-25, 3]],
+                    [[-60, 5], [55, 25], [-20, 2], [15, 0]]
                 ],
                 "right": [
-                    [[-30, -45], [30, 30], [-15, -15], [15, -5]],
-                    [[45, -20], [-35, -50], [-25, -30], [10, -10]],
-                    [[-55, 30], [-20, -55], [15, -20], [-20, -5]],
-                    [[30, 50], [55, -15], [-30, -10], [20, -20]],
-                    [[-65, -25], [10, 45], [-10, -35], [25, -5]],
-                    [[60, 5], [-55, 25], [20, -25], [-15, -15]]
+                    [[-30, -45], [30, 30], [-15, 0], [15, 0]],
+                    [[45, -20], [-35, -50], [-25, 2], [10, 1]],
+                    [[-55, 30], [-20, -55], [15, 0], [-20, 2]],
+                    [[30, 50], [55, -15], [-30, 3], [20, 1]],
+                    [[-65, -25], [10, 45], [-10, 1], [25, 3]],
+                    [[60, 5], [-55, 25], [20, 2], [-15, 0]]
                 ]
             }
         },
@@ -744,12 +754,14 @@
                 "tail_fraction": 0.3,
                 "samples": 24,
                 "head_width_pixels": 4,
-                "orb_radius_pixels": 3.5,
-                "right_entry_gap_pixels": 24
+                "orb_radius_pixels": 3.5
             },
             "dialogue_key_color": "#F0FCFF",
             "dialogue_description_opacity": 0.78,
             "lock_motion": {
+                "hit_seconds": 0.18,
+                "hit_scale": 1.12,
+                "hit_shake_pixels": 1.5,
                 "enter_seconds": 0.32,
                 "label_seconds": 0.16,
                 "exit_seconds": 0.2,
@@ -852,7 +864,11 @@
             "lock_thickness_pixels": 2,
             "ultimate_icon_scale": 0.62,
             "counter_text_scale": 0.82,
-            "level_curve_radius_pixels": 12,
+            "level_bevel_pixels": 12,
+            "overdrive_red": [255, 64, 68],
+            "level_text": {"number_scale": 0.85, "label_scale": 0.65, "right_inset_pixels": 12, "gap_pixels": 6},
+            "counter_label_right_inset_pixels": 3,
+            "counter_label_gap_pixels": 4,
             "lock_body_scale": 1.8,
             "counter_plaque_height_pixels": 8,
             "counter_plaque_slant_pixels": 6,

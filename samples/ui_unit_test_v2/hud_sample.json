@@ -61,7 +61,7 @@
     "total_damage_dealt": 12004,
     "energy_ratio": 0.72,
     "energy_level": 3,
-    "overdrive": true,
+    "overdrive": false,
     "counter": true,
     "dash_ready": true,
     "target_body_size_pixels": [

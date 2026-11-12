@@ -69,7 +69,7 @@ class ParticleRequestTests(unittest.TestCase):
         program.perform('damage_target')
         requests = [command for command in program.particle_system.commands if isinstance(command, SpawnParticles)]
         self.assertEqual(len(requests), 1)
-        self.assertEqual(requests[0].count, 3)
+        self.assertEqual(requests[0].count, 6)
         self.assertFalse(program.absorption.trails)
         before = list(program.particle_system.commands)
         program.pause.request(True)

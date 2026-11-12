@@ -51,7 +51,7 @@ class HealthHitTests(unittest.TestCase):
     def test_damage_pause_target_switch_zero_damage_and_reset(self):
         program = SAMPLE.UiUnitTestV2(initial_scene="combat")
         program.perform("damage_target")
-        self.assertEqual(program.particle_system.commands[0].count, 3)
+        self.assertEqual(program.particle_system.commands[0].count, 6)
         self.assertEqual(program.target_hit.elapsed_seconds, 0)
         self.assertEqual(program.player_hit.visual, HealthHitVisual())
         program.perform("damage_player")
@@ -77,7 +77,7 @@ class HealthHitTests(unittest.TestCase):
         renderer.text_size.return_value = (20, 18)
         renderer.directional_blur.side_effect = lambda *args: nullcontext()
         view = UiV2View(program.config, renderer)
-        geometry = resource_geometry(view.layout, view.style["level_curve_radius_pixels"])
+        geometry = resource_geometry(view.layout, view.style["level_bevel_pixels"])
         with patch.object(view, "meter") as meter:
             view.player_health(program.state.hud, geometry, 1, 1, (), HealthHitVisual((0, 4), (0, 500)))
         shifted = meter.call_args.kwargs["shape"]
@@ -87,7 +87,7 @@ class HealthHitTests(unittest.TestCase):
         blur = renderer.directional_blur.call_args.args[1]
         self.assertEqual(blur[0], 0)
         self.assertAlmostEqual(blur[1] * view.style["hud_scale"], 3)
-        self.assertEqual(geometry, resource_geometry(view.layout, view.style["level_curve_radius_pixels"]))
+        self.assertEqual(geometry, resource_geometry(view.layout, view.style["level_bevel_pixels"]))
 
 
 

@@ -1,5 +1,11 @@
 # ui-unit-test-v2
 
+- 에너지는 `EnergyCharge`의 누적 충전량으로 계산한다. 한 게이지마다 LV1→LV2→LV3으로 오르고, **LV3 게이지 완충 후 추가 한 게이지**를 채워야 Overdrive에 진입한다. 추가 충전은 기본 채움 위의 밝은 영역으로 표시하며 `overdrive_charge_ratio` 0→1에 따라 바·흡수 오브·리본·회복 flash가 청록→빨강으로 변한다. 빨강은 `v2.style.overdrive_red`다. 샘플 기본 상태는 LV3·72%이며 Overdrive 전이다. 6은 완충/Overdrive 비교용 조작이다.
+- HIT·DAMAGE와 LV 상승 숫자는 v01의 탄성 이동·방향성 잔상을 사용한다. `damage_counter.duration_seconds=0.12`이며 `vertical_easing`·`elastic_*`·`blur_*`·`outgoing_fade_power`를 공유한다. COUNTER! 메시지는 이 숫자 전환과 별개다.
+- HP·LV 접합부는 곡선 없이 사선으로 연결하고 오른쪽 외곽은 `\`·`|`·`/` 순서다. `v2.style.level_bevel_pixels`는 모서리 크기, `level_text`는 LV와 숫자의 가로 정렬, `counter_label_*`는 HIT/DAMAGE 레이블의 오른쪽 여백·받침판 아래 간격이다.
+- 타겟 선택 변경·해제 때도 현재 HP 비율을 보존한 채 독립적으로 페이드아웃한다. 처치 시 HP는 0에서 페이드하며 록온 마커의 기존 회전·확대 퇴장은 유지한다.
+
+
 `concept/ui-concept-v2.png`를 바탕으로 배치와 스타일을 다듬는 독립 UI 테스트다. 도안 이미지는 실행 입력이 아니며, 샘플 도형·수치와 저장소에 배포하는 폰트만 사용한다. 기존 v1과 별도 설정을 사용한다.
 
 ## 실행
@@ -14,15 +20,17 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 
 ## 조절 위치
 
-- `v2.style.health_hit_motion`: 유효 피격의 감쇠 진동. 타겟 `(0, ±3px)`·플레이어 HP `(0, ±4px)`가 화면 기준 상한이며 연타에도 누적하지 않는다. 플레이어 HP의 약한 블러는 `player_health_blur`에서 조절한다.
-- `v2.absorption_routes.paths_by_side`: 사전에 지정한 왼쪽·오른쪽 각 6개 경로. 후보당 제어점 4개이며 접근 구간 2개·바 진입 구간 2개의 화면 px 오프셋이다. 경로 번호만 무작위 선택하고 도착까지 고정한다. 왼쪽 적은 필살기 아이콘, 오른쪽 적은 에너지 채널 오른쪽을 경유한다.
+- `v2.style.health_hit_motion`: 타겟 HP `(0, ±3px)`·플레이어의 연결된 자원 UI 묶음 `(0, ±4px)`의 피격 진동이다. HP·에너지·레벨·필살기 아이콘/문구가 함께 움직이며 분리된 대시는 고정한다. HP의 약한 블러는 `player_health_blur`에서 조절한다.
+- `v2.absorption_routes.paths_by_side`: 왼쪽·오른쪽 각 6개 고정 경로다. 양쪽 모두 바 아래를 지나며 필살기 아이콘을 필수 경유하지 않는다. 경로 번호는 생성 때 선택하고 최신 에너지 채움 끝점에 맞춰 진입 구간을 변형한다.
+- `v2.energy_absorption`: 예제 입자 수 6개·총 회복량 10%·도착 간격 0.055초·풀 256개·회복 flash 0.16초·처치 HP 퇴장 0.32초다. 회복량은 예제 수치다. 입자별 도착 때만 분할 회복하며 CPU UI는 완료된 비동기 집계를 받은 프레임에 반영한다. `4`/`G`도 도착을 기다리며 `3`의 감소는 즉시 반영한다.
+- `v2.style.lock_motion.hit_seconds/hit_scale/hit_shake_pixels`: 일반 피격의 록온 마커 확대·진동이다. 기본은 0.18초·최대 1.12배·1.5 화면 px다. 처치 때는 기존 퇴장 효과를 유지한다.
 - `v2.style.absorption_trail`: 필압 꼬리·오브 크기·오른쪽 경유 여백을 조절한다. 기본 `renderer=compute`는 OpenGL 4.3 이상을 요구한다. CPU는 생성 요청과 프레임 시간만 보내며 GPU의 생성/갱신 Ubershader 두 개가 입자 생성·경로 선택·수명·이동·Trail을 처리한다. 활성 목록·간접 Instancing을 사용해 프레임 중 입자 상태를 CPU로 읽지 않는다. 프로그램은 로딩 중 한 번 컴파일·링크한다.
-- `1`로 적 피해·타겟 HP 진동·오브 3개 흡수를, `2`로 플레이어 피해·HP UI의 세로 진동/약한 블러를 확인한다. 마우스로 좌우 표적을 선택한 뒤 비교한다. `G`는 피해 없이 흡수만 시연한다. `Esc`는 효과 정지/재개, `F5`는 초기화다. 좌클릭 모션의 실제 피해 판정·에너지 획득량은 별도다.
+- `1`은 적 피해·HP바/록온 피격 반응·오브 6개 회복, `2`는 플레이어 피해·자원 UI 진동/HP 블러다. 적 HP가 0이면 HP바는 페이드아웃하고 마커는 기존 효과로 퇴장한다. `G`는 피해 없이 흡수·회복을 시연한다. `Esc`는 효과 정지/재개, `F5`는 초기화다. 좌클릭 모션의 실제 피해 판정·본편 에너지 규칙 연결은 별도다.
 - 대량 생성·갱신·렌더 계측은 [Massive Energy Particle Stress](../massive_energy_particle_stress/README.md)에서 별도로 실행한다.
 
 - `ui_config.json`의 `v2.layout`: 미니맵·록온·타겟 HP·플레이어 HP·에너지·필살기 아이콘·레벨·무장·카운터 배치.
 - `v2.layout.hp_bar`·`energy_bar`·`ultimate_center_x`·`ultimate_radius_pixels`: 바의 높이/오른쪽 끝과 아이콘 위치·크기. 두 바의 왼쪽 경계는 마름모 변에 맞춰 계산한다. HP 안쪽 여백은 없고 수치/HP는 바 위에 자동 정렬한다.
-- `v2.layout.energy_level_width_pixels`·`v2.style.level_curve_radius_pixels`: HP 옆에 붙는 레벨 영역의 폭과 곡선 강도. HP/에너지 공유 경계와 레벨 왼쪽 사선은 함께 계산한다.
+- `v2.layout.energy_level_width_pixels`·`v2.style.level_bevel_pixels`: HP 옆에 붙는 레벨 영역의 폭과 사선 모서리 크기. HP/에너지 공유 경계와 레벨 왼쪽 사선은 함께 계산한다.
 - HIT·누적 데미지 전체 크기는 각각 `v2.style.counters.*.ui_scale=0.9`로 조절한다. 숫자·레이블·받침판·정적 잔상을 함께 10% 축소한다. `v2.layout.hit_y=276`·`damage_y=366`으로 간격을 90px로 맞추고 기본 샘플의 묶음을 화면 오른쪽 중앙에 배치한다. 오른쪽 여백은 14px다.
 - `v2.style.counters`: HIT/DAMAGE의 원근 `depth`(0~1)·기울기 `lean`/`slope`·고정 `text_scale`·원근 기준 폭 `perspective_width_pixels`·오른쪽 여백. 기준 폭은 최대 표시 폭이 아니다. 숫자를 축소하지 않고 받침판과 잔상 조각을 왼쪽으로 확장한다. 오른쪽 기준 투영은 자릿수와 무관하게 유지한다.
 - `v2.style.panel_cut_pixels`·`surface_opacity`: 사선 외곽과 일반 패널의 최대 배경 불투명도 0.55. 활성/비활성·버튼 상태의 기존 투명도도 함께 적용한다.
@@ -71,7 +79,7 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 | 우클릭 유지 | 자동 획득거리 증가. 발사/탄 퍼짐은 이 샘플에 미연결 |
 | T | 후보 전체 비활성/활성. 표적·대기 후보 초기화, 활성 뒤 새 후보를 1초 확인 |
 | D | 조작 가이드 패널 열기/TV 종료 닫기, 위쪽 표적과 록온 부분 가림 비교 |
-| C / Space | COUNTER / 대시 가능 표시 변경 |
+| C / Space | COUNTER / 부스트 가능 표시 변경 |
 | E / F | 고정된 두 행에서 활성 카드 전후 전환 / 01·02 고정 상태로 로드아웃 카드 퇴장·등장 |
 | F5 | 표시 초기화 |
 | Esc | 일시정지 / 계속 |

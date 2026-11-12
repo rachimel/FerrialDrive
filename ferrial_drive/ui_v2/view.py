@@ -5,6 +5,7 @@ from contextlib import contextmanager, nullcontext
 
 from ferrial_drive.ui.components import Rect
 from ferrial_drive.ui.counter import CounterVisual
+from ferrial_drive.ui.energy import energy_color
 from ferrial_drive.ui.view import UiView
 from .geometry import (PerspectivePlane, body_diamond, counter_plaque, quad_fill,
                        resource_geometry, slanted_meter, tapered_stroke_mesh)
@@ -330,6 +331,8 @@ class UiV2View(UiView):
         x, y, rx, ry = body_diamond((body.x, body.y, body.width, body.height), self.style["lock_body_scale"])
         x += offset_x
         angle = visual.angle_degrees * pi / 180
+        x += visual.offset_pixels[0] / self.style['hud_scale']
+        y += visual.offset_pixels[1] / self.style['hud_scale']
         def transform(dx, dy):
             return (x + (dx * cos(angle) - dy * sin(angle)) * visual.scale,
                     y + (dx * sin(angle) + dy * cos(angle)) * visual.scale)
@@ -397,23 +400,42 @@ class UiV2View(UiView):
             r.text("HP", x + value_width + 9, top - hp_height - gap, "hud_small", c["muted"], opacity)
 
     def resources(self, state, opacity, offset_x, player_trailing_ratio, *, damage_flashes=(),
-                  hit_visual=HealthHitVisual()):
+                  hit_visual=HealthHitVisual(), energy_flash=0, level_visual=None):
+        dx, dy = self.health_hit_offset(hit_visual)
+        scope = self.renderer.translated(dx, dy) if dx or dy else nullcontext()
+        with scope:
+            self._resource_contents(state, opacity, offset_x, player_trailing_ratio, damage_flashes=damage_flashes,
+                                    hit_visual=HealthHitVisual((0, 0), hit_visual.velocity_pixels_per_second),
+                                    energy_flash=energy_flash, level_visual=level_visual)
+        self.dash_indicator(state, opacity)
+
+    def _resource_contents(self, state, opacity, offset_x, player_trailing_ratio, *, damage_flashes=(),
+                           hit_visual=HealthHitVisual(), energy_flash=0, level_visual=None):
         r, c = self.renderer, self.config.colors
-        geometry = resource_geometry(self.layout, self.style["level_curve_radius_pixels"])
+        geometry = resource_geometry(self.layout, self.style["level_bevel_pixels"])
         self.player_health(state.hud, geometry, opacity, player_trailing_ratio, damage_flashes, hit_visual)
         x, y, width, height = self.layout["energy_bar"]
         outline, channel = geometry.energy_outline, geometry.energy_channel
+        charge = 1 if state.overdrive else state.overdrive_charge_ratio
+        color = energy_color(c['energy'], self.style['overdrive_red'], charge)
+        fill_color = energy_color(c['energy_fill'], self.style['overdrive_red'], charge)
         self.panel_layer(geometry.energy_body, c["panel"], opacity, grain=True, effect_surface=channel)
         self.polygon(geometry.level_shape, c["panel"], opacity * self.style["surface_opacity"], filled=True)
         self.stroke(outline + outline[:1], c["text"], opacity * 0.75, 1.5)
-        self.polygon(channel, c["energy"], opacity * 0.1, filled=True)
+        self.polygon(channel, color, opacity * 0.1, filled=True)
         energy_alpha = opacity * breathing_opacity(self._scanline_visual.elapsed_seconds, **self.style["energy_breathing"])
         if state.energy_ratio > 0:
             filled = quad_fill(channel, state.energy_ratio)
-            self.polygon(filled, c["energy_fill"], energy_alpha, filled=True)
-            self.stroke((filled[1], filled[2]), c["energy"], energy_alpha, 2)
+            self.polygon(filled, fill_color, energy_alpha, filled=True)
+            self.stroke((filled[1], filled[2]), color, energy_alpha, 2)
+        if charge > 0:
+            charged = quad_fill(channel, charge)
+            self.polygon(charged, color, energy_alpha * 0.45, filled=True)
+            self.stroke((charged[1], charged[2]), color, energy_alpha, 2)
+        if energy_flash > 0:
+            self.polygon(channel, color, opacity * energy_flash * 0.55, filled=True)
         self.stroke((outline[-1], geometry.level_shape[-2]),
-                     c["energy"] if state.overdrive else self.ui_accent, opacity, 2)
+                     color if charge > 0 else self.ui_accent, opacity, 2)
         label_center = sum(point[0] for point in channel) / 4
         if state.overdrive:
             label, role = "OVERDRIVE", "v2_overdrive"
@@ -426,7 +448,7 @@ class UiV2View(UiView):
             label_x = label_center - label_width / 2
             for letter, (letter_width, _) in zip(label, sizes):
                 r.neon_text(letter, label_x, label_y, role, c["text"], energy_alpha,
-                            glow_color=c["energy"], **self.style["overdrive_bloom"])
+                            glow_color=color, **self.style["overdrive_bloom"])
                 label_x += letter_width + spacing
         else:
             label = "E N E R G Y"
@@ -434,11 +456,24 @@ class UiV2View(UiView):
             self.slanted_text(label, label_center - label_width / 2, y + 2,
                               "v2_meter_label", c["text"], energy_alpha)
         level_right = x + width + self.layout["energy_level_width_pixels"]
-        level_text_right = level_right - 8
-        self.slanted_text("LV", level_text_right, geometry.level_top + 4,
-                          "hud_small", c["ui_accent"], opacity, scale=0.65, align="right")
-        self.slanted_text(f"{state.energy_level:02}", level_text_right, geometry.level_top + 15,
-                          "v2_level", c["muted"], opacity, scale=0.85, lean=0.1, align="right")
+        settings = self.style['level_text']
+        number_scale = settings['number_scale']
+        digit_width = max(r.text_size(str(d), 'v2_level')[0] for d in range(10)) * number_scale
+        number_height = r.text_size('0', 'v2_level')[1] * number_scale
+        number_right = level_right - settings['right_inset_pixels']
+        number_top = (geometry.level_top + self.layout['energy_bar'][1] + height + 4 - number_height) / 2
+        label_scale = settings['label_scale']
+        self.slanted_text('LV', number_right - digit_width * 2 - settings['gap_pixels'],
+                          number_top + (number_height - r.text_size('LV', 'hud_small')[1] * label_scale) / 2,
+                          'hud_small', c['ui_accent'], opacity, scale=label_scale, align='right')
+        level_visual = level_visual or CounterVisual(state.energy_level, state.energy_level, 1, 1)
+        old, new = f'{level_visual.previous_value:02}', f'{level_visual.value:02}'
+        project = lambda px, py: (number_right - digit_width * 2 + px + (number_height / 2 - py) * 0.1,
+                                  number_top + py)
+        viewport = Rect(0, 0, digit_width * 2, number_height)
+        for i, (before, after) in enumerate(zip(old, new)):
+            self.rolling_digit(level_visual, before, after, i * digit_width, number_height,
+                               'v2_level', c['muted'], project, opacity, number_scale, viewport)
         cx, cy = geometry.icon_center
         radius = geometry.icon_radius
         diamond = ((cx, cy - radius), (cx + radius, cy), (cx, cy + radius), (cx - radius, cy))
@@ -462,7 +497,6 @@ class UiV2View(UiView):
                             c["text"], opacity)
         self.ultimate_label(level, label_right, cy + radius / 2 + gap,
                             c["muted"], opacity, scale=0.85, slant_right=True)
-        self.dash_indicator(state, opacity)
 
     def dash_indicator(self, state, opacity):
         """현재 가로 위치에서 아이콘·키 안내를 화면 하단 기준으로 배치한다."""
@@ -570,8 +604,8 @@ class UiV2View(UiView):
                                     top + 10, "v2_ammo", c["text"], alpha * self.style["weapon_text_opacity"],
                                     **self.style["weapon_text_neon"])
 
-    def absorption(self, trails, opacity, particle_system=None):
-        color = self.config.colors["energy"]
+    def absorption(self, trails, opacity, particle_system=None, charge=0):
+        color = energy_color(self.config.colors['energy'], self.style['overdrive_red'], charge)
         settings = self.style["absorption_trail"]
         if particle_system is not None:
             self.renderer.draw_compute_particles(particle_system, settings, color, self.config.colors["text"], opacity)
@@ -653,23 +687,46 @@ class UiV2View(UiView):
         text_alpha = opacity * self.text_flicker()
         x = 0
         for before, after, slot_width in zip(old, new, widths):
-            moving = visual.moving and before != after and after != ","
-            faces = ((before, -height * visual.vertical_progress, 1 - visual.progress),
-                     (after, height * (1 - visual.vertical_progress), 1)) if moving else ((after, 0, 1),)
-            for char, top, alpha in faces:
-                if char == " ":
-                    continue
-                left = x + (slot_width - r.text_size(char, role)[0]) * scale / 2
-                for projection, color in ((shadow, c["counter_shadow"]), (project, c["text"])):
-                    r.warped_text(char, left, top, role, color, projection, text_alpha * alpha,
-                                  scale_x=scale, scale_y=scale, clip_rect=viewport)
+            for projection, color in ((shadow, c['counter_shadow']), (project, c['text'])):
+                self.rolling_digit(visual, before, after, x, height, role, color, projection,
+                                   text_alpha, scale, viewport, slot_width * scale)
             x += slot_width * scale
         label_text = self.config.labels[label]
         label_role = f"{label}_label"
         label_width = r.text_size(label_text, label_role)[0]
-        r.warped_text(label_text, width - label_width - 6,
-                      ink_bottom + self.style["counter_plaque_height_pixels"] + 5,
+        r.warped_text(label_text, width - label_width - self.style['counter_label_right_inset_pixels'],
+                      ink_bottom + self.style["counter_plaque_height_pixels"] + self.style['counter_label_gap_pixels'],
                       label_role, c["muted"], project, text_alpha)
+
+    def rolling_digit(self, visual, before, after, x, height, role, color, project, opacity, scale, viewport,
+                      slot_width=None):
+        """v01의 탄성 이동·퇴장 감쇠·방향성 잔상을 투영면 안에서 재사용한다."""
+        r, settings = self.renderer, self.config.data['damage_counter']
+        moving = visual.moving and before != after and after != ','
+        faces = ((before, -height * visual.vertical_progress, (1 - visual.progress) ** settings['outgoing_fade_power']),
+                 (after, height * (1 - visual.vertical_progress), 1)) if moving else ((after, 0, 1),)
+        samples = settings['blur_samples'] if moving else 0
+        p = visual.progress
+        strength = settings['blur_opacity'] * 4 * p * (1 - p) if samples else 0
+        length = min(settings['blur_length_pixels'] * scale,
+                     height * max(0, p - visual.progress_before(settings['blur_shutter_seconds'])))
+        dx, dy = settings['blur_direction']
+        norm = hypot(dx, dy)
+        passes = [(0, 0, 1 - strength)]
+        weight_sum = samples * (samples + 1) / 2
+        for sample in range(samples, 0, -1):
+            distance = length * sample / samples
+            passes.append((dx / norm * distance, dy / norm * distance,
+                           strength * (samples + 1 - sample) / weight_sum))
+        for char, top, alpha in faces:
+            if char == ' ':
+                continue
+            width = r.text_size(char, role)[0] * scale
+            left = x + ((slot_width - width) / 2 if slot_width is not None else 0)
+            for smear_x, smear_y, weight in passes:
+                if weight > 0:
+                    r.warped_text(char, left + smear_x, top + smear_y, role, color, project,
+                                  opacity * alpha * weight, scale_x=scale, scale_y=scale, clip_rect=viewport)
 
     def combat(self, state, damage_visuals=(), opacity=1, offset_x=0, *, scanline_visual=None, **kwargs):
         with self.scanline_frame(scanline_visual):
@@ -681,7 +738,8 @@ class UiV2View(UiView):
                absorption_trails=(), scanline_visual=None, dialogue_visual=None, lock_visuals=None,
                player_damage_flashes=(), target_damage_flashes=(), counter_message_opacity=None, player_screen=None,
                loadout_visual=None, weapon_swap_visual=None,
-               player_hit_visual=HealthHitVisual(), target_hit_visual=HealthHitVisual(), particle_system=None):
+               player_hit_visual=HealthHitVisual(), target_hit_visual=HealthHitVisual(), particle_system=None,
+               defeated_targets=(), energy_flash=0, level_visual=None):
         r, c, hud = self.renderer, self.config.colors, state.hud
         scale = self.style["hud_scale"]
         width, height = self.config.window["width"], self.config.window["height"]
@@ -699,12 +757,21 @@ class UiV2View(UiView):
             hit_x, hit_y = self.health_hit_offset(target_hit_visual)
             x, y = x + hit_x, y + hit_y
             target_rect = (x, y, bar_width, bar_height)
-            if hud.target:
+            if hud.target and hud.target.health.current > 0:
                 self.meter("target_hp", hud.target.health.ratio, "enemy", opacity, target_trailing_ratio,
                            rect=target_rect, damage_flashes=target_damage_flashes)
-            else:
-                self.meter("target_hp", 0, "enemy", opacity, rect=target_rect)
-            r.text("TARGET", x + bar_width, y + bar_height + 4, "target_heading", c["muted"], opacity, align="right")
+                r.text("TARGET", x + bar_width, y + bar_height + 4, "target_heading", c["muted"], opacity, align="right")
+        for visual in defeated_targets:
+            body = visual.body
+            center = (body.x + body.width / 2, body.y + body.height / 2)
+            dx, dy = self.layout['target_hp_offset_pixels']
+            _, _, bar_width, bar_height = self.layout['target_hp']
+            rect = (center[0] + dx, center[1] + dy, bar_width, bar_height)
+            with r.scaled(scale, center):
+                self.meter('target_hp', visual.current_ratio, 'enemy', opacity * visual.opacity,
+                           visual.trailing_ratio, rect=rect)
+                r.text('TARGET', rect[0] + bar_width, rect[1] + bar_height + 4, 'target_heading',
+                       c['muted'], opacity * visual.opacity, align='right')
         if lock_visuals is not None:
             for visual in lock_visuals:
                 body = visual.body
@@ -712,7 +779,7 @@ class UiV2View(UiView):
                     self.lock_marker(visual, opacity, offset_x)
         with r.scaled(scale, (width / 2, height)):
             self.resources(state, opacity, offset_x, player_trailing_ratio, damage_flashes=player_damage_flashes,
-                           hit_visual=player_hit_visual)
+                           hit_visual=player_hit_visual, energy_flash=energy_flash, level_visual=level_visual)
         with r.scaled(self.style["equipment_scale"], (width, height)):
             self.weapons(hud, opacity, offset_x, loadout_visual=loadout_visual,
                          weapon_swap_visual=weapon_swap_visual)
@@ -734,7 +801,8 @@ class UiV2View(UiView):
         for visual in damage_visuals:
             with r.scaled(scale, (visual.x, visual.y)):
                 self.damage_number(visual, opacity, offset_x)
-        self.absorption(absorption_trails, opacity, particle_system)
+        self.absorption(absorption_trails, opacity, particle_system,
+                        1 if state.overdrive else state.overdrive_charge_ratio)
         self.dialogue(state.dialogue, opacity, scanline_visual, panel_visual=dialogue_visual)
         if cursor_position is not None:
             x, y = cursor_position

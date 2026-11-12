@@ -19,6 +19,7 @@ from ferrial_drive.combat.mouse_targeting import MouseAutoTargeting
 from ferrial_drive.combat.camera import LookAheadCamera
 from ferrial_drive.ui.config import UiConfig
 from ferrial_drive.ui.counter import RollingCounter
+from ferrial_drive.ui.energy import EnergyCharge
 from ferrial_drive.ui.damage import DamageNumbers
 from ferrial_drive.ui.health import HealthTrail
 from ferrial_drive.ui.loadout_slide import LoadoutSlide
@@ -26,7 +27,7 @@ from ferrial_drive.ui.pause import PauseState
 from ferrial_drive.ui.state import Health, HudState, LoadoutInfo, RadarContact, TargetInfo, WeaponInfo
 from ferrial_drive.ui.transition import SceneTransition
 from ferrial_drive.ui.weapon_swap import WeaponSwap
-from ferrial_drive.ui_v2.effects import (DialoguePanelMotion, EnergyAbsorption, HealthDamageFlash,
+from ferrial_drive.ui_v2.effects import (DefeatedTargetMotion, DialoguePanelMotion, EnergyAbsorption, EnergyRecoveryFlash, HealthDamageFlash,
                                        HealthHitMotion, IndicatorFade, ScanlineMotion)
 from ferrial_drive.ui_v2.lock_on import LockOnMotion
 from ferrial_drive.ui_v2.geometry import resource_geometry, scaled_point
@@ -55,6 +56,7 @@ class UiUnitTestV2:
                                           self.config.data["animation"]["duration_seconds"], 0)
         self.pause = PauseState(self.config.data["pause"]["duration_seconds"])
         self.particle_system = (GpuParticleSystem(self.config.data['v2']['absorption_duration_seconds'],
+                                 capacity=self.config.data['v2']['energy_absorption']['capacity'],
                                  tail_fraction=self.config.data['v2']['style']['absorption_trail']['tail_fraction'],
                                  **self.config.data['v2']['absorption_routes'])
                                 if self.config.data['v2']['style']['absorption_trail']['renderer'] == 'compute' else None)
@@ -102,9 +104,12 @@ class UiUnitTestV2:
                                 dialogue=DialogueInfo(data["dialogue"]["speaker"], tuple(data["dialogue"]["lines"])))
         self.target_size_index = 0
         self.set_target_size(1)
-        duration = self.config.data["damage_counter"]["duration_seconds"]
-        self.hit_counter = RollingCounter(duration, hud.combo_count)
-        self.damage_counter = RollingCounter(duration, hud.total_damage_dealt)
+        counter = self.config.data['damage_counter']
+        counter_motion = {key: counter[key] for key in ('vertical_easing', 'elastic_strength', 'elastic_period')}
+        duration = counter['duration_seconds']
+        self.hit_counter = RollingCounter(duration, hud.combo_count, **counter_motion)
+        self.damage_counter = RollingCounter(duration, hud.total_damage_dealt, **counter_motion)
+        self.level_counter = RollingCounter(duration, self.state.energy_level, **counter_motion)
         duration = self.config.data["health_trail"]["duration_seconds"]
         self.player_health = HealthTrail(duration, hud.player_health.ratio)
         self.target_health = HealthTrail(duration, hud.target.health.ratio)
@@ -114,6 +119,9 @@ class UiUnitTestV2:
         hit_settings = self.config.data["v2"]["style"]["health_hit_motion"]
         self.player_hit = HealthHitMotion(**hit_settings["player"])
         self.target_hit = HealthHitMotion(**hit_settings["target"])
+        absorption = self.config.data['v2']['energy_absorption']
+        self.energy_flash = EnergyRecoveryFlash(absorption['flash_seconds'])
+        self.defeated_targets = DefeatedTargetMotion(absorption['target_fade_seconds'])
         animation = self.config.data["animation"]
         self.damage_numbers = DamageNumbers(animation["damage_duration_seconds"],
                                             animation["damage_scatter_x_pixels"],
@@ -132,6 +140,7 @@ class UiUnitTestV2:
                                          self.config.data["loadout_slide"]["duration_seconds"])
         self.weapon_swap = WeaponSwap(hud.active_weapon_kind,
                                       self.config.data["weapon_swap"]["duration_seconds"])
+        self.sync_energy_target()
 
     def damage_text_size(self, text):
         if self.renderer is not None:
@@ -153,6 +162,10 @@ class UiUnitTestV2:
     def apply_target(self, target_id):
         if target_id == self.selected_target_id:
             return
+        if self.state.hud.target and not any(v.target_id == self.selected_target_id for v in self.defeated_targets.visuals):
+            self.defeated_targets.trigger(self.selected_target_id, self.state.target_body,
+                                         self.target_health.trailing_ratio, self.state.hud.target.health.ratio)
+        self.defeated_targets.tracks = [track for track in self.defeated_targets.tracks if track['target_id'] != target_id]
         self.selected_target_id = target_id
         if self.auto_target.selected_id != target_id:
             self.auto_target.reset(target_id)
@@ -184,6 +197,11 @@ class UiUnitTestV2:
                 x, y = self.camera.world_to_screen(self.enemies[track.target_id]["position"])
                 width, height = track.body.width, track.body.height
                 track.body = Rect(x - width / 2, y - 12 * width / self.preset["target_body_size_pixels"][0], width, height)
+        for track in self.defeated_targets.tracks:
+            x, y = self.camera.world_to_screen(self.enemies[track['target_id']]['position'])
+            body = track['body']
+            track['body'] = Rect(x - body.width / 2, y - 12 * body.width / self.preset['target_body_size_pixels'][0],
+                                 body.width, body.height)
 
     def enter(self):
         import pico2d.pico2d as pico
@@ -197,27 +215,49 @@ class UiUnitTestV2:
     def set_hud(self, **changes):
         self.state = replace(self.state, hud=replace(self.state.hud, **changes))
 
-    def absorb(self):
+    def energy_geometry(self):
         layout = self.config.data["v2"]["layout"]
-        geometry = resource_geometry(layout, self.config.data["v2"]["style"]["level_curve_radius_pixels"])
-        icon, destination = geometry.icon_center, geometry.energy_tip(self.state.energy_ratio)
+        geometry = resource_geometry(layout, self.config.data["v2"]["style"]["level_bevel_pixels"])
         scale = self.config.data["v2"]["style"]["hud_scale"]
         anchor = (self.config.window["width"] / 2, self.config.window["height"])
-        icon = scaled_point(icon, anchor, scale)
-        destination = scaled_point(destination, anchor, scale)
+        offset = self.player_hit.visual.offset_pixels
+        screen = lambda point: tuple(value + shift for value, shift in zip(scaled_point(point, anchor, scale), offset))
+        channel = tuple(screen(point) for point in geometry.energy_channel)
+        left = tuple((a + b) / 2 for a, b in zip(channel[0], channel[3]))
+        right = tuple((a + b) / 2 for a, b in zip(channel[1], channel[2]))
+        return channel, left, right
+
+    def sync_energy_target(self):
+        if self.particle_system is not None:
+            _, left, right = self.energy_geometry()
+            charge = EnergyCharge.from_state(self.state)
+            self.particle_system.set_energy_target(left, right, charge.arrival_ratio, charge_total=charge.total)
+
+    def set_energy_charge(self, charge):
+        self.state = replace(self.state, energy_level=charge.level, energy_ratio=charge.ratio,
+                             overdrive_charge_ratio=charge.overdrive_ratio, overdrive=charge.active)
+        self.level_counter.set_value(charge.level)
+        self.sync_energy_target()
+
+    def absorb(self):
+        settings = self.config.data['v2']['energy_absorption']
+        channel, left, right = self.energy_geometry()
+        ratio = EnergyCharge.from_state(self.state).arrival_ratio
+        destination = tuple(a + (b - a) * ratio for a, b in zip(left, right))
         enemy = self.enemies.get(self.selected_target_id)
         start = self.camera.world_to_screen(enemy["position"]) if enemy else self.config.actor_anchor("target")
         side = 1 if start[0] > self.camera.world_to_screen(self.player_world)[0] else -1
-        if side > 0:
-            # 오른쪽 적은 왼쪽 필살기 아이콘 대신 에너지 바 오른쪽을 경유한다.
-            gap = self.config.data["v2"]["style"]["absorption_trail"]["right_entry_gap_pixels"]
-            right = max(point[0] for point in geometry.energy_channel) + gap
-            icon = scaled_point((right, geometry.energy_tip(self.state.energy_ratio)[1]), anchor, scale)
+        bend_x = max(left[0] + 18, min(right[0] - 18, destination[0] + side * settings['approach_offset_pixels']))
+        below = min(self.config.window['height'] - 12,
+                    max(point[1] for point in channel) + settings['under_bar_gap_pixels'])
+        waypoint = bend_x, below
         if self.particle_system is not None:
-            self.particle_system.emit(start, icon, destination, count=3, side=side, spread_pixels=15)
+            self.sync_energy_target()
+            self.particle_system.emit(start, waypoint, destination, count=settings['count'], side=side, spread_pixels=6,
+                                      gain_ratio=settings['gain_ratio'], arrival_spacing_seconds=settings['arrival_spacing_seconds'])
         else:
             for offset in (-15, 0, 15):
-                self.absorption.add((start[0] + offset, start[1] - offset), icon, destination, approach_side=side)
+                self.absorption.add((start[0] + offset, start[1] - offset), waypoint, destination, approach_side=side)
 
     def perform(self, action):
         hud = self.state.hud
@@ -251,6 +291,11 @@ class UiUnitTestV2:
                 self.target_flash.trigger(previous_ratio, health.ratio)
                 self.target_hit.trigger()
                 self.absorb()
+                if health.current == 0:
+                    self.defeated_targets.trigger(self.selected_target_id, self.state.target_body, self.target_health.trailing_ratio)
+                    self.lock_motion.select(None, None)
+                else:
+                    self.lock_motion.hit(self.selected_target_id)
                 self.hit_counter.set_value(self.state.hud.combo_count)
                 self.damage_counter.set_value(self.state.hud.total_damage_dealt)
             else:
@@ -274,19 +319,22 @@ class UiUnitTestV2:
             self.dialogue_motion.request(not self.dialogue_motion.opened)
         elif action in ("energy_up", "energy_down"):
             change = 0.1 if action == "energy_up" else -0.1
-            self.state = replace(self.state, energy_ratio=round(max(0, min(1, self.state.energy_ratio + change)), 3))
             if change > 0:
                 self.absorb()
+            else:
+                self.set_energy_charge(EnergyCharge.from_state(self.state).add(change))
         elif action == "absorb":
             self.absorb()
         elif action == "level":
-            self.state = replace(self.state, energy_level=self.state.energy_level % 3 + 1)
+            self.set_energy_charge(EnergyCharge(self.state.energy_level % 3))
         elif action == "target_size":
             sizes = (1, 1.5, 0.75)
             self.target_size_index = (self.target_size_index + 1) % len(sizes)
             self.set_target_size(sizes[self.target_size_index])
-        elif action in ("overdrive", "counter", "dash"):
-            field = {"overdrive": "overdrive", "counter": "counter", "dash": "dash_ready"}[action]
+        elif action == 'overdrive':
+            self.set_energy_charge(EnergyCharge(3 if self.state.overdrive else 4))
+        elif action in ("counter", "dash"):
+            field = {"counter": "counter", "dash": "dash_ready"}[action]
             self.state = replace(self.state, **{field: not getattr(self.state, field)})
         elif action == "swap":
             self.set_hud(active_weapon_kind="melee" if hud.active_weapon_kind == "ranged" else "ranged")
@@ -350,7 +398,7 @@ class UiUnitTestV2:
         self.scanline_motion.update(delta_seconds)
         self.dialogue_motion.update(delta_seconds)
         self.lock_motion.update_body(self.state.target_body)
-        self.lock_motion.update(delta_seconds)
+        self.lock_motion.update(delta_seconds, freeze_hits=self.pause.blocking)
         if self.dialogue_motion.phase == "closed" and self.state.dialogue is not None:
             self.state = replace(self.state, dialogue=None)
         if self.pause.blocking:
@@ -365,14 +413,27 @@ class UiUnitTestV2:
             self.update_world_view(delta_seconds)
         self.hit_counter.update(delta_seconds)
         self.damage_counter.update(delta_seconds)
+        self.level_counter.update(delta_seconds)
         self.player_health.update(delta_seconds)
         self.target_health.update(delta_seconds)
         self.player_flash.update(delta_seconds)
         self.target_flash.update(delta_seconds)
         self.player_hit.update(delta_seconds)
         self.target_hit.update(delta_seconds)
+        self.defeated_targets.update(delta_seconds)
+        self.energy_flash.update(delta_seconds)
         self.damage_numbers.update(delta_seconds)
         if self.particle_system is not None:
+            if self.renderer is not None and self.renderer.compute_particles is not None:
+                self.renderer.compute_particles.poll_arrivals()
+            gain, _ = self.particle_system.take_arrivals()
+            if gain > 0:
+                charge = EnergyCharge.from_state(self.state)
+                recovered = charge.add(gain)
+                if recovered.total > charge.total:
+                    self.energy_flash.trigger()
+                self.set_energy_charge(recovered)
+            self.sync_energy_target()
             self.particle_system.update(delta_seconds)
         else:
             self.absorption.update(delta_seconds)
@@ -418,6 +479,9 @@ class UiUnitTestV2:
                                  target_trailing_ratio=self.target_health.trailing_ratio,
                                  absorption_trails=self.absorption.trails,
                                  particle_system=self.particle_system,
+                                 defeated_targets=self.defeated_targets.visuals,
+                                 energy_flash=self.energy_flash.opacity,
+                                 level_visual=self.level_counter.visual,
                                  scanline_visual=self.scanline_motion.visual,
                                  dialogue_visual=self.dialogue_motion.visual,
                                  lock_visuals=self.lock_motion.visuals,

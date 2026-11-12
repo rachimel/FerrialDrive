@@ -23,12 +23,15 @@ class HudV2State:
     dash_ready: bool = True
     target_body: Rect | None = None
     dialogue: DialogueInfo | None = None
+    overdrive_charge_ratio: float = 0
 
     def __post_init__(self):
         if not isfinite(self.energy_ratio) or not 0 <= self.energy_ratio <= 1:
             raise ValueError("에너지 표시 비율은 0~1이어야 한다.")
         if type(self.energy_level) is not int or not 1 <= self.energy_level <= 3:
             raise ValueError("에너지 레벨은 1~3의 정수여야 한다.")
+        if not isfinite(self.overdrive_charge_ratio) or not 0 <= self.overdrive_charge_ratio <= 1:
+            raise ValueError('Overdrive 추가 충전 비율은 0~1이어야 한다.')
         body = self.target_body
         if body is not None and (not all(isfinite(value) for value in (body.x, body.y, body.width, body.height))
                                  or body.width <= 0 or body.height <= 0):

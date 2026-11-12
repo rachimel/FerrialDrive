@@ -140,6 +140,68 @@ class HealthHitMotion:
                                tuple(limit * velocity for limit in self.max_offset_pixels))
 
 
+class EnergyRecoveryFlash:
+    def __init__(self, duration_seconds=0.16):
+        if not isfinite(duration_seconds) or duration_seconds <= 0:
+            raise ValueError('회복 flash 시간은 양수여야 한다.')
+        self.duration_seconds = duration_seconds
+        self.elapsed_seconds = duration_seconds
+
+    def trigger(self):
+        self.elapsed_seconds = 0
+
+    def update(self, delta_seconds):
+        if not isfinite(delta_seconds) or delta_seconds < 0:
+            raise ValueError('회복 flash 갱신 시간은 0 이상이어야 한다.')
+        self.elapsed_seconds = min(self.duration_seconds, self.elapsed_seconds + delta_seconds)
+
+    @property
+    def opacity(self):
+        return (1 - self.elapsed_seconds / self.duration_seconds) ** 2
+
+
+@dataclass(frozen=True)
+class DefeatedTargetVisual:
+    target_id: str
+    body: object
+    opacity: float
+    trailing_ratio: float
+    current_ratio: float = 0
+
+
+class DefeatedTargetMotion:
+    """처치·선택 해제 후에도 HP바의 퇴장을 독립적으로 유지한다."""
+    def __init__(self, duration_seconds=0.32):
+        if not isfinite(duration_seconds) or duration_seconds <= 0:
+            raise ValueError('처치 HP바 퇴장 시간은 양수여야 한다.')
+        self.duration_seconds = duration_seconds
+        self.tracks = []
+
+    def trigger(self, target_id, body, trailing_ratio, current_ratio=0):
+        if body is None:
+            return
+        self.tracks = [track for track in self.tracks if track['target_id'] != target_id]
+        self.tracks.append(dict(target_id=target_id, body=body, trailing_ratio=trailing_ratio,
+                                current_ratio=current_ratio, age=0))
+
+    def update(self, delta_seconds):
+        if not isfinite(delta_seconds) or delta_seconds < 0:
+            raise ValueError('처치 HP바 갱신 시간은 0 이상이어야 한다.')
+        for track in self.tracks:
+            track['age'] += delta_seconds
+        self.tracks = [track for track in self.tracks if track['age'] < self.duration_seconds]
+
+    @property
+    def visuals(self):
+        result = []
+        for track in self.tracks:
+            t = min(1, track['age'] / self.duration_seconds)
+            opacity = 1 - t * t * (3 - 2 * t)
+            result.append(DefeatedTargetVisual(track['target_id'], track['body'], opacity,
+                                               track['trailing_ratio'] * (1 - t * t), track['current_ratio']))
+        return tuple(result)
+
+
 @dataclass(frozen=True)
 class ScanlineVisual:
     line_offset_pixels: float = 0

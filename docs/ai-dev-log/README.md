@@ -1,5 +1,7 @@
 # AI 개발 로그
 
+- [2026-11-12 에너지 도착별 회복·피격/처치 반응](2026-11-12-energy-arrival-and-hit-feedback.md): 아래쪽 경유·6개 분할 회복·동적 끝점·일반 피격 마커 확대/진동·기존 처치 퇴장·자원 묶음 진동·LV3 추가 충전/붉은색·숫자 전환/사선 정렬
+
 - [2026-11-12 파티클 Compute Ubershader·대량 벤치마크](2026-11-12-particle-compute-ubershaders.md): GPU 생성/갱신·간접 Instancing·독립 Stress·확인 후 이전 검사 정리·GPU별 측정과 깜박임 미확정
 
 - [2026-11-12 UI 피격·고정 흡수 경로·GPU Instancing](2026-11-12-ui-hit-feedback-instancing.md): 축소 블러 세로 오차·HP 진동 상한·좌우 각 6개 경로·필압 Trail·오브/리본 Instancing

@@ -57,6 +57,7 @@ class LockOnVisual:
     opacity: float = 1
     label_progress: float = 1
     border_position: float = 3.5
+    offset_pixels: tuple[float, float] = (0, 0)
 
 
 @dataclass
@@ -68,16 +69,21 @@ class LockOnTrack:
     exit_age: float = 0
     exit_start_angle_degrees: float = 45
     exit_start_scale: float = 1
+    hit_age: float = 1
 
 
 class LockOnMotion:
     def __init__(self, enter_seconds=0.4, label_seconds=0.2, exit_seconds=0.25,
-                 move_seconds=0.4, hold_seconds=0.25, start_scale=0.25, exit_scale=1.5):
+                 move_seconds=0.4, hold_seconds=0.25, start_scale=0.25, exit_scale=1.5,
+                 hit_seconds=0.18, hit_scale=1.12, hit_shake_pixels=1.5):
         values = (enter_seconds, label_seconds, exit_seconds, move_seconds, hold_seconds, start_scale, exit_scale)
         if not all(isfinite(value) and value > 0 for value in values) or start_scale >= 1 or exit_scale <= 1:
             raise ValueError("록온 시간은 양수이며 등장 배율은 1 미만, 퇴장 배율은 1 초과여야 한다.")
         self.enter_seconds, self.label_seconds, self.exit_seconds = values[:3]
         self.move_seconds, self.hold_seconds, self.start_scale, self.exit_scale = values[3:]
+        if not all(map(isfinite, (hit_seconds, hit_scale, hit_shake_pixels))) or hit_seconds <= 0 or hit_scale <= 1 or hit_shake_pixels < 0:
+            raise ValueError('피격 마커의 시간·확대 배율·진폭이 유효하지 않다.')
+        self.hit_seconds, self.hit_scale, self.hit_shake_pixels = hit_seconds, hit_scale, hit_shake_pixels
         self.tracks = []
         self.selected_id = None
 
@@ -105,10 +111,17 @@ class LockOnMotion:
             if not track.leaving and body is not None:
                 track.body = body
 
-    def update(self, delta_seconds):
+    def hit(self, target_id):
+        for track in self.tracks:
+            if track.target_id == target_id and not track.leaving:
+                track.hit_age = 0
+
+    def update(self, delta_seconds, *, freeze_hits=False):
         if not isfinite(delta_seconds) or delta_seconds < 0:
             raise ValueError("록온 갱신 시간은 0 이상의 유한한 초 단위 값이어야 한다.")
         for track in self.tracks:
+            if not freeze_hits:
+                track.hit_age += delta_seconds
             if not track.leaving:
                 track.age += delta_seconds
             else:
@@ -120,11 +133,18 @@ class LockOnMotion:
     def visuals(self):
         result = []
         for track in self.tracks:
+            offset = (0, 0)
             progress = max(0, min(1, track.age / self.enter_seconds))
             angle = 45 * elastic_out(progress)
             scale = self.start_scale + (1 - self.start_scale) * emphasized(progress)
             opacity = 1
             label = max(0, min(1, (track.age - self.enter_seconds) / self.label_seconds))
+            if not track.leaving and track.hit_age < self.hit_seconds:
+                t = track.hit_age / self.hit_seconds
+                scale *= 1 + (self.hit_scale - 1) * sin(pi * t)
+                amplitude = self.hit_shake_pixels * (1 - t)
+                offset = (sin(track.hit_age * 2 * pi * 20) * amplitude,
+                          sin(track.hit_age * 2 * pi * 24) * amplitude)
             if track.leaving:
                 label = 0
                 t = min(1, track.exit_age / self.exit_seconds)
@@ -136,5 +156,5 @@ class LockOnMotion:
             step, local = divmod(patrol_age, cycle)
             move = cubic(min(1, local / self.move_seconds), 0.42, 0, 0.58, 1)
             result.append(LockOnVisual(track.target_id, track.body, angle, scale, opacity,
-                                       label, 3.5 + 2 * (step + move)))
+                                       label, 3.5 + 2 * (step + move), offset))
         return tuple(result)

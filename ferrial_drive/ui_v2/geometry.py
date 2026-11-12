@@ -101,28 +101,26 @@ class ResourceGeometry:
         return tuple((a + b) / 2 for a, b in zip(shape[1], shape[2]))
 
 
-def resource_geometry(layout, curve_radius=10):
-    """여백 없는 HP·큰 마름모·에너지·레벨 곡선의 공통 접점을 계산한다."""
+def resource_geometry(layout, bevel_pixels=10):
+    """HP·마름모·에너지·레벨의 공통 접점과 사선 모서리를 계산한다."""
     hx, hy, hw, hh = layout["hp_bar"]
     ex, ey, ew, eh = layout["energy_bar"]
     cx = layout["ultimate_center_x"]
     top, bottom = hy, ey + eh + 4
     cy, radius = hy + hh, layout["ultimate_radius_pixels"]
     level_left, level_top = hx + hw, ey - hh
-    neck = (level_left + curve_radius * 7 / 6, cy)
-    shoulder = (level_left + curve_radius / 4, level_top + curve_radius / 3)
+    neck = (level_left + bevel_pixels * 7 / 6, cy)
+    shoulder = (level_left + bevel_pixels / 4, level_top + bevel_pixels / 3)
     side_slope = (neck[0] - shoulder[0]) / (neck[1] - shoulder[1])
     cap_x = lambda y: neck[0] + (y - cy) * side_slope
     hp_outline = ((cx + radius - hh, top), (cap_x(top), top), neck, (cx + radius, cy))
     hp_shape = hp_outline
     right = ex + ew + layout["energy_level_width_pixels"]
-    upper = (right - curve_radius * 2, level_top)
-    side, end = (right + 6, level_top + curve_radius * 1.8), (right - curve_radius, bottom)
-    level_shape = ((neck, shoulder) + quadratic_curve(shoulder, (level_left, level_top),
-                                                    (level_left + curve_radius, level_top))
-                   + (upper,) + quadratic_curve(upper, (right + 6, level_top), side)
-                   + quadratic_curve(side, (right + 10, bottom), end)
-                   + ((neck[0], bottom),))
+    upper = (right - bevel_pixels * 2, level_top)
+    side = (right + 6, level_top + bevel_pixels * 1.8)
+    level_shape = (neck, shoulder, (level_left + bevel_pixels, level_top), upper,
+                   side, (side[0], bottom - bevel_pixels), (right - bevel_pixels, bottom),
+                   (neck[0], bottom))
     # 큰 마름모의 변 중간에도 바를 붙일 수 있도록 각 높이의 접점을 구한다.
     icon_right, icon_bottom = (cx + radius, cy), (cx + radius - (bottom - cy), bottom)
     energy_body = (icon_right, neck, level_shape[-1], icon_bottom)

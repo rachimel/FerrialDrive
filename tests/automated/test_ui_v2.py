@@ -715,7 +715,7 @@ class UiV2Tests(unittest.TestCase):
             view.resources(self.program.state, 1, 0, 0.8)
         self.assertEqual(scanlines.call_count, 1)
         geometry = resource_geometry(self.program.config.data["v2"]["layout"],
-                                     self.program.config.data["v2"]["style"]["level_curve_radius_pixels"])
+                                     self.program.config.data["v2"]["style"]["level_bevel_pixels"])
         self.assertEqual(scanlines.call_args.args[0].surface, geometry.energy_channel)
         self.assertEqual(renderer.film_grain.call_count, 1)
         self.assertEqual(renderer.film_grain.call_args.args[0], geometry.energy_channel)
@@ -781,7 +781,7 @@ class UiV2Tests(unittest.TestCase):
         self.assertEqual(geometry.hp_outline[3], geometry.energy_body[0])
         self.assertEqual(geometry.hp_outline[2], geometry.energy_body[1])
 
-    def test_curved_level_touches_hp_without_entering_it(self):
+    def test_beveled_level_touches_hp_and_has_a_vertical_side(self):
         geometry = resource_geometry(self.program.config.data["v2"]["layout"])
         a, b = geometry.hp_outline[1:3]
         # 레벨이 HP와 높이를 공유해도 공유 사선의 오른쪽에만 있어야 한다.
@@ -790,7 +790,13 @@ class UiV2Tests(unittest.TestCase):
                 side = (b[0] - a[0]) * (y - a[1]) - (b[1] - a[1]) * (x - a[0])
                 self.assertLessEqual(side, 1e-8)
         self.assertIn(geometry.hp_outline[2], geometry.level_shape)
-        self.assertGreater(len(geometry.level_shape), 20)
+        self.assertEqual(len(geometry.level_shape), 8)
+        upper, side, lower, end = geometry.level_shape[3:7]
+        self.assertLess(upper[0], side[0])
+        self.assertEqual(side[0], lower[0])
+        self.assertGreater(side[1], upper[1])
+        self.assertLess(lower[1], end[1])
+        self.assertGreater(lower[0], end[0])
 
     def test_lock_border_scales_with_torso_and_keeps_its_center(self):
         for amount in (0.75, 1, 1.5):
