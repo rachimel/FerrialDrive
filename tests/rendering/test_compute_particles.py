@@ -322,6 +322,44 @@ class ComputeParticleTests(unittest.TestCase):
             self.assertEqual(check.call_args.args[1:], (0, 0))
         self.assertEqual(system.take_arrivals(), (0, 0))
 
+    def test_boundary_sparks_rise_scatter_and_expire_without_energy_receipts(self):
+        system, backend = self.make_system(capacity=32)
+        system.emit_sparks((65, 60), (70, 75), count=12)
+        with patch.object(backend, 'glGetBufferSubData', side_effect=AssertionError('불꽃은 집계를 읽지 않는다.')):
+            self.draw(system)
+        first = backend.snapshot()
+        sparks = [p for p in first['particles'] if p[2] and p[10] == 1]
+        self.assertEqual(len(sparks), 12)
+        self.assertTrue(all(60 <= p[13] <= 75 and p[7] < 0 for p in sparks))
+        self.assertTrue(all(p[16] == 0 and p[18] == 0 for p in sparks))
+        system.update(0.3)
+        with patch.object(backend, 'glGetBufferSubData', side_effect=AssertionError('불꽃은 집계를 읽지 않는다.')):
+            self.draw(system)
+        moved = [p for p in backend.snapshot()['particles'] if p[2] and p[10] == 1]
+        self.assertTrue(all(p[13] < old[13] - 5 for p, old in zip(moved, sparks)))
+        self.assertGreater(len({round(p[12], 1) for p in moved}), 4)
+        system.update(0.4)
+        self.draw(system)
+        final = backend.snapshot()
+        self.assertEqual(final['active_count'], 0)
+        self.assertEqual(final['arrived_units'], 0)
+        self.assertEqual(final['arrival_count'], 0)
+        self.assertFalse(backend.receipt_pending)
+        self.assertEqual(system.take_arrivals(), (0, 0))
+        self.assertEqual(set(backend.compute_programs), {'spawn', 'update'})
+
+    def test_mixed_orbs_and_boundary_sparks_credit_only_orb_arrivals(self):
+        system, backend = self.make_system(capacity=32)
+        system.emit((20, 20), (40, 58), (70, 45), count=6, gain_ratio=0.1)
+        system.emit_sparks((65, 60), (70, 75), count=12)
+        self.draw(system)
+        self.assertEqual(backend.snapshot()['active_count'], 18)
+        system.update(1.01)
+        self.draw(system)
+        backend.poll_arrivals(wait=True)
+        self.assertEqual(backend.snapshot()['active_count'], 6)
+        self.assertEqual(system.take_arrivals(), (0.1, 6))
+
 
 if __name__ == '__main__':
     unittest.main()

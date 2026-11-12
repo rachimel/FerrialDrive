@@ -117,16 +117,22 @@ class GpuParticleSystem:
         duration = self.duration_seconds if duration_seconds is None else duration_seconds
         if not isfinite(duration) or duration <= 0 or not isfinite(spread_pixels) or spread_pixels < 0:
             raise ValueError('수명은 양수이며 생성 간격은 0 이상이어야 한다.')
-        if effect_type != 0:
-            raise ValueError('현재 지원하는 효과 종류는 에너지 오브 0이다.')
+        if effect_type not in (0, 1):
+            raise ValueError('지원 효과는 에너지 오브 0·경계 불꽃 1이다.')
         if (not isfinite(gain_ratio) or not 0 <= gain_ratio <= 1
                 or not isfinite(arrival_spacing_seconds) or arrival_spacing_seconds < 0):
             raise ValueError('회복 비율은 0~1이며 도착 간격은 0 이상의 초 단위 값이어야 한다.')
         units = round(gain_ratio * ENERGY_UNITS)
+        if effect_type == 1 and (units or arrival_spacing_seconds):
+            raise ValueError('경계 불꽃은 회복·도착 간격을 사용하지 않는다.')
         self.commands.append(SpawnParticles(tuple(start), tuple(waypoint), tuple(destination),
                                             min(count, self.capacity), side, spread_pixels, duration, effect_type,
                                             units, arrival_spacing_seconds))
         self.requested_gain_units += units
+
+    def emit_sparks(self, top, bottom, *, count=1, duration_seconds=0.65, spread_pixels=2):
+        self.emit(top, bottom, (0, 0), effect_type=1, count=count, side=1,
+                  spread_pixels=spread_pixels, duration_seconds=duration_seconds)
 
     def update(self, delta_seconds):
         if not isfinite(delta_seconds) or delta_seconds < 0:

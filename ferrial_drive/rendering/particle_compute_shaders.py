@@ -110,6 +110,19 @@ void main() {
             }
             break;
         }
+        case 1: {
+            uint h = hash_value(ticket ^ request_seed);
+            vec3 random = vec3(float(h & 1023u), float((h >> 10u) & 1023u),
+                               float((h >> 20u) & 1023u)) / 1023.0;
+            p.anchors.xy = mix(anchors.xy, anchors.zw, random.y);
+            p.anchors.xy += vec2((random.z - 0.5) * spawn_settings.z, 0.0);
+            p.anchors.zw = vec2((random.x - 0.5) * 70.0, -36.0 - random.z * 46.0);
+            p.target.w = random.x * 6.283185;
+            p.life.z = 1.0;
+            p.motion = vec4(p.anchors.xy, 0.0, 0.0);
+            p.payload = vec4(0.0, 1.0, 0.0, 0.32 + random.z * 0.48);
+            break;
+        }
         default: break;
     }
     particles[slot] = p;
@@ -165,6 +178,15 @@ void main() {
             }
             break;
         }
+        case 1: {
+            float age = p.life.x;
+            float travel = (1.0 - exp(-2.0 * age)) / 2.0;
+            p.motion.xy = p.anchors.xy + p.anchors.zw * travel;
+            p.motion.x += (sin(p.target.w + age * 8.0) - sin(p.target.w)) * 3.5;
+            p.motion.y -= 10.0 * age * age;
+            p.motion.z = age / p.life.y;
+            break;
+        }
         default: p.life.z = 0.0; break;
     }
     particles[slot] = p;
@@ -195,6 +217,11 @@ void main() {
     Particle p = particles[slot];
     vec2 point;
     if (mode == 0) {
+        if (int(p.target.z) == 1) {
+            gl_Position = vec4(-2.0, -2.0, 0.0, 1.0);
+            ink = vec4(0.0); uv = vec2(0.0);
+            return;
+        }
         uint node = uint(gl_VertexID) / 2u;
         float edge = float(gl_VertexID % 2);
         uint base = (slot * (MAX_SEGMENTS + 1u) + node) * 2u;
@@ -208,9 +235,14 @@ void main() {
     } else {
         vec2 corner = vec2(float(gl_VertexID / 2), float(gl_VertexID % 2));
         float radius = orb_radius * (layer == 0u ? 2.4 : (layer == 1u ? 1.0 : 0.45));
+        if (int(p.target.z) == 1) radius *= p.payload.w;
         point = p.motion.xy + (corner * 2.0 - 1.0) * radius;
         ink = layer == 2u ? core_color : base_color;
         ink.a *= (p.motion.z <= 1.0 ? 1.0 : 0.0) * (layer == 0u ? 0.1 : (layer == 1u ? 0.9 : 1.0));
+        if (int(p.target.z) == 1) {
+            float twinkle = 0.45 + 0.55 * pow(sin(p.life.x * 22.0 + p.target.w), 2.0);
+            ink.a *= pow(max(0.0, 1.0 - p.motion.z), 1.4) * twinkle;
+        }
         uv = (vec2(0.5) + corner * 63.0) / vec2(128.0, 64.0);
     }
     vec2 screen = transform.xy + point * transform.zw;
