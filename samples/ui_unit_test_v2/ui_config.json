@@ -113,7 +113,7 @@
         },
         "v2_overdrive": {
             "path": "../../data/fonts/SUITE-otf/SUITE-Regular.otf",
-            "size": 12
+            "size": 18
         },
         "v2_level": {
             "path": "../../data/fonts/ferrial_hud_square_wide/FerrialHudSquareWide-Regular.otf",
@@ -877,6 +877,8 @@
             "level_bevel_pixels": 12,
             "overdrive_red": [255, 64, 68],
             "overdrive_motion": {"enter_seconds": 0.42, "exit_seconds": 0.18, "fade_in_seconds": 0.065},
+            "overdrive_entry_streak": {"expand_seconds": 0.045, "hold_seconds": 0.025, "fade_seconds": 0.17,
+                "length_ratio": 0.88, "width_pixels": 3.2, "glow_width_pixels": 14, "opacity": 0.95},
             "energy_boundary": {"rate_per_second": 40, "duration_seconds": 0.8, "spread_pixels": 2,
                 "glow_width_pixels": 5, "sparkle_size_pixels": 3.5},
             "level_text": {"number_scale": 0.85, "label_scale": 0.65, "right_inset_pixels": 12, "gap_pixels": 6},

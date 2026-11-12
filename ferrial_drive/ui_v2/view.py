@@ -511,6 +511,7 @@ class UiV2View(UiView):
         width = text_width + spacing * (len(label) - 1)
         cursor = -width / 2
         glow_color = energy_color(c['energy'], self.style['overdrive_red'], 1)
+        self.overdrive_entry_streak((center_x, center_y), bar_width, visual, glow_color, opacity)
         for index, (letter, (letter_width, letter_height)) in enumerate(zip(label, sizes)):
             x = center_x + (cursor + letter_width / 2) * visual.spread - letter_width / 2
             flash = visual.flash * (0.5 + 0.5 * sin(index * 2.4 + visual.spread * 18) ** 2)
@@ -527,6 +528,25 @@ class UiV2View(UiView):
                 self.stroke(((spark_x - length, spark_y), (spark_x + length, spark_y)), c['text'], alpha, 1)
                 self.stroke(((spark_x, spark_y - length), (spark_x, spark_y + length)), c['text'], alpha, 1)
             cursor += letter_width + spacing
+
+    def overdrive_entry_streak(self, center, bar_width, visual, color, opacity):
+        """등장 순간 중앙에서 수평으로 빠르게 뻗는 빛. 유지 중에는 반복하지 않는다."""
+        settings = self.style['overdrive_entry_streak']
+        age = visual.entry_seconds
+        expand, hold, fade = (settings[key] for key in ('expand_seconds', 'hold_seconds', 'fade_seconds'))
+        if age <= 0 or age >= expand + hold + fade or visual.opacity <= 0:
+            return
+        progress = min(1, age / expand)
+        brightness = progress ** 0.35 if age < expand else max(0, 1 - max(0, age - expand - hold) / fade) ** 2
+        length = bar_width * settings['length_ratio'] * (0.12 + 0.88 * (1 - (1 - progress) ** 3))
+        alpha = opacity * visual.opacity * settings['opacity'] * brightness
+        x, y = center
+        for width, ink, weight in ((settings['glow_width_pixels'], self.config.colors['text'], 0.18),
+                                   (settings['width_pixels'] * 2, color, 0.5),
+                                   (settings['width_pixels'], self.config.colors['text'], 1)):
+            shape = ((x - length / 2, y), (x, y - width / 2),
+                     (x + length / 2, y), (x, y + width / 2))
+            self.polygon(shape, ink, alpha * weight, filled=True)
 
     def energy_boundary(self, channel, ratio, color, opacity):
         if not 0 < ratio < 1:

@@ -14,7 +14,7 @@ SAMPLE = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(SAMPLE)
 
 from ferrial_drive.ui.energy import EnergyCharge
-from ferrial_drive.ui_v2.effects import (BoundaryParticleEmitter, HealthHitMotion, OverdriveMotion,
+from ferrial_drive.ui_v2.effects import (BoundaryParticleEmitter, HealthHitMotion, OverdriveMotion, OverdriveVisual,
                                        UltimateReadyVisual, damped_oscillation)
 from ferrial_drive.ui_v2.geometry import resource_geometry
 from ferrial_drive.ui_v2.lock_on import accent_position, outline_segment
@@ -76,6 +76,43 @@ class ReadyVfxTests(unittest.TestCase):
         self.program.update(0.2)
         self.assertEqual(self.program.ultimate_motion.visual.flash, 0)
         self.assertEqual(self.program.ultimate_motion.visual.opacity, 1)
+
+    def test_horizontal_entry_streak_expands_once_and_fades_with_exit(self):
+        view = UiV2View(self.program.config, Mock())
+        with patch.object(view, 'polygon') as polygon:
+            view.overdrive_entry_streak((100, 100), 140, OverdriveVisual(1, entry_seconds=0), '#FF4044', 1)
+            self.assertFalse(polygon.called)
+            view.overdrive_entry_streak((100, 100), 140, OverdriveVisual(1, entry_seconds=0.02), '#FF4044', 1)
+            fade_in = polygon.call_args.args[2]
+            early_points = polygon.call_args.args[0]
+            polygon.reset_mock()
+            view.overdrive_entry_streak((100, 100), 140, OverdriveVisual(1, entry_seconds=0.06), '#FF4044', 1)
+            peak = polygon.call_args.args[2]
+            points = polygon.call_args.args[0]
+            self.assertGreater(peak, fade_in)
+            self.assertEqual(len(points), 4)
+            width = max(p[0] for p in points) - min(p[0] for p in points)
+            height = max(p[1] for p in points) - min(p[1] for p in points)
+            self.assertGreater(width, height * 20)
+            self.assertGreater(width, max(p[0] for p in early_points) - min(p[0] for p in early_points))
+            polygon.reset_mock()
+            view.overdrive_entry_streak((100, 100), 140, OverdriveVisual(0.5, entry_seconds=0.06), '#FF4044', 1)
+            self.assertAlmostEqual(polygon.call_args.args[2], peak / 2)
+            polygon.reset_mock()
+            view.overdrive_entry_streak((100, 100), 140, OverdriveVisual(1, entry_seconds=0.25), '#FF4044', 1)
+            view.overdrive_entry_streak((100, 100), 140, OverdriveVisual(1, entry_seconds=1.41), '#FF4044', 1)
+            self.assertFalse(polygon.called)
+        self.program.perform('overdrive')
+        self.program.update(0.2)
+        age = self.program.overdrive_motion.visual.entry_seconds
+        self.program.pause.request(True)
+        self.program.update(1)
+        self.assertEqual(self.program.overdrive_motion.visual.entry_seconds, age)
+        motion = self.program.overdrive_motion
+        motion.request(False)
+        motion.update(0.09)
+        self.assertEqual(motion.visual.entry_seconds, age)
+        self.assertAlmostEqual(motion.visual.opacity, 0.5)
 
     def test_v_key_starts_cooldown_and_pause_freezes_it(self):
         import pico2d as p

@@ -1,5 +1,8 @@
 # ui-unit-test-v2
 
+- `v2.style.overdrive_entry_streak`: 등장 순간 중앙에서 수평으로 뻗는 빛을 한 번 표시한다. 0.045초 확장·0.025초 유지·0.17초 fade-out, 최대 길이는 바 폭의 88%다. Overdrive 퇴장 투명도를 함께 적용하며 일시정지 때 등장 시계도 멈춘다.
+
+
 - 오른쪽 LV 외곽의 위·아래 사선은 같은 가로/세로 변화량을 사용한다. 가운데 수직선은 전체 높이에서 두 사선 높이를 뺀 길이다.
 - `v2.style.energy_boundary`: 채움과 빈 공간의 경계에 선·별 모양 반짝임과 GPU 불꽃을 표시한다. 초당 40개·수명 0.8초이며 위로 상승하고 옆으로 흩어진다. 생성/갱신 Compute의 효과 종류 1을 사용하며 CPU는 요청 주기만 관리한다. 회복량은 0이고 빈 게이지·완충 때 새 불꽃을 만들지 않는다. Overdrive 추가 충전 중에는 그 추가 채움 경계를 사용한다.
 - `HealthHitMotion.damping`·`lock_motion.hit_damping`의 기본값은 1.8이다. 지수 감쇠와 종료 구간 완화를 함께 사용하며 위치·속도는 종료 때 0이다. 0이면 지수 감쇠만 끈다. 피격·연타는 진폭 상한을 누적하지 않는다.
@@ -141,7 +144,7 @@ HP flash는 `HealthDamageFlash.trigger(피해 전 비율, 피해 후 비율)`·`
 
 `v2.style.lock_motion`은 등장 0.32초·캐럿 0.16초·퇴장 0.2초·강조선 이동 0.32초/정지 0.2초·시작 배율 0.25/퇴장 배율 1.5를 조절한다. 기본형은 정사각형이며 등장 완료 45°는 마름모다. 가이드 조작키 색/설명 투명도는 `dialogue_key_color`·`dialogue_description_opacity`다.
 
-OVERDRIVE 문구만 SUITE Regular 12px로 게이지 중앙에 표시한다. ENERGY 문구는 표시하지 않는다. 문구 폭은 바 폭의 40%(`overdrive_width_ratio=0.4`)다. 등장 때 불투명도는 0.065초에 올라가고 0.42초 동안 글자가 중앙에서 퍼지며 개별 반짝임·에너지색 Bloom을 낸다. 퇴장은 0.18초 fade-out만 사용한다. 시간은 `v2.style.overdrive_motion`, Bloom은 `overdrive_bloom`으로 조절한다. 준비된 네온 텍스처를 재사용한다.
+OVERDRIVE 문구만 SUITE Regular 18px로 게이지 중앙에 표시한다. ENERGY 문구는 표시하지 않는다. 문구 폭은 바 폭의 40%(`overdrive_width_ratio=0.4`)다. 등장 때 불투명도는 0.065초에 올라가고 0.42초 동안 글자가 중앙에서 퍼지며 개별 반짝임·에너지색 Bloom을 낸다. 퇴장은 0.18초 fade-out만 사용한다. 시간은 `v2.style.overdrive_motion`, Bloom은 `overdrive_bloom`으로 조절한다. 준비된 네온 텍스처를 재사용한다.
 
 등장 중 취소도 역재생하지 않는다. 취소 시점의 실제 회전값/배율을 저장해 그 값부터 회전은 2배, 크기는 `exit_scale`배까지 확대하며 흐려진다. 완료 뒤 취소는 기존 45→90°·1→1.5배와 같다.
 

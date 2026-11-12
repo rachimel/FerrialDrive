@@ -176,6 +176,7 @@ class OverdriveVisual:
     opacity: float = 0
     spread: float = 1
     flash: float = 0
+    entry_seconds: float = 1
 
 
 class OverdriveMotion:
@@ -211,7 +212,7 @@ class OverdriveMotion:
         t = min(1, self.age / self.enter_seconds)
         spread = 0.16 + 0.84 * (1 - (1 - t) ** 3)
         flash = (1 - t) * (0.35 + 0.65 * sin(tau * t * 2.5) ** 2) if self.visible else 0
-        return OverdriveVisual(self.animation.value, spread, flash)
+        return OverdriveVisual(self.animation.value, spread, flash, self.age)
 
 
 @dataclass(frozen=True)
