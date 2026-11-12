@@ -11,7 +11,7 @@ from .geometry import (PerspectivePlane, body_diamond, counter_plaque, quad_fill
 from .panels import (PanelGeometry, build_panel_geometry, merge_panel_y_ranges,
                      panel_bright_band_top, scale_panel_geometry)
 from .panel_probe import PanelProbeRenderer
-from .effects import DialoguePanelVisual, ScanlineVisual, breathing_opacity, subtle_flicker
+from .effects import DialoguePanelVisual, HealthHitVisual, ScanlineVisual, breathing_opacity, subtle_flicker
 from .lock_on import LockOnVisual, outline_segment
 
 
@@ -365,20 +365,42 @@ class UiV2View(UiView):
             cursor = label_width * visual.label_progress
             self.stroke((label_point(cursor, 0), label_point(cursor, label_height)), c["text"], alpha, 2)
 
-    def resources(self, state, opacity, offset_x, player_trailing_ratio, *, damage_flashes=()):
+    def health_hit_offset(self, visual):
+        return tuple(value / self.style["hud_scale"] for value in visual.offset_pixels)
+
+    def health_hit_blur(self, bounds, visual):
+        settings = self.style["player_health_blur"]
+        maximum = settings["max_length_pixels"]
+        displacement = tuple(max(-maximum, min(maximum, speed * settings["shutter_seconds"]))
+                             / self.style["hud_scale"] for speed in visual.velocity_pixels_per_second)
+        return (self.renderer.directional_blur(bounds, displacement, settings["opacity"], settings["samples"])
+                if any(abs(value) > 0.01 for value in displacement) else nullcontext())
+
+    def player_health(self, hud, geometry, opacity, trailing_ratio, damage_flashes, hit_visual):
         r, c = self.renderer, self.config.colors
-        hud = state.hud
-        geometry = resource_geometry(self.layout, self.style["level_curve_radius_pixels"])
-        self.meter("hp_bar", hud.player_health.ratio, "accent", opacity, player_trailing_ratio,
-                   shape=geometry.hp_shape, border=geometry.hp_outline, damage_flashes=damage_flashes)
+        dx, dy = self.health_hit_offset(hit_visual)
+        shape = tuple((x + dx, y + dy) for x, y in geometry.hp_shape)
+        border = tuple((x + dx, y + dy) for x, y in geometry.hp_outline)
         value = f"{hud.player_health.current:,.0f}"
         value_width, value_height = r.text_size(value, "v2_hp")
-        x, top = geometry.hp_outline[0]
+        x, top = border[0]
         gap = self.style["resource_label_gap_pixels"]
-        hp_alpha = opacity
-        r.text(value, x, top - value_height - gap, "v2_hp", c["text"], hp_alpha)
-        hp_height = r.text_size("HP", "hud_small")[1]
-        r.text("HP", x + value_width + 9, top - hp_height - gap, "hud_small", c["muted"], hp_alpha)
+        hp_width, hp_height = r.text_size("HP", "hud_small")
+        left, right = min(p[0] for p in border), max(max(p[0] for p in border), x + value_width + 9 + hp_width)
+        bottom = max(p[1] for p in border)
+        label_top = top - max(value_height, hp_height) - gap
+        bounds = Rect(left - 4, label_top - 4, right - left + 8, bottom - label_top + 8)
+        with self.health_hit_blur(bounds, hit_visual):
+            self.meter("hp_bar", hud.player_health.ratio, "accent", opacity, trailing_ratio,
+                       shape=shape, border=border, damage_flashes=damage_flashes)
+            r.text(value, x, top - value_height - gap, "v2_hp", c["text"], opacity)
+            r.text("HP", x + value_width + 9, top - hp_height - gap, "hud_small", c["muted"], opacity)
+
+    def resources(self, state, opacity, offset_x, player_trailing_ratio, *, damage_flashes=(),
+                  hit_visual=HealthHitVisual()):
+        r, c = self.renderer, self.config.colors
+        geometry = resource_geometry(self.layout, self.style["level_curve_radius_pixels"])
+        self.player_health(state.hud, geometry, opacity, player_trailing_ratio, damage_flashes, hit_visual)
         x, y, width, height = self.layout["energy_bar"]
         outline, channel = geometry.energy_outline, geometry.energy_channel
         self.panel_layer(geometry.energy_body, c["panel"], opacity, grain=True, effect_surface=channel)
@@ -549,19 +571,40 @@ class UiV2View(UiView):
                                     **self.style["weapon_text_neon"])
 
     def absorption(self, trails, opacity):
-        r, color = self.renderer, self.config.colors["energy"]
+        color = self.config.colors["energy"]
+        settings = self.style["absorption_trail"]
+        if self.renderer.draw_instanced_particles(trails, settings, color, self.config.colors["text"], opacity):
+            return
+        quads = []
         for trail in trails:
-            head = trail.progress
-            for index in range(18):
-                a = head - 0.28 + index / 18 * 0.28
-                b = a + 0.28 / 18
-                if b <= 0 or a >= 1:
-                    continue
-                alpha = opacity * ((index + 1) / 18) ** 1.5
-                segment = (trail.point(a), trail.point(b))
-                self.stroke(segment, color, alpha * 0.12, 5)
-                self.stroke(segment, color, alpha * 0.5, 2)
-                self.stroke(segment, self.config.colors["text"], alpha)
+            ribbon = trail.ribbon(settings["tail_fraction"], settings["samples"])
+            if ribbon:
+                normals = []
+                for index in range(len(ribbon)):
+                    a = ribbon[max(0, index - 1)][0]
+                    b = ribbon[min(len(ribbon) - 1, index + 1)][0]
+                    length = max(1e-9, hypot(b[0] - a[0], b[1] - a[1]))
+                    normals.append((-(b[1] - a[1]) / length, (b[0] - a[0]) / length))
+                for width, ink, alpha in ((settings["head_width_pixels"] * 2, color, 0.85),
+                                           (settings["head_width_pixels"] * 0.5, self.config.colors["text"], 0.9)):
+                    sections = []
+                    for (point, pressure), normal in zip(ribbon, normals):
+                        dx, dy = (value * width * pressure / 2 for value in normal)
+                        sections.append(((point[0] + dx, point[1] + dy), (point[0] - dx, point[1] - dy)))
+                    for index, (a, b) in enumerate(zip(sections, sections[1:])):
+                        first = self.renderer.rgba(ink, opacity * alpha * ribbon[index][1])
+                        second = self.renderer.rgba(ink, opacity * alpha * ribbon[index + 1][1])
+                        quads.append(((a[0], b[0], b[1], a[1]), (first, second, second, first), 1))
+            if trail.progress <= 1:
+                x, y = trail.point(trail.progress)
+                for radius, ink, alpha in ((settings["orb_radius_pixels"] * 2.4, color, 0.1),
+                                           (settings["orb_radius_pixels"], color, 0.9),
+                                           (settings["orb_radius_pixels"] * 0.45, self.config.colors["text"], 1)):
+                    points = ((x - radius, y - radius), (x + radius, y - radius),
+                              (x + radius, y + radius), (x - radius, y + radius))
+                    rgba = self.renderer.rgba(ink, opacity * alpha)
+                    quads.append((points, (rgba,) * 4, 0))
+        self.renderer.particle_quads(quads)
 
     def counter_base(self, project, width, ink_bottom, opacity):
         thickness = self.style["counter_plaque_height_pixels"]
@@ -634,7 +677,8 @@ class UiV2View(UiView):
                cursor_position=None, player_trailing_ratio=None, target_trailing_ratio=None,
                absorption_trails=(), scanline_visual=None, dialogue_visual=None, lock_visuals=None,
                player_damage_flashes=(), target_damage_flashes=(), counter_message_opacity=None, player_screen=None,
-               loadout_visual=None, weapon_swap_visual=None):
+               loadout_visual=None, weapon_swap_visual=None,
+               player_hit_visual=HealthHitVisual(), target_hit_visual=HealthHitVisual()):
         r, c, hud = self.renderer, self.config.colors, state.hud
         scale = self.style["hud_scale"]
         width, height = self.config.window["width"], self.config.window["height"]
@@ -649,6 +693,8 @@ class UiV2View(UiView):
             x, y, bar_width, bar_height = self.layout["target_hp"]
             dx, dy = self.layout["target_hp_offset_pixels"]
             x, y = target_anchor[0] + dx, target_anchor[1] + dy
+            hit_x, hit_y = self.health_hit_offset(target_hit_visual)
+            x, y = x + hit_x, y + hit_y
             target_rect = (x, y, bar_width, bar_height)
             if hud.target:
                 self.meter("target_hp", hud.target.health.ratio, "enemy", opacity, target_trailing_ratio,
@@ -662,7 +708,8 @@ class UiV2View(UiView):
                 with r.scaled(scale, (body.x + body.width / 2, body.y + body.height / 2)):
                     self.lock_marker(visual, opacity, offset_x)
         with r.scaled(scale, (width / 2, height)):
-            self.resources(state, opacity, offset_x, player_trailing_ratio, damage_flashes=player_damage_flashes)
+            self.resources(state, opacity, offset_x, player_trailing_ratio, damage_flashes=player_damage_flashes,
+                           hit_visual=player_hit_visual)
         with r.scaled(self.style["equipment_scale"], (width, height)):
             self.weapons(hud, opacity, offset_x, loadout_visual=loadout_visual,
                          weapon_swap_visual=weapon_swap_visual)

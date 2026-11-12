@@ -26,7 +26,8 @@ from ferrial_drive.ui.pause import PauseState
 from ferrial_drive.ui.state import Health, HudState, LoadoutInfo, RadarContact, TargetInfo, WeaponInfo
 from ferrial_drive.ui.transition import SceneTransition
 from ferrial_drive.ui.weapon_swap import WeaponSwap
-from ferrial_drive.ui_v2.effects import DialoguePanelMotion, EnergyAbsorption, HealthDamageFlash, IndicatorFade, ScanlineMotion
+from ferrial_drive.ui_v2.effects import (DialoguePanelMotion, EnergyAbsorption, HealthDamageFlash,
+                                       HealthHitMotion, IndicatorFade, ScanlineMotion)
 from ferrial_drive.ui_v2.lock_on import LockOnMotion
 from ferrial_drive.ui_v2.geometry import resource_geometry, scaled_point
 from ferrial_drive.ui_v2.pico_renderer import PicoV2Renderer
@@ -50,7 +51,9 @@ class UiUnitTestV2:
         self.transition = SceneTransition("menu", "combat", initial_scene or self.config.window["initial_scene"],
                                           self.config.data["animation"]["duration_seconds"], 0)
         self.pause = PauseState(self.config.data["pause"]["duration_seconds"])
-        self.absorption = EnergyAbsorption(self.config.data["v2"]["absorption_duration_seconds"])
+        self.absorption = EnergyAbsorption(self.config.data["v2"]["absorption_duration_seconds"],
+                                           tail_fraction=self.config.data["v2"]["style"]["absorption_trail"]["tail_fraction"],
+                                           **self.config.data["v2"]["absorption_routes"])
         scanline = self.config.data["v2"]["style"]["panel_scanlines"]
         scanline_speeds = (scanline["spacing_pixels"], scanline["motion"]["slow_speed_pixels_per_second"],
                            scanline["motion"]["fast_speed_pixels_per_second"])
@@ -101,6 +104,9 @@ class UiUnitTestV2:
         flash = self.config.data["v2"]["style"]["health_damage_flash"]
         self.player_flash = HealthDamageFlash(flash["hold_seconds"], flash["fade_seconds"], attack_seconds=flash["attack_seconds"])
         self.target_flash = HealthDamageFlash(flash["hold_seconds"], flash["fade_seconds"], attack_seconds=flash["attack_seconds"])
+        hit_settings = self.config.data["v2"]["style"]["health_hit_motion"]
+        self.player_hit = HealthHitMotion(**hit_settings["player"])
+        self.target_hit = HealthHitMotion(**hit_settings["target"])
         animation = self.config.data["animation"]
         self.damage_numbers = DamageNumbers(animation["damage_duration_seconds"],
                                             animation["damage_scatter_x_pixels"],
@@ -146,6 +152,7 @@ class UiUnitTestV2:
         self.set_target_size(self.target_scale)
         self.target_health.reset(enemy["health"].ratio if enemy else 0)
         self.target_flash.clear()
+        self.target_hit.clear()
         self.lock_motion.select(self.selected_target_id, self.state.target_body)
 
     def update_world_view(self, delta_seconds):
@@ -189,8 +196,14 @@ class UiUnitTestV2:
         destination = scaled_point(destination, anchor, scale)
         enemy = self.enemies.get(self.selected_target_id)
         start = self.camera.world_to_screen(enemy["position"]) if enemy else self.config.actor_anchor("target")
+        side = 1 if start[0] > self.camera.world_to_screen(self.player_world)[0] else -1
+        if side > 0:
+            # 오른쪽 적은 왼쪽 필살기 아이콘 대신 에너지 바 오른쪽을 경유한다.
+            gap = self.config.data["v2"]["style"]["absorption_trail"]["right_entry_gap_pixels"]
+            right = max(point[0] for point in geometry.energy_channel) + gap
+            icon = scaled_point((right, geometry.energy_tip(self.state.energy_ratio)[1]), anchor, scale)
         for offset in (-15, 0, 15):
-            self.absorption.add((start[0] + offset, start[1] - offset), icon, destination)
+            self.absorption.add((start[0] + offset, start[1] - offset), icon, destination, approach_side=side)
 
     def perform(self, action):
         hud = self.state.hud
@@ -222,12 +235,15 @@ class UiUnitTestV2:
                              total_damage_dealt=hud.total_damage_dealt + int(applied))
                 self.target_health.set_ratio(health.ratio)
                 self.target_flash.trigger(previous_ratio, health.ratio)
+                self.target_hit.trigger()
+                self.absorb()
                 self.hit_counter.set_value(self.state.hud.combo_count)
                 self.damage_counter.set_value(self.state.hud.total_damage_dealt)
             else:
                 self.set_hud(player_health=health)
                 self.player_health.set_ratio(health.ratio)
                 self.player_flash.trigger(previous_ratio, health.ratio)
+                self.player_hit.trigger()
             owner = self.selected_target_id if target else "player"
             origin = self.player_world
             position = self.enemies[owner]["position"] if target else origin
@@ -339,6 +355,8 @@ class UiUnitTestV2:
         self.target_health.update(delta_seconds)
         self.player_flash.update(delta_seconds)
         self.target_flash.update(delta_seconds)
+        self.player_hit.update(delta_seconds)
+        self.target_hit.update(delta_seconds)
         self.damage_numbers.update(delta_seconds)
         self.absorption.update(delta_seconds)
 
@@ -387,6 +405,8 @@ class UiUnitTestV2:
                                  lock_visuals=self.lock_motion.visuals,
                                  player_damage_flashes=self.player_flash.visuals,
                                  target_damage_flashes=self.target_flash.visuals,
+                                 player_hit_visual=self.player_hit.visual,
+                                 target_hit_visual=self.target_hit.visual,
                                  counter_message_opacity=self.counter_message.opacity,
                                  loadout_visual=self.loadout_slide.visual,
                                  weapon_swap_visual=self.weapon_swap.visual,

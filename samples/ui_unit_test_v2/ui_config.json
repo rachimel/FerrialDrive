@@ -581,6 +581,26 @@
             "switch_margin_seconds": 1
         },
         "absorption_duration_seconds": 0.85,
+        "absorption_routes": {
+            "paths_by_side": {
+                "left": [
+                    [[30, -45], [-30, 30], [15, -15], [-15, -5]],
+                    [[-45, -20], [35, -50], [25, -30], [-10, -10]],
+                    [[55, 30], [20, -55], [-15, -20], [20, -5]],
+                    [[-30, 50], [-55, -15], [30, -10], [-20, -20]],
+                    [[65, -25], [-10, 45], [10, -35], [-25, -5]],
+                    [[-60, 5], [55, 25], [-20, -25], [15, -15]]
+                ],
+                "right": [
+                    [[-30, -45], [30, 30], [-15, -15], [15, -5]],
+                    [[45, -20], [-35, -50], [-25, -30], [10, -10]],
+                    [[-55, 30], [-20, -55], [15, -20], [-20, -5]],
+                    [[30, 50], [55, -15], [-30, -10], [20, -20]],
+                    [[-65, -25], [10, 45], [-10, -35], [25, -5]],
+                    [[60, 5], [-55, 25], [20, -25], [-15, -15]]
+                ]
+            }
+        },
         "targeting_sample": {
             "range_pixels": 330,
             "aim_range_pixels": 460,
@@ -700,6 +720,32 @@
                 "attack_seconds": 0.02,
                 "hold_seconds": 0,
                 "fade_seconds": 0.08
+            },
+            "health_hit_motion": {
+                "player": {
+                    "duration_seconds": 0.28,
+                    "frequency_hz": 18,
+                    "max_offset_pixels": [0, 4]
+                },
+                "target": {
+                    "duration_seconds": 0.22,
+                    "frequency_hz": 20,
+                    "max_offset_pixels": [0, 3]
+                }
+            },
+            "player_health_blur": {
+                "shutter_seconds": 0.012,
+                "opacity": 0.22,
+                "max_length_pixels": 3,
+                "samples": 33
+            },
+            "absorption_trail": {
+                "renderer": "instanced",
+                "tail_fraction": 0.3,
+                "samples": 24,
+                "head_width_pixels": 4,
+                "orb_radius_pixels": 3.5,
+                "right_entry_gap_pixels": 24
             },
             "dialogue_key_color": "#F0FCFF",
             "dialogue_description_opacity": 0.78,

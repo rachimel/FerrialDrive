@@ -14,6 +14,11 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 
 ## 조절 위치
 
+- `v2.style.health_hit_motion`: 유효 피격의 감쇠 진동. 타겟 `(0, ±3px)`·플레이어 HP `(0, ±4px)`가 화면 기준 상한이며 연타에도 누적하지 않는다. 플레이어 HP의 약한 블러는 `player_health_blur`에서 조절한다.
+- `v2.absorption_routes.paths_by_side`: 사전에 지정한 왼쪽·오른쪽 각 6개 경로. 후보당 제어점 4개이며 접근 구간 2개·바 진입 구간 2개의 화면 px 오프셋이다. 경로 번호만 무작위 선택하고 도착까지 고정한다. 왼쪽 적은 필살기 아이콘, 오른쪽 적은 에너지 채널 오른쪽을 경유한다.
+- `v2.style.absorption_trail`: 필압 꼬리·오브 크기·오른쪽 경유 여백을 조절한다. 기본 `renderer=instanced`는 아틀라스와 고정 경로를 GPU에 올려 재사용하고 매 프레임 오브당 진행률/슬롯 16바이트만 전송한다. GPU가 리본을 펼치며 오브·Trail 두 번의 Instancing으로 그린다. `batched`는 CPU 꼭짓점 묶음 비교용이며 OpenGL 3.3 미만·소프트웨어에서도 이 경로를 사용한다.
+- `1`로 적 피해·타겟 HP 진동·오브 3개 흡수를, `2`로 플레이어 피해·HP UI의 세로 진동/약한 블러를 확인한다. 마우스로 좌우 표적을 선택한 뒤 비교한다. `G`는 피해 없이 흡수만 시연한다. `Esc`는 효과 정지/재개, `F5`는 초기화다. 좌클릭 모션의 실제 피해 판정·에너지 획득량은 별도다.
+
 - `ui_config.json`의 `v2.layout`: 미니맵·록온·타겟 HP·플레이어 HP·에너지·필살기 아이콘·레벨·무장·카운터 배치.
 - `v2.layout.hp_bar`·`energy_bar`·`ultimate_center_x`·`ultimate_radius_pixels`: 바의 높이/오른쪽 끝과 아이콘 위치·크기. 두 바의 왼쪽 경계는 마름모 변에 맞춰 계산한다. HP 안쪽 여백은 없고 수치/HP는 바 위에 자동 정렬한다.
 - `v2.layout.energy_level_width_pixels`·`v2.style.level_curve_radius_pixels`: HP 옆에 붙는 레벨 영역의 폭과 곡선 강도. HP/에너지 공유 경계와 레벨 왼쪽 사선은 함께 계산한다.
@@ -60,7 +65,7 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 | 3 / 4 | 에너지 10% 감소 / 증가·흡수 Trail |
 | 5 / 6 | 에너지 레벨 / Overdrive 표기 변경 |
 | 7 | 몸통 크기와 록온 테두리의 비례 비교: 1→1.5→0.75배 |
-| G | 필살기 아이콘을 통과해 에너지 바로 향하는 흡수 Trail |
+| G | 좌우 경유점에서 에너지 바로 향하는 오브·필압 Trail |
 | 마우스 이동 | 시선 카메라 오프셋·마우스 월드 좌표 최근접 후보가 1초 유지되면 자동 선택 |
 | 우클릭 유지 | 자동 획득거리 증가. 발사/탄 퍼짐은 이 샘플에 미연결 |
 | T | 후보 전체 비활성/활성. 표적·대기 후보 초기화, 활성 뒤 새 후보를 1초 확인 |

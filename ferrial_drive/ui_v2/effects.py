@@ -1,7 +1,8 @@
 """흡수 Trail·패널 스캔·대화창 개폐의 시간 상태. 입력·렌더러와 분리한다."""
 
-from dataclasses import dataclass
-from math import cos, isfinite, tau
+from dataclasses import dataclass, field
+from math import cos, hypot, isfinite, sin, tau
+from random import Random
 
 from ferrial_drive.animation import ScalarAnimation
 
@@ -95,6 +96,48 @@ class HealthDamageFlash:
         return tuple(HealthFlashVisual(low, high, min(elapsed / self.attack_seconds,
                      1 - max(0, elapsed - self.attack_seconds - self.hold_seconds) / self.fade_seconds))
                      for low, high, elapsed in self._flashes)
+
+
+@dataclass(frozen=True)
+class HealthHitVisual:
+    offset_pixels: tuple[float, float] = (0, 0)
+    velocity_pixels_per_second: tuple[float, float] = (0, 0)
+
+
+class HealthHitMotion:
+    """피격마다 제한된 진폭으로 재시작하는 감쇠 진동. 좌표는 화면 px다."""
+    def __init__(self, duration_seconds=0.28, frequency_hz=18, max_offset_pixels=(0, 4)):
+        if (not all(isfinite(value) and value > 0 for value in (duration_seconds, frequency_hz))
+                or len(max_offset_pixels) != 2
+                or not all(isfinite(value) and value >= 0 for value in max_offset_pixels)):
+            raise ValueError("피격 시간·진동수는 양수이며 최대 오프셋은 0 이상의 화면 px여야 한다.")
+        self.duration_seconds, self.frequency_hz = duration_seconds, frequency_hz
+        self.max_offset_pixels = tuple(max_offset_pixels)
+        self.clear()
+
+    def clear(self):
+        self.elapsed_seconds = self.duration_seconds
+
+    def trigger(self):
+        self.elapsed_seconds = 0
+
+    def update(self, delta_seconds):
+        if not isfinite(delta_seconds) or delta_seconds < 0:
+            raise ValueError("피격 갱신 시간은 0 이상의 유한한 초 단위 값이어야 한다.")
+        self.elapsed_seconds = min(self.duration_seconds, self.elapsed_seconds + delta_seconds)
+
+    @property
+    def visual(self):
+        if self.elapsed_seconds >= self.duration_seconds:
+            return HealthHitVisual()
+        time = self.elapsed_seconds
+        remaining = 1 - time / self.duration_seconds
+        angle = tau * self.frequency_hz * time
+        offset = remaining ** 2 * sin(angle)
+        velocity = (remaining ** 2 * tau * self.frequency_hz * cos(angle)
+                    - 2 * remaining / self.duration_seconds * sin(angle))
+        return HealthHitVisual(tuple(limit * offset for limit in self.max_offset_pixels),
+                               tuple(limit * velocity for limit in self.max_offset_pixels))
 
 
 @dataclass(frozen=True)
@@ -214,35 +257,105 @@ class AbsorptionTrail:
     destination: tuple[float, float]
     duration_seconds: float
     elapsed_seconds: float = 0.0
+    route_offsets: tuple[tuple[float, float], ...] = ()
+    approach_side: int = -1
+    path_points: tuple[tuple[float, float], ...] = field(init=False, repr=False)
+
+    def __post_init__(self):
+        # 생성 때만 곡선을 계산하고 매 프레임에는 고정 경로를 선형 조회한다.
+        # 0.72 경유점은 200분할의 144번째 점으로 정확히 보존한다.
+        self.path_points = tuple(self._curve_point(index / 200) for index in range(201))
 
     def point(self, amount):
+        position = max(0.0, min(1.0, amount)) * 200
+        index = min(199, int(position))
+        a, b = self.path_points[index:index + 2]
+        t = position - index
+        return a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t
+
+    def _curve_point(self, amount):
         amount = max(0.0, min(1.0, amount))
         sx, sy = self.start
         ix, iy = self.icon
         dx, dy = self.destination
-        if amount <= 0.72:
-            return _bezier(((sx, sy), (sx + 90, sy + 100),
-                            (ix - 90, iy - 110), (ix, iy)), amount / 0.72)
-        return _bezier(((ix, iy), (ix + 55, iy + 55),
-                        (dx - 75, dy + 30), (dx, dy)), (amount - 0.72) / 0.28)
+        first_leg = amount <= 0.72
+        local = amount / 0.72 if first_leg else (amount - 0.72) / 0.28
+        side = self.approach_side
+        controls = (((sx, sy), (sx - side * 90, sy + 100), (ix + side * 90, iy - 110), (ix, iy))
+                    if first_leg else ((ix, iy), (ix - side * 55, iy - 55), (dx + side * 75, dy - 30), (dx, dy)))
+        x, y = _bezier(controls, local)
+        if not self.route_offsets:
+            return x, y
+        offsets = self.route_offsets[:4] if first_leg else self.route_offsets[4:]
+        # 사전 지정한 제어점을 사용한다. 생성 시 경로 번호만 무작위로 선택한다.
+        dx, dy = _bezier(offsets, local)
+        return x + dx, y + dy
+
+    def ribbon(self, tail_fraction=0.3, samples=40):
+        """꼬리→오브 순 좌표와 오브까지의 실제 거리에 따른 필압을 반환한다."""
+        head = min(1, self.progress)
+        tail = max(0, self.progress - tail_fraction)
+        if tail >= head:
+            return ()
+        points = tuple(self.point(tail + (head - tail) * i / samples) for i in range(samples + 1))
+        lengths = [0.0]
+        for a, b in zip(points, points[1:]):
+            lengths.append(lengths[-1] + hypot(b[0] - a[0], b[1] - a[1]))
+        if lengths[-1] <= 1e-9:
+            return ()
+        fade = max(0, 1 - max(0, self.progress - 1) / tail_fraction)
+        return tuple((point, (distance / lengths[-1]) ** 1.5 * fade)
+                     for point, distance in zip(points, lengths))
 
     @property
     def progress(self):
         return self.elapsed_seconds / self.duration_seconds
 
 
+DEFAULT_ABSORPTION_PROFILES = (
+    ((30, -45), (-30, 30), (15, -15), (-15, -5)),
+    ((-45, -20), (35, -50), (25, -30), (-10, -10)),
+    ((55, 30), (20, -55), (-15, -20), (20, -5)),
+    ((-30, 50), (-55, -15), (30, -10), (-20, -20)),
+    ((65, -25), (-10, 45), (10, -35), (-25, -5)),
+    ((-60, 5), (55, 25), (-20, -25), (15, -15)),
+)
+
+
 class EnergyAbsorption:
-    def __init__(self, duration_seconds=0.85):
+    def __init__(self, duration_seconds=0.85, *, paths_by_side=None, seed=None, tail_fraction=0.3):
         if not isfinite(duration_seconds) or duration_seconds <= 0:
             raise ValueError("흡수 효과 시간은 양수인 초 단위 값이어야 한다.")
         self.duration_seconds = duration_seconds
+        if not isfinite(tail_fraction) or not 0 < tail_fraction <= 1:
+            raise ValueError("흡수 꼬리 비율은 0 초과 1 이하여야 한다.")
+        self.tail_fraction = tail_fraction
+        self.random = Random(seed)
+        profiles = paths_by_side or {
+            "left": DEFAULT_ABSORPTION_PROFILES,
+            "right": tuple(tuple((-x, y) for x, y in profile) for profile in DEFAULT_ABSORPTION_PROFILES),
+        }
+        self.routes = {}
+        for side, key in ((-1, "left"), (1, "right")):
+            entries = profiles[key]
+            if len(entries) != 6 or any(len(entry) != 4 or any(len(point) != 2
+                    or not all(map(isfinite, point)) for point in entry) for entry in entries):
+                raise ValueError("좌우 흡수 경로는 각각 6개이며 후보마다 유한한 제어점 4개가 필요하다.")
+            self.routes[side] = tuple(((0, 0), tuple(a), tuple(b), (0, 0),
+                                      (0, 0), tuple(c), tuple(d), (0, 0)) for a, b, c, d in entries)
         self.trails = []
 
-    def add(self, start, icon, destination):
+    def add(self, start, icon, destination, *, approach_side=-1):
         if not all(isfinite(value) for point in (start, icon, destination) for value in point):
             raise ValueError("흡수 효과 좌표는 유한한 화면 픽셀이어야 한다.")
+        if approach_side not in (-1, 1):
+            raise ValueError("흡수 진입 방향은 왼쪽 -1 또는 오른쪽 1이어야 한다.")
+        candidates = self.routes[approach_side]
+        route = self.random.choice(candidates)
+        if self.trails and route == self.trails[-1].route_offsets:
+            route = candidates[(candidates.index(route) + 1) % len(candidates)]
         self.trails.append(AbsorptionTrail(tuple(start), tuple(icon), tuple(destination),
-                                          self.duration_seconds))
+                                          self.duration_seconds, route_offsets=route, approach_side=approach_side))
         # 빠른 반복 입력에서도 표시 효과의 수를 제한한다.
         self.trails = self.trails[-24:]
 
@@ -251,7 +364,7 @@ class EnergyAbsorption:
             raise ValueError("효과 갱신 시간은 0 이상의 초 단위 값이어야 한다.")
         for trail in self.trails:
             trail.elapsed_seconds += delta_seconds
-        self.trails = [trail for trail in self.trails if trail.progress < 1.3]
+        self.trails = [trail for trail in self.trails if trail.progress < 1 + self.tail_fraction]
 
     def clear(self):
         self.trails.clear()

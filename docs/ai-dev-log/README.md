@@ -1,5 +1,7 @@
 # AI 개발 로그
 
+- [2026-11-12 UI 피격·고정 흡수 경로·GPU Instancing](2026-11-12-ui-hit-feedback-instancing.md): 축소 블러 세로 오차·HP 진동 상한·좌우 각 6개 경로·필압 Trail·오브/리본 Instancing
+
 - [2026-11-11 UI v2 카운터 전용 점멸](2026-11-11-ui-v2-counters-only-blink.md): 히트/데미지만·80% 하한·0.06초 보간·자동 128개/60프레임
 
 - [2026-11-11 UI v2 점멸 최소 75%](2026-11-11-ui-v2-blink-75-percent.md): 0.12초 반복·0.05초 보간·자동 127개/60프레임

@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [UI 피격·고정 흡수 경로·GPU Instancing](2026-11-12-ui-hit-feedback-instancing.md): TIME(scope). 축소 확인·피격 반응·좌우 분기 수용·Instancing·방향별 6개 고정 경로 지시의 개별 발언 시각을 확인한다.
+
 - [UI v2 간격·블러·흔들림 보정](2026-11-12-ui-v2-motion-stability.md): TIME(scope). 간격 축소·방향성 강화·전환 흔들림 지적의 개별 시각을 확인한다.
 
 - [UI v2 MAP 확대](2026-11-12-ui-v2-map-label.md): TIME(scope). MAP 확대 요청의 정확한 발언 시각을 확인한다.

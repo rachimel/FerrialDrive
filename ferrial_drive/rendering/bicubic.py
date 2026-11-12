@@ -63,14 +63,14 @@ def acquire_sampler(pico):
 
 
 class BicubicSampler:
-    def __init__(self, pico, key, *, fragment_shader=FRAGMENT_SHADER, extra_uniforms=()):
+    def __init__(self, pico, key, *, fragment_shader=FRAGMENT_SHADER, vertex_shader=VERTEX_SHADER, extra_uniforms=()):
         self.pico, self.key, self.references, self.depth = pico, key, 0, 0
         self.functions = {}
         self.program = 0
         self._bind_functions()
         shaders = []
         try:
-            for kind, source in ((0x8B31, VERTEX_SHADER), (0x8B30, fragment_shader)):
+            for kind, source in ((0x8B31, vertex_shader), (0x8B30, fragment_shader)):
                 shader = self.glCreateShader(kind)
                 shaders.append(shader)
                 pointer = ct.c_char_p(source)

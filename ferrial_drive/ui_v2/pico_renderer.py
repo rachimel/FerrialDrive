@@ -5,9 +5,13 @@ from collections import OrderedDict
 from ctypes import byref, c_float, c_int, c_ubyte, memmove, string_at
 from math import ceil, exp, floor, isfinite, log2
 from random import Random
+from struct import Struct
 
 from ferrial_drive.ui.pico_renderer import PicoRenderer
 from .panels import clip_panel_band, clip_panel_rect, visible_panel_y_range
+
+
+PARTICLE_VERTEX = Struct("=ff4Bff")
 
 
 class PicoV2Renderer(PicoRenderer):
@@ -21,6 +25,10 @@ class PicoV2Renderer(PicoRenderer):
         self.motion_texture = None
         self.motion_size = None
         self.motion_sampler = None
+        self.particle_texture = None
+        self.particle_indices = None
+        self.particle_instances = None
+        self.particle_instancing_supported = None
         super().__init__(font_paths, font_sizes)
 
     def draw_transform(self):
@@ -458,7 +466,91 @@ class PicoV2Renderer(PicoRenderer):
             p.SDL_RenderSetViewport(p.renderer, byref(viewport))
             p.SDL_RenderSetClipRect(p.renderer, byref(clip) if clip is not None else None)
 
+    def draw_instanced_particles(self, trails, settings, color, core_color, opacity):
+        from ferrial_drive.rendering.canvas import renderer_info
+        if settings.get("renderer") != "instanced" or renderer_info(self.pico).name != "opengl":
+            return False
+        if self.particle_instancing_supported is None:
+            import ctypes as ct
+            import os
+            prototype = ct.WINFUNCTYPE if os.name == "nt" else ct.CFUNCTYPE
+            query = prototype(ct.c_char_p, ct.c_uint)(self.pico.SDL_GL_GetProcAddress(b"glGetString"))
+            version = query(0x1F02).decode().split()[0].split(".")
+            self.particle_instancing_supported = (len(version) >= 2 and all(v.isdigit() for v in version[:2])
+                                                  and tuple(map(int, version[:2])) >= (3, 3))
+        if not self.particle_instancing_supported:
+            return False
+        if not trails:
+            if self.particle_instances is not None:
+                self.particle_instances.slots.clear()
+            return True
+        if self.particle_instances is None:
+            from ferrial_drive.rendering.instanced_particles import InstancedParticles
+            self.particle_instances = InstancedParticles(self.pico)
+        scale, _, _, _ = self.draw_transform()
+        base = tuple(value / 255 for value in self.rgba(color, opacity))
+        core = tuple(value / 255 for value in self.rgba(core_color, opacity))
+        self.particle_instances.render(trails, settings, base, core, scale)
+        return True
+
+    def particle_quads(self, quads):
+        """공용 오브/Trail 텍스처 하나로 모든 파티클의 사각형을 한 번에 그린다."""
+        if not quads:
+            return
+        p = self.pico
+        from .particle_texture import ATLAS_SIZE, CELL_SIZE, build_particle_atlas
+        if self.particle_texture is None:
+            width, height = ATLAS_SIZE
+            surface = p.SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, p.SDL_PIXELFORMAT_RGBA32)
+            if not surface:
+                raise RuntimeError("파티클 아틀라스 surface 생성 실패")
+            try:
+                pixels = build_particle_atlas()
+                if p.SDL_LockSurface(surface) != 0:
+                    raise RuntimeError("파티클 아틀라스 surface 잠금 실패")
+                try:
+                    for row in range(height):
+                        memmove(surface.contents.pixels + row * surface.contents.pitch,
+                                pixels[row * width * 4:(row + 1) * width * 4], width * 4)
+                finally:
+                    p.SDL_UnlockSurface(surface)
+                texture = p.SDL_CreateTextureFromSurface(p.renderer, surface)
+            finally:
+                p.SDL_FreeSurface(surface)
+            if not texture:
+                raise RuntimeError("파티클 아틀라스 GPU 업로드 실패")
+            if (p.SDL_SetTextureBlendMode(texture, p.SDL_BLENDMODE_BLEND) != 0
+                    or p.SDL_SetTextureScaleMode(texture, p.SDL_ScaleModeLinear) != 0):
+                p.SDL_DestroyTexture(texture)
+                raise RuntimeError("파티클 텍스처 필터 설정 실패")
+            self.particle_texture = texture
+        # SDL 구조체 객체를 꼭짓점마다 여러 개 만들지 않고 연속 버퍼에 채운다.
+        data = bytearray(len(quads) * 4 * PARTICLE_VERTEX.size)
+        vertices = (p.SDL_Vertex * (len(quads) * 4)).from_buffer(data)
+        index_count = len(quads) * 6
+        if self.particle_indices is None or len(self.particle_indices) < index_count:
+            self.particle_indices = (c_int * index_count)(*(index * 4 + corner
+                                      for index in range(len(quads)) for corner in (0, 1, 2, 0, 2, 3)))
+        uv_regions = []
+        for region in (0, 1):
+            u0, u1 = (region * CELL_SIZE + 0.5) / ATLAS_SIZE[0], ((region + 1) * CELL_SIZE - 0.5) / ATLAS_SIZE[0]
+            v0, v1 = 0.5 / CELL_SIZE, 1 - 0.5 / CELL_SIZE
+            uv_regions.append(((u0, v0), (u1, v0), (u1, v1), (u0, v1)))
+        for index, (points, colors, region) in enumerate(quads):
+            # 셀 가장자리의 반 texel을 안쪽으로 옮겨 인접 셀 혼입을 막는다.
+            for corner, (point, color, uv) in enumerate(zip(points, colors, uv_regions[region])):
+                PARTICLE_VERTEX.pack_into(data, (index * 4 + corner) * PARTICLE_VERTEX.size, *point, *color, *uv)
+        if p.SDL_RenderGeometry(p.renderer, self.particle_texture, vertices, len(vertices), self.particle_indices, index_count) != 0:
+            raise RuntimeError("파티클 묶음 렌더 실패: " + p.SDL_GetError().decode("utf-8", errors="replace"))
+
     def close(self):
+        if self.particle_instances is not None:
+            self.particle_instances.close()
+            self.particle_instances = None
+        self.particle_indices = None
+        if self.particle_texture:
+            self.pico.SDL_DestroyTexture(self.particle_texture)
+            self.particle_texture = None
         if self.motion_sampler is not None:
             self.motion_sampler.close()
             self.motion_sampler = None
