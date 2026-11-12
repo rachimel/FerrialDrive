@@ -28,7 +28,7 @@ from ferrial_drive.ui.state import Health, HudState, LoadoutInfo, RadarContact, 
 from ferrial_drive.ui.transition import SceneTransition
 from ferrial_drive.ui.weapon_swap import WeaponSwap
 from ferrial_drive.ui_v2.effects import (BoundaryParticleEmitter, DefeatedTargetMotion, DialoguePanelMotion,
-                                       EnergyAbsorption, EnergyRecoveryFlash, HealthDamageFlash, HealthHitMotion,
+                                       EnergyAbsorption, EnergyRecoveryFlash, EnergyTintMotion, HealthDamageFlash, HealthHitMotion,
                                        IndicatorFade, OverdriveMotion, ScanlineMotion, UltimateReadyMotion)
 from ferrial_drive.ui_v2.lock_on import LockOnMotion
 from ferrial_drive.ui_v2.geometry import resource_geometry, scaled_point
@@ -122,6 +122,8 @@ class UiUnitTestV2:
         self.target_hit = HealthHitMotion(**hit_settings["target"])
         absorption = self.config.data['v2']['energy_absorption']
         self.energy_flash = EnergyRecoveryFlash(absorption['flash_seconds'])
+        self.energy_tint = EnergyTintMotion(self.config.data['v2']['style']['energy_tint_seconds'])
+        self.energy_tint.reset(EnergyCharge.from_state(self.state).overdrive_ratio)
         self.boundary_emitter = BoundaryParticleEmitter(self.config.data['v2']['style']['energy_boundary']['rate_per_second'])
         self.overdrive_motion = OverdriveMotion(**self.config.data['v2']['style']['overdrive_motion'])
         self.overdrive_motion.reset(self.state.overdrive)
@@ -243,22 +245,26 @@ class UiUnitTestV2:
         self.state = replace(self.state, energy_level=charge.level, energy_ratio=charge.ratio,
                              overdrive_charge_ratio=charge.overdrive_ratio, overdrive=charge.active)
         self.level_counter.set_value(charge.level)
+        self.energy_tint.request(charge.overdrive_ratio)
         self.overdrive_motion.request(charge.active)
         self.ultimate_motion.request(self.state.ultimate_ready)
         self.sync_energy_target()
 
     def emit_boundary_particles(self, delta_seconds):
         ratio = EnergyCharge.from_state(self.state).arrival_ratio
-        enabled = (self.particle_system is not None and 0 < ratio < 1
+        settings = self.config.data['v2']['style']['energy_boundary']
+        overdrive = self.state.overdrive
+        self.boundary_emitter.rate_per_second = settings['overdrive_rate_per_second'] if overdrive else settings['rate_per_second']
+        enabled = (self.particle_system is not None and (0 < ratio < 1 or overdrive)
                    and self.transition.target == 'combat' and not self.transition.active)
         count = self.boundary_emitter.update(delta_seconds, enabled)
         if count:
             channel, _, _ = self.energy_geometry()
             top = tuple(a + (b - a) * ratio for a, b in zip(channel[0], channel[1]))
             bottom = tuple(a + (b - a) * ratio for a, b in zip(channel[3], channel[2]))
-            settings = self.config.data['v2']['style']['energy_boundary']
             self.particle_system.emit_sparks(top, bottom, count=count,
-                duration_seconds=settings['duration_seconds'], spread_pixels=settings['spread_pixels'])
+                duration_seconds=settings['overdrive_duration_seconds'] if overdrive else settings['duration_seconds'],
+                spread_pixels=settings['spread_pixels'], intensity=settings['overdrive_intensity'] if overdrive else 1)
 
     def absorb(self):
         settings = self.config.data['v2']['energy_absorption']
@@ -435,6 +441,8 @@ class UiUnitTestV2:
         self.ultimate_motion.request(self.state.ultimate_ready)
         self.overdrive_motion.request(self.state.overdrive)
         self.overdrive_motion.update(delta_seconds)
+        self.energy_tint.request(EnergyCharge.from_state(self.state).overdrive_ratio)
+        self.energy_tint.update(delta_seconds)
         self.loadout_slide.request(self.state.hud.active_loadout_index)
         self.loadout_slide.update(delta_seconds)
         self.weapon_swap.request(self.state.hud.active_weapon_kind)
@@ -515,6 +523,7 @@ class UiUnitTestV2:
                                  level_visual=self.level_counter.visual,
                                  overdrive_visual=self.overdrive_motion.visual,
                                  ultimate_visual=self.ultimate_motion.visual,
+                                 energy_tint_ratio=self.energy_tint.ratio,
                                  scanline_visual=self.scanline_motion.visual,
                                  dialogue_visual=self.dialogue_motion.visual,
                                  lock_visuals=self.lock_motion.visuals,

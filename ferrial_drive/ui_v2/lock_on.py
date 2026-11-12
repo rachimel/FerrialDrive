@@ -53,7 +53,9 @@ def outline_segment(points, start, length=0.65):
 def accent_position(age, move_seconds, hold_seconds):
     """마주 보는 강조선 두 개의 위치. 록온·필살기가 같은 이동/정지를 사용한다."""
     step, local = divmod(max(0, age), move_seconds + hold_seconds)
-    move = cubic(min(1, local / move_seconds), 0.42, 0, 0.58, 1)
+    t = min(1, local / move_seconds)
+    # 이동 속도가 t=0.5에서 최대가 되는 대칭 5차 보간이다.
+    move = t ** 3 * (t * (6 * t - 15) + 10)
     return 3.5 + 2 * (step + move)
 
 

@@ -1,5 +1,7 @@
 # AI 개발 로그
 
+- [2026-11-12 강조선 빗금·색 전환·Overdrive 불꽃](2026-11-12-accent-hatching-energy-transition.md): 끝으로 갈수록 촘촘한 빗금·느린 순환·넓은 자간·색 보간·강화 불꽃·방향성 숫자 블러
+
 - [2026-11-12 Overdrive 글자 확대·수평 등장 플래시](2026-11-12-overdrive-pen-glints.md): 18px·등장 순간 가로 확장/fade-out·사용자 수평 효과 정정
 
 - [2026-11-12 에너지 경계 VFX·필살기 준비](2026-11-12-energy-boundary-and-ultimate-ready.md): 사선 대칭·Overdrive 확산/퇴장·상승 GPU 불꽃·감쇠·V키 쿨다운/강조선/flash

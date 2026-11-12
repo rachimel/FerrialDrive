@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [강조선 빗금·색 전환·Overdrive 불꽃](2026-11-12-accent-hatching-energy-transition.md): TIME(scope). 빗금 형태/간격·느린 순환·자간·빨간색 보간 정정·Overdrive 불꽃·숫자 블러 요청의 개별 시각을 확인한다.
+
 - [Overdrive 글자 확대·수평 등장 플래시](2026-11-12-overdrive-pen-glints.md): TIME(scope). 글자 확대·펜 모양 요청과 수평으로 등장하는 효과라는 정정의 개별 시각을 확인한다.
 
 - [에너지 경계 VFX·필살기 준비](2026-11-12-energy-boundary-and-ultimate-ready.md): TIME(scope). ENERGY 제거·5초 예제 수용·V키 정정·감쇠/준비 조건 요청의 개별 시각을 확인한다.

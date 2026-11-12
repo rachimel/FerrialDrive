@@ -1,10 +1,15 @@
 # ui-unit-test-v2
 
+- `v2.style.accent_hatching`은 록온·필살기 강조선의 빗금이다. 강조선 띠 안으로 잘라 모양을 맞추며, 진행 방향의 뒤쪽 8px→앞쪽 2.5px로 간격을 좁힌다. `enabled=false`로 끈다. 공통 순환은 5차 보간으로 시작/끝 속도 0·중간 t=0.5에서 최대 속도다. 이동 0.5초·정지 0.2초를 공유한다.
+- `EnergyTintMotion`은 논리 충전량과 별개로 표시 색을 0.24초 동안 보간한다. 바·회복 flash·흡수 입자에 같은 `energy_tint_ratio`를 공급한다. `v2.style.energy_tint_seconds`로 시간을 조절하며 정지 중 멈춘다. 충전/Overdrive 판정은 지연하지 않는다.
+- Overdrive 완충 뒤에도 채움 끝의 불꽃을 유지한다. 일반 40개/초·0.8초 수명에서 Overdrive 96개/초·1초·강도 1.8로 전환한다. `energy_boundary.overdrive_*`로 조절한다. 생성 강도는 GPU 속도·크기에 적용하며 생성/갱신 Compute 두 개를 유지한다.
+- HIT·DAMAGE 숫자 블러는 탄성 이동의 실제 노출 시간 내 이동량과 방향을 사용한다. 지나온 쪽으로 잔상을 남기고 반전 때 잔상 방향도 뒤집는다. 바뀌지 않는 자릿수·레이블·받침판은 흐리지 않는다. `damage_counter`의 기본은 노출 0.045초·세기 0.78·12샘플·최대 44px다.
+
 - `v2.style.overdrive_entry_streak`: 등장 순간 중앙에서 수평으로 뻗는 빛을 한 번 표시한다. 0.045초 확장·0.025초 유지·0.17초 fade-out, 최대 길이는 바 폭의 88%다. Overdrive 퇴장 투명도를 함께 적용하며 일시정지 때 등장 시계도 멈춘다.
 
 
 - 오른쪽 LV 외곽의 위·아래 사선은 같은 가로/세로 변화량을 사용한다. 가운데 수직선은 전체 높이에서 두 사선 높이를 뺀 길이다.
-- `v2.style.energy_boundary`: 채움과 빈 공간의 경계에 선·별 모양 반짝임과 GPU 불꽃을 표시한다. 초당 40개·수명 0.8초이며 위로 상승하고 옆으로 흩어진다. 생성/갱신 Compute의 효과 종류 1을 사용하며 CPU는 요청 주기만 관리한다. 회복량은 0이고 빈 게이지·완충 때 새 불꽃을 만들지 않는다. Overdrive 추가 충전 중에는 그 추가 채움 경계를 사용한다.
+- `v2.style.energy_boundary`: 채움과 빈 공간의 경계에 선·별 모양 반짝임과 GPU 불꽃을 표시한다. 초당 40개·수명 0.8초이며 위로 상승하고 옆으로 흩어진다. 생성/갱신 Compute의 효과 종류 1을 사용하며 CPU는 요청 주기만 관리한다. 회복량은 0이고 빈 게이지에서는 새 불꽃을 만들지 않는다. Overdrive 완충 뒤에는 강화된 불꽃을 유지한다. Overdrive 추가 충전 중에는 그 추가 채움 경계를 사용한다.
 - `HealthHitMotion.damping`·`lock_motion.hit_damping`의 기본값은 1.8이다. 지수 감쇠와 종료 구간 완화를 함께 사용하며 위치·속도는 종료 때 0이다. 0이면 지수 감쇠만 끈다. 피격·연타는 진폭 상한을 누적하지 않는다.
 - 필살기 준비 조건은 `energy_level == 3`과 `ultimate_cooldown_seconds == 0`이다. `HudV2State.ultimate_ready`로 확인하며 준비 중에만 마름모에 강조선 두 개를 그린다. 록온과 같은 `accent_position`·`outline_segment` 및 `lock_motion.move_seconds/hold_seconds`를 공유한다. 준비 상태로 바뀌면 0.28초 flash가 한 번 재생된다.
 - 샘플의 **V**는 준비됐을 때만 필살기를 사용하며 에너지는 유지하고 5초 쿨다운을 시작한다. 재입력으로 남은 시간을 초기화하지 않는다. `v2.ultimate_sample.cooldown_seconds/flash_seconds`는 예제 수치다. 본편은 실제 남은 쿨다운을 상태로 공급한다. 쿨다운·피격·Overdrive 전환·입자 시간은 일시정지 중 멈춘다.
@@ -142,9 +147,9 @@ HP flash는 `HealthDamageFlash.trigger(피해 전 비율, 피해 후 비율)`·`
 
 록온은 `LockOnMotion.select(target_id, body)`·`update(delta_seconds)`로 제어하고 `visuals`를 `view.combat(lock_visuals=...)`에 공급한다. 몸통 Rect는 카메라 투영 후 좌표다. 선택 유지 중과 퇴장 중에도 적의 월드 위치를 현재 카메라로 투영한다. 자동 선택 규칙은 `MouseAutoTargeting`, 좌표 변환은 `LookAheadCamera`가 맡는다. 새 선택 ID에서 기존 표시 퇴장과 신규 등장을 재생한다. `view.combat(player_screen=...)`는 레이더 중심을 실제 플레이어 화면 위치에 맞춘다.
 
-`v2.style.lock_motion`은 등장 0.32초·캐럿 0.16초·퇴장 0.2초·강조선 이동 0.32초/정지 0.2초·시작 배율 0.25/퇴장 배율 1.5를 조절한다. 기본형은 정사각형이며 등장 완료 45°는 마름모다. 가이드 조작키 색/설명 투명도는 `dialogue_key_color`·`dialogue_description_opacity`다.
+`v2.style.lock_motion`은 등장 0.32초·캐럿 0.16초·퇴장 0.2초·강조선 이동 0.5초/정지 0.2초·시작 배율 0.25/퇴장 배율 1.5를 조절한다. 기본형은 정사각형이며 등장 완료 45°는 마름모다. 가이드 조작키 색/설명 투명도는 `dialogue_key_color`·`dialogue_description_opacity`다.
 
-OVERDRIVE 문구만 SUITE Regular 18px로 게이지 중앙에 표시한다. ENERGY 문구는 표시하지 않는다. 문구 폭은 바 폭의 40%(`overdrive_width_ratio=0.4`)다. 등장 때 불투명도는 0.065초에 올라가고 0.42초 동안 글자가 중앙에서 퍼지며 개별 반짝임·에너지색 Bloom을 낸다. 퇴장은 0.18초 fade-out만 사용한다. 시간은 `v2.style.overdrive_motion`, Bloom은 `overdrive_bloom`으로 조절한다. 준비된 네온 텍스처를 재사용한다.
+OVERDRIVE 문구만 SUITE Regular 18px로 게이지 중앙에 표시한다. ENERGY 문구는 표시하지 않는다. 문구 폭은 바 폭의 60%(`overdrive_width_ratio=0.6`)다. 등장 때 불투명도는 0.065초에 올라가고 0.42초 동안 글자가 중앙에서 퍼지며 개별 반짝임·에너지색 Bloom을 낸다. 퇴장은 0.18초 fade-out만 사용한다. 시간은 `v2.style.overdrive_motion`, Bloom은 `overdrive_bloom`으로 조절한다. 준비된 네온 텍스처를 재사용한다.
 
 등장 중 취소도 역재생하지 않는다. 취소 시점의 실제 회전값/배율을 저장해 그 값부터 회전은 2배, 크기는 `exit_scale`배까지 확대하며 흐려진다. 완료 뒤 취소는 기존 45→90°·1→1.5배와 같다.
 

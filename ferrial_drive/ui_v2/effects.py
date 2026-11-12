@@ -151,6 +151,33 @@ class HealthHitMotion:
                                tuple(limit * velocity for limit in self.max_offset_pixels))
 
 
+class EnergyTintMotion:
+    """논리 충전량을 바꾸지 않고 표시 색의 비율만 시간 보간한다."""
+    def __init__(self, duration_seconds=0.24):
+        if not isfinite(duration_seconds) or duration_seconds <= 0:
+            raise ValueError('에너지 색 전환 시간은 양수여야 한다.')
+        self.duration_seconds = duration_seconds
+        self.reset(0)
+
+    def reset(self, ratio):
+        if not isfinite(ratio) or not 0 <= ratio <= 1:
+            raise ValueError('에너지 색 비율은 0~1이어야 한다.')
+        self.animation = ScalarAnimation(ratio, ratio, self.duration_seconds)
+
+    def request(self, ratio):
+        if not isfinite(ratio) or not 0 <= ratio <= 1:
+            raise ValueError('에너지 색 비율은 0~1이어야 한다.')
+        if ratio != self.animation.end_value:
+            self.animation = ScalarAnimation(self.ratio, ratio, self.duration_seconds)
+
+    def update(self, delta_seconds):
+        self.animation.update(delta_seconds)
+
+    @property
+    def ratio(self):
+        return self.animation.value
+
+
 class EnergyRecoveryFlash:
     def __init__(self, duration_seconds=0.16):
         if not isfinite(duration_seconds) or duration_seconds <= 0:

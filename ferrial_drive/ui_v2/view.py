@@ -1,13 +1,14 @@
 """v2 도안의 사선·연결형 자원부·원근 카운터를 그린다."""
 
 from math import atan2, cos, hypot, pi, sin
+from dataclasses import replace
 from contextlib import contextmanager, nullcontext
 
 from ferrial_drive.ui.components import Rect
 from ferrial_drive.ui.counter import CounterVisual
 from ferrial_drive.ui.energy import energy_color
 from ferrial_drive.ui.view import UiView
-from .geometry import (PerspectivePlane, body_diamond, counter_plaque, quad_fill,
+from .geometry import (PerspectivePlane, body_diamond, counter_plaque, hatched_stroke_mesh, quad_fill,
                        resource_geometry, slanted_meter, tapered_stroke_mesh)
 from .panels import (PanelGeometry, build_panel_geometry, merge_panel_y_ranges,
                      panel_bright_band_top, scale_panel_geometry)
@@ -79,6 +80,16 @@ class UiV2View(UiView):
             self.polygon(((a[0] + nx, a[1] + ny), (b[0] + nx, b[1] + ny),
                           (b[0] - nx, b[1] - ny), (a[0] - nx, a[1] - ny)),
                          color, opacity, filled=True)
+
+    def accent_stroke(self, points, color, opacity):
+        width = self.style['lock_accent_pixels']
+        self.stroke(points, color, opacity, width)
+        pattern = self.style['accent_hatching']
+        if pattern['enabled']:
+            shapes = hatched_stroke_mesh(points, width, pattern['pitch_start_pixels'],
+                                          pattern['pitch_end_pixels'], pattern['width_pixels'])
+            for shape in shapes:
+                self.polygon(shape, self.config.colors['background'], opacity * pattern['opacity'], filled=True)
 
     def slanted_text(self, text, x, y, role, color, opacity=1, *, scale=1, slope=0, lean=0.15, align="left"):
         r = self.renderer
@@ -346,8 +357,7 @@ class UiV2View(UiView):
             return
         self.stroke(points + points[:1], self.ui_accent, alpha, self.style["lock_thickness_pixels"])
         for position in (visual.border_position, visual.border_position + 2):
-            self.stroke(outline_segment(points, position - 0.325), c["text"], alpha,
-                        self.style["lock_accent_pixels"])
+            self.accent_stroke(outline_segment(points, position - 0.325), c["text"], alpha)
         if visual.label_progress <= 0:
             return
         angle = atan2(points[0][1] - points[3][1], points[0][0] - points[3][0])
@@ -402,27 +412,29 @@ class UiV2View(UiView):
 
     def resources(self, state, opacity, offset_x, player_trailing_ratio, *, damage_flashes=(),
                   hit_visual=HealthHitVisual(), energy_flash=0, level_visual=None,
-                  overdrive_visual=None, ultimate_visual=None):
+                  overdrive_visual=None, ultimate_visual=None, energy_tint_ratio=None):
         dx, dy = self.health_hit_offset(hit_visual)
         scope = self.renderer.translated(dx, dy) if dx or dy else nullcontext()
         with scope:
             self._resource_contents(state, opacity, offset_x, player_trailing_ratio, damage_flashes=damage_flashes,
                                     hit_visual=HealthHitVisual((0, 0), hit_visual.velocity_pixels_per_second),
                                     energy_flash=energy_flash, level_visual=level_visual,
-                                    overdrive_visual=overdrive_visual, ultimate_visual=ultimate_visual)
+                                    overdrive_visual=overdrive_visual, ultimate_visual=ultimate_visual,
+                                    energy_tint_ratio=energy_tint_ratio)
         self.dash_indicator(state, opacity)
 
     def _resource_contents(self, state, opacity, offset_x, player_trailing_ratio, *, damage_flashes=(),
                            hit_visual=HealthHitVisual(), energy_flash=0, level_visual=None,
-                           overdrive_visual=None, ultimate_visual=None):
+                           overdrive_visual=None, ultimate_visual=None, energy_tint_ratio=None):
         r, c = self.renderer, self.config.colors
         geometry = resource_geometry(self.layout, self.style["level_bevel_pixels"])
         self.player_health(state.hud, geometry, opacity, player_trailing_ratio, damage_flashes, hit_visual)
         x, y, width, height = self.layout["energy_bar"]
         outline, channel = geometry.energy_outline, geometry.energy_channel
         charge = 1 if state.overdrive else state.overdrive_charge_ratio
-        color = energy_color(c['energy'], self.style['overdrive_red'], charge)
-        fill_color = energy_color(c['energy_fill'], self.style['overdrive_red'], charge)
+        tint = charge if energy_tint_ratio is None else energy_tint_ratio
+        color = energy_color(c['energy'], self.style['overdrive_red'], tint)
+        fill_color = energy_color(c['energy_fill'], self.style['overdrive_red'], tint)
         self.panel_layer(geometry.energy_body, c["panel"], opacity, grain=True, effect_surface=channel)
         self.polygon(geometry.level_shape, c["panel"], opacity * self.style["surface_opacity"], filled=True)
         self.stroke(outline + outline[:1], c["text"], opacity * 0.75, 1.5)
@@ -441,7 +453,7 @@ class UiV2View(UiView):
         self.stroke((outline[-1], geometry.level_shape[-2]),
                      color if charge > 0 else self.ui_accent, opacity, 2)
         ratio = charge if state.energy_level == 3 and state.energy_ratio == 1 else state.energy_ratio
-        self.energy_boundary(channel, ratio, color, energy_alpha)
+        self.energy_boundary(channel, ratio, color, energy_alpha, overdrive=state.overdrive)
         overdrive_visual = overdrive_visual or OverdriveVisual(float(state.overdrive))
         self.overdrive_label(channel, overdrive_visual, energy_alpha)
         level_right = x + width + self.layout["energy_level_width_pixels"]
@@ -473,8 +485,7 @@ class UiV2View(UiView):
             settings = self.style['lock_motion']
             position = accent_position(visual.age, settings['move_seconds'], settings['hold_seconds'])
             for start in (position, position + 2):
-                self.stroke(outline_segment(diamond, start - 0.325), color, opacity * visual.opacity,
-                            self.style['lock_accent_pixels'])
+                self.accent_stroke(outline_segment(diamond, start - 0.325), color, opacity * visual.opacity)
             if visual.flash > 0:
                 self.polygon(diamond, c['text'], opacity * visual.flash * 0.45, filled=True)
                 self.stroke(diamond + diamond[:1], c['text'], opacity * visual.flash,
@@ -548,19 +559,20 @@ class UiV2View(UiView):
                      (x + length / 2, y), (x, y + width / 2))
             self.polygon(shape, ink, alpha * weight, filled=True)
 
-    def energy_boundary(self, channel, ratio, color, opacity):
-        if not 0 < ratio < 1:
+    def energy_boundary(self, channel, ratio, color, opacity, *, overdrive=False):
+        if not (0 < ratio < 1 or overdrive and ratio == 1):
             return
         edge = quad_fill(channel, ratio)[1:3]
         time = self._scanline_visual.elapsed_seconds
         settings = self.style['energy_boundary']
         pulse = 0.5 + 0.5 * sin(time * 17) ** 2
-        self.stroke(edge, color, opacity * 0.25 * pulse, settings['glow_width_pixels'])
+        strength = settings['overdrive_intensity'] if overdrive else 1
+        self.stroke(edge, color, opacity * 0.25 * pulse, settings['glow_width_pixels'] * strength)
         self.stroke(edge, self.config.colors['text'], opacity * 0.85 * pulse, 1)
         for index in range(2):
             t = (time * 0.8 + index * 0.5) % 1
             x, y = (a + (b - a) * t for a, b in zip(*edge))
-            size = settings['sparkle_size_pixels'] * sin(pi * t) * pulse
+            size = settings['sparkle_size_pixels'] * sin(pi * t) * pulse * strength
             self.stroke(((x - size, y), (x + size, y)), color, opacity * pulse, 1)
             self.stroke(((x, y - size * 1.6), (x, y + size * 1.6)),
                         self.config.colors['text'], opacity * pulse, 1)
@@ -774,16 +786,19 @@ class UiV2View(UiView):
                  (after, height * (1 - visual.vertical_progress), 1)) if moving else ((after, 0, 1),)
         samples = settings['blur_samples'] if moving else 0
         p = visual.progress
-        strength = settings['blur_opacity'] * 4 * p * (1 - p) if samples else 0
-        length = min(settings['blur_length_pixels'] * scale,
-                     height * max(0, p - visual.progress_before(settings['blur_shutter_seconds'])))
+        previous = replace(visual, elapsed_seconds=max(0, visual.elapsed_seconds - settings['blur_shutter_seconds']))
+        travel = height * (visual.vertical_progress - previous.vertical_progress) if moving else 0
+        strength = settings['blur_opacity'] * 4 * p * (1 - p) * min(1, abs(travel) / max(1, height * 0.2)) if samples else 0
+        length = min(settings['blur_length_pixels'] * scale, abs(travel))
+        direction = 1 if travel >= 0 else -1
         dx, dy = settings['blur_direction']
         norm = hypot(dx, dy)
         passes = [(0, 0, 1 - strength)]
         weight_sum = samples * (samples + 1) / 2
         for sample in range(samples, 0, -1):
             distance = length * sample / samples
-            passes.append((dx / norm * distance, dy / norm * distance,
+            # 숫자가 지나온 쪽에 잔상을 남긴다. 탄성 반전 때는 방향도 뒤집는다.
+            passes.append((-dx / norm * distance * direction, -dy / norm * distance * direction,
                            strength * (samples + 1 - sample) / weight_sum))
         for char, top, alpha in faces:
             if char == ' ':
@@ -806,7 +821,8 @@ class UiV2View(UiView):
                player_damage_flashes=(), target_damage_flashes=(), counter_message_opacity=None, player_screen=None,
                loadout_visual=None, weapon_swap_visual=None,
                player_hit_visual=HealthHitVisual(), target_hit_visual=HealthHitVisual(), particle_system=None,
-               defeated_targets=(), energy_flash=0, level_visual=None, overdrive_visual=None, ultimate_visual=None):
+               defeated_targets=(), energy_flash=0, level_visual=None, overdrive_visual=None, ultimate_visual=None,
+               energy_tint_ratio=None):
         r, c, hud = self.renderer, self.config.colors, state.hud
         scale = self.style["hud_scale"]
         width, height = self.config.window["width"], self.config.window["height"]
@@ -847,7 +863,8 @@ class UiV2View(UiView):
         with r.scaled(scale, (width / 2, height)):
             self.resources(state, opacity, offset_x, player_trailing_ratio, damage_flashes=player_damage_flashes,
                            hit_visual=player_hit_visual, energy_flash=energy_flash, level_visual=level_visual,
-                           overdrive_visual=overdrive_visual, ultimate_visual=ultimate_visual)
+                           overdrive_visual=overdrive_visual, ultimate_visual=ultimate_visual,
+                           energy_tint_ratio=energy_tint_ratio)
         with r.scaled(self.style["equipment_scale"], (width, height)):
             self.weapons(hud, opacity, offset_x, loadout_visual=loadout_visual,
                          weapon_swap_visual=weapon_swap_visual)
@@ -870,7 +887,7 @@ class UiV2View(UiView):
             with r.scaled(scale, (visual.x, visual.y)):
                 self.damage_number(visual, opacity, offset_x)
         self.absorption(absorption_trails, opacity, particle_system,
-                        1 if state.overdrive else state.overdrive_charge_ratio)
+                        (1 if state.overdrive else state.overdrive_charge_ratio) if energy_tint_ratio is None else energy_tint_ratio)
         self.dialogue(state.dialogue, opacity, scanline_visual, panel_visual=dialogue_visual)
         if cursor_position is not None:
             x, y = cursor_position

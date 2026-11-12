@@ -16,7 +16,9 @@ spec.loader.exec_module(SAMPLE)
 from ferrial_drive.ui.energy import EnergyCharge
 from ferrial_drive.ui_v2.effects import (BoundaryParticleEmitter, HealthHitMotion, OverdriveMotion, OverdriveVisual,
                                        UltimateReadyVisual, damped_oscillation)
-from ferrial_drive.ui_v2.geometry import resource_geometry
+from ferrial_drive.ui_v2.geometry import hatched_stroke_mesh, resource_geometry
+from ferrial_drive.ui.counter import CounterVisual
+from ferrial_drive.ui.components import Rect
 from ferrial_drive.ui_v2.lock_on import accent_position, outline_segment
 from ferrial_drive.ui_v2.view import UiV2View
 
@@ -32,6 +34,66 @@ class ReadyVfxTests(unittest.TestCase):
                          (lower[0] - bottom[0], bottom[1] - lower[1]))
         self.assertEqual(side[0], lower[0])
         self.assertGreater(lower[1] - side[1], 20)
+
+    def test_accent_speed_peaks_at_midpoint_and_stops_at_both_ends(self):
+        duration, hold, step = 0.32, 0.2, 0.00001
+        def velocity(t):
+            age = t * duration
+            return (accent_position(age + step, duration, hold) - accent_position(age, duration, hold)) / step
+        self.assertGreater(velocity(0.5), velocity(0.25))
+        self.assertGreater(velocity(0.25), velocity(0.05))
+        self.assertAlmostEqual(velocity(0.25), velocity(0.75), delta=0.01)
+        self.assertLess(velocity(0), 0.001)
+        self.assertAlmostEqual(accent_position(duration, duration, hold), 5.5)
+        self.assertAlmostEqual(accent_position(duration + hold / 2, duration, hold), 5.5)
+
+    def test_hatches_stay_inside_band_and_spacing_tightens_at_the_head(self):
+        shapes = hatched_stroke_mesh(((0, 0), (40, 0)), 4, 8, 2.5, 1.1)
+        self.assertTrue(shapes)
+        self.assertTrue(all(0 <= x <= 40 and -2 <= y <= 2 for shape in shapes for x, y in shape))
+        centers = [(min(x for x, _ in s) + max(x for x, _ in s)) / 2 for s in shapes
+                   if min(x for x, _ in s) > 0 and max(x for x, _ in s) < 40]
+        gaps = [b - a for a, b in zip(centers, centers[1:])]
+        self.assertGreater(len(gaps), 2)
+        self.assertTrue(all(a > b for a, b in zip(gaps, gaps[1:])))
+
+    def test_numeric_motion_blur_trails_rising_digits_and_keeps_static_digits_sharp(self):
+        renderer = Mock()
+        renderer.text_size.return_value = (16, 40)
+        view = UiV2View(self.program.config, renderer)
+        visual = CounterVisual(1, 2, 0.06, 0.12, 'elastic_in_out')
+        view.rolling_digit(visual, '1', '2', 0, 40, 'combo_number', '#FFFFFF',
+                           lambda x, y: (x, y), 1, 1, Rect(0, 0, 16, 40))
+        tops = [call.args[2] for call in renderer.warped_text.call_args_list if call.args[0] == '2']
+        self.assertGreater(len(tops), 1)
+        self.assertGreater(max(tops), min(tops))
+        self.assertAlmostEqual(min(tops), 40 * (1 - visual.vertical_progress))
+        renderer.warped_text.reset_mock()
+        view.rolling_digit(visual, '2', '2', 0, 40, 'combo_number', '#FFFFFF',
+                           lambda x, y: (x, y), 1, 1, Rect(0, 0, 16, 40))
+        self.assertEqual(renderer.warped_text.call_count, 1)
+
+    def test_energy_tint_interpolates_without_delaying_charge_and_freezes_on_pause(self):
+        self.program.perform('overdrive')
+        self.assertTrue(self.program.state.overdrive)
+        self.assertEqual(EnergyCharge.from_state(self.program.state).total, 4)
+        self.assertEqual(self.program.energy_tint.ratio, 0)
+        self.program.update(0.12)
+        self.assertAlmostEqual(self.program.energy_tint.ratio, 0.5)
+        self.program.renderer, self.program.view = Mock(), Mock()
+        self.program.draw_layers()
+        self.assertAlmostEqual(self.program.view.combat.call_args.kwargs['energy_tint_ratio'], 0.5)
+        self.program.pause.request(True)
+        self.program.update(1)
+        self.assertAlmostEqual(self.program.energy_tint.ratio, 0.5)
+        self.program.pause.reset()
+        self.program.renderer = None
+        self.program.update(0.12)
+        self.assertEqual(self.program.energy_tint.ratio, 1)
+        self.program.perform('overdrive')
+        self.program.update(0.12)
+        self.assertAlmostEqual(self.program.energy_tint.ratio, 0.5)
+        self.assertFalse(self.program.state.overdrive)
 
     def test_overdrive_spreads_flashes_then_only_fades_out(self):
         motion = OverdriveMotion()
@@ -152,11 +214,19 @@ class ReadyVfxTests(unittest.TestCase):
         self.assertTrue(sparks)
         self.assertTrue(all(c.gain_units == 0 for c in sparks))
         self.assertEqual(self.program.particle_system.requested_gain_units, 0)
-        for charge in (EnergyCharge(0), EnergyCharge(3), EnergyCharge(4)):
+        for charge in (EnergyCharge(0), EnergyCharge(3)):
             self.program.particle_system.commands.clear()
             self.program.set_energy_charge(charge)
             self.program.emit_boundary_particles(0.1)
             self.assertFalse(self.program.particle_system.commands)
+        self.program.set_energy_charge(EnergyCharge(4))
+        self.program.emit_boundary_particles(0.1)
+        sparks = self.program.particle_system.commands[-1]
+        self.assertEqual(sparks.effect_type, 1)
+        self.assertGreater(sparks.count, 4)
+        self.assertGreater(sparks.intensity, 1)
+        self.assertGreater(sparks.duration_seconds, 0.8)
+        self.assertEqual(sparks.gain_units, 0)
         emitter = BoundaryParticleEmitter(32)
         self.assertEqual(sum(emitter.update(1 / 64, True) for _ in range(64)), 32)
         self.assertLessEqual(emitter.update(100, True), 5)

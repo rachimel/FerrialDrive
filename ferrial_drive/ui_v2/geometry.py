@@ -4,6 +4,50 @@ from dataclasses import dataclass
 from math import hypot, isfinite
 
 
+def hatched_stroke_mesh(points, width, pitch_start, pitch_end, cut_width):
+    """선의 띠 안에만 빗금을 만든다. 꺾인 구간에서도 간격의 위상을 이어간다."""
+    if not all(isfinite(v) and v > 0 for v in (width, pitch_start, pitch_end, cut_width)) or cut_width >= min(pitch_start, pitch_end):
+        raise ValueError('빗금 두께·간격은 양수이며 무늬 폭은 간격보다 작아야 한다.')
+    total = sum(hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(points, points[1:]))
+    centers, position = [-pitch_start], 0
+    while position <= total + width:
+        centers.append(position)
+        t = min(1, position / total) if total else 1
+        position += pitch_start + (pitch_end - pitch_start) * t
+    shapes, travelled = [], 0
+    for a, b in zip(points, points[1:]):
+        length = hypot(b[0] - a[0], b[1] - a[1])
+        if not length:
+            continue
+        ux, uy = (b[0] - a[0]) / length, (b[1] - a[1]) / length
+        for center in centers:
+            offset = center - travelled
+            if offset < -width or offset > length + width:
+                continue
+            half = width / 2
+            shape = ((offset - half, -half), (offset - half + cut_width, -half),
+                     (offset + half + cut_width, half), (offset + half, half))
+            # 선분 시작/끝을 넘는 빗금만 잘라 바깥 테두리를 건드리지 않는다.
+            for limit, sign in ((0, 1), (length, -1)):
+                clipped = []
+                if not shape:
+                    break
+                previous = shape[-1]
+                for point in shape:
+                    before, inside = sign * (previous[0] - limit) >= 0, sign * (point[0] - limit) >= 0
+                    if before != inside:
+                        t = (limit - previous[0]) / (point[0] - previous[0])
+                        clipped.append((limit, previous[1] + (point[1] - previous[1]) * t))
+                    if inside:
+                        clipped.append(point)
+                    previous = point
+                shape = tuple(clipped)
+            if len(shape) >= 3:
+                shapes.append(tuple((a[0] + x * ux - y * uy, a[1] + x * uy + y * ux) for x, y in shape))
+        travelled += length
+    return tuple(shapes)
+
+
 def tapered_stroke_mesh(points, corner_indices, thin_width, corner_width, reach, corner_hold_pixels=0):
     """지정한 꼭짓점으로 갈수록 직선으로 두꺼워지는 선. 이음부 단면을 공유한다."""
     if (not all(map(isfinite, (thin_width, corner_width, reach)))
