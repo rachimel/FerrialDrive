@@ -63,7 +63,8 @@ class MassiveEnergyParticleStress:
             destination = (width * 0.5, height * 0.94)
             spread = min(width * 0.4, height * 0.72) / max(1, amount - 1)
             self.system.emit(start, waypoint, destination, count=amount, side=side,
-                             spread_pixels=spread, duration_seconds=duration_seconds)
+                             spread_pixels=spread, duration_seconds=duration_seconds,
+                             duration_variation=self.config.get('duration_variation', 0))
         self.requested = count
 
     def handle_event(self, event):
@@ -205,6 +206,7 @@ class MassiveEnergyParticleStress:
                           gpu=self.backend.gpu_info, canvas=[self.config['width'], self.config['height']],
                           style=self.config['style'], seed=self.system.seed,
                           capacity=self.system.capacity, allocated_bytes=self.backend.allocated_bytes,
+                          duration_variation=self.config.get('duration_variation', 0),
                           warmup_frames=warmup, measured_frames=frames, fixed_delta_seconds=delta,
                           readback_in_measured_loop=False, gpu_timer='GL_TIME_ELAPSED',
                           includes_ui=False, includes_present=False, results=results)

@@ -1,5 +1,7 @@
 # Massive Energy Particle Stress
 
+- `config.json`의 `duration_variation`은 요청당 평균 이동시간을 유지하는 GPU 변동 비율이다. 기본 0, UI와 같은 비교는 0.18을 사용한다. 보고서에도 비율을 남긴다. 입자 위치·겹침 분포도 달라지므로 두 결과 차이를 생성 연산만의 비용으로 단정하지 않는다.
+
 에너지 오브의 생성·갱신 Compute Ubershader와 간접 Instancing을 확인하는 독립 Unit Test다. 게임 상태·모델·AI 이미지 없이 공개 폰트와 수치 설정만 사용한다. Pico2D와 OpenGL 4.3 이상이 필요하다.
 
 ```text

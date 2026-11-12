@@ -30,6 +30,7 @@ class SpawnParticles:
     gain_units: int = 0
     arrival_spacing_seconds: float = 0
     intensity: float = 1
+    duration_variation: float = 0
 
 
 @dataclass(frozen=True)
@@ -110,7 +111,8 @@ class GpuParticleSystem:
         return result
 
     def emit(self, start, waypoint, destination, *, count=3, side=-1, spread_pixels=15,
-             duration_seconds=None, effect_type=0, gain_ratio=0, arrival_spacing_seconds=0, intensity=1):
+             duration_seconds=None, effect_type=0, gain_ratio=0, arrival_spacing_seconds=0, intensity=1,
+             duration_variation=0):
         if any(len(point) != 2 or not all(map(isfinite, point)) for point in (start, waypoint, destination)):
             raise ValueError('생성 좌표는 유한한 화면 픽셀의 두 성분이어야 한다.')
         if type(count) is not int or count <= 0 or side not in (-1, 1):
@@ -126,11 +128,15 @@ class GpuParticleSystem:
         units = round(gain_ratio * ENERGY_UNITS)
         if not isfinite(intensity) or not 0 < intensity <= 4:
             raise ValueError('입자 강도는 0 초과 4 이하의 유한한 값이어야 한다.')
+        if not isfinite(duration_variation) or not 0 <= duration_variation < 1:
+            raise ValueError('이동시간 변동 비율은 0 이상 1 미만이어야 한다.')
+        if duration_variation and (effect_type != 0 or arrival_spacing_seconds):
+            raise ValueError('이동시간 변동은 고정 도착 간격 없는 에너지 오브에만 적용한다.')
         if effect_type == 1 and (units or arrival_spacing_seconds):
             raise ValueError('경계 불꽃은 회복·도착 간격을 사용하지 않는다.')
         self.commands.append(SpawnParticles(tuple(start), tuple(waypoint), tuple(destination),
                                             min(count, self.capacity), side, spread_pixels, duration, effect_type,
-                                            units, arrival_spacing_seconds, intensity))
+                                            units, arrival_spacing_seconds, intensity, duration_variation))
         self.requested_gain_units += units
 
     def emit_sparks(self, top, bottom, *, count=1, duration_seconds=0.65, spread_pixels=2, intensity=1):

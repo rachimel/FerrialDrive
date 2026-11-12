@@ -54,6 +54,7 @@ uniform vec4 spawn_settings; // duration, side, spread, tail fraction
 uniform uint gain_units;
 uniform float arrival_spacing;
 uniform float effect_intensity;
+uniform vec2 duration_settings; // 변동 비율, 요청 시드
 uint hash_value(uint x) {
     x ^= x >> 16u; x *= 0x7feb352du; x ^= x >> 15u; x *= 0x846ca68bu;
     return x ^ (x >> 16u);
@@ -94,6 +95,15 @@ void main() {
     p.payload = vec4(float(share), 0.0, gain_units > 0u ? 1.0 : 0.0, 0.0);
     switch (effect_type) {
         case 0: {
+            if (duration_settings.x > 0.0) {
+                uint pair = index / 2u;
+                uint h = hash_value(request_seed ^ uint(duration_settings.y) ^ (pair * 0x9e3779b9u));
+                float offset = float(h & 65535u) / 65535.0 * duration_settings.x;
+                bool unpaired = (request_count % 2u != 0u && index == request_count - 1u);
+                float sign = index % 2u == 0u ? -1.0 : 1.0;
+                // 짝의 이동시간 증감을 상쇄해 요청당 평균 이동시간을 보존한다.
+                p.life.y = spawn_settings.x * (1.0 + (unpaired ? 0.0 : sign * offset));
+            }
             float shift = (float(index) - float(request_count - 1u) * 0.5) * spawn_settings.z;
             p.anchors.xy += vec2(shift, -shift);
             // 인접 ticket의 홀짝을 나눠 동일 경로가 연속 선택되지 않게 한다.

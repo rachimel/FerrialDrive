@@ -78,6 +78,18 @@ class ParticleRequestTests(unittest.TestCase):
         program.reset()
         self.assertFalse(program.particle_system.commands)
 
+    def test_duration_variation_is_one_gpu_request_and_rejects_invalid_combinations(self):
+        system = GpuParticleSystem()
+        system.emit((10, 20), (30, 40), (50, 60), count=6, duration_variation=0.18)
+        self.assertEqual(len(system.commands), 1)
+        self.assertEqual(system.commands[0].duration_variation, 0.18)
+        self.assertFalse(hasattr(system, 'particles'))
+        for variation in (-0.1, 1, float('nan'), float('inf')):
+            with self.assertRaises(ValueError):
+                system.emit((10, 20), (30, 40), (50, 60), duration_variation=variation)
+        with self.assertRaises(ValueError):
+            system.emit((10, 20), (30, 40), (50, 60), duration_variation=0.18, arrival_spacing_seconds=0.05)
+
     def test_stress_program_is_standalone_and_construction_opens_no_window(self):
         path = ROOT / 'tests/massive_energy_particle_stress.py'
         self.assertEqual(inspect_entrypoint(path), 'standalone')

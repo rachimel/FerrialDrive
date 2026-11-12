@@ -375,6 +375,26 @@ class ComputeParticleTests(unittest.TestCase):
         self.assertEqual(system.pending_gain_units, 0)
         self.assertEqual(set(backend.compute_programs), {'spawn', 'update'})
 
+    def test_duration_variation_preserves_batch_mean_bounds_and_exact_recovery(self):
+        for count in (5, 6):
+            with self.subTest(count=count):
+                system, backend = self.make_system(capacity=16)
+                system.emit((20, 20), (40, 58), (70, 45), count=count,
+                            duration_seconds=1, duration_variation=0.18, gain_ratio=0.1)
+                self.draw(system)
+                particles = [p for p in backend.snapshot()['particles'] if p[2]]
+                durations = [p[1] for p in particles]
+                self.assertEqual(len(durations), count)
+                self.assertAlmostEqual(sum(durations) / count, 1, places=6)
+                self.assertTrue(all(0.82 <= value <= 1.18 for value in durations))
+                self.assertGreater(len(set(durations)), 2)
+                system.update(1.2)
+                self.draw(system)
+                backend.poll_arrivals(wait=True)
+                self.assertEqual(system.take_arrivals(), (0.1, count))
+                self.assertEqual(backend.snapshot()['arrived_units'], 100000)
+                self.assertEqual(set(backend.compute_programs), {'spawn', 'update'})
+
 
 if __name__ == '__main__':
     unittest.main()
