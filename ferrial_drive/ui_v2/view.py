@@ -298,7 +298,7 @@ class UiV2View(UiView):
                 self.polygon((left[1], right[1], right[2], left[2]), self.style["health_damage_flash"]["color"],
                              opacity * flash.opacity, filled=True)
         if border is not None:
-            self.stroke(border + border[:1], self.ui_accent, opacity * 0.85, 1.5)
+            self.stroke(border + border[:1], self.ui_accent, opacity * 0.85, self.style['resource_border_width_pixels'])
             return
         self.stroke(((x - cut - 7, y - 4), (x + width - cut + 3, y - 4),
                      (x + width + 7, y + height + 2)), self.ui_accent, opacity * 0.8)
@@ -438,7 +438,7 @@ class UiV2View(UiView):
         boundary_color = self.style['energy_boundary']['color']
         self.panel_layer(geometry.energy_body, c["panel"], opacity, grain=True, effect_surface=channel)
         self.polygon(geometry.level_shape, c["panel"], opacity * self.style["surface_opacity"], filled=True)
-        self.stroke(outline + outline[:1], c["text"], opacity * 0.75, 1.5)
+        self.stroke(outline + outline[:1], c["text"], opacity * 0.75, self.style['resource_border_width_pixels'])
         self.polygon(channel, color, opacity * 0.1, filled=True)
         energy_alpha = opacity * breathing_opacity(self._scanline_visual.elapsed_seconds, **self.style["energy_breathing"])
         if state.energy_ratio > 0:
@@ -452,7 +452,7 @@ class UiV2View(UiView):
         if energy_flash > 0:
             self.polygon(channel, color, opacity * energy_flash * 0.55, filled=True)
         self.stroke((outline[-1], geometry.level_shape[-2]),
-                     color if charge > 0 else self.ui_accent, opacity, 2)
+                     color if charge > 0 else self.ui_accent, opacity, self.style['resource_border_width_pixels'])
         ratio = charge if state.energy_level == 3 and state.energy_ratio == 1 else state.energy_ratio
         self.energy_boundary(channel, ratio, energy_alpha, overdrive=state.overdrive)
         overdrive_visual = overdrive_visual or OverdriveVisual(float(state.overdrive))
@@ -466,7 +466,7 @@ class UiV2View(UiView):
         number_top = (geometry.level_top + self.layout['energy_bar'][1] + height + 4 - number_height) / 2
         label_scale = settings['label_scale']
         self.slanted_text('LV', number_right - digit_width * 2 - settings['gap_pixels'],
-                          number_top + (number_height - r.text_size('LV', 'hud_small')[1] * label_scale) / 2,
+                          number_top + number_height - r.text_size('LV', 'hud_small')[1] * label_scale,
                           'hud_small', c['ui_accent'], opacity, scale=label_scale, align='right')
         level_visual = level_visual or CounterVisual(state.energy_level, state.energy_level, 1, 1)
         old, new = f'{level_visual.previous_value:02}', f'{level_visual.value:02}'
@@ -478,28 +478,7 @@ class UiV2View(UiView):
                                'v2_level', c['muted'], project, opacity, number_scale, viewport)
         cx, cy = geometry.icon_center
         radius = geometry.icon_radius
-        diamond = ((cx, cy - radius), (cx + radius, cy), (cx, cy + radius), (cx - radius, cy))
-        self.polygon(diamond, c["panel"], opacity * self.style["surface_opacity"], filled=True)
-        self.stroke(diamond + diamond[:1], c["text"], opacity * 0.9, 1.5)
-        if state.ultimate_ready:
-            visual = ultimate_visual or UltimateReadyVisual()
-            settings = self.style['lock_motion']
-            position = accent_position(visual.age, settings['move_seconds'], settings['hold_seconds'])
-            for start in (position, position + 2):
-                self.accent_stroke(outline_segment(diamond, start - 0.325), color, opacity * visual.opacity)
-            if visual.flash > 0:
-                self.polygon(diamond, c['text'], opacity * visual.flash * 0.45, filled=True)
-                self.stroke(diamond + diamond[:1], c['text'], opacity * visual.flash,
-                            self.style['lock_accent_pixels'] + 1)
-        # 기본 도형으로 만든 비대칭 네 갈래 칼날. 원본 아이콘 아트는 별도 제작한다.
-        for angle in (-0.3, pi / 2 - 0.3, pi - 0.3, 3 * pi / 2 - 0.3):
-            def blade_point(dx, dy):
-                return cx + cos(angle) * dx - sin(angle) * dy, cy + sin(angle) * dx + cos(angle) * dy
-            icon_scale = self.style["ultimate_icon_scale"]
-            blade = tuple(blade_point(point[0] * icon_scale, point[1] * icon_scale)
-                          for point in ((-5, -5), (radius + 5, -10), (12, 4), (1, 18)))
-            self.polygon(blade, c["energy_fill"], opacity * 0.75, filled=True)
-            self.stroke(blade + blade[:1], c["text"], opacity * 0.9, 1.5)
+        self.ultimate_icon(state, geometry, color, opacity, ultimate_visual)
         key = self.config.data["v2"]["labels"]["ultimate_key"]
         level = "LV. 03"
         key_height = r.text_size(key, "hud_small")[1]
@@ -509,6 +488,45 @@ class UiV2View(UiView):
                             c["text"], opacity)
         self.ultimate_label(level, label_right, cy + radius / 2 + gap,
                             c["muted"], opacity, scale=0.85, slant_right=True)
+
+    def ultimate_icon(self, state, geometry, color, opacity, visual=None):
+        """쿨다운 동안 어두운 아이콘 위로 아래쪽부터 밝은 영역을 드러낸다."""
+        r, c = self.renderer, self.config.colors
+        cx, cy = geometry.icon_center
+        radius = geometry.icon_radius
+        border_width = self.style['ultimate_border_width_pixels']
+        diamond = ((cx, cy - radius), (cx + radius, cy), (cx, cy + radius), (cx - radius, cy))
+        self.polygon(diamond, c["panel"], opacity * self.style["surface_opacity"], filled=True)
+        visual = visual or UltimateReadyVisual()
+        if state.ultimate_ready and visual.flash > 0:
+            self.polygon(diamond, c['text'], opacity * visual.flash * 0.45, filled=True)
+
+        def face(alpha):
+            self.stroke(diamond + diamond[:1], c['text'], alpha * 0.9, border_width)
+            for angle in (-0.3, pi / 2 - 0.3, pi - 0.3, 3 * pi / 2 - 0.3):
+                def blade_point(dx, dy):
+                    return cx + cos(angle) * dx - sin(angle) * dy, cy + sin(angle) * dx + cos(angle) * dy
+                scale = self.style['ultimate_icon_scale']
+                blade = tuple(blade_point(x * scale, y * scale) for x, y in ((-5, -5), (radius + 5, -10), (12, 4), (1, 18)))
+                self.polygon(blade, c['energy_fill'], alpha * 0.75, filled=True)
+                self.stroke(blade + blade[:1], c['text'], alpha * 0.9, 1.5)
+
+        cooling = state.ultimate_cooldown_seconds > 0
+        face(opacity * (self.style['ultimate_cooldown_dim_opacity'] if cooling else 1))
+        recovery = state.ultimate_recovery_ratio
+        if cooling and recovery > 0:
+            reveal_height = radius * 2 * recovery
+            with r.clip(Rect(cx - radius - border_width, cy + radius - reveal_height,
+                             (radius + border_width) * 2, reveal_height + border_width)):
+                face(opacity)
+        if state.ultimate_ready:
+            settings = self.style['lock_motion']
+            position = accent_position(visual.age, settings['move_seconds'], settings['hold_seconds'])
+            for start in (position, position + 2):
+                self.accent_stroke(outline_segment(diamond, start - 0.325), color, opacity * visual.opacity)
+            if visual.flash > 0:
+                self.stroke(diamond + diamond[:1], c['text'], opacity * visual.flash,
+                            border_width + 1)
 
     def overdrive_label(self, channel, visual, opacity):
         if visual.opacity <= 0:

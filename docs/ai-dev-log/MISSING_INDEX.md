@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [필살기 쿨다운 채움·자원 테두리](2026-11-12-ultimate-cooldown-and-resource-frame.md): TIME(scope). 쿨다운 밝기·자원 외곽·사선 길이·LV/HP 정렬 요청과 진동 블러 질문의 개별 시각을 확인한다.
+
 - [강조선 빗금·색 전환·Overdrive 불꽃](2026-11-12-accent-hatching-energy-transition.md): TIME(scope). 빗금 형태/간격·느린 순환·자간·빨간색 보간 정정·Overdrive 불꽃·숫자 블러 요청의 개별 시각을 확인한다.
 
 - [Overdrive 글자 확대·수평 등장 플래시](2026-11-12-overdrive-pen-glints.md): TIME(scope). 글자 확대·펜 모양 요청과 수평으로 등장하는 효과라는 정정의 개별 시각을 확인한다.

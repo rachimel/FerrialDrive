@@ -1,6 +1,7 @@
 """경계 불꽃 요청·Overdrive 확산·V키 쿨다운·준비 강조선·감쇠를 검사한다."""
 
 from dataclasses import replace
+from contextlib import contextmanager, nullcontext
 import importlib.util
 from pathlib import Path
 import sys
@@ -29,6 +30,7 @@ class ReadyVfxTests(unittest.TestCase):
 
     def test_matching_bevel_vectors_and_longer_vertical_side(self):
         geometry = resource_geometry(self.program.config.data['v2']['layout'], 12)
+        self.assertEqual(geometry.level_top, self.program.config.data['v2']['layout']['hp_bar'][1])
         upper, side, lower, bottom = geometry.level_shape[3:7]
         self.assertEqual((side[0] - upper[0], side[1] - upper[1]),
                          (lower[0] - bottom[0], bottom[1] - lower[1]))
@@ -192,6 +194,7 @@ class ReadyVfxTests(unittest.TestCase):
     def test_ultimate_emphasis_uses_lock_on_patrol_only_when_ready(self):
         renderer = Mock()
         renderer.text_size.side_effect = lambda text, role: (len(text) * 10, 18)
+        renderer.clip.side_effect = lambda rect: nullcontext()
         view = UiV2View(self.program.config, renderer)
         geometry = resource_geometry(view.layout, view.style['level_bevel_pixels'])
         x, y = geometry.icon_center
@@ -207,6 +210,35 @@ class ReadyVfxTests(unittest.TestCase):
                                ultimate_visual=UltimateReadyVisual(age))
             found = [call for call in stroke.call_args_list if call.args[0] in segments]
             self.assertEqual(len(found), count)
+
+    def test_ultimate_cooldown_darkens_and_reveals_only_the_lower_region(self):
+        renderer = Mock()
+        active = []
+        @contextmanager
+        def clip(rect):
+            active.append(rect)
+            yield
+            active.pop()
+        renderer.clip.side_effect = clip
+        view = UiV2View(self.program.config, renderer)
+        geometry = resource_geometry(view.layout, view.style['level_bevel_pixels'])
+        state = replace(self.program.state, ultimate_cooldown_seconds=2.5, ultimate_cooldown_duration_seconds=5)
+        drawn = []
+        def stroke(points, color, opacity=1, width=1):
+            drawn.append((bool(active), opacity, width))
+        with patch.object(view, 'stroke', side_effect=stroke):
+            view.ultimate_icon(state, geometry, '#FFFFFF', 1)
+        rect = renderer.clip.call_args.args[0]
+        self.assertEqual(rect.y, geometry.icon_center[1])
+        self.assertEqual(rect.height, geometry.icon_radius + view.style['ultimate_border_width_pixels'])
+        self.assertTrue(any(not clipped and alpha < 0.3 for clipped, alpha, _ in drawn))
+        self.assertTrue(any(clipped and alpha == 0.9 for clipped, alpha, _ in drawn))
+        self.assertFalse(active)
+        self.assertEqual(replace(state, ultimate_cooldown_seconds=5).ultimate_recovery_ratio, 0)
+        self.assertEqual(replace(state, ultimate_cooldown_seconds=0).ultimate_recovery_ratio, 1)
+        for invalid in (0, -1, float('nan'), float('inf')):
+            with self.assertRaises(ValueError):
+                replace(state, ultimate_cooldown_duration_seconds=invalid)
 
     def test_boundary_emission_has_no_gain_and_stops_at_empty_full_or_pause(self):
         self.program.update(0.1)

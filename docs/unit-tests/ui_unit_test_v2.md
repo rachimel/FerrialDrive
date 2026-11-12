@@ -1,5 +1,9 @@
 # UI Unit Test v2
 
+- 필살기 쿨다운 동안 아이콘·외곽은 밝기 22%로 어둡게 표시한다. `ultimate_cooldown_seconds / ultimate_cooldown_duration_seconds`로 남은 비율을 계산해 아래에서 위로 원래 밝기를 드러낸다. 남은/전체 시간은 게임이 공급하며 예제는 5초다. 완료 flash·LV3/쿨다운 0 강조선 조건은 유지한다.
+- `v2.style.ultimate_border_width_pixels`·`resource_border_width_pixels`는 필살기 외곽·HP/에너지/LV 외곽의 3px 두께다. 쿨다운 밝기는 `ultimate_cooldown_dim_opacity=0.22`다. 내부 아이콘 그림·채움 끝선의 기존 두께와 구분한다.
+- LV 영역 윗선은 HP 바 윗선과 같은 높이다. 오른쪽 위/아래 사선은 `v2.layout.level_right_bevel_pixels=7`로 짧게 하고 같은 길이를 유지한다. 왼쪽 접합부는 `v2.style.level_bevel_pixels`로 따로 계산한다. LV 레이블은 숫자 왼쪽 아래에 맞춘다.
+
 - `v2.style.accent_hatching`은 록온·필살기 강조선의 빗금이다. 강조선 띠 안으로 잘라 모양을 맞추며, 진행 방향의 뒤쪽 8px→앞쪽 2.5px로 간격을 좁힌다. `enabled=false`로 끈다. 공통 순환은 5차 보간으로 시작/끝 속도 0·중간 t=0.5에서 최대 속도다. 이동 0.5초·정지 0.2초를 공유한다.
 - `EnergyTintMotion`은 논리 충전량과 별개로 표시 색을 0.24초 동안 보간한다. 바·회복 flash·흡수 입자에 같은 `energy_tint_ratio`를 공급한다. `v2.style.energy_tint_seconds`로 시간을 조절하며 정지 중 멈춘다. 충전/Overdrive 판정은 지연하지 않는다.
 - Overdrive 완충 뒤에도 채움 끝의 불꽃을 유지한다. 일반 40개/초·0.8초 수명에서 Overdrive 96개/초·1초·강도 1.8로 전환한다. `energy_boundary.overdrive_*`로 조절한다. 생성 강도는 GPU 속도·크기에 적용하며 생성/갱신 Compute 두 개를 유지한다.
@@ -17,7 +21,7 @@
 
 - 에너지는 `EnergyCharge`의 누적 충전량으로 계산한다. 한 게이지마다 LV1→LV2→LV3으로 오르고, **LV3 게이지 완충 후 추가 한 게이지**를 채워야 Overdrive에 진입한다. 추가 충전은 기본 채움 위의 밝은 영역으로 표시하며 `overdrive_charge_ratio` 0→1에 따라 바·흡수 오브·리본·회복 flash가 청록→빨강으로 변한다. 빨강은 `v2.style.overdrive_red`다. 샘플 기본 상태는 LV3·72%이며 Overdrive 전이다. 6은 완충/Overdrive 비교용 조작이다.
 - HIT·DAMAGE와 LV 상승 숫자는 v01의 탄성 이동·방향성 잔상을 사용한다. `damage_counter.duration_seconds=0.12`이며 `vertical_easing`·`elastic_*`·`blur_*`·`outgoing_fade_power`를 공유한다. COUNTER! 메시지는 이 숫자 전환과 별개다.
-- HP·LV 접합부는 곡선 없이 사선으로 연결하고 오른쪽 외곽은 `\`·`|`·`/` 순서다. `v2.style.level_bevel_pixels`는 모서리 크기, `level_text`는 LV와 숫자의 가로 정렬, `counter_label_*`는 HIT/DAMAGE 레이블의 오른쪽 여백·받침판 아래 간격이다.
+- HP·LV 접합부는 곡선 없이 사선으로 연결하고 오른쪽 외곽은 `\`·`|`·`/` 순서다. `v2.style.level_bevel_pixels`는 모서리 크기, `level_text`는 숫자와 왼쪽 아래 LV 레이블의 간격/크기, `counter_label_*`는 HIT/DAMAGE 레이블의 오른쪽 여백·받침판 아래 간격이다.
 - 타겟 선택 변경·해제 때도 현재 HP 비율을 보존한 채 독립적으로 페이드아웃한다. 처치 시 HP는 0에서 페이드하며 록온 마커의 기존 회전·확대 퇴장은 유지한다.
 
 

@@ -102,7 +102,8 @@ class UiUnitTestV2:
                        active_weapon_kind=data["active_weapon_kind"])
         self.state = HudV2State(hud, data["energy_ratio"], data["energy_level"],
                                 data["overdrive"], data["counter"], data["dash_ready"],
-                                dialogue=DialogueInfo(data["dialogue"]["speaker"], tuple(data["dialogue"]["lines"])))
+                                dialogue=DialogueInfo(data["dialogue"]["speaker"], tuple(data["dialogue"]["lines"])),
+                                ultimate_cooldown_duration_seconds=self.config.data['v2']['ultimate_sample']['cooldown_seconds'])
         self.target_size_index = 0
         self.set_target_size(1)
         counter = self.config.data['damage_counter']
@@ -362,7 +363,8 @@ class UiUnitTestV2:
             self.set_energy_charge(EnergyCharge(3 if self.state.overdrive else 4))
         elif action == 'ultimate':
             if self.state.ultimate_ready:
-                self.state = replace(self.state, ultimate_cooldown_seconds=self.config.data['v2']['ultimate_sample']['cooldown_seconds'])
+                duration = self.config.data['v2']['ultimate_sample']['cooldown_seconds']
+                self.state = replace(self.state, ultimate_cooldown_seconds=duration, ultimate_cooldown_duration_seconds=duration)
                 self.ultimate_motion.request(False)
         elif action in ("counter", "dash"):
             field = {"counter": "counter", "dash": "dash_ready"}[action]

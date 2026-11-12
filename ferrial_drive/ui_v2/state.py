@@ -25,10 +25,15 @@ class HudV2State:
     dialogue: DialogueInfo | None = None
     overdrive_charge_ratio: float = 0
     ultimate_cooldown_seconds: float = 0
+    ultimate_cooldown_duration_seconds: float = 5
 
     @property
     def ultimate_ready(self):
         return self.energy_level == 3 and self.ultimate_cooldown_seconds == 0
+
+    @property
+    def ultimate_recovery_ratio(self):
+        return max(0, 1 - self.ultimate_cooldown_seconds / self.ultimate_cooldown_duration_seconds)
 
     def __post_init__(self):
         if not isfinite(self.energy_ratio) or not 0 <= self.energy_ratio <= 1:
@@ -39,6 +44,8 @@ class HudV2State:
             raise ValueError('Overdrive 추가 충전 비율은 0~1이어야 한다.')
         if not isfinite(self.ultimate_cooldown_seconds) or self.ultimate_cooldown_seconds < 0:
             raise ValueError('필살기 쿨다운은 0 이상의 초 단위 값이어야 한다.')
+        if not isfinite(self.ultimate_cooldown_duration_seconds) or self.ultimate_cooldown_duration_seconds <= 0:
+            raise ValueError('필살기 전체 쿨다운은 양수의 초 단위 값이어야 한다.')
         body = self.target_body
         if body is not None and (not all(isfinite(value) for value in (body.x, body.y, body.width, body.height))
                                  or body.width <= 0 or body.height <= 0):

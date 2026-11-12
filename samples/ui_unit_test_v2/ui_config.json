@@ -662,6 +662,7 @@
             ],
             "ultimate_center_x": 320,
             "energy_level_width_pixels": 78,
+            "level_right_bevel_pixels": 7,
             "ultimate_radius_pixels": 43
         },
         "map_walls": [
@@ -873,6 +874,9 @@
             "hud_scale": 0.81,
             "lock_thickness_pixels": 2,
             "ultimate_icon_scale": 0.62,
+            "ultimate_border_width_pixels": 3,
+            "ultimate_cooldown_dim_opacity": 0.22,
+            "resource_border_width_pixels": 3,
             "counter_text_scale": 0.82,
             "level_bevel_pixels": 12,
             "overdrive_red": [255, 64, 68],

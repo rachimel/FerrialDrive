@@ -1,5 +1,7 @@
 # AI 개발 로그
 
+- [2026-11-12 필살기 쿨다운 채움·자원 테두리](2026-11-12-ultimate-cooldown-and-resource-frame.md): 아래부터 밝아지는 아이콘·굵은 외곽·짧은 오른쪽 사선·LV 하단 정렬·HP 윗선 일치
+
 - [2026-11-12 강조선 빗금·색 전환·Overdrive 불꽃](2026-11-12-accent-hatching-energy-transition.md): 끝으로 갈수록 촘촘한 빗금·느린 순환·넓은 자간·색 보간·강화 불꽃·방향성 숫자 블러
 
 - [2026-11-12 Overdrive 글자 확대·수평 등장 플래시](2026-11-12-overdrive-pen-glints.md): 18px·등장 순간 가로 확장/fade-out·사용자 수평 효과 정정
