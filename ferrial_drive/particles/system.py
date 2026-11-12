@@ -29,6 +29,7 @@ class SpawnParticles:
     effect_type: int = 0
     gain_units: int = 0
     arrival_spacing_seconds: float = 0
+    intensity: float = 1
 
 
 @dataclass(frozen=True)
@@ -109,7 +110,7 @@ class GpuParticleSystem:
         return result
 
     def emit(self, start, waypoint, destination, *, count=3, side=-1, spread_pixels=15,
-             duration_seconds=None, effect_type=0, gain_ratio=0, arrival_spacing_seconds=0):
+             duration_seconds=None, effect_type=0, gain_ratio=0, arrival_spacing_seconds=0, intensity=1):
         if any(len(point) != 2 or not all(map(isfinite, point)) for point in (start, waypoint, destination)):
             raise ValueError('생성 좌표는 유한한 화면 픽셀의 두 성분이어야 한다.')
         if type(count) is not int or count <= 0 or side not in (-1, 1):
@@ -123,16 +124,18 @@ class GpuParticleSystem:
                 or not isfinite(arrival_spacing_seconds) or arrival_spacing_seconds < 0):
             raise ValueError('회복 비율은 0~1이며 도착 간격은 0 이상의 초 단위 값이어야 한다.')
         units = round(gain_ratio * ENERGY_UNITS)
+        if not isfinite(intensity) or not 0 < intensity <= 4:
+            raise ValueError('입자 강도는 0 초과 4 이하의 유한한 값이어야 한다.')
         if effect_type == 1 and (units or arrival_spacing_seconds):
             raise ValueError('경계 불꽃은 회복·도착 간격을 사용하지 않는다.')
         self.commands.append(SpawnParticles(tuple(start), tuple(waypoint), tuple(destination),
                                             min(count, self.capacity), side, spread_pixels, duration, effect_type,
-                                            units, arrival_spacing_seconds))
+                                            units, arrival_spacing_seconds, intensity))
         self.requested_gain_units += units
 
-    def emit_sparks(self, top, bottom, *, count=1, duration_seconds=0.65, spread_pixels=2):
+    def emit_sparks(self, top, bottom, *, count=1, duration_seconds=0.65, spread_pixels=2, intensity=1):
         self.emit(top, bottom, (0, 0), effect_type=1, count=count, side=1,
-                  spread_pixels=spread_pixels, duration_seconds=duration_seconds)
+                  spread_pixels=spread_pixels, duration_seconds=duration_seconds, intensity=intensity)
 
     def update(self, delta_seconds):
         if not isfinite(delta_seconds) or delta_seconds < 0:

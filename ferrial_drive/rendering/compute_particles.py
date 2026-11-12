@@ -40,7 +40,7 @@ class ComputeParticles(InstancedParticles):
         try:
             self.compute_programs['spawn'] = self._compile_compute(SPAWN_SHADER, (
                 'capacity', 'request_count', 'request_seed', 'effect_type', 'anchors', 'destination', 'spawn_settings',
-                'gain_units', 'arrival_spacing'))
+                'gain_units', 'arrival_spacing', 'effect_intensity'))
             self.compute_programs['update'] = self._compile_compute(UPDATE_SHADER, ('capacity', 'delta_seconds', 'segments',
                 'energy_enabled', 'energy_geometry', 'energy_ratio', 'energy_acknowledged',
                 'energy_charge_mode', 'energy_charge_total'))
@@ -245,6 +245,7 @@ class ComputeParticles(InstancedParticles):
         self.glUniform1i(uniforms['effect_type'], request.effect_type)
         self.glUniform1ui(uniforms['gain_units'], request.gain_units)
         self.glUniform1f(uniforms['arrival_spacing'], request.arrival_spacing_seconds)
+        self.glUniform1f(uniforms['effect_intensity'], request.intensity)
         self.glUniform4f(uniforms['anchors'], *request.start, *request.waypoint)
         self.glUniform4f(uniforms['destination'], *request.destination, 0, 0)
         self.glUniform4f(uniforms['spawn_settings'], request.duration_seconds, request.side,

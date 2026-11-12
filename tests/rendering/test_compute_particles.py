@@ -360,6 +360,21 @@ class ComputeParticleTests(unittest.TestCase):
         self.assertEqual(backend.snapshot()['active_count'], 6)
         self.assertEqual(system.take_arrivals(), (0.1, 6))
 
+    def test_spark_intensity_scales_gpu_velocity_and_size_without_extra_program(self):
+        system, backend = self.make_system()
+        system.emit_sparks((65, 60), (70, 75), count=1)
+        self.draw(system)
+        normal = backend.snapshot()['particles'][0]
+        system.clear()
+        system.emit_sparks((65, 60), (70, 75), count=1, intensity=1.8)
+        self.draw(system)
+        intense = backend.snapshot()['particles'][0]
+        self.assertAlmostEqual(intense[6], normal[6] * 1.8, places=4)
+        self.assertAlmostEqual(intense[7], normal[7] * 1.8, places=4)
+        self.assertGreater(intense[19], normal[19])
+        self.assertEqual(system.pending_gain_units, 0)
+        self.assertEqual(set(backend.compute_programs), {'spawn', 'update'})
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -53,6 +53,7 @@ uniform vec4 destination;
 uniform vec4 spawn_settings; // duration, side, spread, tail fraction
 uniform uint gain_units;
 uniform float arrival_spacing;
+uniform float effect_intensity;
 uint hash_value(uint x) {
     x ^= x >> 16u; x *= 0x7feb352du; x ^= x >> 15u; x *= 0x846ca68bu;
     return x ^ (x >> 16u);
@@ -116,11 +117,12 @@ void main() {
                                float((h >> 20u) & 1023u)) / 1023.0;
             p.anchors.xy = mix(anchors.xy, anchors.zw, random.y);
             p.anchors.xy += vec2((random.z - 0.5) * spawn_settings.z, 0.0);
-            p.anchors.zw = vec2((random.x - 0.5) * 70.0, -36.0 - random.z * 46.0);
+            p.anchors.zw = vec2((random.x - 0.5) * 70.0, -36.0 - random.z * 46.0) * effect_intensity;
             p.target.w = random.x * 6.283185;
             p.life.z = 1.0;
             p.motion = vec4(p.anchors.xy, 0.0, 0.0);
-            p.payload = vec4(0.0, 1.0, 0.0, 0.32 + random.z * 0.48);
+            p.payload = vec4(0.0, 1.0, 0.0, (0.32 + random.z * 0.48) * sqrt(effect_intensity));
+            p.life.w = effect_intensity;
             break;
         }
         default: break;
@@ -182,7 +184,7 @@ void main() {
             float age = p.life.x;
             float travel = (1.0 - exp(-2.0 * age)) / 2.0;
             p.motion.xy = p.anchors.xy + p.anchors.zw * travel;
-            p.motion.x += (sin(p.target.w + age * 8.0) - sin(p.target.w)) * 3.5;
+            p.motion.x += (sin(p.target.w + age * 8.0) - sin(p.target.w)) * 3.5 * sqrt(p.life.w);
             p.motion.y -= 10.0 * age * age;
             p.motion.z = age / p.life.y;
             break;
