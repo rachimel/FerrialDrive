@@ -22,7 +22,10 @@ class EnergyFillMotion:
         if total < self.animation.end_value:
             self.reset(total)
         elif total != self.animation.end_value:
-            self.animation = ScalarAnimation(self.animation.value, total, self.duration_seconds)
+            remaining = (self.duration_seconds if self.animation.finished else
+                         self.animation.duration_seconds - self.animation.elapsed_seconds)
+            # 연속 도착은 최초 증가의 남은 시간 안에 따라잡는다.
+            self.animation = ScalarAnimation(self.animation.value, total, remaining)
 
     def update(self, delta_seconds):
         self.animation.update(delta_seconds)

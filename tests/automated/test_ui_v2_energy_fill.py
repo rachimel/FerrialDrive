@@ -17,6 +17,34 @@ SPEC.loader.exec_module(SAMPLE)
 
 
 class EnergyFillTests(unittest.TestCase):
+    def test_dense_arrivals_do_not_extend_the_original_catchup_window(self):
+        for delta in (1 / 60, 1 / 120, 0.01):
+            motion = EnergyFillMotion()
+            elapsed, target = 0, 0
+            while elapsed < 0.12 - 1e-9:
+                target += 0.03
+                before = motion.visual.total
+                motion.request(target)
+                self.assertEqual(motion.visual.total, before)
+                step = min(delta, 0.12 - elapsed)
+                motion.update(step)
+                elapsed += step
+            self.assertAlmostEqual(motion.visual.total, target)
+            motion.request(target + 0.2)
+            self.assertAlmostEqual(motion.visual.total, target)
+            motion.update(0.12)
+            self.assertAlmostEqual(motion.visual.total, target + 0.2)
+
+    def test_repeated_scene_charge_updates_catch_up_without_delaying_real_energy(self):
+        program = SAMPLE.create_test()
+        program.set_energy_charge(EnergyCharge(0))
+        for frame in range(12):
+            total = (frame + 1) / 10
+            program.set_energy_charge(EnergyCharge(total))
+            self.assertAlmostEqual(EnergyCharge.from_state(program.state).total, total)
+            program.update(0.01)
+        self.assertAlmostEqual(program.energy_fill.visual.total, 1.2)
+
     def test_retarget_starts_from_current_display_and_identical_target_does_not_restart(self):
         motion = EnergyFillMotion()
         motion.reset(0.2)
