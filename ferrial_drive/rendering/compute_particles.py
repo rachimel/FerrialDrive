@@ -32,14 +32,18 @@ class ComputeParticles(InstancedParticles):
         self.gpu_samples = defaultdict(lambda: deque(maxlen=240))
         self.spawn_requests_submitted = 0
         self.frame_particle_upload_bytes = 0
+        self.receipt_buffers, self.receipt_pending = [], []
         self.dispatch_counts = {'spawn': 0, 'update': 0}
         BicubicSampler.__init__(self, pico, None, vertex_shader=VERTEX_SHADER, fragment_shader=FRAGMENT_SHADER,
                                 extra_uniforms=('transform', 'base_color', 'core_color', 'head_width',
                                                 'orb_radius', 'segments', 'mode'))
         try:
             self.compute_programs['spawn'] = self._compile_compute(SPAWN_SHADER, (
-                'capacity', 'request_count', 'request_seed', 'effect_type', 'anchors', 'destination', 'spawn_settings'))
-            self.compute_programs['update'] = self._compile_compute(UPDATE_SHADER, ('capacity', 'delta_seconds', 'segments'))
+                'capacity', 'request_count', 'request_seed', 'effect_type', 'anchors', 'destination', 'spawn_settings',
+                'gain_units', 'arrival_spacing'))
+            self.compute_programs['update'] = self._compile_compute(UPDATE_SHADER, ('capacity', 'delta_seconds', 'segments',
+                'energy_enabled', 'energy_geometry', 'energy_ratio', 'energy_acknowledged',
+                'energy_charge_mode', 'energy_charge_total'))
             with self.batch(), self._state():
                 self._allocate()
             self.gpu_info = {key: self.glGetString(value).decode(errors='replace') for key, value in
@@ -65,6 +69,9 @@ class ComputeParticles(InstancedParticles):
             'glDrawArraysIndirect': (None, [uint, pointer]),
             'glGetError': (uint, []), 'glGetProgramInfoLog': (None, [uint, integer, pointer, pointer]),
             'glGetString': (ct.c_char_p, [uint]),
+            'glCopyBufferSubData': (None, [uint, uint, ct.c_ssize_t, ct.c_ssize_t, ct.c_ssize_t]),
+            'glFenceSync': (pointer, [uint, uint]), 'glDeleteSync': (None, [pointer]),
+            'glClientWaitSync': (uint, [pointer, uint, ct.c_uint64]),
             'glFlush': (None, []),
             'glGenQueries': (None, [integer, pointer]), 'glDeleteQueries': (None, [integer, pointer]),
             'glBeginQuery': (None, [uint, uint]), 'glEndQuery': (None, [uint]),
@@ -111,6 +118,7 @@ class ComputeParticles(InstancedParticles):
     def _state(self):
         generic = self.integer(SSBO_BINDING)
         indirect, unpack_buffer = self.integer(0x8F43), self.integer(0x88EF)
+        copy_read, copy_write = self.integer(0x8F36), self.integer(0x8F37)
         unpack_keys = (0x0CF5, 0x0CF2, 0x0CF3, 0x0CF4)
         unpack = tuple(self.integer(key) for key in unpack_keys)
         indexed = []
@@ -130,6 +138,8 @@ class ComputeParticles(InstancedParticles):
                 self.glBindBufferBase(SSBO, index, name)
             self.glBindBuffer(SSBO, generic)
             self.glBindBuffer(INDIRECT, indirect)
+            self.glBindBuffer(0x8F36, copy_read)
+            self.glBindBuffer(0x8F37, copy_write)
             self.glBindBuffer(0x88EC, unpack_buffer)
             for key, value in zip(unpack_keys, unpack):
                 self.glPixelStorei(key, value)
@@ -162,7 +172,13 @@ class ComputeParticles(InstancedParticles):
         self._texture(0, *ATLAS_SIZE, pixels, floating=False)
         self.glTexParameteri(0x0DE1, 0x2801, 0x2601)
         self.glTexParameteri(0x0DE1, 0x2800, 0x2601)
-        self.allocated_bytes = sum(sizes) + ATLAS_SIZE[0] * ATLAS_SIZE[1] * 4
+        receipts = (ct.c_uint * 3)()
+        self.glGenBuffers(3, receipts)
+        self.receipt_buffers = list(receipts)
+        for name in receipts:
+            self.glBindBuffer(0x8F37, name)
+            self.glBufferData(0x8F37, 16, None, 0x88E1)
+        self.allocated_bytes = sum(sizes) + ATLAS_SIZE[0] * ATLAS_SIZE[1] * 4 + 48
 
     def _zero(self, index):
         zero = ct.c_uint(0)
@@ -227,6 +243,8 @@ class ComputeParticles(InstancedParticles):
         self.glUniform1ui(uniforms['request_count'], request.count)
         self.glUniform1ui(uniforms['request_seed'], self.system.seed)
         self.glUniform1i(uniforms['effect_type'], request.effect_type)
+        self.glUniform1ui(uniforms['gain_units'], request.gain_units)
+        self.glUniform1f(uniforms['arrival_spacing'], request.arrival_spacing_seconds)
         self.glUniform4f(uniforms['anchors'], *request.start, *request.waypoint)
         self.glUniform4f(uniforms['destination'], *request.destination, 0, 0)
         self.glUniform4f(uniforms['spawn_settings'], request.duration_seconds, request.side,
@@ -244,6 +262,13 @@ class ComputeParticles(InstancedParticles):
         self.glUniform1ui(uniforms['capacity'], self.capacity)
         self.glUniform1f(uniforms['delta_seconds'], delta_seconds)
         self.glUniform1i(uniforms['segments'], segments)
+        target = self.system.energy_target
+        self.glUniform1i(uniforms['energy_enabled'], int(target is not None))
+        self.glUniform4f(uniforms['energy_geometry'], *(target[:4] if target else (0, 0, 0, 0)))
+        self.glUniform1f(uniforms['energy_ratio'], target[4] if target else 0)
+        self.glUniform1ui(uniforms['energy_acknowledged'], self.system.arrived_units)
+        self.glUniform1i(uniforms['energy_charge_mode'], int(self.system.energy_charge_total is not None))
+        self.glUniform1f(uniforms['energy_charge_total'], self.system.energy_charge_total or 0)
         with self._measure('update'):
             self.glDispatchCompute((self.capacity + 63) // 64, 1, 1)
         self.glMemoryBarrier(STORAGE_BARRIER | COMMAND_BARRIER)
@@ -256,6 +281,7 @@ class ComputeParticles(InstancedParticles):
         # 이전 프레임의 셰이더 접근 뒤에 같은 풀과 draw buffer를 재사용한다.
         self.glMemoryBarrier(STORAGE_BARRIER | 0x0200 | COMMAND_BARRIER)
         if self.generation != self.system.generation:
+            self._clear_receipt_fences()
             self._zero(0)
             self._zero(1)
             self.generation = self.system.generation
@@ -275,6 +301,8 @@ class ComputeParticles(InstancedParticles):
     def render(self, settings, color, core_color, scale=(1, 1)):
         self.collect_timings()
         with self.batch(), self._state():
+            if self.generation == self.system.generation:
+                self._poll_arrivals()
             self._process(settings['samples'])
             self.glUseProgram(self.program)
             vx, vy, _, _ = self.viewport
@@ -293,24 +321,70 @@ class ComputeParticles(InstancedParticles):
                 self.glDrawArraysIndirect(0x0005, None)
                 self.glUniform1i(self.uniforms['mode'], 1)
                 self.glDrawArraysIndirect(0x0005, ct.c_void_p(16))
+            self._queue_receipt()
+
+    def _clear_receipt_fences(self):
+        for _, fence in self.receipt_pending:
+            self.glDeleteSync(fence)
+        self.receipt_pending.clear()
+
+    def _queue_receipt(self):
+        if self.system.pending_gain_units <= 0 or len(self.receipt_pending) >= len(self.receipt_buffers):
+            return
+        used = {name for name, _ in self.receipt_pending}
+        target = next(name for name in self.receipt_buffers if name not in used)
+        self.glMemoryBarrier(0x0200 | STORAGE_BARRIER)
+        self.glBindBuffer(0x8F36, self.buffers[1])
+        self.glBindBuffer(0x8F37, target)
+        self.glCopyBufferSubData(0x8F36, 0x8F37, 0, 0, 16)
+        self.receipt_pending.append((target, self.glFenceSync(0x9117, 0)))
+
+    def _poll_arrivals(self, *, wait=False):
+        while self.receipt_pending:
+            buffer, fence = self.receipt_pending[0]
+            status = self.glClientWaitSync(fence, 1 if wait else 0, 1_000_000_000 if wait else 0)
+            if status == 0x911B:
+                break
+            if status not in (0x911A, 0x911C):
+                raise RuntimeError('파티클 회복 집계 fence 확인 실패')
+            values = (ct.c_uint * 4)()
+            self.glBindBuffer(0x8F36, buffer)
+            self.glGetBufferSubData(0x8F36, 0, 16, values)
+            self.system.accept_receipt(values[1], values[2], values[3])
+            self.glDeleteSync(fence)
+            self.receipt_pending.pop(0)
+
+    def poll_arrivals(self, *, wait=False):
+        """일반 루프는 timeout=0으로 준비된 집계만 읽는다. wait는 검증용이다."""
+        if self.generation != self.system.generation:
+            return
+        with self.batch(), self._state():
+            self._poll_arrivals(wait=wait)
 
     def snapshot(self, *, max_particles=24):
         """검증·벤치마크 종료 전용 동기식 readback. 실제 프레임 루프에서는 호출하지 않는다."""
         with self.batch(), self._state():
             self.glMemoryBarrier(0x0200 | STORAGE_BARRIER)
-            commands, counter = (ct.c_uint * 8)(), ct.c_uint()
+            commands, counter = (ct.c_uint * 8)(), (ct.c_uint * 4)()
             self.glBindBuffer(SSBO, self.buffers[3])
             self.glGetBufferSubData(SSBO, 0, ct.sizeof(commands), commands)
             self.glBindBuffer(SSBO, self.buffers[1])
-            self.glGetBufferSubData(SSBO, 0, 4, ct.byref(counter))
+            self.glGetBufferSubData(SSBO, 0, 16, counter)
             count = min(self.capacity, max_particles)
-            data = (ct.c_float * (count * 16))()
+            stride = PARTICLE_BYTES // 4
+            data = (ct.c_float * (count * stride))()
             self.glBindBuffer(SSBO, self.buffers[0])
             self.glGetBufferSubData(SSBO, 0, ct.sizeof(data), data)
             return dict(active_count=commands[1] // 2, draw_commands=list(commands),
-                        spawn_cursor=counter.value, particles=[list(data[i * 16:(i + 1) * 16]) for i in range(count)])
+                        spawn_cursor=counter[0], arrived_units=counter[1], arrival_count=counter[2], cancelled_units=counter[3],
+                        particles=[list(data[i * stride:(i + 1) * stride]) for i in range(count)])
 
     def close(self):
+        self._clear_receipt_fences()
+        if self.receipt_buffers:
+            names = (ct.c_uint * len(self.receipt_buffers))(*self.receipt_buffers)
+            self.glDeleteBuffers(len(names), names)
+            self.receipt_buffers.clear()
         if self.query_names:
             names = (ct.c_uint * len(self.query_names))(*self.query_names)
             self.glDeleteQueries(len(names), names)

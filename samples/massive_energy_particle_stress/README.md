@@ -31,7 +31,7 @@ python tests/massive_energy_particle_stress.py --benchmark --hidden --counts 102
 - GPU 시간은 `GL_TIME_ELAPSED`로 생성·갱신·렌더를 따로 측정한다. 모든 측정 프레임을 수집하도록 쿼리를 미리 확보한다. 생성 `total_ms`는 두 요청의 합, `mean_ms`는 요청당 평균이다. 갱신·렌더 평균은 프레임당 시간이다. 배리어·CPU API 호출·UI·화면 합성 전체 시간을 의미하지 않는다.
 - GPU 상태·활성 수의 동기식 readback은 각 측정 구간이 끝난 뒤에만 수행한다. 측정 구간 안에서는 GPU가 활성 목록·간접 그리기 개수를 만든다.
 - 결과는 `output/performance/massive_energy_particle_stress.json`, CPU 원본은 같은 폴더의 입자 수별 `_cpu.json`이다. `--output`으로 별도 경로를 지정한다. GPU 제조사·렌더러·드라이버 버전·해상도·설정·실제 활성 수·샘플 수를 기록한다. 옵티머스 환경에서는 기존 창과 새 프로세스가 같은 GPU인지 결과로 확인한다.
-- `--capacity`는 최대 65,536이다. 실제 사용 가능 크기는 GPU의 SSBO 한도·메모리에 따라 제한된다. 기본 풀 16,384개는 버퍼·아틀라스 약 83.8MiB를 사용한다.
+- `--capacity`는 최대 65,536이다. 실제 사용 가능 크기는 GPU의 SSBO 한도·메모리에 따라 제한된다. 기본 풀 16,384개는 버퍼·아틀라스 약 84.1MiB를 사용한다. 스트레스 요청의 회복량은 0이므로 회복 집계 readback을 사용하지 않는다.
 - 같은 화면에 입자를 집중시키는 고정 시연이다. 일반 게임 장면 FPS·전체 프레임 성능·실제 창 사용감·최종 외관 승인과 구분한다.
 
 `--capture output/compute_particles/stress.png`로 재생성 가능한 화면을 저장한다. UI에 실제 선택된 OpenGL GPU와 CPU/GPU 시간을 표시한다.

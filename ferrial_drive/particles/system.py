@@ -4,14 +4,16 @@ from dataclasses import dataclass
 from math import isfinite
 from secrets import randbits
 
+ENERGY_UNITS = 1_000_000
+
 
 DEFAULT_PROFILES = (
-    ((30, -45), (-30, 30), (15, -15), (-15, -5)),
-    ((-45, -20), (35, -50), (25, -30), (-10, -10)),
-    ((55, 30), (20, -55), (-15, -20), (20, -5)),
-    ((-30, 50), (-55, -15), (30, -10), (-20, -20)),
-    ((65, -25), (-10, 45), (10, -35), (-25, -5)),
-    ((-60, 5), (55, 25), (-20, -25), (15, -15)),
+    ((30, -45), (-30, 30), (15, 0), (-15, 0)),
+    ((-45, -20), (35, -50), (25, 2), (-10, 1)),
+    ((55, 30), (20, -55), (-15, 0), (20, 2)),
+    ((-30, 50), (-55, -15), (30, 3), (-20, 1)),
+    ((65, -25), (-10, 45), (10, 1), (-25, 3)),
+    ((-60, 5), (55, 25), (-20, 2), (15, 0)),
 )
 
 
@@ -25,6 +27,8 @@ class SpawnParticles:
     spread_pixels: float
     duration_seconds: float
     effect_type: int = 0
+    gain_units: int = 0
+    arrival_spacing_seconds: float = 0
 
 
 @dataclass(frozen=True)
@@ -58,9 +62,54 @@ class GpuParticleSystem:
         self.profiles = tuple(self.profiles)
         self.commands = []
         self.generation = 0
+        self.energy_target = None
+        self.energy_charge_total = None
+        self._clear_receipts()
+
+    def _clear_receipts(self):
+        self.arrived_units = self.arrived_count = self.cancelled_units = 0
+        self.requested_gain_units = self.received_gain_units = self.lost_gain_units = 0
+        self._gain_ready = self._arrivals_ready = 0
+
+    @property
+    def pending_gain_units(self):
+        return max(0, self.requested_gain_units - self.received_gain_units - self.lost_gain_units)
+
+    def set_energy_target(self, left, right, ratio, *, charge_total=None):
+        if (any(len(point) != 2 or not all(map(isfinite, point)) for point in (left, right))
+                or not isfinite(ratio) or not 0 <= ratio <= 1):
+            raise ValueError('에너지 바 목표 좌표와 0~1 비율이 필요하다.')
+        self.energy_target = (*left, *right, ratio)
+        if charge_total is not None and (not isfinite(charge_total) or not 0 <= charge_total <= 4):
+            raise ValueError('누적 충전량은 0~4이어야 한다.')
+        self.energy_charge_total = charge_total
+
+    def accept_receipt(self, units, count, cancelled):
+        gain = (units - self.arrived_units) & 0xffffffff
+        arrivals = (count - self.arrived_count) & 0xffffffff
+        lost = (cancelled - self.cancelled_units) & 0xffffffff
+        self.arrived_units, self.arrived_count, self.cancelled_units = units, count, cancelled
+        self.received_gain_units += gain
+        self.lost_gain_units += lost
+        self._gain_ready += gain
+        self._arrivals_ready += arrivals
+        if self.energy_target is not None:
+            *geometry, ratio = self.energy_target
+            if self.energy_charge_total is None:
+                ratio = min(1, ratio + gain / ENERGY_UNITS)
+            else:
+                self.energy_charge_total = min(4, self.energy_charge_total + gain / ENERGY_UNITS)
+                total = self.energy_charge_total
+                ratio = total - 3 if total >= 3 else total % 1
+            self.energy_target = (*geometry, ratio)
+
+    def take_arrivals(self):
+        result = self._gain_ready / ENERGY_UNITS, self._arrivals_ready
+        self._gain_ready = self._arrivals_ready = 0
+        return result
 
     def emit(self, start, waypoint, destination, *, count=3, side=-1, spread_pixels=15,
-             duration_seconds=None, effect_type=0):
+             duration_seconds=None, effect_type=0, gain_ratio=0, arrival_spacing_seconds=0):
         if any(len(point) != 2 or not all(map(isfinite, point)) for point in (start, waypoint, destination)):
             raise ValueError('생성 좌표는 유한한 화면 픽셀의 두 성분이어야 한다.')
         if type(count) is not int or count <= 0 or side not in (-1, 1):
@@ -70,8 +119,14 @@ class GpuParticleSystem:
             raise ValueError('수명은 양수이며 생성 간격은 0 이상이어야 한다.')
         if effect_type != 0:
             raise ValueError('현재 지원하는 효과 종류는 에너지 오브 0이다.')
+        if (not isfinite(gain_ratio) or not 0 <= gain_ratio <= 1
+                or not isfinite(arrival_spacing_seconds) or arrival_spacing_seconds < 0):
+            raise ValueError('회복 비율은 0~1이며 도착 간격은 0 이상의 초 단위 값이어야 한다.')
+        units = round(gain_ratio * ENERGY_UNITS)
         self.commands.append(SpawnParticles(tuple(start), tuple(waypoint), tuple(destination),
-                                            min(count, self.capacity), side, spread_pixels, duration, effect_type))
+                                            min(count, self.capacity), side, spread_pixels, duration, effect_type,
+                                            units, arrival_spacing_seconds))
+        self.requested_gain_units += units
 
     def update(self, delta_seconds):
         if not isfinite(delta_seconds) or delta_seconds < 0:
@@ -85,3 +140,4 @@ class GpuParticleSystem:
     def clear(self):
         self.commands.clear()
         self.generation += 1
+        self._clear_receipts()

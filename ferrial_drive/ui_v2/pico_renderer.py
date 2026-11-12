@@ -622,6 +622,18 @@ class PicoV2Renderer(PicoRenderer):
         return self.ink_bottoms[role]
 
     @contextmanager
+    def translated(self, dx, dy):
+        p = self.pico
+        viewport = p.SDL_Rect()
+        p.SDL_RenderGetViewport(p.renderer, byref(viewport))
+        target = p.SDL_Rect(viewport.x + round(dx), viewport.y + round(dy), viewport.w, viewport.h)
+        try:
+            p.SDL_RenderSetViewport(p.renderer, byref(target))
+            yield
+        finally:
+            p.SDL_RenderSetViewport(p.renderer, byref(viewport))
+
+    @contextmanager
     def scaled(self, amount, anchor):
         """HUD 묶음의 앵커를 유지하며 크기만 조절하고 SDL 상태를 복원한다."""
         if not isfinite(amount) or amount <= 0:

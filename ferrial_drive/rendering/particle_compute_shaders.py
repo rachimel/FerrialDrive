@@ -2,24 +2,43 @@
 
 MAX_SEGMENTS = 64
 PATH_POINTS = 201
-PARTICLE_BYTES = 64
+PARTICLE_BYTES = 80
 
 COMMON = r'''
 const uint MAX_SEGMENTS = 64u;
 const uint PATH_POINTS = 201u;
-struct Particle { vec4 life; vec4 anchors; vec4 target; vec4 motion; };
+struct Particle { vec4 life; vec4 anchors; vec4 target; vec4 motion; vec4 payload; };
 layout(std430, binding=0) buffer ParticlePool { Particle particles[]; };
-layout(std430, binding=1) buffer PoolCounters { uint cursor; uint pad0; uint pad1; uint pad2; };
+layout(std430, binding=1) buffer PoolCounters { uint cursor; uint arrived_units; uint arrival_count; uint cancelled_units; };
 layout(std430, binding=2) buffer ActiveParticles { uint active_indices[]; };
 layout(std430, binding=3) buffer DrawCommands { uint draws[]; };
 layout(std430, binding=4) buffer RouteProfiles { vec4 profiles[]; };
 layout(std430, binding=5) buffer ParticlePaths { vec4 path_points[]; };
 layout(std430, binding=6) buffer ParticleRibbons { vec4 ribbon_points[]; };
+uniform int energy_enabled;
+uniform vec4 energy_geometry;
+uniform float energy_ratio;
+uniform int energy_charge_mode;
+uniform float energy_charge_total;
+uniform uint energy_acknowledged;
 vec3 sample_path(uint slot, float t) {
     float p = clamp(t, 0.0, 1.0) * 200.0;
     uint i = min(199u, uint(p));
-    return mix(path_points[slot * PATH_POINTS + i].xyz,
+    vec3 result = mix(path_points[slot * PATH_POINTS + i].xyz,
                path_points[slot * PATH_POINTS + i + 1u].xyz, p - float(i));
+    Particle particle = particles[slot];
+    if (energy_enabled != 0 && particle.payload.z > 0.0) {
+        uint gain_so_far = atomicAdd(arrived_units, 0u);
+        float gain = float(gain_so_far - energy_acknowledged) / 1000000.0;
+        float ratio = clamp(energy_ratio + gain, 0.0, 1.0);
+        if (energy_charge_mode != 0) {
+            float total = min(4.0, energy_charge_total + gain);
+            ratio = total >= 3.0 ? total - 3.0 : fract(total);
+        }
+        vec2 target = mix(energy_geometry.xy, energy_geometry.zw, ratio);
+        result.xy += (target - particle.target.xy) * smoothstep(0.72, 1.0, t);
+    }
+    return result;
 }
 '''
 
@@ -32,6 +51,8 @@ uniform int effect_type;
 uniform vec4 anchors;
 uniform vec4 destination;
 uniform vec4 spawn_settings; // duration, side, spread, tail fraction
+uniform uint gain_units;
+uniform float arrival_spacing;
 uint hash_value(uint x) {
     x ^= x >> 16u; x *= 0x7feb352du; x ^= x >> 15u; x *= 0x846ca68bu;
     return x ^ (x >> 16u);
@@ -50,8 +71,9 @@ vec2 energy_path(Particle p, float t) {
                       waypoint + vec2(side * 90.0, -110.0) + profiles[base + 1u].xy,
                       waypoint, t / 0.72);
     }
-    return bezier(waypoint, waypoint + vec2(-side * 55.0, -55.0) + profiles[base + 2u].xy,
-                  target + vec2(side * 75.0, -30.0) + profiles[base + 3u].xy,
+    float below = max(waypoint.y, target.y + 10.0);
+    return bezier(waypoint, vec2(waypoint.x - side * 40.0, below) + profiles[base + 2u].xy,
+                  vec2(target.x + side * 35.0, below) + profiles[base + 3u].xy,
                   target, (t - 0.72) / 0.28);
 }
 void main() {
@@ -59,11 +81,16 @@ void main() {
     if (index >= request_count) return;
     uint ticket = atomicAdd(cursor, 1u);
     uint slot = ticket % capacity;
+    Particle old = particles[slot];
+    if (old.life.z != 0.0 && old.payload.y == 0.0 && old.payload.x > 0.0)
+        atomicAdd(cancelled_units, uint(old.payload.x));
     Particle p;
-    p.life = vec4(0.0, spawn_settings.x, 0.0, spawn_settings.y);
+    p.life = vec4(0.0, spawn_settings.x + float(index) * arrival_spacing, 0.0, spawn_settings.y);
     p.anchors = anchors;
     p.target = vec4(destination.xy, float(effect_type), 0.0);
     p.motion = vec4(anchors.xy, 0.0, spawn_settings.w);
+    uint share = gain_units / request_count + (index < gain_units % request_count ? 1u : 0u);
+    p.payload = vec4(float(share), 0.0, gain_units > 0u ? 1.0 : 0.0, 0.0);
     switch (effect_type) {
         case 0: {
             float shift = (float(index) - float(request_count - 1u) * 0.5) * spawn_settings.z;
@@ -100,6 +127,13 @@ void main() {
     Particle p = particles[slot];
     if (p.life.z == 0.0) return;
     p.life.x += delta_seconds;
+    if (p.life.x >= p.life.y && p.payload.y == 0.0) {
+        if (p.payload.x > 0.0) {
+            atomicAdd(arrived_units, uint(p.payload.x));
+            atomicAdd(arrival_count, 1u);
+        }
+        p.payload.y = 1.0;
+    }
     if (p.life.x >= p.life.y * (1.0 + p.motion.w)) {
         p.life.z = 0.0;
         particles[slot] = p;
@@ -111,18 +145,23 @@ void main() {
             float head = min(1.0, progress), tail = max(0.0, progress - p.motion.w);
             p.motion.xy = sample_path(slot, head).xy;
             p.motion.z = progress;
-            float low = sample_path(slot, tail).z;
-            float high = sample_path(slot, head).z;
             float fade = clamp(1.0 - max(0.0, progress - 1.0) / p.motion.w, 0.0, 1.0);
+            float distance = 0.0;
+            vec2 previous = sample_path(slot, tail).xy;
             for (int i=0; i<=segments; ++i) {
                 float t = mix(tail, head, float(i) / float(segments));
                 vec3 point = sample_path(slot, t);
                 vec2 tangent = sample_path(slot, t + 0.005).xy - sample_path(slot, t - 0.005).xy;
                 vec2 normal = vec2(-tangent.y, tangent.x) / max(0.00001, length(tangent));
-                float pressure = pow(clamp((point.z - low) / max(0.00001, high - low), 0.0, 1.0), 1.5) * fade;
+                distance += length(point.xy - previous);
+                previous = point.xy;
                 uint base = (slot * (MAX_SEGMENTS + 1u) + uint(i)) * 2u;
                 ribbon_points[base] = vec4(point.xy, normal);
-                ribbon_points[base + 1u] = vec4(pressure, 0.0, 0.0, 0.0);
+                ribbon_points[base + 1u] = vec4(distance, 0.0, 0.0, 0.0);
+            }
+            for (int i=0; i<=segments; ++i) {
+                uint base = (slot * (MAX_SEGMENTS + 1u) + uint(i)) * 2u + 1u;
+                ribbon_points[base].x = pow(clamp(ribbon_points[base].x / max(0.00001, distance), 0.0, 1.0), 1.5) * fade;
             }
             break;
         }

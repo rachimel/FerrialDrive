@@ -41,6 +41,16 @@ class PanelProbeRenderer:
         yield
 
     @contextmanager
+    def translated(self, dx, dy):
+        previous = self.viewport
+        x, y, width, height = previous
+        self.viewport = (x + round(dx), y + round(dy), width, height)
+        try:
+            yield
+        finally:
+            self.viewport = previous
+
+    @contextmanager
     def scaled(self, amount, anchor):
         previous = self.scale, self.viewport
         sx, sy = self.scale

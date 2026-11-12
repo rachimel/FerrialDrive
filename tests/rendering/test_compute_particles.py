@@ -213,6 +213,115 @@ class ComputeParticleTests(unittest.TestCase):
             self.draw(system)
             self.assertEqual(self.pixels()[:96 * 26 * 4], baseline, f'UI 글자 변경: {frame}')
 
+    def test_arrivals_split_energy_exactly_once_and_follow_moving_fill_tip(self):
+        system, backend = self.make_system(capacity=16)
+        system.set_energy_target((10, 45), (80, 45), 0.25)
+        system.emit((20, 20), (40, 58), (27.5, 45), count=6, spread_pixels=0,
+                    gain_ratio=0.1, arrival_spacing_seconds=0.05)
+        system.update(0.99)
+        self.draw(system)
+        self.assertEqual(backend.snapshot()['arrived_units'], 0)
+        system.update(0.02)
+        self.draw(system)
+        first = backend.snapshot()
+        self.assertEqual(first['arrival_count'], 1)
+        self.assertEqual(first['arrived_units'], 16667)
+        backend.poll_arrivals(wait=True)
+        gain, count = system.take_arrivals()
+        self.assertAlmostEqual(gain, 0.016667)
+        self.assertEqual(count, 1)
+        system.update(0.25)
+        self.draw(system)
+        final = backend.snapshot()
+        self.assertEqual(final['arrival_count'], 6)
+        self.assertEqual(final['arrived_units'], 100000)
+        backend.poll_arrivals(wait=True)
+        gain2, count2 = system.take_arrivals()
+        self.assertAlmostEqual(gain + gain2, 0.1)
+        self.assertEqual(count + count2, 6)
+        self.assertEqual(system.pending_gain_units, 0)
+        self.assertAlmostEqual(system.energy_target[-1], 0.35)
+        # 도착한 꼬리 끝도 새로 채워진 위치를 따른다.
+        system.update(0.01)
+        self.draw(system)
+        live = [p for p in backend.snapshot()['particles'] if p[2] and p[14] >= 1]
+        self.assertTrue(live)
+        self.assertTrue(all(abs(p[12] - 34.5) < 0.001 for p in live))
+
+    def test_large_step_still_credits_contact_before_particle_expires(self):
+        system, backend = self.make_system()
+        system.set_energy_target((10, 45), (80, 45), 0.2)
+        system.emit((20, 20), (40, 58), (24, 45), count=6, gain_ratio=0.1)
+        system.update(4)
+        self.draw(system)
+        snapshot = backend.snapshot()
+        self.assertEqual(snapshot['active_count'], 0)
+        self.assertEqual(snapshot['arrived_units'], 100000)
+        backend.poll_arrivals(wait=True)
+        self.assertAlmostEqual(system.take_arrivals()[0], 0.1)
+
+    def test_gpu_fill_target_wraps_levels_and_tracks_extra_overdrive_charge(self):
+        for total, expected in ((0.99, 0.09), (2.99, 0.09), (3.45, 0.55), (3.95, 1)):
+            with self.subTest(total=total):
+                system, backend = self.make_system()
+                ratio = total - 3 if total >= 3 else total % 1
+                system.set_energy_target((10, 45), (80, 45), ratio, charge_total=total)
+                system.emit((20, 20), (40, 58), (10 + 70 * ratio, 45), count=6,
+                            gain_ratio=0.1, spread_pixels=0, arrival_spacing_seconds=0.05)
+                system.update(1.26)
+                self.draw(system)
+                self.assertEqual(backend.snapshot()['arrived_units'], 100000)
+                backend.poll_arrivals(wait=True)
+                self.assertAlmostEqual(system.energy_target[-1], expected)
+                # 집계 수신 후에도 GPU 목표가 같은 충전 단계의 끝을 가리킨다.
+                system.update(0.01)
+                self.draw(system)
+                live = [p for p in backend.snapshot()['particles'] if p[2] and p[14] >= 1]
+                self.assertTrue(live)
+                self.assertTrue(all(abs(p[12] - (10 + 70 * expected)) < 0.001 for p in live))
+                backend.close()
+
+    def test_reset_discards_inflight_receipts_and_overflow_does_not_award_dropped_particles(self):
+        system, backend = self.make_system(capacity=2)
+        system.set_energy_target((10, 45), (80, 45), 0.2)
+        for _ in range(2):
+            system.emit((20, 20), (40, 58), (24, 45), count=2, gain_ratio=0.1)
+        system.update(1.01)
+        self.draw(system)
+        snapshot = backend.snapshot()
+        self.assertEqual(snapshot['cancelled_units'], 100000)
+        self.assertEqual(snapshot['arrived_units'], 100000)
+        system.clear()
+        self.draw(system)
+        backend.poll_arrivals(wait=True)
+        self.assertEqual(system.take_arrivals(), (0, 0))
+        self.assertEqual(backend.snapshot()['arrived_units'], 0)
+
+    def test_bar_entry_stays_below_target_and_translation_restores_state(self):
+        system, backend = self.make_system()
+        system.emit((20, 20), (40, 58), (70, 45), count=1, spread_pixels=0)
+        elapsed = 0
+        for time in (0.72, 0.85, 0.95):
+            system.update(time - elapsed)
+            self.draw(system)
+            self.assertGreater(backend.snapshot()['particles'][0][13], 45)
+            elapsed = time
+        before = self.renderer.draw_transform()
+        with self.renderer.translated(3, 4):
+            self.assertNotEqual(self.renderer.draw_transform(), before)
+        self.assertEqual(self.renderer.draw_transform(), before)
+
+    def test_unready_recovery_fence_never_blocks_or_reads_particle_buffer(self):
+        system, backend = self.make_system()
+        system.set_energy_target((10, 45), (80, 45), 0.2)
+        system.emit((20, 20), (40, 58), (24, 45), count=1, gain_ratio=0.1)
+        self.draw(system)
+        with patch.object(backend, 'glClientWaitSync', return_value=0x911B) as check, \
+                patch.object(backend, 'glGetBufferSubData', side_effect=AssertionError('미완료 집계 읽기 금지')):
+            backend.poll_arrivals()
+            self.assertEqual(check.call_args.args[1:], (0, 0))
+        self.assertEqual(system.take_arrivals(), (0, 0))
+
 
 if __name__ == '__main__':
     unittest.main()
