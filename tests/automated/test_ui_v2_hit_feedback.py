@@ -71,7 +71,7 @@ class HealthHitTests(unittest.TestCase):
         program.perform("damage_player")
         self.assertEqual(program.player_hit.visual, HealthHitVisual())
 
-    def test_player_offset_is_screen_pixels_and_only_hp_moves(self):
+    def test_player_health_offset_uses_screen_pixels_without_an_individual_blur(self):
         program = SAMPLE.UiUnitTestV2(initial_scene="combat")
         renderer = Mock()
         renderer.text_size.return_value = (20, 18)
@@ -84,9 +84,7 @@ class HealthHitTests(unittest.TestCase):
         for old, new in zip(geometry.hp_shape, shifted):
             self.assertEqual(old[0], new[0])
             self.assertAlmostEqual((new[1] - old[1]) * view.style["hud_scale"], 4)
-        blur = renderer.directional_blur.call_args.args[1]
-        self.assertEqual(blur[0], 0)
-        self.assertAlmostEqual(blur[1] * view.style["hud_scale"], view.style['player_health_blur']['max_length_pixels'])
+        renderer.directional_blur.assert_not_called()
         self.assertEqual(geometry, resource_geometry(view.layout, view.style["level_bevel_pixels"]))
 
 

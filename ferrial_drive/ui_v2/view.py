@@ -382,13 +382,41 @@ class UiV2View(UiView):
     def health_hit_offset(self, visual):
         return tuple(value / self.style["hud_scale"] for value in visual.offset_pixels)
 
-    def health_hit_blur(self, bounds, visual):
-        settings = self.style["player_health_blur"]
+    def resource_hit_blur(self, bounds, visual):
+        settings = self.style['resource_hit_blur']
         maximum = settings["max_length_pixels"]
-        displacement = tuple(max(-maximum, min(maximum, speed * settings["shutter_seconds"]))
-                             / self.style["hud_scale"] for speed in visual.velocity_pixels_per_second)
-        return (self.renderer.directional_blur(bounds, displacement, settings["opacity"], settings["samples"])
-                if any(abs(value) > 0.01 for value in displacement) else nullcontext())
+        speed = hypot(*visual.velocity_pixels_per_second)
+        length = min(maximum, speed * settings['shutter_seconds'])
+        if length <= 0.01:
+            return nullcontext()
+        displacement = tuple(value / speed * length / self.style['hud_scale']
+                             for value in visual.velocity_pixels_per_second)
+        strength = settings['opacity'] * min(1, length / maximum)
+        return self.renderer.directional_blur(bounds, displacement, strength, settings['samples'])
+
+    def resource_hit_bounds(self, state):
+        geometry = resource_geometry(self.layout, self.style['level_bevel_pixels'])
+        cx, cy = geometry.icon_center
+        radius = geometry.icon_radius
+        key = self.config.data['v2']['labels']['ultimate_key']
+        key_width, key_height = self.renderer.text_size(key, 'hud_small')
+        level_width, level_height = self.renderer.text_size('LV. 03', 'hud_small')
+        padding_x, padding_y = self.style['ultimate_label_padding_pixels']
+        gap = self.style['ultimate_label_gap_pixels']
+        label_right = cx - radius / 2 - gap
+        label_left = label_right - max(key_width + 0.15 * key_height,
+                                      (level_width + 0.15 * level_height) * 0.85) - padding_x
+        value_width, value_height = self.renderer.text_size(f'{state.hud.player_health.current:,.0f}', 'v2_hp')
+        hp_width, hp_height = self.renderer.text_size('HP', 'hud_small')
+        hp_left, hp_top = geometry.hp_outline[0]
+        left = min(cx - radius, label_left, hp_left)
+        right = max(max(x for x, _ in geometry.energy_outline), hp_left + value_width + 9 + hp_width)
+        top = min(cy - radius, cy - radius / 2 - key_height - gap - padding_y,
+                  hp_top - max(value_height, hp_height) - self.style['resource_label_gap_pixels'])
+        bottom = max(cy + radius, cy + radius / 2 + gap + level_height * 0.85 + padding_y,
+                     max(y for _, y in geometry.energy_outline))
+        pad = self.style['resource_hit_blur']['bounds_padding_pixels']
+        return Rect(left - pad, top - pad, right - left + pad * 2, bottom - top + pad * 2)
 
     def player_health(self, hud, geometry, opacity, trailing_ratio, damage_flashes, hit_visual):
         r, c = self.renderer, self.config.colors
@@ -399,16 +427,11 @@ class UiV2View(UiView):
         value_width, value_height = r.text_size(value, "v2_hp")
         x, top = border[0]
         gap = self.style["resource_label_gap_pixels"]
-        hp_width, hp_height = r.text_size("HP", "hud_small")
-        left, right = min(p[0] for p in border), max(max(p[0] for p in border), x + value_width + 9 + hp_width)
-        bottom = max(p[1] for p in border)
-        label_top = top - max(value_height, hp_height) - gap
-        bounds = Rect(left - 4, label_top - 4, right - left + 8, bottom - label_top + 8)
-        with self.health_hit_blur(bounds, hit_visual):
-            self.meter("hp_bar", hud.player_health.ratio, "accent", opacity, trailing_ratio,
-                       shape=shape, border=border, damage_flashes=damage_flashes)
-            r.text(value, x, top - value_height - gap, "v2_hp", c["text"], opacity)
-            r.text("HP", x + value_width + 9, top - hp_height - gap, "hud_small", c["muted"], opacity)
+        _, hp_height = r.text_size("HP", "hud_small")
+        self.meter("hp_bar", hud.player_health.ratio, "accent", opacity, trailing_ratio,
+                   shape=shape, border=border, damage_flashes=damage_flashes)
+        r.text(value, x, top - value_height - gap, "v2_hp", c["text"], opacity)
+        r.text("HP", x + value_width + 9, top - hp_height - gap, "hud_small", c["muted"], opacity)
 
     def resources(self, state, opacity, offset_x, player_trailing_ratio, *, damage_flashes=(),
                   hit_visual=HealthHitVisual(), energy_flash=0, level_visual=None,
@@ -416,11 +439,13 @@ class UiV2View(UiView):
         dx, dy = self.health_hit_offset(hit_visual)
         scope = self.renderer.translated(dx, dy) if dx or dy else nullcontext()
         with scope:
-            self._resource_contents(state, opacity, offset_x, player_trailing_ratio, damage_flashes=damage_flashes,
-                                    hit_visual=HealthHitVisual((0, 0), hit_visual.velocity_pixels_per_second),
-                                    energy_flash=energy_flash, level_visual=level_visual,
-                                    overdrive_visual=overdrive_visual, ultimate_visual=ultimate_visual,
-                                    energy_tint_ratio=energy_tint_ratio)
+            blur = (self.resource_hit_blur(self.resource_hit_bounds(state), hit_visual)
+                    if any(abs(value) > 1 for value in hit_visual.velocity_pixels_per_second) else nullcontext())
+            with blur:
+                self._resource_contents(state, opacity, offset_x, player_trailing_ratio, damage_flashes=damage_flashes,
+                                        hit_visual=HealthHitVisual(), energy_flash=energy_flash, level_visual=level_visual,
+                                        overdrive_visual=overdrive_visual, ultimate_visual=ultimate_visual,
+                                        energy_tint_ratio=energy_tint_ratio)
         self.dash_indicator(state, opacity)
 
     def _resource_contents(self, state, opacity, offset_x, player_trailing_ratio, *, damage_flashes=(),

@@ -102,12 +102,52 @@ class EnergyFeedbackTests(unittest.TestCase):
             self.assertTrue(active)
             self.assertAlmostEqual(active[0][1] * view.style['hud_scale'], 4)
             self.assertEqual(kwargs['hit_visual'].offset_pixels, (0, 0))
+            self.assertEqual(kwargs['hit_visual'].velocity_pixels_per_second, (0, 0))
         def dash(*args):
             self.assertFalse(active)
         with patch.object(view, '_resource_contents', side_effect=contents) as body, \
                 patch.object(view, 'dash_indicator', side_effect=dash):
             view.resources(self.program.state, 1, 0, 1, hit_visual=HealthHitVisual((0, 4)))
             body.assert_called_once()
+
+    def test_resource_blur_wraps_all_connected_elements_once_and_scales_with_speed(self):
+        renderer = Mock()
+        renderer.text_size.side_effect = lambda text, role: (len(text) * 12, 24)
+        active, labels = [], []
+        @contextmanager
+        def translated(dx, dy):
+            active.append('translation')
+            yield
+            active.pop()
+        @contextmanager
+        def blurred(*args, **kwargs):
+            self.assertEqual(active, ['translation'])
+            active.append('blur')
+            yield
+            active.pop()
+        renderer.translated.side_effect = translated
+        renderer.directional_blur.side_effect = blurred
+        renderer.text.side_effect = lambda text, *args, **kwargs: labels.append((text, tuple(active)))
+        renderer.warped_text.side_effect = lambda text, *args, **kwargs: labels.append((text, tuple(active)))
+        view = UiV2View(self.program.config, renderer)
+        view.resources(self.program.state, 1, 0, 1, hit_visual=HealthHitVisual((0, 4), (0, 500)))
+        self.assertEqual(renderer.directional_blur.call_count, 1)
+        bounds, motion, strength, _ = renderer.directional_blur.call_args.args
+        self.assertAlmostEqual(motion[1] * view.style['hud_scale'], 3)
+        self.assertEqual(motion[0], 0)
+        self.assertEqual(strength, 0.22)
+        self.assertTrue(any(text == 'HP' and state == ('translation', 'blur') for text, state in labels))
+        self.assertTrue(any(text == 'LV' and state == ('translation', 'blur') for text, state in labels))
+        self.assertTrue(any(text == 'V' and state == ('translation', 'blur') for text, state in labels))
+        self.assertTrue(any(text == 'SPACE' and not state for text, state in labels))
+        self.assertGreater(bounds.width, self.program.config.data['v2']['layout']['energy_bar'][2])
+        self.assertFalse(active)
+        renderer.directional_blur.reset_mock()
+        view.resources(self.program.state, 1, 0, 1, hit_visual=HealthHitVisual((0, 4), (0, 0)))
+        renderer.directional_blur.assert_not_called()
+        with renderer.translated(0, 0), view.resource_hit_blur(bounds, HealthHitVisual((0, 0), (0, 30))):
+            pass
+        self.assertLess(renderer.directional_blur.call_args.args[2], 0.22)
 
     def test_pause_freezes_death_and_flash_and_recovery_clamps_to_full(self):
         self.program.state = replace(self.program.state, energy_ratio=0.99)

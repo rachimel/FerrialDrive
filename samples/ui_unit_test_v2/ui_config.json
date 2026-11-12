@@ -754,11 +754,12 @@
                     "damping": 1.8
                 }
             },
-            "player_health_blur": {
-                "shutter_seconds": 0.016,
-                "opacity": 0.32,
-                "max_length_pixels": 5,
-                "samples": 33
+            "resource_hit_blur": {
+                "shutter_seconds": 0.008,
+                "opacity": 0.22,
+                "max_length_pixels": 3,
+                "samples": 33,
+                "bounds_padding_pixels": 8
             },
             "absorption_trail": {
                 "renderer": "compute",
