@@ -784,14 +784,17 @@ class UiV2Tests(unittest.TestCase):
     def test_beveled_level_touches_hp_and_has_a_vertical_side(self):
         geometry = resource_geometry(self.program.config.data["v2"]["layout"])
         a, b = geometry.hp_outline[1:3]
-        # 레벨이 HP와 높이를 공유해도 공유 사선의 오른쪽에만 있어야 한다.
+        # 레벨은 HP와 공유하는 수직선의 오른쪽에만 있어야 한다.
+        self.assertEqual(a[0], b[0])
         for x, y in geometry.level_shape:
             if y <= b[1]:
                 side = (b[0] - a[0]) * (y - a[1]) - (b[1] - a[1]) * (x - a[0])
                 self.assertLessEqual(side, 1e-8)
         self.assertIn(geometry.hp_outline[2], geometry.level_shape)
-        self.assertEqual(len(geometry.level_shape), 8)
-        upper, side, lower, end = geometry.level_shape[3:7]
+        self.assertEqual(len(geometry.level_shape), 7)
+        self.assertEqual(geometry.level_shape[0][0], geometry.level_shape[1][0])
+        self.assertEqual(geometry.level_shape[0][0], geometry.level_shape[-1][0])
+        upper, side, lower, end = geometry.level_shape[2:6]
         self.assertLess(upper[0], side[0])
         self.assertEqual(side[0], lower[0])
         self.assertGreater(side[1], upper[1])

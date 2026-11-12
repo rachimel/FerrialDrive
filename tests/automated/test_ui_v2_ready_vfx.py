@@ -31,7 +31,7 @@ class ReadyVfxTests(unittest.TestCase):
     def test_matching_bevel_vectors_and_longer_vertical_side(self):
         geometry = resource_geometry(self.program.config.data['v2']['layout'], 12)
         self.assertEqual(geometry.level_top, self.program.config.data['v2']['layout']['hp_bar'][1])
-        upper, side, lower, bottom = geometry.level_shape[3:7]
+        upper, side, lower, bottom = geometry.level_shape[2:6]
         self.assertEqual((side[0] - upper[0], side[1] - upper[1]),
                          (lower[0] - bottom[0], bottom[1] - lower[1]))
         self.assertEqual(side[0], lower[0])
@@ -59,21 +59,47 @@ class ReadyVfxTests(unittest.TestCase):
         self.assertGreater(len(gaps), 2)
         self.assertTrue(all(a > b for a, b in zip(gaps, gaps[1:])))
 
-    def test_numeric_motion_blur_trails_rising_digits_and_keeps_static_digits_sharp(self):
+    def test_level_smear_trails_rising_digits_and_keeps_static_digits_sharp(self):
         renderer = Mock()
         renderer.text_size.return_value = (16, 40)
         view = UiV2View(self.program.config, renderer)
         visual = CounterVisual(1, 2, 0.06, 0.12, 'elastic_in_out')
-        view.rolling_digit(visual, '1', '2', 0, 40, 'combo_number', '#FFFFFF',
+        view.rolling_digit(visual, '1', '2', 0, 40, 'v2_level', '#FFFFFF',
                            lambda x, y: (x, y), 1, 1, Rect(0, 0, 16, 40))
         tops = [call.args[2] for call in renderer.warped_text.call_args_list if call.args[0] == '2']
         self.assertGreater(len(tops), 1)
         self.assertGreater(max(tops), min(tops))
         self.assertAlmostEqual(min(tops), 40 * (1 - visual.vertical_progress))
         renderer.warped_text.reset_mock()
-        view.rolling_digit(visual, '2', '2', 0, 40, 'combo_number', '#FFFFFF',
+        view.rolling_digit(visual, '2', '2', 0, 40, 'v2_level', '#FFFFFF',
                            lambda x, y: (x, y), 1, 1, Rect(0, 0, 16, 40))
         self.assertEqual(renderer.warped_text.call_count, 1)
+
+    def test_counter_gpu_blur_follows_projected_motion_and_excludes_static_digits_and_labels(self):
+        renderer = Mock()
+        renderer.text_size.side_effect = lambda text, role: (len(text) * 16, 40)
+        renderer.digit_ink_bottom.return_value = 34
+        renderer.clip.side_effect = lambda rect: nullcontext()
+        active, drawn = [], []
+        @contextmanager
+        def blur(*args):
+            active.append(True)
+            yield
+            active.pop()
+        renderer.directional_blur.side_effect = blur
+        renderer.warped_text.side_effect = lambda *args, **kwargs: drawn.append((bool(active), args[0], args[3]))
+        view = UiV2View(self.program.config, renderer)
+        view.perspective_counter(CounterVisual(98, 99, 0.06, 0.12, 'elastic_in_out'),
+                                 'combo_number', 'combo', 276, 1)
+        self.assertEqual(renderer.directional_blur.call_count, 1)
+        _, motion, strength, samples = renderer.directional_blur.call_args.args
+        self.assertLess(motion[1], 0)
+        self.assertGreater(abs(motion[1]), abs(motion[0]))
+        self.assertGreater(strength, 0)
+        self.assertEqual(samples, 49)
+        self.assertTrue(any(not filtered and char == '9' and role == 'combo_number' for filtered, char, role in drawn))
+        self.assertTrue(all(role == 'combo_number' for filtered, _, role in drawn if filtered))
+        self.assertFalse(active)
 
     def test_energy_tint_interpolates_without_delaying_charge_and_freezes_on_pause(self):
         self.program.perform('overdrive')

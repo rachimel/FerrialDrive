@@ -770,12 +770,19 @@ class UiV2View(UiView):
         viewport = Rect(0, 0, width, ink_bottom)
         self.counter_base(project, width, ink_bottom, opacity)
         text_alpha = opacity * self.text_flicker()
-        x = 0
-        for before, after, slot_width in zip(old, new, widths):
-            for projection, color in ((shadow, c['counter_shadow']), (project, c['text'])):
-                self.rolling_digit(visual, before, after, x, height, role, color, projection,
-                                   text_alpha, scale, viewport, slot_width * scale)
-            x += slot_width * scale
+        def draw_digits(moving):
+            x = 0
+            for before, after, slot_width in zip(old, new, widths):
+                changes = visual.moving and before != after and after != ','
+                if changes == moving:
+                    for projection, color in ((shadow, c['counter_shadow']), (project, c['text'])):
+                        self.rolling_digit(visual, before, after, x, height, role, color, projection,
+                                           text_alpha, scale, viewport, slot_width * scale, smear=False)
+                x += slot_width * scale
+        if visual.moving and any(a != b and b != ',' for a, b in zip(old, new)):
+            with self.counter_motion_blur(visual, project, width, height, ink_bottom, scale):
+                draw_digits(True)
+        draw_digits(False)
         label_text = self.config.labels[label]
         label_role = f"{label}_label"
         label_width = r.text_size(label_text, label_role)[0]
@@ -783,14 +790,37 @@ class UiV2View(UiView):
                       ink_bottom + self.style["counter_plaque_height_pixels"] + self.style['counter_label_gap_pixels'],
                       label_role, c["muted"], project, text_alpha)
 
+    @contextmanager
+    def counter_motion_blur(self, visual, project, width, height, ink_bottom, scale):
+        """변하는 숫자만 실제 화면 이동축에 연속 GPU 필터를 적용한다."""
+        settings = self.style['counter_motion_blur']
+        previous = replace(visual, elapsed_seconds=max(0, visual.elapsed_seconds - settings['shutter_seconds']))
+        travel = -height * (visual.vertical_progress - previous.vertical_progress)
+        a, b = project(width / 2, 0), project(width / 2, travel)
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        length = hypot(dx, dy)
+        if length <= 0.001:
+            yield
+            return
+        distance = min(settings['max_length_pixels'] * scale, length * settings['displacement_scale'])
+        motion = dx / length * distance, dy / length * distance
+        p = visual.progress
+        strength = settings['strength'] * 4 * p * (1 - p) * min(1, length / max(1, height * 0.15))
+        corners = tuple(project(x, y) for x, y in ((0, 0), (width, 0), (width, ink_bottom), (0, ink_bottom)))
+        xs, ys = zip(*corners)
+        bounds = Rect(min(xs) - 2, min(ys) - 2, max(xs) - min(xs) + 7, max(ys) - min(ys) + 7)
+        with self.renderer.clip(bounds):
+            with self.renderer.directional_blur(bounds, motion, strength, settings['samples']):
+                yield
+
     def rolling_digit(self, visual, before, after, x, height, role, color, project, opacity, scale, viewport,
-                      slot_width=None):
+                      slot_width=None, *, smear=True):
         """v01의 탄성 이동·퇴장 감쇠·방향성 잔상을 투영면 안에서 재사용한다."""
         r, settings = self.renderer, self.config.data['damage_counter']
         moving = visual.moving and before != after and after != ','
         faces = ((before, -height * visual.vertical_progress, (1 - visual.progress) ** settings['outgoing_fade_power']),
                  (after, height * (1 - visual.vertical_progress), 1)) if moving else ((after, 0, 1),)
-        samples = settings['blur_samples'] if moving else 0
+        samples = settings['blur_samples'] if moving and smear else 0
         p = visual.progress
         previous = replace(visual, elapsed_seconds=max(0, visual.elapsed_seconds - settings['blur_shutter_seconds']))
         travel = height * (visual.vertical_progress - previous.vertical_progress) if moving else 0

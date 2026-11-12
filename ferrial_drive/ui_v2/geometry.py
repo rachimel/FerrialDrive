@@ -154,16 +154,13 @@ def resource_geometry(layout, bevel_pixels=10):
     cy, radius = hy + hh, layout["ultimate_radius_pixels"]
     level_left, level_top = hx + hw, top
     neck = (level_left + bevel_pixels * 7 / 6, cy)
-    shoulder = (level_left + bevel_pixels / 4, level_top + bevel_pixels / 3)
-    side_slope = (neck[0] - shoulder[0]) / (neck[1] - shoulder[1])
-    cap_x = lambda y: neck[0] + (y - cy) * side_slope
-    hp_outline = ((cx + radius - hh, top), (cap_x(top), top), neck, (cx + radius, cy))
+    hp_outline = ((cx + radius - hh, top), (neck[0], top), neck, (cx + radius, cy))
     hp_shape = hp_outline
     right = ex + ew + layout["energy_level_width_pixels"]
     right_cut = layout.get('level_right_bevel_pixels', bevel_pixels)
     upper = (right - right_cut, level_top)
     side = (right + 6, level_top + right_cut)
-    level_shape = (neck, shoulder, (level_left + bevel_pixels, level_top), upper,
+    level_shape = (neck, (neck[0], level_top), upper,
                    side, (side[0], bottom - right_cut), (right - right_cut, bottom),
                    (neck[0], bottom))
     # 큰 마름모의 변 중간에도 바를 붙일 수 있도록 각 높이의 접점을 구한다.

@@ -2,12 +2,12 @@
 
 - 필살기 쿨다운 동안 아이콘·외곽은 밝기 22%로 어둡게 표시한다. `ultimate_cooldown_seconds / ultimate_cooldown_duration_seconds`로 남은 비율을 계산해 아래에서 위로 원래 밝기를 드러낸다. 남은/전체 시간은 게임이 공급하며 예제는 5초다. 완료 flash·LV3/쿨다운 0 강조선 조건은 유지한다.
 - `v2.style.ultimate_border_width_pixels`·`resource_border_width_pixels`는 필살기 외곽·HP/에너지/LV 외곽의 3px 두께다. 쿨다운 밝기는 `ultimate_cooldown_dim_opacity=0.22`다. 내부 아이콘 그림·채움 끝선의 기존 두께와 구분한다.
-- LV 영역 윗선은 HP 바 윗선과 같은 높이다. 오른쪽 위/아래 사선은 `v2.layout.level_right_bevel_pixels=7`로 짧게 하고 같은 길이를 유지한다. 왼쪽 접합부는 `v2.style.level_bevel_pixels`로 따로 계산한다. LV 레이블은 숫자 왼쪽 아래에 맞춘다.
+- LV 영역 윗선은 HP 바 윗선과 같은 높이다. 오른쪽 위/아래 사선은 `v2.layout.level_right_bevel_pixels=7`로 짧게 하고 같은 길이를 유지한다. 레벨 왼쪽과 HP 오른쪽은 같은 수직선으로 연결한다. `level_bevel_pixels`는 기존 접합 위치의 수평 여유를 유지한다. LV 레이블은 숫자 왼쪽 아래에 맞춘다.
 
 - `v2.style.accent_hatching`은 록온·필살기 강조선의 빗금이다. 강조선 띠 안으로 잘라 모양을 맞추며, 진행 방향의 뒤쪽 8px→앞쪽 2.5px로 간격을 좁힌다. `enabled=false`로 끈다. 공통 순환은 5차 보간으로 시작/끝 속도 0·중간 t=0.5에서 최대 속도다. 이동 0.5초·정지 0.2초를 공유한다.
 - `EnergyTintMotion`은 논리 충전량과 별개로 표시 색을 0.24초 동안 보간한다. 바·회복 flash·흡수 입자에 같은 `energy_tint_ratio`를 공급한다. `v2.style.energy_tint_seconds`로 시간을 조절하며 정지 중 멈춘다. 충전/Overdrive 판정은 지연하지 않는다.
 - Overdrive 완충 뒤에도 채움 끝의 불꽃을 유지한다. 일반 40개/초·0.8초 수명에서 Overdrive 96개/초·1초·강도 1.8로 전환한다. `energy_boundary.overdrive_*`로 조절한다. 생성 강도는 GPU 속도·크기에 적용하며 생성/갱신 Compute 두 개를 유지한다.
-- HIT·DAMAGE 숫자 블러는 탄성 이동의 실제 노출 시간 내 이동량과 방향을 사용한다. 지나온 쪽으로 잔상을 남기고 반전 때 잔상 방향도 뒤집는다. 바뀌지 않는 자릿수·레이블·받침판은 흐리지 않는다. `damage_counter`의 기본은 노출 0.045초·세기 0.78·12샘플·최대 44px다.
+- HIT·DAMAGE의 바뀌는 자릿수는 별도 투명 레이어에 그리고 실제 원근 투영 이동축을 따라 연속 GPU 방향성 필터를 적용한다. 고정 자릿수·레이블·받침판은 필터 밖이다. `v2.style.counter_motion_blur`는 노출 0.045초·세기 0.82·49샘플·최대 64px·이동량 배율 2.4다. LV 숫자의 기존 잔상은 유지한다.
 
 - `v2.style.overdrive_entry_streak`: 등장 순간 중앙에서 수평으로 뻗는 빛을 한 번 표시한다. 0.045초 확장·0.025초 유지·0.17초 fade-out, 최대 길이는 바 폭의 88%다. Overdrive 퇴장 투명도를 함께 적용하며 일시정지 때 등장 시계도 멈춘다.
 
@@ -20,7 +20,7 @@
 
 
 - 에너지는 `EnergyCharge`의 누적 충전량으로 계산한다. 한 게이지마다 LV1→LV2→LV3으로 오르고, **LV3 게이지 완충 후 추가 한 게이지**를 채워야 Overdrive에 진입한다. 추가 충전은 기본 채움 위의 밝은 영역으로 표시하며 `overdrive_charge_ratio` 0→1에 따라 바·흡수 오브·리본·회복 flash가 청록→빨강으로 변한다. 빨강은 `v2.style.overdrive_red`다. 샘플 기본 상태는 LV3·72%이며 Overdrive 전이다. 6은 완충/Overdrive 비교용 조작이다.
-- HIT·DAMAGE와 LV 상승 숫자는 v01의 탄성 이동·방향성 잔상을 사용한다. `damage_counter.duration_seconds=0.12`이며 `vertical_easing`·`elastic_*`·`blur_*`·`outgoing_fade_power`를 공유한다. COUNTER! 메시지는 이 숫자 전환과 별개다.
+- HIT·DAMAGE와 LV 상승 숫자는 v01의 탄성 이동·방향성 잔상을 사용한다. `damage_counter.duration_seconds=0.12`이며 `vertical_easing`·`elastic_*`·`outgoing_fade_power`를 공유한다. HIT/DAMAGE 필터는 `counter_motion_blur`, LV 잔상은 `damage_counter.blur_*`를 사용한다. COUNTER! 메시지는 이 숫자 전환과 별개다.
 - HP·LV 접합부는 곡선 없이 사선으로 연결하고 오른쪽 외곽은 `\`·`|`·`/` 순서다. `v2.style.level_bevel_pixels`는 모서리 크기, `level_text`는 숫자와 왼쪽 아래 LV 레이블의 간격/크기, `counter_label_*`는 HIT/DAMAGE 레이블의 오른쪽 여백·받침판 아래 간격이다.
 - 타겟 선택 변경·해제 때도 현재 HP 비율을 보존한 채 독립적으로 페이드아웃한다. 처치 시 HP는 0에서 페이드하며 록온 마커의 기존 회전·확대 퇴장은 유지한다.
 
@@ -49,7 +49,7 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 
 - `ui_config.json`의 `v2.layout`: 미니맵·록온·타겟 HP·플레이어 HP·에너지·필살기 아이콘·레벨·무장·카운터 배치.
 - `v2.layout.hp_bar`·`energy_bar`·`ultimate_center_x`·`ultimate_radius_pixels`: 바의 높이/오른쪽 끝과 아이콘 위치·크기. 두 바의 왼쪽 경계는 마름모 변에 맞춰 계산한다. HP 안쪽 여백은 없고 수치/HP는 바 위에 자동 정렬한다.
-- `v2.layout.energy_level_width_pixels`·`v2.style.level_bevel_pixels`: HP 옆에 붙는 레벨 영역의 폭과 사선 모서리 크기. HP/에너지 공유 경계와 레벨 왼쪽 사선은 함께 계산한다.
+- `v2.layout.energy_level_width_pixels`·`v2.style.level_bevel_pixels`: HP 옆에 붙는 레벨 영역의 폭과 사선 모서리 크기. HP/에너지 접합 위치를 함께 계산하며 레벨 왼쪽은 수직이다.
 - HIT·누적 데미지 전체 크기는 각각 `v2.style.counters.*.ui_scale=0.9`로 조절한다. 숫자·레이블·받침판·정적 잔상을 함께 10% 축소한다. `v2.layout.hit_y=276`·`damage_y=366`으로 간격을 90px로 맞추고 기본 샘플의 묶음을 화면 오른쪽 중앙에 배치한다. 오른쪽 여백은 14px다.
 - `v2.style.counters`: HIT/DAMAGE의 원근 `depth`(0~1)·기울기 `lean`/`slope`·고정 `text_scale`·원근 기준 폭 `perspective_width_pixels`·오른쪽 여백. 기준 폭은 최대 표시 폭이 아니다. 숫자를 축소하지 않고 받침판과 잔상 조각을 왼쪽으로 확장한다. 오른쪽 기준 투영은 자릿수와 무관하게 유지한다.
 - `v2.style.panel_cut_pixels`·`surface_opacity`: 사선 외곽과 일반 패널의 최대 배경 불투명도 0.55. 활성/비활성·버튼 상태의 기존 투명도도 함께 적용한다.
