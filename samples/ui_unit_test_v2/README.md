@@ -50,7 +50,7 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 - `v2.style.health_hit_motion`: 타겟 HP `(0, ±5px)`·플레이어의 연결된 자원 UI 묶음 `(0, ±7px)`의 피격 진동이다. HP·에너지·레벨·필살기 아이콘/문구가 함께 움직이며 분리된 대시는 고정한다. 연결된 자원 묶음의 약한 블러는 `resource_hit_blur`에서 조절한다.
 - `v2.absorption_routes.paths_by_side`: 왼쪽·오른쪽 각 6개 고정 경로다. 양쪽 모두 바 아래를 지나며 필살기 아이콘을 필수 경유하지 않는다. 경로 번호는 생성 때 선택하고 최신 에너지 채움 끝점에 맞춰 진입 구간을 변형한다.
 - `v2.energy_absorption`: 예제 입자 수 6개·총 회복량 10%·평균 이동 0.9875초·최대 ±18% 변동·풀 256개·회복 flash 0.16초·처치 HP 퇴장 0.32초다. 회복량은 예제 수치다. 입자별 도착 때만 분할 회복하며 CPU UI는 완료된 비동기 집계를 받은 프레임에 반영한다. `4`/`G`도 도착을 기다리며 `3`의 감소는 즉시 반영한다.
-- `v2.style.lock_motion.hit_seconds/hit_scale/hit_shake_pixels`: 일반 피격의 록온 마커 확대·진동이다. 기본은 0.26초·상한 1.18배·2.2 화면 px이며 `hit_damping=1.8`의 지수 감쇠를 적용한다. 처치 때는 기존 퇴장 효과를 유지한다.
+- `v2.style.lock_motion.hit_seconds/hit_scale/hit_shake_pixels`: 일반 피격의 록온 마커 확대·진동이다. 기본은 0.26초·상한 1.5배·2.2 화면 px이며 `hit_damping=1.8`의 지수 감쇠를 적용해 실제 확대 피크는 약 1.24배다. 처치 때는 기존 퇴장 효과를 유지한다.
 - `v2.style.absorption_trail`: 필압 꼬리·오브 크기·오른쪽 경유 여백을 조절한다. 기본 `renderer=compute`는 OpenGL 4.3 이상을 요구한다. CPU는 생성 요청과 프레임 시간만 보내며 GPU의 생성/갱신 Ubershader 두 개가 입자 생성·경로 선택·수명·이동·Trail을 처리한다. 활성 목록·간접 Instancing을 사용해 프레임 중 입자 상태를 CPU로 읽지 않는다. 프로그램은 로딩 중 한 번 컴파일·링크한다.
 - `1`은 적 피해·HP바/록온 피격 반응·오브 6개 회복, `2`는 플레이어 피해·자원 UI 진동/HP 블러다. 적 HP가 0이면 HP바는 페이드아웃하고 마커는 기존 효과로 퇴장한다. `G`는 피해 없이 흡수·회복을 시연한다. `Esc`는 효과 정지/재개, `F5`는 초기화다. 좌클릭 모션의 실제 피해 판정·본편 에너지 규칙 연결은 별도다.
 - 대량 생성·갱신·렌더 계측은 [Massive Energy Particle Stress](../massive_energy_particle_stress/README.md)에서 별도로 실행한다.

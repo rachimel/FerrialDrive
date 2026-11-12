@@ -79,7 +79,7 @@ class EnergyFeedbackTests(unittest.TestCase):
         self.assertGreater(self.program.state.hud.target.health.current, 0)
         self.program.lock_motion.update(0.06)
         marker = next(v for v in self.program.lock_motion.visuals if v.target_id == 'enemy_a')
-        self.assertTrue(1 < marker.scale <= 1.12)
+        self.assertTrue(1 < marker.scale <= self.program.lock_motion.hit_scale)
         self.assertNotEqual(marker.offset_pixels, (0, 0))
         self.assertLessEqual(max(map(abs, marker.offset_pixels)), 1.5)
         self.assertFalse(self.program.defeated_targets.visuals)

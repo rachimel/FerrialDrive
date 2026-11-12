@@ -780,7 +780,7 @@
             "dialogue_description_opacity": 0.78,
             "lock_motion": {
                 "hit_seconds": 0.26,
-                "hit_scale": 1.18,
+                "hit_scale": 1.5,
                 "hit_shake_pixels": 2.2,
                 "enter_seconds": 0.32,
                 "label_seconds": 0.16,
