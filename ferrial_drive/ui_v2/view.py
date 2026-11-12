@@ -16,6 +16,7 @@ from .panel_probe import PanelProbeRenderer
 from .effects import (DialoguePanelVisual, HealthHitVisual, OverdriveVisual, ScanlineVisual,
                       UltimateReadyVisual, breathing_opacity, subtle_flicker)
 from .lock_on import LockOnVisual, accent_position, outline_segment
+from .weapon_card import draw_weapon_card
 
 
 class UiV2View(UiView):
@@ -688,7 +689,7 @@ class UiV2View(UiView):
             shift_delta = 0
             if sliding:
                 leftmost = x - (self.style["weapon_depth_offset_pixels"] + self.style["weapon_card_cut_pixels"]
-                                if self.style["weapon_card_shape"] == "trapezoid" else 0)
+                                if self.style["weapon_card_shape"] in ("trapezoid", "concept") else 0)
                 distance = self.config.window["width"] - leftmost + self.config.data["loadout_slide"]["exit_padding_pixels"]
                 shift, fade, index = loadout_visual.pose(distance)
                 shift_delta = loadout_visual.velocity(distance) * shutter
@@ -708,7 +709,7 @@ class UiV2View(UiView):
             top = y + index * (height + 8)
             weight = ranged_weight if kind == "ranged" else 1 - ranged_weight
             alpha = opacity * (0.5 + 0.5 * weight)
-            trapezoid = self.style["weapon_card_shape"] == "trapezoid"
+            trapezoid = self.style["weapon_card_shape"] in ("trapezoid", "concept")
             if trapezoid:
                 cut = self.style["weapon_card_cut_pixels"]
                 right = x + width - self.style["weapon_depth_offset_pixels"] * weight
@@ -722,6 +723,9 @@ class UiV2View(UiView):
             bounds = Rect(left - 4, top - 4, right - left + 8, height + 8)
             with r.directional_blur(bounds, (motion_x, 0), blur_strength, blur_samples) if blur_strength else nullcontext():
                 with r.scaled(amount, (right, top + height / 2)):
+                    if self.style["weapon_card_shape"] == "concept":
+                        draw_weapon_card(self, weapon, kind, left, top, right, height, alpha)
+                        continue
                     shape = (((left + cut, top), (right, top), (right, top + height), (left, top + height))
                              if trapezoid else ((left + 18, top), (right, top),
                                                 (right - 18, top + height), (left, top + height)))

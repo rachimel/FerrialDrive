@@ -8,20 +8,29 @@
     "loadouts": [
         {
             "melee": {
-                "name": "도검"
+                "name": "도검",
+                "base_attribute": "SLASH",
+                "auxiliary_kind": "counter"
             },
             "ranged": {
                 "name": "PDW",
-                "rounds": 45
+                "rounds": 45,
+                "base_attribute": "IMPACT",
+                "additional_attributes": ["FIRE"],
+                "auxiliary_kind": "back_weapon"
             }
         },
         {
             "melee": {
-                "name": "도검"
+                "name": "도검",
+                "base_attribute": "SLASH",
+                "auxiliary_kind": "counter"
             },
             "ranged": {
                 "name": "PDW",
-                "rounds": 18
+                "rounds": 18,
+                "base_attribute": "IMPACT",
+                "auxiliary_kind": "back_weapon"
             }
         }
     ],

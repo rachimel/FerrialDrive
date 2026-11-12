@@ -50,10 +50,22 @@ class WeaponInfo:
     name: str
     rounds: int | None = None
     image_path: str | None = None
+    base_attribute: str = ""
+    additional_attributes: tuple[str, ...] = ()
+    auxiliary_kind: str | None = None
+    auxiliary_image_path: str | None = None
 
     def __post_init__(self):
         if self.rounds is not None and (type(self.rounds) is not int or self.rounds < 0):
             raise ValueError("잔탄수는 0 이상의 정수 또는 None이어야 한다.")
+        if not isinstance(self.base_attribute, str):
+            raise ValueError("기본 속성 표시는 문자열이어야 한다.")
+        if not isinstance(self.additional_attributes, (tuple, list)) or any(
+                not isinstance(value, str) or not value.strip() for value in self.additional_attributes):
+            raise ValueError("추가 속성은 비어 있지 않은 표시 문자열 목록이어야 한다.")
+        object.__setattr__(self, "additional_attributes", tuple(self.additional_attributes))
+        if self.auxiliary_kind not in (None, "back_weapon", "counter"):
+            raise ValueError("보조 슬롯은 back_weapon 또는 counter여야 한다.")
 
 
 @dataclass(frozen=True)

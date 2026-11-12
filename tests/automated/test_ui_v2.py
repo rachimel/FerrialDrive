@@ -177,6 +177,7 @@ class UiV2Tests(unittest.TestCase):
         renderer.scaled.side_effect = lambda *args: nullcontext()
         renderer.text_size.return_value = (20, 18)
         view = UiV2View(self.program.config, renderer)
+        view.style["weapon_card_shape"] = "trapezoid"
         hud = self.program.state.hud
         x, y, width, height = view.layout["weapons"]
         for weight in (0, 0.5, 1):
@@ -630,6 +631,7 @@ class UiV2Tests(unittest.TestCase):
                                    scaled=lambda *args: nullcontext(), text=Mock(), warped_text=Mock(),
                                    scanline_layer=Mock(), film_grain=Mock(), neon_text=Mock())
         view = UiV2View(self.program.config, renderer)
+        view.style["weapon_card_shape"] = "trapezoid"
         with patch.object(view, "polygon") as polygon, patch.object(view, "stroke"), patch.object(view, "weapon_image"):
             view.weapons(self.program.state.hud, 1, 0)
         renderer.warped_text.assert_not_called()

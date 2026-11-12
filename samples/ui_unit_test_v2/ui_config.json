@@ -107,6 +107,18 @@
             "path": "../../data/fonts/ferrial_hud_square_wide/FerrialHudSquareWide-Regular.otf",
             "size": 42
         },
+        "v2_weapon_attribute": {
+            "path": "../../data/fonts/gamwulchifreegothic/GamwulchiFreeGothic.otf",
+            "size": 48
+        },
+        "v2_weapon_name": {
+            "path": "../../data/fonts/gamwulchifreegothic/GamwulchiFreeGothic.otf",
+            "size": 18
+        },
+        "v2_weapon_kind": {
+            "path": "../../data/fonts/gamwulchifreegothic/GamwulchiFreeGothic.otf",
+            "size": 18
+        },
         "v2_meter_label": {
             "path": "../../data/fonts/ferrial_hud_square_wide/FerrialHudSquareWide-Regular.otf",
             "size": 16
@@ -121,7 +133,7 @@
         },
         "v2_ammo": {
             "path": "../../data/fonts/gamwulchifreegothic/GamwulchiFreeGothic.otf",
-            "size": 38
+            "size": 46
         },
         "v2_counter": {
             "path": "../../data/fonts/ferrial_hud_square_wide/FerrialHudSquareWide-Regular.otf",
@@ -658,10 +670,10 @@
             ],
             "dash_x": 870,
             "weapons": [
-                1004,
-                556,
-                260,
-                70
+                844,
+                432,
+                420,
+                132
             ],
             "hit_y": 276,
             "damage_y": 366,
@@ -922,9 +934,26 @@
             "lock_text_end_gap_pixels": 2,
             "weapon_outer_edge_pixels": 3,
             "map_scale": 0.9,
-            "equipment_scale": 0.9,
+            "equipment_scale": 1.0,
             "inactive_weapon_scale": 0.8,
-            "weapon_card_shape": "trapezoid",
+            "weapon_card_shape": "concept",
+            "weapon_card": {
+                "content_left_pixels": 56,
+                "content_gap_pixels": 12,
+                "band_height_pixels": 28,
+                "spine_slant_pixels": 36,
+                "spine_width_pixels": 18,
+                "spine_upper_width_pixels": 7,
+                "right_cut_pixels": 9,
+                "kind_width_pixels": 82,
+                "attribute_opacity": 0.32,
+                "ammo_min_width_pixels": 76,
+                "image_top_pixels": 40,
+                "auxiliary_diameter_pixels": 80,
+                "auxiliary_gap_pixels": 12,
+                "additional_icon_pixels": 16,
+                "additional_icon_gap_pixels": 5
+            },
             "weapon_card_cut_pixels": 18,
             "weapon_depth_offset_pixels": 22,
             "weapon_swap_blur": {
