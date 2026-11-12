@@ -435,6 +435,7 @@ class UiV2View(UiView):
         tint = charge if energy_tint_ratio is None else energy_tint_ratio
         color = energy_color(c['energy'], self.style['overdrive_red'], tint)
         fill_color = energy_color(c['energy_fill'], self.style['overdrive_red'], tint)
+        boundary_color = self.style['energy_boundary']['color']
         self.panel_layer(geometry.energy_body, c["panel"], opacity, grain=True, effect_surface=channel)
         self.polygon(geometry.level_shape, c["panel"], opacity * self.style["surface_opacity"], filled=True)
         self.stroke(outline + outline[:1], c["text"], opacity * 0.75, 1.5)
@@ -443,17 +444,17 @@ class UiV2View(UiView):
         if state.energy_ratio > 0:
             filled = quad_fill(channel, state.energy_ratio)
             self.polygon(filled, fill_color, energy_alpha, filled=True)
-            self.stroke((filled[1], filled[2]), color, energy_alpha, 2)
+            self.stroke((filled[1], filled[2]), boundary_color, energy_alpha, 2)
         if charge > 0:
             charged = quad_fill(channel, charge)
             self.polygon(charged, color, energy_alpha * 0.45, filled=True)
-            self.stroke((charged[1], charged[2]), color, energy_alpha, 2)
+            self.stroke((charged[1], charged[2]), boundary_color, energy_alpha, 2)
         if energy_flash > 0:
             self.polygon(channel, color, opacity * energy_flash * 0.55, filled=True)
         self.stroke((outline[-1], geometry.level_shape[-2]),
                      color if charge > 0 else self.ui_accent, opacity, 2)
         ratio = charge if state.energy_level == 3 and state.energy_ratio == 1 else state.energy_ratio
-        self.energy_boundary(channel, ratio, color, energy_alpha, overdrive=state.overdrive)
+        self.energy_boundary(channel, ratio, energy_alpha, overdrive=state.overdrive)
         overdrive_visual = overdrive_visual or OverdriveVisual(float(state.overdrive))
         self.overdrive_label(channel, overdrive_visual, energy_alpha)
         level_right = x + width + self.layout["energy_level_width_pixels"]
@@ -531,13 +532,6 @@ class UiV2View(UiView):
             r.neon_text(letter, x, center_y - letter_height / 2, role, c['text'],
                         opacity * visual.opacity * (1 - 0.4 * visual.flash + 0.4 * flash),
                         glow_color=glow_color, **bloom)
-            if flash > 0.15:
-                spark_x = x + letter_width / 2
-                spark_y = center_y + (1 if index % 2 else -1) * letter_height * 0.45
-                length = 3.5 * flash
-                alpha = opacity * visual.opacity * flash
-                self.stroke(((spark_x - length, spark_y), (spark_x + length, spark_y)), c['text'], alpha, 1)
-                self.stroke(((spark_x, spark_y - length), (spark_x, spark_y + length)), c['text'], alpha, 1)
             cursor += letter_width + spacing
 
     def overdrive_entry_streak(self, center, bar_width, visual, color, opacity):
@@ -559,23 +553,17 @@ class UiV2View(UiView):
                      (x + length / 2, y), (x, y + width / 2))
             self.polygon(shape, ink, alpha * weight, filled=True)
 
-    def energy_boundary(self, channel, ratio, color, opacity, *, overdrive=False):
+    def energy_boundary(self, channel, ratio, opacity, *, overdrive=False):
         if not (0 < ratio < 1 or overdrive and ratio == 1):
             return
         edge = quad_fill(channel, ratio)[1:3]
         time = self._scanline_visual.elapsed_seconds
         settings = self.style['energy_boundary']
+        color = settings['color']
         pulse = 0.5 + 0.5 * sin(time * 17) ** 2
         strength = settings['overdrive_intensity'] if overdrive else 1
         self.stroke(edge, color, opacity * 0.25 * pulse, settings['glow_width_pixels'] * strength)
-        self.stroke(edge, self.config.colors['text'], opacity * 0.85 * pulse, 1)
-        for index in range(2):
-            t = (time * 0.8 + index * 0.5) % 1
-            x, y = (a + (b - a) * t for a, b in zip(*edge))
-            size = settings['sparkle_size_pixels'] * sin(pi * t) * pulse * strength
-            self.stroke(((x - size, y), (x + size, y)), color, opacity * pulse, 1)
-            self.stroke(((x, y - size * 1.6), (x, y + size * 1.6)),
-                        self.config.colors['text'], opacity * pulse, 1)
+        self.stroke(edge, color, opacity * 0.85 * pulse, 1)
 
     def dash_indicator(self, state, opacity):
         """현재 가로 위치에서 아이콘·키 안내를 화면 하단 기준으로 배치한다."""

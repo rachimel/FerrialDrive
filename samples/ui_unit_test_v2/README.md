@@ -9,7 +9,7 @@
 
 
 - 오른쪽 LV 외곽의 위·아래 사선은 같은 가로/세로 변화량을 사용한다. 가운데 수직선은 전체 높이에서 두 사선 높이를 뺀 길이다.
-- `v2.style.energy_boundary`: 채움과 빈 공간의 경계에 선·별 모양 반짝임과 GPU 불꽃을 표시한다. 초당 40개·수명 0.8초이며 위로 상승하고 옆으로 흩어진다. 생성/갱신 Compute의 효과 종류 1을 사용하며 CPU는 요청 주기만 관리한다. 회복량은 0이고 빈 게이지에서는 새 불꽃을 만들지 않는다. Overdrive 완충 뒤에는 강화된 불꽃을 유지한다. Overdrive 추가 충전 중에는 그 추가 채움 경계를 사용한다.
+- `v2.style.energy_boundary`: 채움과 빈 공간의 경계에 흰 선과 GPU 불꽃을 표시한다. `energy_boundary.color=#FFFFFF`는 채움 끝선·경계 광의 공통 색이다. 십자 반짝임 도형은 표시하지 않는다. 초당 40개·수명 0.8초이며 위로 상승하고 옆으로 흩어진다. 생성/갱신 Compute의 효과 종류 1을 사용하며 CPU는 요청 주기만 관리한다. 회복량은 0이고 빈 게이지에서는 새 불꽃을 만들지 않는다. Overdrive 완충 뒤에는 강화된 불꽃을 유지한다. Overdrive 추가 충전 중에는 그 추가 채움 경계를 사용한다.
 - `HealthHitMotion.damping`·`lock_motion.hit_damping`의 기본값은 1.8이다. 지수 감쇠와 종료 구간 완화를 함께 사용하며 위치·속도는 종료 때 0이다. 0이면 지수 감쇠만 끈다. 피격·연타는 진폭 상한을 누적하지 않는다.
 - 필살기 준비 조건은 `energy_level == 3`과 `ultimate_cooldown_seconds == 0`이다. `HudV2State.ultimate_ready`로 확인하며 준비 중에만 마름모에 강조선 두 개를 그린다. 록온과 같은 `accent_position`·`outline_segment` 및 `lock_motion.move_seconds/hold_seconds`를 공유한다. 준비 상태로 바뀌면 0.28초 flash가 한 번 재생된다.
 - 샘플의 **V**는 준비됐을 때만 필살기를 사용하며 에너지는 유지하고 5초 쿨다운을 시작한다. 재입력으로 남은 시간을 초기화하지 않는다. `v2.ultimate_sample.cooldown_seconds/flash_seconds`는 예제 수치다. 본편은 실제 남은 쿨다운을 상태로 공급한다. 쿨다운·피격·Overdrive 전환·입자 시간은 일시정지 중 멈춘다.

@@ -881,7 +881,7 @@
             "overdrive_entry_streak": {"expand_seconds": 0.045, "hold_seconds": 0.025, "fade_seconds": 0.17,
                 "length_ratio": 0.88, "width_pixels": 3.2, "glow_width_pixels": 14, "opacity": 0.95},
             "energy_boundary": {"rate_per_second": 40, "duration_seconds": 0.8, "spread_pixels": 2,
-                "glow_width_pixels": 5, "sparkle_size_pixels": 3.5,
+                "glow_width_pixels": 5, "color": "#FFFFFF",
                 "overdrive_rate_per_second": 96, "overdrive_duration_seconds": 1, "overdrive_intensity": 1.8},
             "level_text": {"number_scale": 0.85, "label_scale": 0.65, "right_inset_pixels": 12, "gap_pixels": 6},
             "counter_label_right_inset_pixels": 3,
