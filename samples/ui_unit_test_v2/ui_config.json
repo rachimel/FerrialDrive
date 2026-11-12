@@ -785,7 +785,7 @@
                 "label_seconds": 0.16,
                 "exit_seconds": 0.2,
                 "move_seconds": 0.5,
-                "hold_seconds": 0.2,
+                "hold_seconds": 0,
                 "start_scale": 0.25,
                 "exit_scale": 1.5,
                 "hit_damping": 1.8

@@ -6,6 +6,22 @@ from ferrial_drive.ui_v2.lock_on import LockOnMotion, cubic, emphasized, elastic
 
 
 class LockOnTests(unittest.TestCase):
+    def test_zero_hold_restarts_immediately_without_changing_easing(self):
+        motion = LockOnMotion(move_seconds=0.5, hold_seconds=0)
+        motion.select('a', Rect(0, 0, 20, 20))
+        motion.update(motion.enter_seconds + motion.label_seconds + motion.move_seconds)
+        boundary = motion.visuals[0].border_position
+        self.assertAlmostEqual(boundary, 5.5)
+        motion.update(0.05)
+        early = motion.visuals[0].border_position
+        self.assertGreater(early, boundary)
+        self.assertLess(early - boundary, 0.05)
+        motion.update(0.2)
+        self.assertAlmostEqual(motion.visuals[0].border_position, 6.5)
+        for hold in (-0.1, float('nan'), float('inf')):
+            with self.assertRaises(ValueError):
+                LockOnMotion(hold_seconds=hold)
+
     def test_exit_after_frame_entry_uses_normal_exit_even_before_label(self):
         body = Rect(0, 0, 20, 20)
         for elapsed in (0.4, 0.5, 0.6):

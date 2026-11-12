@@ -87,11 +87,13 @@ class LockOnMotion:
     def __init__(self, enter_seconds=0.4, label_seconds=0.2, exit_seconds=0.25,
                  move_seconds=0.4, hold_seconds=0.25, start_scale=0.25, exit_scale=1.5,
                  hit_seconds=0.18, hit_scale=1.12, hit_shake_pixels=1.5, hit_damping=1.8):
-        values = (enter_seconds, label_seconds, exit_seconds, move_seconds, hold_seconds, start_scale, exit_scale)
-        if not all(isfinite(value) and value > 0 for value in values) or start_scale >= 1 or exit_scale <= 1:
-            raise ValueError("록온 시간은 양수이며 등장 배율은 1 미만, 퇴장 배율은 1 초과여야 한다.")
+        values = (enter_seconds, label_seconds, exit_seconds, move_seconds, start_scale, exit_scale)
+        if (not all(isfinite(value) and value > 0 for value in values)
+                or not isfinite(hold_seconds) or hold_seconds < 0 or start_scale >= 1 or exit_scale <= 1):
+            raise ValueError("록온 이동·등장·퇴장 시간은 양수, 대기는 0 이상이며 등장 배율은 1 미만, 퇴장 배율은 1 초과여야 한다.")
         self.enter_seconds, self.label_seconds, self.exit_seconds = values[:3]
-        self.move_seconds, self.hold_seconds, self.start_scale, self.exit_scale = values[3:]
+        self.move_seconds, self.hold_seconds = move_seconds, hold_seconds
+        self.start_scale, self.exit_scale = start_scale, exit_scale
         if not all(map(isfinite, (hit_seconds, hit_scale, hit_shake_pixels))) or hit_seconds <= 0 or hit_scale <= 1 or hit_shake_pixels < 0:
             raise ValueError('피격 마커의 시간·확대 배율·진폭이 유효하지 않다.')
         self.hit_seconds, self.hit_scale, self.hit_shake_pixels = hit_seconds, hit_scale, hit_shake_pixels

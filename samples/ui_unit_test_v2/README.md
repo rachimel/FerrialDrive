@@ -11,7 +11,7 @@
 - `v2.style.ultimate_border_width_pixels`·`resource_border_width_pixels`는 필살기 외곽·HP/에너지/LV 외곽의 3px 두께다. 쿨다운 밝기는 `ultimate_cooldown_dim_opacity=0.22`다. 내부 아이콘 그림·채움 끝선의 기존 두께와 구분한다.
 - LV 영역 윗선은 HP 바 윗선과 같은 높이다. 오른쪽 위/아래 사선은 `v2.layout.level_right_bevel_pixels=7`로 짧게 하고 같은 길이를 유지한다. 레벨 왼쪽과 HP 오른쪽은 같은 수직선으로 연결한다. `level_bevel_pixels`는 기존 접합 위치의 수평 여유를 유지한다. LV 레이블은 숫자 왼쪽 아래에 맞춘다.
 
-- `v2.style.accent_hatching`은 록온·필살기 강조선의 빗금이다. 강조선 띠 안으로 잘라 모양을 맞추며, 진행 방향의 뒤쪽 8px→앞쪽 2.5px로 간격을 좁힌다. `enabled=false`로 끈다. 공통 순환은 5차 보간으로 시작/끝 속도 0·중간 t=0.5에서 최대 속도다. 이동 0.5초·정지 0.2초를 공유한다.
+- 록온·필살기 강조선은 `v2.style.accent_profile`의 공통 분절형이다. 경로 뒤쪽의 가는 꼬리 → 작은 조각 2개 → 앞쪽의 긴 본체 순서이며 최대 굵기는 `lock_accent_pixels=4.5`다. `sections`는 각 조각의 시작/끝 길이 비율과 시작/끝 굵기 비율이다. 조각 사이에는 기본 테두리가 보이며 번짐을 추가하지 않는다. `length_sides=1.0`으로 한 변 길이를 차지하고 모서리를 지나는 단면을 공유한다. 이전 `accent_hatching`은 비활성이다. 공통 순환은 5차 보간으로 시작/끝 속도 0·중간 t=0.5에서 최대 속도이며 이동 0.5초·대기 0초로 반복한다. 이동 양끝의 가속·감속은 유지한다.
 - `EnergyTintMotion`은 논리 충전량과 별개로 표시 색을 0.24초 동안 보간한다. 바·회복 flash·흡수 입자에 같은 `energy_tint_ratio`를 공급한다. `v2.style.energy_tint_seconds`로 시간을 조절하며 정지 중 멈춘다. 충전/Overdrive 판정은 지연하지 않는다.
 - Overdrive 완충 뒤에도 채움 끝의 불꽃을 유지한다. 일반 40개/초·0.8초 수명에서 Overdrive 96개/초·1초·강도 1.8로 전환한다. `energy_boundary.overdrive_*`로 조절한다. 생성 강도는 GPU 속도·크기에 적용하며 생성/갱신 Compute 두 개를 유지한다.
 - HIT·DAMAGE의 바뀌는 자릿수는 별도 투명 레이어에 그리고 실제 원근 투영 이동축을 따라 연속 GPU 방향성 필터를 적용한다. 고정 자릿수·레이블·받침판은 필터 밖이다. `v2.style.counter_motion_blur`는 노출 0.06초·세기 0.85·49샘플·최대 128px·이동량 배율 1.3이다. LV 숫자의 기존 잔상은 유지한다.
@@ -85,7 +85,7 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 - `colors.panel_surface`: 무기 행과 필살기 단축키·레벨 패널의 면 색상(`#22343F`). 일반 패널보다 한 단계 밝게 표시하며 기존 활성/비활성 투명도를 유지한다.
 - `v2.style.counter_plaque_height_pixels`·`counter_plaque_slant_pixels`: 숫자 아래 평행사변형 받침판의 두께와 사선. 색은 `colors.counter_plaque`다.
 - `v2.style.lock_body_scale`·`lock_thickness_pixels`·`lock_accent_pixels`: 몸통 대비 테두리 배율과 기본/강조선 두께.
-- `v2.style.accent_profile`: 록온·준비된 필살기의 분절 강조선이다. 가는 꼬리·작은 조각 2개·굵은 본체를 한 변 길이에 배치하며 `sections`의 4개 값은 시작/끝 길이 비율과 시작/끝 굵기 비율이다. 최대 굵기는 4.5 논리 px이며 빈 간격에는 기본 테두리가 보인다. 기존 빗금은 비활성이고 순환 속도·정지 시간·색·준비 조건은 유지한다.
+- `v2.style.accent_profile`: 록온·준비된 필살기의 분절 강조선이다. 가는 꼬리·작은 조각 2개·굵은 본체를 한 변 길이에 배치하며 `sections`의 4개 값은 시작/끝 길이 비율과 시작/끝 굵기 비율이다. 최대 굵기는 4.5 논리 px이며 빈 간격에는 기본 테두리가 보인다. 기존 빗금은 비활성이다. 이동 곡선·색·준비 조건은 유지하며 별도 대기는 0초다.
 - `v2.style.lock_text_gap_pixels`·`lock_text_end_gap_pixels`: 강조선에 끝점을 맞추는 글자의 수직 간격과 끝 여백. 크기 값은 HUD 축소 전 논리 픽셀이다.
 - `v2.style.weapon_outer_edge_pixels`: L자 대신 강조하는 무장 왼쪽 외곽의 두께.
 - `ui_config.json`의 `colors`·`fonts`: 색상과 글꼴 역할·크기.
@@ -159,7 +159,7 @@ HP flash는 `HealthDamageFlash.trigger(피해 전 비율, 피해 후 비율)`·`
 
 록온은 `LockOnMotion.select(target_id, body)`·`update(delta_seconds)`로 제어하고 `visuals`를 `view.combat(lock_visuals=...)`에 공급한다. 몸통 Rect는 카메라 투영 후 좌표다. 선택 유지 중과 퇴장 중에도 적의 월드 위치를 현재 카메라로 투영한다. 자동 선택 규칙은 `MouseAutoTargeting`, 좌표 변환은 `LookAheadCamera`가 맡는다. 새 선택 ID에서 기존 표시 퇴장과 신규 등장을 재생한다. `view.combat(player_screen=...)`는 레이더 중심을 실제 플레이어 화면 위치에 맞춘다.
 
-`v2.style.lock_motion`은 등장 0.32초·캐럿 0.16초·퇴장 0.2초·강조선 이동 0.5초/정지 0.2초·시작 배율 0.25/퇴장 배율 1.5를 조절한다. 기본형은 정사각형이며 등장 완료 45°는 마름모다. 가이드 조작키 색/설명 투명도는 `dialogue_key_color`·`dialogue_description_opacity`다.
+`v2.style.lock_motion`은 등장 0.32초·캐럿 0.16초·퇴장 0.2초·강조선 이동 0.5초/대기 0초·시작 배율 0.25/퇴장 배율 1.5를 조절한다. 기본형은 정사각형이며 등장 완료 45°는 마름모다. 가이드 조작키 색/설명 투명도는 `dialogue_key_color`·`dialogue_description_opacity`다.
 
 OVERDRIVE 문구만 SUITE Regular 18px로 게이지 중앙에 표시한다. ENERGY 문구는 표시하지 않는다. 문구 폭은 바 폭의 60%(`overdrive_width_ratio=0.6`)다. 등장 때 불투명도는 0.065초에 올라가고 0.42초 동안 글자가 중앙에서 퍼지며 개별 반짝임·에너지색 Bloom을 낸다. 퇴장은 0.18초 fade-out만 사용한다. 시간은 `v2.style.overdrive_motion`, Bloom은 `overdrive_bloom`으로 조절한다. 준비된 네온 텍스처를 재사용한다.
 
