@@ -9,7 +9,7 @@ from ferrial_drive.ui.counter import CounterVisual
 from ferrial_drive.ui.energy import energy_color
 from ferrial_drive.ui.view import UiView
 from .geometry import (PerspectivePlane, body_diamond, counter_plaque, hatched_stroke_mesh, quad_fill,
-                       resource_geometry, slanted_meter, tapered_stroke_mesh)
+                       resource_geometry, segmented_stroke_mesh, slanted_meter, tapered_stroke_mesh)
 from .panels import (PanelGeometry, build_panel_geometry, merge_panel_y_ranges,
                      panel_bright_band_top, scale_panel_geometry)
 from .panel_probe import PanelProbeRenderer
@@ -99,6 +99,11 @@ class UiV2View(UiView):
 
     def accent_stroke(self, points, color, opacity):
         width = self.style['lock_accent_pixels']
+        profile = self.style.get('accent_profile')
+        if profile is not None:
+            for shape in segmented_stroke_mesh(points, width, profile['sections']):
+                self.polygon(shape, color, opacity, filled=True)
+            return
         self.stroke(points, color, opacity, width)
         pattern = self.style['accent_hatching']
         if pattern['enabled']:
@@ -372,8 +377,9 @@ class UiV2View(UiView):
         if alpha <= 0 or visual.scale <= 0:
             return
         self.stroke(points + points[:1], self.ui_accent, alpha, self.style["lock_thickness_pixels"])
+        length = self.style.get('accent_profile', {}).get('length_sides', 0.65)
         for position in (visual.border_position, visual.border_position + 2):
-            self.accent_stroke(outline_segment(points, position - 0.325), c["text"], alpha)
+            self.accent_stroke(outline_segment(points, position - length / 2, length), c["text"], alpha)
         if visual.label_progress <= 0:
             return
         angle = atan2(points[0][1] - points[3][1], points[0][0] - points[3][0])
@@ -563,8 +569,9 @@ class UiV2View(UiView):
         if state.ultimate_ready:
             settings = self.style['lock_motion']
             position = accent_position(visual.age, settings['move_seconds'], settings['hold_seconds'])
+            length = self.style.get('accent_profile', {}).get('length_sides', 0.65)
             for start in (position, position + 2):
-                self.accent_stroke(outline_segment(diamond, start - 0.325), color, opacity * visual.opacity)
+                self.accent_stroke(outline_segment(diamond, start - length / 2, length), color, opacity * visual.opacity)
             if visual.flash > 0:
                 self.stroke(diamond + diamond[:1], c['text'], opacity * visual.flash,
                             border_width + 1)

@@ -85,6 +85,7 @@ Unit Test Runner에서 `tests/ui_unit_test_v2.py`를 선택하거나 Runner 창�
 - `colors.panel_surface`: 무기 행과 필살기 단축키·레벨 패널의 면 색상(`#22343F`). 일반 패널보다 한 단계 밝게 표시하며 기존 활성/비활성 투명도를 유지한다.
 - `v2.style.counter_plaque_height_pixels`·`counter_plaque_slant_pixels`: 숫자 아래 평행사변형 받침판의 두께와 사선. 색은 `colors.counter_plaque`다.
 - `v2.style.lock_body_scale`·`lock_thickness_pixels`·`lock_accent_pixels`: 몸통 대비 테두리 배율과 기본/강조선 두께.
+- `v2.style.accent_profile`: 록온·준비된 필살기의 분절 강조선이다. 가는 꼬리·작은 조각 2개·굵은 본체를 한 변 길이에 배치하며 `sections`의 4개 값은 시작/끝 길이 비율과 시작/끝 굵기 비율이다. 최대 굵기는 4.5 논리 px이며 빈 간격에는 기본 테두리가 보인다. 기존 빗금은 비활성이고 순환 속도·정지 시간·색·준비 조건은 유지한다.
 - `v2.style.lock_text_gap_pixels`·`lock_text_end_gap_pixels`: 강조선에 끝점을 맞추는 글자의 수직 간격과 끝 여백. 크기 값은 HUD 축소 전 논리 픽셀이다.
 - `v2.style.weapon_outer_edge_pixels`: L자 대신 강조하는 무장 왼쪽 외곽의 두께.
 - `ui_config.json`의 `colors`·`fonts`: 색상과 글꼴 역할·크기.

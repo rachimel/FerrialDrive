@@ -1,5 +1,7 @@
 # AI 개발 로그
 
+- [2026-11-13 록온·필살기 분절 강조선](2026-11-13-lock-ultimate-segmented-accent.md): 굵은 본체·작은 조각·가는 꼬리·공통 프로필·117개 검사/85프레임 OpenGL
+
 - [2026-11-13 UI v2 HUD 확대·중앙 정렬·카메라 이동 블러](2026-11-13-hud-scale-center-camera-blur.md): HUD 1.0·FHD 중앙 배치·월드 전용 블러·113개 검사/OpenGL 확인
 
 - [2026-11-13 자원 UI 묶음 피격 블러](2026-11-13-resource-hit-group-blur.md): HP/에너지/LV/필살기 한 번 합성·속도 연동 최대 3px·기존 HP 중복 제거

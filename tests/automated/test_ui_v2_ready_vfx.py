@@ -250,12 +250,13 @@ class ReadyVfxTests(unittest.TestCase):
         settings = view.style['lock_motion']
         age = 0.17
         position = accent_position(age, settings['move_seconds'], settings['hold_seconds'])
-        segments = [outline_segment(diamond, p - 0.325) for p in (position, position + 2)]
+        length = view.style['accent_profile']['length_sides']
+        segments = [outline_segment(diamond, p - length / 2, length) for p in (position, position + 2)]
         for seconds, count in ((0, 2), (1, 0)):
-            with patch.object(view, 'stroke') as stroke:
+            with patch.object(view, 'accent_stroke') as accent:
                 view.resources(replace(self.program.state, ultimate_cooldown_seconds=seconds), 1, 0, 1,
                                ultimate_visual=UltimateReadyVisual(age))
-            found = [call for call in stroke.call_args_list if call.args[0] in segments]
+            found = [call for call in accent.call_args_list if call.args[0] in segments]
             self.assertEqual(len(found), count)
 
     def test_ultimate_cooldown_darkens_and_reveals_only_the_lower_region(self):

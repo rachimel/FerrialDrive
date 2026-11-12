@@ -4,6 +4,54 @@ from dataclasses import dataclass
 from math import hypot, isfinite
 
 
+def segmented_stroke_mesh(points, width, sections):
+    """경로 전체의 길이 비율로 분절·굵기를 지정한다. 꺾임의 단면을 공유한다."""
+    if not isfinite(width) or width <= 0:
+        raise ValueError('강조선 두께는 양수인 유한한 픽셀 값이어야 한다.')
+    previous_end = 0
+    for start, end, first_width, last_width in sections:
+        if (not all(map(isfinite, (start, end, first_width, last_width)))
+                or not previous_end <= start < end <= 1
+                or not 0 < first_width <= 1 or not 0 < last_width <= 1):
+            raise ValueError('강조선 구간은 겹치지 않는 0~1 길이 비율과 양수인 1 이하 굵기 비율이어야 한다.')
+        previous_end = end
+    path = []
+    for point in points:
+        if not path or hypot(point[0] - path[-1][0], point[1] - path[-1][1]) > 1e-9:
+            path.append(point)
+    if len(path) < 2:
+        return ()
+    lengths = [hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(path, path[1:])]
+    normals = [(-(b[1] - a[1]) / length, (b[0] - a[0]) / length)
+               for a, b, length in zip(path, path[1:], lengths)]
+    distances, joins = [0], [normals[0]]
+    for length in lengths:
+        distances.append(distances[-1] + length)
+    for first, last in zip(normals, normals[1:]):
+        denominator = 1 + first[0] * last[0] + first[1] * last[1]
+        if denominator < 0.25:
+            raise ValueError('강조선의 접힘 각도가 너무 좁다.')
+        joins.append(tuple((a + b) / denominator for a, b in zip(first, last)))
+    joins.append(normals[-1])
+    total, quads = distances[-1], []
+    for start, end, first_width, last_width in sections:
+        low, high = start * total, end * total
+        samples = [low, *(distance for distance in distances[1:-1] if low < distance < high), high]
+        edges = []
+        for distance in samples:
+            index = next(i for i, stop in enumerate(distances[1:]) if distance <= stop)
+            t = (distance - distances[index]) / lengths[index]
+            normal = joins[index] if t <= 1e-9 else joins[index + 1] if t >= 1 - 1e-9 else normals[index]
+            x, y = (a + (b - a) * t for a, b in zip(path[index], path[index + 1]))
+            amount = (distance - low) / (high - low)
+            half = width * (first_width + (last_width - first_width) * amount) / 2
+            nx, ny = normal
+            edges.append(((x + nx * half, y + ny * half), (x - nx * half, y - ny * half)))
+        for first, last in zip(edges, edges[1:]):
+            quads.append((first[0], last[0], last[1], first[1]))
+    return tuple(quads)
+
+
 def hatched_stroke_mesh(points, width, pitch_start, pitch_end, cut_width):
     """선의 띠 안에만 빗금을 만든다. 꺾인 구간에서도 간격의 위상을 이어간다."""
     if not all(isfinite(v) and v > 0 for v in (width, pitch_start, pitch_end, cut_width)) or cut_width >= min(pitch_start, pitch_end):

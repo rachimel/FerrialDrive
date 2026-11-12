@@ -904,8 +904,17 @@
             "lock_body_scale": 1.8,
             "counter_plaque_height_pixels": 8,
             "counter_plaque_slant_pixels": 6,
-            "lock_accent_pixels": 3,
-            "accent_hatching": {"enabled": true, "pitch_start_pixels": 8, "pitch_end_pixels": 2.5,
+            "lock_accent_pixels": 4.5,
+            "accent_profile": {
+                "length_sides": 1.0,
+                "sections": [
+                    [0.0, 0.22, 0.15, 0.22],
+                    [0.26, 0.32, 0.3, 0.42],
+                    [0.36, 0.44, 0.48, 0.65],
+                    [0.49, 1.0, 0.72, 1.0]
+                ]
+            },
+            "accent_hatching": {"enabled": false, "pitch_start_pixels": 8, "pitch_end_pixels": 2.5,
                 "width_pixels": 1.1, "opacity": 0.85},
             "lock_text_gap_pixels": 7,
             "lock_text_end_gap_pixels": 2,
