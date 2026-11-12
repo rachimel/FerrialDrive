@@ -950,6 +950,7 @@
                 "ammo_min_width_pixels": 76,
                 "image_top_pixels": 40,
                 "auxiliary_diameter_pixels": 80,
+                "auxiliary_border_pixels": 3.2,
                 "auxiliary_gap_pixels": 12,
                 "additional_icon_pixels": 16,
                 "additional_icon_gap_pixels": 5

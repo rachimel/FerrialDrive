@@ -25,7 +25,8 @@ def draw_auxiliary_slot(view, weapon, left, top, diameter, opacity):
     circle = tuple((cx + cos(i * pi / 24) * radius, cy + sin(i * pi / 24) * radius)
                    for i in range(48))
     view.panel_layer(circle, c["panel_surface"], opacity, grain=True)
-    view.stroke(circle + circle[:1], view.ui_accent, opacity * 0.75, 1.4)
+    view.stroke(circle + circle[:1], view.ui_accent, opacity * 0.75,
+                view.style["weapon_card"]["auxiliary_border_pixels"])
     if weapon.auxiliary_image_path:
         r.image(weapon.auxiliary_image_path, Rect(left + 8, top + 8, diameter - 16, diameter - 16), opacity)
     elif weapon.auxiliary_kind == "back_weapon":
