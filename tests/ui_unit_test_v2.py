@@ -282,7 +282,8 @@ class UiUnitTestV2:
         if self.particle_system is not None:
             self.sync_energy_target()
             self.particle_system.emit(start, waypoint, destination, count=settings['count'], side=side, spread_pixels=6,
-                                      gain_ratio=settings['gain_ratio'], arrival_spacing_seconds=settings['arrival_spacing_seconds'])
+                                      gain_ratio=settings['gain_ratio'], arrival_spacing_seconds=settings['arrival_spacing_seconds'],
+                                      duration_variation=settings['duration_variation'])
         else:
             for offset in (-15, 0, 15):
                 self.absorption.add((start[0] + offset, start[1] - offset), waypoint, destination, approach_side=side)

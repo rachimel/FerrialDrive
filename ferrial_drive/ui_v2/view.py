@@ -794,8 +794,14 @@ class UiV2View(UiView):
     def counter_motion_blur(self, visual, project, width, height, ink_bottom, scale):
         """변하는 숫자만 실제 화면 이동축에 연속 GPU 필터를 적용한다."""
         settings = self.style['counter_motion_blur']
-        previous = replace(visual, elapsed_seconds=max(0, visual.elapsed_seconds - settings['shutter_seconds']))
-        travel = -height * (visual.vertical_progress - previous.vertical_progress)
+        # 로드아웃과 같이 순간 속도에 노출 시간을 곱한다. 탄성 보간의 속도는 중앙 차분으로 구한다.
+        epsilon = min(0.0001, visual.duration_seconds * 0.001)
+        low = max(0, visual.elapsed_seconds - epsilon)
+        high = min(visual.duration_seconds, visual.elapsed_seconds + epsilon)
+        before = replace(visual, elapsed_seconds=low).vertical_progress
+        after = replace(visual, elapsed_seconds=high).vertical_progress
+        velocity = (after - before) / max(0.000001, high - low)
+        travel = -height * velocity * settings['shutter_seconds']
         a, b = project(width / 2, 0), project(width / 2, travel)
         dx, dy = b[0] - a[0], b[1] - a[1]
         length = hypot(dx, dy)
@@ -804,12 +810,14 @@ class UiV2View(UiView):
             return
         distance = min(settings['max_length_pixels'] * scale, length * settings['displacement_scale'])
         motion = dx / length * distance, dy / length * distance
-        p = visual.progress
-        strength = settings['strength'] * 4 * p * (1 - p) * min(1, length / max(1, height * 0.15))
+        strength = settings['strength']
         corners = tuple(project(x, y) for x, y in ((0, 0), (width, 0), (width, ink_bottom), (0, ink_bottom)))
         xs, ys = zip(*corners)
         bounds = Rect(min(xs) - 2, min(ys) - 2, max(xs) - min(xs) + 7, max(ys) - min(ys) + 7)
-        with self.renderer.clip(bounds):
+        pad_x = max(settings['overscan_pixels'], abs(motion[0]) / 2 + 8)
+        pad_y = max(settings['overscan_pixels'], abs(motion[1]) / 2 + 8)
+        clip = Rect(bounds.x - pad_x, bounds.y - pad_y, bounds.width + pad_x * 2, bounds.height + pad_y * 2)
+        with self.renderer.clip(clip):
             with self.renderer.directional_blur(bounds, motion, strength, settings['samples']):
                 yield
 

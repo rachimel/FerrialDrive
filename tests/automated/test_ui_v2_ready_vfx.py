@@ -123,6 +123,26 @@ class ReadyVfxTests(unittest.TestCase):
         self.assertAlmostEqual(self.program.energy_tint.ratio, 0.5)
         self.assertFalse(self.program.state.overdrive)
 
+    def test_counter_exposure_uses_instantaneous_speed_and_keeps_streak_margin(self):
+        renderer = Mock()
+        renderer.clip.side_effect = lambda rect: nullcontext()
+        renderer.directional_blur.side_effect = lambda *args: nullcontext()
+        view = UiV2View(self.program.config, renderer)
+        lengths = []
+        for elapsed in (0.001, 0.09, 0.179):
+            visual = CounterVisual(1, 2, elapsed, 0.18, 'elastic_in_out')
+            with view.counter_motion_blur(visual, lambda x, y: (x, y), 80, 60, 50, 1):
+                pass
+            bounds, motion, strength, _ = renderer.directional_blur.call_args.args
+            clipping = renderer.clip.call_args.args[0]
+            self.assertLess(clipping.y, bounds.y)
+            self.assertGreater(clipping.y + clipping.height, bounds.y + bounds.height)
+            self.assertGreaterEqual(bounds.y - clipping.y, abs(motion[1]) / 2 + 8 - 0.00001)
+            self.assertEqual(strength, view.style['loadout_blur']['opacity'])
+            lengths.append(abs(motion[1]))
+        self.assertGreater(lengths[1], lengths[0])
+        self.assertGreater(lengths[1], lengths[2])
+
     def test_overdrive_spreads_flashes_then_only_fades_out(self):
         motion = OverdriveMotion()
         motion.request(True)

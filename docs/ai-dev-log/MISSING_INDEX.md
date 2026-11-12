@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [입자 이동시간 변동·카운터 노출/여백](2026-11-12-particle-timing-counter-exposure.md): TIME(scope). 이동시간 차이 적용·로드아웃 느낌·노출 시간·숫자 바깥 번짐 여백 요청의 개별 시각을 확인한다.
+
 - [필살기 쿨다운 채움·자원 테두리](2026-11-12-ultimate-cooldown-and-resource-frame.md): TIME(scope). 쿨다운 밝기·자원 외곽·사선 길이·LV/HP 정렬 요청과 진동 블러 질문의 개별 시각을 확인한다.
 
 - [강조선 빗금·색 전환·Overdrive 불꽃](2026-11-12-accent-hatching-energy-transition.md): TIME(scope). 빗금 형태/간격·느린 순환·자간·빨간색 보간 정정·Overdrive 불꽃·숫자 블러 요청의 개별 시각을 확인한다.

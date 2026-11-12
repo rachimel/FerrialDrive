@@ -206,7 +206,7 @@
         "max_length_pixels": 28
     },
     "damage_counter": {
-        "duration_seconds": 0.12,
+        "duration_seconds": 0.18,
         "blur_samples": 12,
         "vertical_easing": "elastic_in_out",
         "elastic_strength": 0.35,
@@ -580,13 +580,14 @@
         "auto_targeting": {
             "switch_margin_seconds": 1
         },
-        "absorption_duration_seconds": 0.85,
+        "absorption_duration_seconds": 0.9875,
         "ultimate_sample": {"cooldown_seconds": 5.0, "flash_seconds": 0.28},
         "energy_absorption": {
             "count": 6,
             "gain_ratio": 0.1,
             "capacity": 256,
-            "arrival_spacing_seconds": 0.055,
+            "arrival_spacing_seconds": 0,
+            "duration_variation": 0.18,
             "under_bar_gap_pixels": 10,
             "approach_offset_pixels": 85,
             "flash_seconds": 0.16,
@@ -890,8 +891,8 @@
             "level_text": {"number_scale": 0.85, "label_scale": 0.65, "right_inset_pixels": 12, "gap_pixels": 6},
             "counter_label_right_inset_pixels": 3,
             "counter_label_gap_pixels": 4,
-            "counter_motion_blur": {"shutter_seconds": 0.045, "strength": 0.82, "samples": 49,
-                "max_length_pixels": 64, "displacement_scale": 2.4},
+            "counter_motion_blur": {"shutter_seconds": 0.075, "strength": 0.85, "samples": 49,
+                "max_length_pixels": 96, "displacement_scale": 1, "overscan_pixels": 24},
             "lock_body_scale": 1.8,
             "counter_plaque_height_pixels": 8,
             "counter_plaque_slant_pixels": 6,

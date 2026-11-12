@@ -34,7 +34,9 @@ class EnergyFeedbackTests(unittest.TestCase):
             self.assertEqual(command.side, side)
             self.assertGreater(command.waypoint[1], max(point[1] for point in channel))
             self.assertTrue(left[0] < command.waypoint[0] < right[0])
-            self.assertGreater(command.arrival_spacing_seconds, 0)
+            self.assertEqual(command.arrival_spacing_seconds, 0)
+            self.assertEqual(command.duration_variation, 0.18)
+            self.assertAlmostEqual(command.duration_seconds, 0.9875)
 
     def test_recovery_waits_for_receipts_splits_amount_and_flashes(self):
         before = self.program.state.energy_ratio
