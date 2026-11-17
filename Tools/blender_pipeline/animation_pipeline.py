@@ -139,7 +139,7 @@ def bake(manifest, destination):
     if maximum > 1e-4:
         raise ValueError(f'포즈 재로딩 불일치: {maximum}')
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-    from Tools.asset_loader.production import render_config
+    from Tools.blender_pipeline.render_recipe import render_config
     configs = destination / 'export_configs'
     configs.mkdir()
     index = []

@@ -23,7 +23,8 @@ def apply_operations(operations):
                 bpy.context.scene.collection.objects.link(obj)
             elif kind == 'create_profile':
                 from model_primitives import profile_mesh
-                obj = profile_mesh(name, operation['profiles'], operation.get('capped', True))
+                obj = profile_mesh(name, operation['profiles'], operation.get('capped', True),
+                                   operation.get('cyclic_profiles', False))
             else:
                 bpy.ops.mesh.primitive_cube_add(size=1)
                 obj = bpy.context.object
@@ -41,6 +42,13 @@ def apply_operations(operations):
                 obj.data.materials.append(bpy.data.materials[operation['material']])
         elif kind == 'set_frame':
             bpy.context.scene.frame_set(int(operation['frame']))
+        elif kind == 'freeze_evaluated_meshes':
+            from model_geometry import freeze_evaluated_meshes
+            freeze_evaluated_meshes(operation['objects'])
+        elif kind in ('partition_mesh_faces', 'partition_mesh_planes'):
+            from model_geometry import partition_mesh_faces
+            partition_mesh_faces(bpy.data.objects[operation['object']], operation['groups'],
+                                 operation.get('cap_material'), planes=kind == 'partition_mesh_planes')
         elif kind == 'freeze_pose':
             obj = bpy.data.objects[operation['object']]
             if obj.type != 'ARMATURE':
@@ -179,7 +187,9 @@ def apply_operations(operations):
                 raise ValueError('스케일은 양수여야 한다. 반전은 별도 조형 기능으로 처리한다.')
             offset = Vector(vector(operation.get('offset', [0, 0, 0])))
             pivot = Vector(vector(operation.get('pivot', [0, 0, 0])))
-            transform_vertices(obj, root, lambda p: pivot + Vector([(p[i] - pivot[i]) * scale[i] for i in range(3)]) + offset)
+            from mathutils import Euler
+            rotation = Euler([math.radians(v) for v in vector(operation.get('rotation_degrees', [0, 0, 0]))], 'XYZ').to_matrix()
+            transform_vertices(obj, root, lambda p: pivot + rotation @ Vector([(p[i] - pivot[i]) * scale[i] for i in range(3)]) + offset)
         elif kind == 'set_properties':
             obj = bpy.data.objects[operation['object']]
             for key, value in operation['values'].items():

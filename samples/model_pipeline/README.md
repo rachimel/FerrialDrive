@@ -1,5 +1,7 @@
 # JSON 모델 제작 샘플
 
+> 이 샘플은 Blender 모델링·검사·외형 이미지 검토용이다. 메카 리깅·애니메이션은 Unreal에서 수행한다. [전체 역할](../../docs/ai-asset-pipeline/unreal_pipeline.md)을 따른다. 본/포즈가 포함된 기존 도형은 검사 데이터이며 Blender 리깅·동작 제작 경로를 뜻하지 않는다.
+
 에셋별 Python 파일 없이 두 기본 도형을 만들고 저장·재로딩·6면의 512px·192px 검토 렌더를 출력한다. Blender 내장 Python만 필요하며 실제 메카/Pico2D는 필요 없다. 이 기존 샘플은 192px을 명시하며 새 검토의 기본 표시는 240px이다.
 
 프로젝트 루트에서 `$blender_exe`를 설치된 Blender 실행 파일로 지정한다. 출력 폴더/검사 JSON은 기존 파일을 덮어쓰지 않으므로 매 실행 새 이름을 사용한다.
@@ -33,11 +35,7 @@
 
 도형은 기본 UVMap을 사용하며 텍스처 이미지는 없다. 검사 실패 예시는 테스트에서 겹치는 도형·잘못된 UV·과대/미패킹 이미지를 만들어 확인한다.
 
-```powershell
-& $blender_exe -b --factory-startup --python-exit-code 1 --python tests/blender/test_model_pipeline.py
-```
 
-이 마지막 명령은 도구 개발용 회귀 테스트다. 실제 에셋 제작에서 품질 검사를 한 파일로 묶어 실행하는 경로가 아니다. 새 에셋에는 manifest의 source/해시/역할별 객체명/operations와 별도 검사 설정만 바꾼다.
 
 ## PBR 표면과 UV 패널
 

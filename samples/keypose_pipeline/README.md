@@ -1,5 +1,7 @@
 # 기본 도형 키포즈 시연
 
+> **현행 제작에서 제외한 Blender 정지 자세 샘플.** 새 동작은 Unreal에서 짧은 초안을 재생·검수·수정하며 별도 KeyPose 사전 승인을 요구하지 않는다. [현재 흐름](../../docs/ai-asset-pipeline/animation_workflow.md)을 따른다. 아래는 과거 제작/호환 확인 안내다.
+
 게임 에셋 없이 작은 상자 리그를 만들고 공통 `keypose_pipeline.py`로 두 정지 자세를 저장·재로딩한다. Blender가 필요하다. 원본 도형과 제작 결과는 지정한 새 출력 폴더에서 분리된다.
 
 ```powershell

@@ -1,5 +1,7 @@
 # 포즈 표본으로 애니메이션 저장
 
+> **현행 제작에서 제외한 포즈 표본 저장 경로.** 새 리깅·동작 편집은 Unreal에서 수행한다. [현재 흐름](../../docs/ai-asset-pipeline/animation_workflow.md)을 따른다. 아래 API·실행법·승인 설명은 보관된 Blender 도구에 한정하며 현재 동작 제작·사전 승인 절차로 적용하지 않는다.
+
 `Tools/blender_pipeline/animation_pipeline.py`는 에셋 JSON의 본 로컬 행렬·장착 앵커 로컬 행렬·장치 속성을 프레임마다 키로 저장한다. 원본 해시를 확인하고 새 폴더에만 출력한다. 일반 모델 생성 연산과 별개이며 메시·UV를 수정하지 않는다.
 
 입력은 version=1, asset_id, source, source_sha256, fps, rig, root, clips다. 각 clip은 name, label, loop, samples, events를 갖는다. sample은 frame, bones(본 이름→4×4 matrix_basis), objects(객체 이름→4×4 matrix_basis), properties(객체 이름→속성 값)다. 이벤트 입력 frame은 클립 안의 0 기반 표본 번호다. 출력 clips.json에는 실제 Blender frame과 clip_frame을 함께 남긴다.

@@ -219,7 +219,7 @@ class ModelDesign:
         if not self.applied:
             raise RuntimeError('검증한 설정을 apply()한 다음 저장해야 한다')
         output = Path(output).resolve()
-        protected = ROOT / 'data/models'
+        protected = ROOT / 'data/source/models'
         if output == self.baseline.resolve() or protected.resolve() in output.parents:
             raise ValueError('디자인 편집 결과는 원본 모델 폴더 밖에 저장해야 한다')
         if output.exists() or output.with_suffix('.design_report.json').exists():

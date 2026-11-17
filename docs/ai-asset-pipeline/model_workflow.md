@@ -1,10 +1,12 @@
-# Blender 모델 제작 파이프라인 1차
+# Blender 모델링 제작 파이프라인
+
+> 현행 역할: Blender 모델링·UV·재질 → 리그 없는 형상 → Unreal 새 리깅·애니메이션·프리렌더 → PNG 파츠+JSON → 툴 2D 조립·패킹. 기존 Blender 리그는 재사용하지 않는다. 프리렌더는 Unreal에서 수행하고 PNG 파츠+JSON을 툴의 2D 조립·패킹으로 인계한다.  [인계 조건](unreal_pipeline.md)을 따른다. 아래 Blender 본/포즈 관련 기존 기능은 보관·호환용이며 새 리깅·동작 편집 경로가 아니다.
 
 새 모델과 기존 모델 수정은 **공통 모듈 + 에셋별 JSON**을 사용한다. 버전마다 Python 파일을 새로 복사하거나 구버전 스크립트를 연쇄 실행하지 않는다. 제작, 품질 검사, 게임 프리렌더는 서로 독립된 단계다.
 
 메카의 조형 판단과 메시·계층·UV·리깅·애니메이션 기준은 [메카 디자인·제작 규칙](mech_design_rules.md)을 먼저 따른다. 이 문서는 실행 경로와 도구의 책임을 관리한다. 디자인 규칙의 존재와 현재 모델의 검증 완료를 구분한다.
 
-플레이어 기체의 기준은 사용자가 확정한 **1차 최종 플레이어 모델 v078**이다. 최종 기준 경로·해시·승인 범위는 로컬 `data/models/player_mech/release_v1.json`에 기록한다. 새 에셋이 플레이어 모델이나 과거 버전 파일에 의존하게 만들지 않는다.
+플레이어 기체의 기준은 사용자가 확정한 **1차 최종 플레이어 모델 v078**이다. 최종 기준 경로·해시·승인 범위는 로컬 `data/source/models/player_mech/release_v1.json`에 기록한다. 새 에셋이 플레이어 모델이나 과거 버전 파일에 의존하게 만들지 않는다.
 
 ## 책임과 실행 파일
 
@@ -16,10 +18,11 @@
 | `model_geometry.py` | root 좌표/Shape Key 변환, 장착 부모 프레임 보존 |
 | `model_snapshot.py` | 객체 구조 지문 |
 | `model_review.py` | 고정 6면 렌더, 이미지 근거 검증, AI 판단과 사용자 중간 OK 기록 |
-| `model_design.py`, `model_design_schema.py` | 기존 부위/프로파일·본·재질·장착 편집 기능을 공통화한 JSON 편집기 |
+| `model_design.py`, `model_design_schema.py` | 부위/프로파일·재질·장착 형상 편집. 기존 본 편집은 호환 기능이며 새 리깅은 Unreal 담당 |
 | `export_model_registry.py` | 새 모델의 부위/본/제어 레지스트리 추출 |
 | `check_model_geometry.py` | 독립 형상 검사 |
 | `check_model_uv.py` | 독립 UV 검사 |
+| `check_model_uv_preservation.py` | 기준 파일·프레임의 평가 표면과 분리 후보의 UV/절단점 보간을 비교한다. 원본 UV 품질 검사와 구분한다. |
 | `check_model_images.py` | 독립 이미지/패킹 검사 |
 | `check_model_collisions.py` | 독립 자세별 접촉 쌍 검사 |
 | `model_check_io.py` | 검사별 입력/JSON 출력만 공유. 검사를 묶어 실행하지 않음 |
@@ -38,9 +41,11 @@
 
 이미 허용된 수정·검사는 반복해서 허락을 받지 않는다. 별도로 요청된 중간 이미지 확인 시점에는 실제 결과를 제시하고 응답을 기다린다. 위험한 설계 선택은 구체적인 영향과 함께 의견을 확인한다.
 
-애니메이션은 [애니메이션 제작 흐름](animation_workflow.md)을 함께 따른다. AI가 제시한 키포즈를 사용자 검수와 AI 수정으로 확정한 뒤 사이 동작을 연결한다. 정지 키포즈와 연결된 동작은 별도로 검수하며, 이 문서의 중간 이미지 승인만으로 동작 전체를 승인한 것으로 간주하지 않는다.
+리깅·애니메이션 편집은 Unreal에서 수행한다. [애니메이션 제작 흐름](animation_workflow.md)에 따라 짧은 동작을 바로 재생·검수·수정하며 별도 키포즈 사전 승인 단계를 두지 않는다. 이 문서의 중간 이미지 승인은 모델 외형 작업에 적용한다.
 
 ## JSON으로 모델 만들기
+
+아래 연산 중 `aim_bone`·`pose_limb`·`repair_unweighted`·`attachment_switch`는 기존 Blender 리그/포즈 데이터의 호환 기능이다. 현행 리깅·동작 제작 진입점으로 사용하지 않는다. `set_frame`·`freeze_pose`는 검사/렌더용 상태 선택에 한정한다.
 
 [기본 도형 샘플](../../samples/model_pipeline/README.md)을 실행하면 에셋별 Python 없이 모델을 만들 수 있다. 기존 `.blend`를 읽고 `operations: []`로 복사 후보만 만드는 것도 가능하다.
 
@@ -48,10 +53,13 @@
 | --- | --- |
 | `create_empty` | name, 선택적 parent/location |
 | `create_box` | name, size, parent/location, 선택적 material |
-| `create_profile` | name, profiles: 동일 순서/정점 수의 3차원 단면 배열, capped, parent/material |
+| `create_profile` | name, profiles: 동일 순서/정점 수의 3차원 단면 배열, capped, parent/material. cyclic_profiles=true는 capped=false와 함께 마지막 단면을 첫 단면에 연결해 구멍이 있는 닫힌 외피를 만든다. |
 | `create_material` | name, color, roughness, metallic, 선택적 transmission/ior/coat |
 | `add_bevel` | object, width, segments |
-| `transform_vertices` | object, root, pivot, scale, offset. Basis와 Shape Key를 함께 변환 |
+| `transform_vertices` | object, root, pivot, scale, offset, 선택적 rotation_degrees. 피봇 기준 스케일·회전·이동 순서로 Basis와 Shape Key를 함께 변환 |
+| `freeze_evaluated_meshes` | objects. 같은 시점의 평가 표면을 모두 복사한 뒤 해당 메시의 모디파이어를 제거한다. 형상 분리용이며 Blender 리그 제작 기능이 아니다. |
+| `partition_mesh_faces` | object, groups(name/faces). 기존 면을 중복·누락 없이 새 강체 패널로 분리하고 원본 객체는 숨긴다. UV·재질·코너 노멀과 원래 면 번호를 보존한다. cap_material 지정 시 닫힌 원본의 절단 경계를 해당 재질로 마감한다. |
+| `partition_mesh_planes` | object, groups(name/planes), 선택적 cap_material. 로컬 평면 `[nx, ny, nz, 거리]`의 양의 쪽을 남기며 패널을 절단한다. 절단점의 UV·노멀을 보간하고 내부 면을 구분한다. 전체 분할의 중복·누락과 외관 보존은 별도 검사한다. |
 | `set_properties` | object, values. 이미 존재하는 장치 제어 속성만 변경 |
 | `set_visibility` | object, hidden |
 | `assign_material` | object, material, 기존 slot |
@@ -80,20 +88,22 @@ manifest의 `schema_version`은 1, `asset_id`는 에셋 식별자다. 기존 sou
 
 ## 이미지 검토와 중간 확인
 
+면 분리로 객체 이름이 바뀌면 `review.before_objects`에 기존 객체, `review.objects`에 새 객체를 지정한다. 수정 전 경계로 구도·배율을 고정해 전후를 비교한다. UV 보존 검사는 `reference_source`·`reference_source_sha256`·`reference_frame`과 `mappings(reference/target)`를 지정한다. 새 절단면은 기존 UV 보존 대상에서 제외하고 별도로 검토한다.
+
 `review`는 root_object, 선택적 objects/views/frames, detail_size/game_size/samples와 `intent`를 받는다. `intent`의 goal(개선 목표), preserve(보존 대상 배열), criteria(id/expectation 배열)는 AI가 기존 요청에서 정리한다. 취향이나 위치가 모호할 때만 사용자에게 묻는다.
 
 - 기존 모델은 수정 전의 프레임별 경계에서 중심/배율을 한 번 계산해 `review_fixture.json`에 고정한다. 후보에서도 같은 카메라·조명·프레임·색 관리·샘플 시드를 사용한다. 후보가 화면을 벗어나면 성공으로 판단하지 말고 양쪽을 포함하는 새 비교 조건을 정한다.
 - `visual_review.json`에는 후보/이미지 해시, 촬영 조건 지문, 관찰 근거와 중간 확인 상태를 남긴다. 렌더 완료는 `awaiting_ai_review`다. 픽셀 차이만으로 품질을 자동 판정하지 않는다.
 - AI는 제공된 모든 방향과 크기의 이미지를 직접 확인한다. `record_ai_review()` 또는 CLI의 `--ai-review`로 항목별 met/unmet/uncertain, 관찰 내용, 근거 이미지, 보존 여부, 다음 행동을 기록한다. 비교 항목은 전후 양쪽 이미지를 지정한다. 전 항목 충족이면 `awaiting_user`, 결함은 `needs_revision`, 판독 불가는 `uncertain`이다.
 - 사용자에게 이미지와 판단을 제시한 뒤 실제 응답만 `--user-decision ok --statement "실제 응답"` 또는 revise로 기록한다. 아직 받지 않은 OK를 작성하지 않는다. OK는 `approved_for_next_stage`와 stage_approval=true이며 제작 보고서의 최종 visual_approval/quality_checks_run을 바꾸지 않는다.
-- 중간 검토가 붙은 후보를 다음 수정·동작 생성·보정·베이크의 source로 쓰면 OK를 확인한다. 기존에 검토 기록이 없는 에셋을 소급 차단하지 않는다. 같은 단계의 결함 수정은 `review_revision=true`와 새 review를 지정하며, needs_revision/uncertain 후보에서만 승인 없이 반복할 수 있다.
+- 모델 외형 중간 검토가 붙은 후보를 다음 외형 수정의 source로 쓰면 OK를 확인한다. 애니메이션에는 별도 키포즈 승인 게이트를 적용하지 않는다. 기존에 검토 기록이 없는 에셋을 소급 차단하지 않는다. 같은 단계의 결함 수정은 `review_revision=true`와 새 review를 지정하며, needs_revision/uncertain 후보에서만 승인 없이 반복할 수 있다.
 - 이 절차는 AI 작업 절차와 로컬 기록이다. 별도 비전 모델의 자동 판정이나 사용자의 실제 응답을 검증하는 인증 시스템은 아니다. 승인된 파일로의 직접 교체와 기존 게임 출력 진입점까지 전역 차단하는 기능은 포함하지 않는다.
 
 정점 위치만으로 목표 형상을 표현할 수 있는지 조형 전에 판단한다. 면 연결이 원인이면 문제 영역의 구성 방식을 바꾼다. 같은 가설과 방식으로 두 번 개선이 없으면 수치 튜닝을 중단한다. 범용 연산 추가는 실제로 반복되는 필요가 확인됐을 때 수행한다.
 
 `report.json.timings`는 로딩·연산·저장/재로딩·검토 렌더·전체 경과 시간을 초 단위로 기록한다. 전체 시간에는 구조 지문 등 나머지 작업도 포함되므로 부분 항목 합계와 다를 수 있다. 실행 파일 시작 시간과 AI/사용자의 검토 시간은 별도다. 실행 예시는 [중간 검토 샘플](../../samples/model_pipeline/README.md#6면-중간-검토)이다.
 
-팔 보정은 `allow_shift=false`가 기본이다. 손 위치 유지로 목표 손목 각도를 달성하지 못하면 requires_strategy_change와 unresolved_samples에 남기며, 도달 불가 위치는 오류로 처리한다. 목표 이동은 명시적 true에서만 허용한다. 동작 생성의 `weight_repair`는 enabled=true로 별도 요청해야 실행한다. `simplified_preview=true`는 형상을 생략하는 빠른 참고 화면이며 최종 외형 근거로 사용하지 않는다.
+보관된 Blender 보정 기능의 호환 규약: 팔 보정은 `allow_shift=false`가 기본이다. 손 위치 유지로 목표 손목 각도를 달성하지 못하면 requires_strategy_change와 unresolved_samples에 남기며, 도달 불가 위치는 오류로 처리한다. 목표 이동은 명시적 true에서만 허용한다. 동작 생성의 `weight_repair`는 enabled=true로 별도 요청해야 실행한다. `simplified_preview=true`는 형상을 생략하는 빠른 참고 화면이며 최종 외형 근거로 사용하지 않는다.
 
 구조 지문은 좌표·면/재질 인덱스·UV·웨이트·Shape Key·부모/변환·본·사용자 속성·가시성을 확인한다. **모디파이어 설정, 재질 노드 내부, 드라이버 표현식, Action 전체의 동등성을 증명하지 않는다.** 해당 변경은 별도 검증이 필요하다. 제작 보고서의 `quality_checks_run`과 `visual_approval`은 false다.
 
@@ -150,6 +160,5 @@ UV 대상이나 간섭 쌍을 지정하지 않으면 `not_configured`를 기록�
 
 로컬 `release_v1.json`은 **1차 최종 플레이어 모델**의 경로·해시·사용자 승인 범위를 고정한다. 모델 파일을 중복 복제하지 않는다. 후속 후보 생성은 해당 해시를 manifest의 source_sha256으로 사용한다. 외부 참조 없는 패킹 상태를 확인했으며 모델/텍스처/이미지는 공개 저장소에 넣지 않는다.
 
-게임 출력은 기존 `asset_build.py` → `render_asset_sample.py` → `pack_sprites.py` → `ferrial_drive/assets/` 경로를 재사용한다. [Asset Load Test](../unit-tests/asset_load_test.md)의 `--scene` 입력으로 승인 모델을 넘기되 root/애니메이션/ShadowCatcher/카메라/공통 배율 등 기존 입력 계약을 맞춘다. 모델 검토 이미지와 게임 번들을 혼동하지 않는다.
 
 1차 범위 밖: 범용 자동 조형·자동 리깅·UV 베이크/겹침·연속 충돌·전체 전투 모션·맵 구역 출력·승인 UI. v078을 새 공통 도구로 재생성했다고 주장하지 않는다.

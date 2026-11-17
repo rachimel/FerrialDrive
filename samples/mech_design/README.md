@@ -1,5 +1,7 @@
 # 메카 디자인 편집기 기본 도형 시연
 
+> 현행 사용 범위는 Blender 부위 형상·재질 편집이다. 본이 포함된 기존 도형은 호환 검사 데이터이며 새 리깅·동작 제작은 [Unreal 흐름](../../docs/ai-asset-pipeline/unreal_pipeline.md)을 따른다.
+
 실제 메카 파일 없이 상자1개와 본1개로 부위 배율·단면 프로파일·재질 편집을 확인한다. Blender5.2에서 검증했다. 아래 경로는 FerrialDrive 프로젝트 루트 기준이다. `BLENDER`는 Blender 실행 파일로 바꾼다.
 
 ```text

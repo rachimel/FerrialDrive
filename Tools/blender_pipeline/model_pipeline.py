@@ -61,12 +61,16 @@ def build(manifest, output):
             bpy.ops.wm.read_factory_settings(use_empty=True)
         timings['load_seconds'] = perf_counter() - stage_started
         # 촬영 조건은 수정 전에 고정하고, 렌더는 후보 저장 후 실행한다.
-        fixture = capture_fixture(config['review']) if source and config.get('review') else None
+        before_review = dict(config.get('review', {}))
+        if before_review.get('before_objects'):
+            before_review['objects'] = before_review['before_objects']
+        fixture = capture_fixture(before_review) if source and config.get('review') else None
         before = {o.name: fingerprint(o) for o in bpy.data.objects}
         for operation in config['operations']:
-            target = operation.get('object')
-            if target in before and target not in config.get('change_objects', []):
-                raise ValueError(f'선언한 수정 범위 밖의 대상: {target}')
+            targets = operation.get('objects', []) if operation['op'] == 'freeze_evaluated_meshes' else [operation.get('object')]
+            for target in targets:
+                if target in before and target not in config.get('change_objects', []):
+                    raise ValueError(f'선언한 수정 범위 밖의 대상: {target}')
         stage_started = perf_counter()
         apply_operations(config['operations'])
         timings['operations_seconds'] = perf_counter() - stage_started
@@ -96,7 +100,7 @@ def build(manifest, output):
             stage_started = perf_counter()
             if source and config['operations']:
                 bpy.ops.wm.open_mainfile(filepath=str(source))
-                for item in render_review(review_config, output / 'before', fixture):
+                for item in render_review(before_review, output / 'before', fixture):
                     evidence.append(dict(item, file='before/' + item['file'], kind='before'))
                 bpy.ops.wm.open_mainfile(filepath=str(candidate))
             for item in render_review(review_config, output / 'after', fixture):

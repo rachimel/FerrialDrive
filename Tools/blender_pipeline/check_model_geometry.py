@@ -12,6 +12,8 @@ def check(config):
     for obj in bpy.data.objects:
         if obj.type != 'MESH' or obj.hide_render:
             continue
+        if config.get('objects') and obj.name not in config['objects']:
+            continue
         mesh = obj.data
         finite = all(math.isfinite(x) for v in mesh.vertices for x in v.co)
         if not finite:

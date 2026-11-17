@@ -21,6 +21,12 @@ def check(config):
             errors.append(f'uv_bounds:{name}')
         obj.data.calc_loop_triangles()
         for triangle in obj.data.loop_triangles:
+            material_index = obj.data.polygons[triangle.polygon_index].material_index
+            material = obj.data.materials[material_index] if material_index < len(obj.data.materials) else None
+            if material and material.name in config.get('untextured_materials', []):
+                if material.use_nodes and any(node.type == 'TEX_IMAGE' for node in material.node_tree.nodes):
+                    errors.append(f'textured_material_excluded:{material.name}')
+                continue
             a, b, c = [layer.data[i].uv for i in triangle.loops]
             if abs((b - a).cross(c - a)) < 1e-12:
                 errors.append(f'zero_area_uv:{name}')

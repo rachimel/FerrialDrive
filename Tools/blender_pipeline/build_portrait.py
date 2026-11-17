@@ -11,8 +11,8 @@ import bpy
 import numpy as np
 
 ROOT=Path(__file__).resolve().parents[2]
-INPUTS=ROOT/'data/portrait_editor/inputs'
-OUT=ROOT/'data/portrait_editor/rig'
+INPUTS=ROOT/'data/source/portrait_editor/inputs'
+OUT=ROOT/'data/source/portrait_editor/rig'
 PREVIEWS=ROOT/'output/blender_pipeline/previews'
 for input_name in ('character-cutout-generated.png','smile-generated.png','closed-smile-generated.png','character-clean-face-generated.png'):
     if not (INPUTS/input_name).is_file():raise FileNotFoundError(f'원본 이미지를 찾을 수 없어: {INPUTS/input_name}')
