@@ -1,0 +1,18 @@
+[
+    {"frame": 1, "keys": ["d"], "mouse": [1500, 540]},
+    {"frame": 7, "capture": "run_start.png"},
+    {"frame": 13, "keys": ["d", "left_shift"]},
+    {"frame": 19, "capture": "run_to_dash.png"},
+    {"frame": 25, "keys": ["d"]},
+    {"frame": 31, "capture": "dash_to_run.png"},
+    {"frame": 37, "keys": []},
+    {"frame": 43, "capture": "run_coast.png"},
+    {"frame": 55, "keys": ["w", "left_shift"]},
+    {"frame": 67, "keys": []},
+    {"frame": 79, "keys": ["d"]},
+    {"frame": 85, "keys": ["w"]},
+    {"frame": 97, "keys": []},
+    {"frame": 115, "keys": ["d"], "boost": true},
+    {"frame": 130, "keys": []},
+    {"frame": 151, "paused": true}
+]

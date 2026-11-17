@@ -1,0 +1,11 @@
+[
+  {"frame": 1, "keys": ["d"]},
+  {"frame": 31, "keys": ["d", "s"]},
+  {"frame": 61, "keys": ["s"]},
+  {"frame": 91, "keys": ["a", "s"]},
+  {"frame": 121, "keys": ["a"]},
+  {"frame": 151, "keys": ["a", "w"]},
+  {"frame": 181, "keys": ["w"]},
+  {"frame": 211, "keys": ["d", "w"]},
+  {"frame": 241, "keys": []}
+]

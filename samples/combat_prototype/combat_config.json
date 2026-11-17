@@ -25,7 +25,7 @@
     "magazine_rounds": 45,
     "shot_interval_seconds": 0.085,
     "ammo_recovery_delay_seconds": 1.0,
-    "ammo_recovery_initial_rounds_per_second": 2.0,
+    "ammo_recovery_initial_rounds_per_second": 4.0,
     "ammo_recovery_growth_per_second": 1.6,
     "bullet_damage": 9
   },

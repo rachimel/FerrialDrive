@@ -1,0 +1,17 @@
+[
+  {"frame": 1, "reset": true, "energy_level": 2, "keys": [], "mouse": [1500, 540], "attack_held": true},
+  {"frame": 10, "boost": true},
+  {"frame": 18, "capture": "run_boost_attack.png"},
+  {"frame": 32, "capture": "run_link.png"},
+  {"frame": 80, "attack_held": false},
+  {"frame": 101, "reset": true, "energy_level": 2, "keys": ["left_shift"], "mouse": [1500, 540], "attack_held": true},
+  {"frame": 128, "boost": true},
+  {"frame": 134, "capture": "dash_boost_attack.png"},
+  {"frame": 158, "capture": "dash_link.png"},
+  {"frame": 180, "attack_held": false},
+  {"frame": 201, "reset": true, "energy_level": 2, "keys": [], "mouse": [1500, 540], "attack_held": true},
+  {"frame": 246, "boost": true},
+  {"frame": 254, "capture": "thrust_boost.png"},
+  {"frame": 270, "capture": "thrust_link.png"},
+  {"frame": 280, "attack_held": false}
+]

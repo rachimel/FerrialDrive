@@ -1,0 +1,13 @@
+[
+  {"frame": 1, "keys": ["d"], "mouse": [1200, 600]},
+  {"frame": 31, "keys": ["d", "s"]},
+  {"frame": 61, "keys": ["s", "left_shift"]},
+  {"frame": 91, "keys": ["a"], "boost": true},
+  {"frame": 94, "keys": []},
+  {"frame": 105, "keys": ["w"]},
+  {"frame": 135, "keys": ["a", "w"]},
+  {"frame": 165, "keys": []},
+  {"frame": 180, "paused": true},
+  {"frame": 195, "paused": false},
+  {"frame": 210, "reset": true}
+]

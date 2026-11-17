@@ -1,0 +1,10 @@
+[
+  {"frame": 1, "reset": true, "ui_action": "overdrive", "keys": [], "mouse": [1500, 540], "attack_held": true},
+  {"frame": 15, "capture": "rainbow_red.png"},
+  {"frame": 61, "capture": "rainbow_green.png"},
+  {"frame": 121, "capture": "rainbow_blue.png"},
+  {"frame": 181, "capture": "rainbow_red_repeat.png"},
+  {"frame": 241, "capture": "rainbow_green_repeat.png"},
+  {"frame": 295, "attack_held": false},
+  {"frame": 330, "capture": "rainbow_restored.png"}
+]

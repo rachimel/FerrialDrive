@@ -1,0 +1,13 @@
+[
+  {"frame": 1, "scene": "combat"},
+  {"frame": 35, "capture": "encounter.png"},
+  {"frame": 45, "attack_held": true},
+  {"frame": 95, "attack_held": false},
+  {"frame": 150, "ui_action": "swap"},
+  {"frame": 210, "attack_held": true},
+  {"frame": 270, "attack_held": false, "paused": true, "capture": "paused.png"},
+  {"frame": 300, "paused": false, "keys": ["d", "left_shift"]},
+  {"frame": 340, "boost": true},
+  {"frame": 370, "keys": []},
+  {"frame": 410, "reset": true, "capture": "reset.png"}
+]

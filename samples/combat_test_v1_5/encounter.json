@@ -1,0 +1,73 @@
+{
+  "rendering": {"backend": "auto"},
+  "knockback": {
+    "duration_seconds": 0.12,
+    "death_seconds": 0.22,
+    "distance_m_by_kind": {"small": 3.0, "medium": 1.4, "humanoid": 0.7}
+  },
+  "gun_knockback": {
+    "duration_seconds": 0.06,
+    "distance_m_by_kind": {"small": 0.3, "medium": 0.14, "humanoid": 0.07}
+  },
+  "profiles": {
+    "small": {
+      "name": "소형", "kind": "small", "health": 180,
+      "radius_m": 1.5, "height_pixels": 24, "hit_radius_pixels": 24,
+      "speed_mps": 38, "melee_reach_m": 7, "melee_damage": 35,
+      "preferred_range_m": 25, "fire_range_m": 80, "shot_damage": 10,
+      "projectile_speed_mps": 70, "projectile_range_m": 160,
+      "windup_seconds": 0.32, "active_seconds": 0.14, "recovery_seconds": 0.65,
+      "color": "#EBB66D"
+    },
+    "medium": {
+      "name": "중형", "kind": "medium", "health": 480,
+      "radius_m": 2.8, "height_pixels": 38, "hit_radius_pixels": 36,
+      "speed_mps": 20, "melee_reach_m": 7, "melee_damage": 35,
+      "preferred_range_m": 36, "fire_range_m": 95, "shot_damage": 45,
+      "projectile_speed_mps": 80, "projectile_range_m": 180,
+      "windup_seconds": 0.5, "active_seconds": 0.1, "recovery_seconds": 0.8,
+      "color": "#C98A75"
+    },
+    "humanoid": {
+      "name": "인간형", "kind": "humanoid", "health": 1200,
+      "radius_m": 2.5, "height_pixels": 48, "hit_radius_pixels": 34,
+      "speed_mps": 32, "melee_reach_m": 11, "melee_damage": 75,
+      "preferred_range_m": 23, "fire_range_m": 85, "shot_damage": 30,
+      "projectile_speed_mps": 105, "projectile_range_m": 190,
+      "windup_seconds": 0.3, "active_seconds": 0.18, "recovery_seconds": 0.5,
+      "color": "#AEADDF"
+    }
+  },
+  "spawns": [
+    {"id": "S1", "profile": "small", "position_m": [521.2, 498.2]},
+    {"id": "S2", "profile": "small", "position_m": [521.2, 501.8]},
+    {"id": "S3", "profile": "small", "position_m": [524.8, 498.2]},
+    {"id": "S4", "profile": "small", "position_m": [521.92, 519.375]},
+    {"id": "S5", "profile": "small", "position_m": [519.375, 521.92]},
+    {"id": "S6", "profile": "small", "position_m": [524.466, 521.92]},
+    {"id": "S7", "profile": "small", "position_m": [501.8, 521.2]},
+    {"id": "S8", "profile": "small", "position_m": [498.2, 521.2]},
+    {"id": "S9", "profile": "small", "position_m": [501.8, 524.8]},
+    {"id": "S10", "profile": "small", "position_m": [480.625, 521.92]},
+    {"id": "S11", "profile": "small", "position_m": [478.08, 519.375]},
+    {"id": "S12", "profile": "small", "position_m": [478.08, 524.466]},
+    {"id": "S13", "profile": "small", "position_m": [478.8, 501.8]},
+    {"id": "S14", "profile": "small", "position_m": [478.8, 498.2]},
+    {"id": "S15", "profile": "small", "position_m": [475.2, 501.8]},
+    {"id": "S16", "profile": "small", "position_m": [478.08, 480.625]},
+    {"id": "S17", "profile": "small", "position_m": [480.625, 478.08]},
+    {"id": "S18", "profile": "small", "position_m": [475.534, 478.08]},
+    {"id": "S19", "profile": "small", "position_m": [498.2, 478.8]},
+    {"id": "S20", "profile": "small", "position_m": [501.8, 478.8]},
+    {"id": "S21", "profile": "small", "position_m": [519.375, 478.08]},
+    {"id": "S22", "profile": "small", "position_m": [521.92, 480.625]},
+    {"id": "M1", "profile": "medium", "position_m": [547.078, 509.364]},
+    {"id": "M2", "profile": "medium", "position_m": [509.364, 547.078]},
+    {"id": "M3", "profile": "medium", "position_m": [473.333, 539.911]},
+    {"id": "M4", "profile": "medium", "position_m": [452.922, 490.636]},
+    {"id": "M5", "profile": "medium", "position_m": [490.636, 452.922]},
+    {"id": "M6", "profile": "medium", "position_m": [526.667, 460.089]},
+    {"id": "H1", "profile": "humanoid", "position_m": [532.043, 518.5]},
+    {"id": "H2", "profile": "humanoid", "position_m": [467.957, 481.5]}
+  ]
+}

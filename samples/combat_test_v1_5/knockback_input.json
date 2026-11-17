@@ -1,0 +1,6 @@
+[
+  {"frame": 1, "scene": "combat", "attack_held": true},
+  {"frame": 65, "attack_held": false, "paused": true},
+  {"frame": 85, "paused": false, "attack_held": true},
+  {"frame": 115, "reset": true, "attack_held": false, "capture": "reset.png"}
+]

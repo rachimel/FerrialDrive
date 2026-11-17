@@ -1,0 +1,485 @@
+{
+  "upper_lower": {
+    "enabled": true,
+    "catalog": "../../data/runtime/upper_lower/player_20261117_compact_r01/catalog.json",
+    "follow": {
+      "upper_response_seconds": 0.12,
+      "lower_response_seconds": 0.24,
+      "lower_start_degrees": 45,
+      "settle_degrees": 0.1
+    }
+  },
+  "energy": {
+    "absorption_gain_multiplier": 0.5,
+    "level_capacities": [
+      100,
+      200,
+      400
+    ],
+    "overdrive_capacity": 200,
+    "decay_margin_seconds": 2,
+    "decay_per_second": 0.5
+  },
+  "overdrive": {
+    "standby_seconds": 3,
+    "cooldown_seconds": 30,
+    "duration_seconds": 10,
+    "animation_speed": 2,
+    "movement_speed": 1.5,
+    "cooldown_speed": 2,
+    "trail_scale": 1.15,
+    "pitch_scale": 1.1,
+    "sword_damage": 150,
+    "standby_tint_ratio": 0.18,
+    "standby_rim_strength": 0.25
+  },
+  "audio": {
+    "enabled": true,
+    "volume": 0.4,
+    "channels": 48,
+    "bank": "../sound_effects/sound_bank.json",
+    "user_bank": "../../data/runtime/audio/user_audio/bank.json",
+    "directory": "../../data/runtime/audio/training_cc0_v1",
+    "demo_directory": "../sound_effects/generated"
+  },
+  "texture_quality_profiles": {
+    "high": "../../data/runtime/textures/contact_runtime_compact_20261117_r01/high/atlas.json",
+    "medium": "../../data/runtime/textures/contact_runtime_compact_20261117_r01/medium/atlas.json",
+    "low": "../../data/runtime/textures/contact_runtime_compact_20261117_r01/low/atlas.json"
+  },
+  "window": {
+    "width": 1920,
+    "height": 1080
+  },
+  "targeting": {
+    "acquisition": "visible",
+    "screen_distance_switch": {
+      "enabled": true,
+      "far_ratio": 0.7,
+      "near_ratio": 0.55,
+      "closer_ratio": 0.75,
+      "switch_delay_seconds": 0.25,
+      "manual_hold_seconds": 1.0
+    }
+  },
+  "camera_zoom": {
+    "transition_seconds": 0.2,
+    "scale_by_state": {
+      "idle": 1.0,
+      "run": 1.0,
+      "dash": 0.9,
+      "boost": 0.85
+    }
+  },
+  "camera_impact": {
+    "enabled": true,
+    "amplitude_pixels": 16,
+    "overdrive_amplitude_pixels": 24,
+    "duration_seconds": 0.2,
+    "frequency_hz": 12,
+    "damping": 1.8
+  },
+  "loading": {
+    "logo": "../../data/runtime/images/ui/logo.png",
+    "background": "#0A1016",
+    "track": "#283840",
+    "accent": "#9DDFEA",
+    "text": "#D8E6ED",
+    "muted": "#91A2AA",
+    "font_size": 18,
+    "logo_width": 640,
+    "logo_height": 220,
+    "bar_width": 480,
+    "bar_height": 4
+  },
+  "ground_effects": {
+    "enabled": true,
+    "material": "soil",
+    "capacity": 160,
+    "emission_seconds": 0.02,
+    "ground_color_blend": 0.8,
+    "near_emitter_front_pixels": 12,
+    "strength_by_mode": {
+      "dash": 1,
+      "boost": 1.8,
+      "attack": 1,
+      "dash_attack": 1.55
+    },
+    "appearance": {
+      "foot_friction": {
+        "size_pixels": [
+          64,
+          32
+        ],
+        "opacity": 0.85,
+        "color": "#D4D5CF",
+        "detail": 0.5,
+        "variant_hz": 30
+      },
+      "energy_orb": {
+        "size_pixels": [
+          3,
+          3
+        ],
+        "lifetime_seconds": 0.12,
+        "drift_pixels_per_second": 110,
+        "spread_pixels_per_second": 180,
+        "opacity": 0.9,
+        "growth": -0.5,
+        "emission_every": 2
+      },
+      "scrape_gray": {
+        "size_pixels": [
+          48,
+          18
+        ],
+        "lifetime_seconds": 0.05,
+        "drift_pixels_per_second": 45
+      },
+      "dirt_debris_gray": {
+        "size_pixels": [
+          78,
+          34
+        ],
+        "lifetime_seconds": 0.3,
+        "drift_pixels_per_second": 105,
+        "rise_pixels_per_second": 35,
+        "spread_pixels_per_second": 120,
+        "spread_degrees": 32,
+        "gravity_pixels_per_second_squared": 220,
+        "brightness": 1.4,
+        "alpha_cutoff": 0.25,
+        "detail": 0.45
+      },
+      "smoke_gray": {
+        "size_pixels": [
+          62,
+          22
+        ],
+        "lifetime_seconds": 0.2,
+        "drift_pixels_per_second": 48,
+        "spread_pixels_per_second": 18,
+        "opacity": 0.7,
+        "detail": 0.45,
+        "growth": 0.5,
+        "count": 2,
+        "spawn_spread_pixels": 8
+      },
+      "thruster_smoke": {
+        "size_pixels": [
+          14,
+          14
+        ],
+        "lifetime_seconds": 0.16,
+        "drift_pixels_per_second": 220,
+        "spread_pixels_per_second": 38,
+        "opacity": 0.6,
+        "color": "#CBD2D4",
+        "detail": 0.4,
+        "roundness": 0.7,
+        "growth": 2,
+        "back_scale": 1.9,
+        "count": 2
+      },
+      "spark": {
+        "size_pixels": [
+          28,
+          2
+        ],
+        "lifetime_seconds": 0.22,
+        "drift_pixels_per_second": 90
+      },
+      "trail": {
+        "width_pixels": 7,
+        "afterimage_hold_seconds": 0.12,
+        "fade_out_seconds": 0.35,
+        "size_decay": 0.65,
+        "length_seconds": 0.045,
+        "min_length_pixels": 22,
+        "max_length_pixels": 110,
+        "length_interpolation_seconds": 0.03,
+        "strength_interpolation_seconds": 0.03,
+        "boost_length_scale": 1.4
+      }
+    },
+    "atlas": "../../data/runtime/images/vfx/ground_scrape_v1/atlas.json",
+    "anchors": "../../data/runtime/animations/player_mech/contact_runtime_aligned_20261117/ground_anchors.json"
+  },
+  "hud": {
+    "config": "../ui_unit_test_v2/ui_config.json",
+    "preset": "../ui_unit_test_v2/hud_sample.json",
+    "icon_manifest": "../../data/runtime/images/ui/hud_icons/model_v3/manifest.json",
+    "camera_motion_blur": {
+      "amount": 0.35,
+      "max_length_pixels": 9,
+      "samples": 17,
+      "forward_bias": 0.65
+    }
+  },
+  "overdrive_rim": {
+    "color": "#FF263D",
+    "strength": 1.0,
+    "breath_seconds": 1.8,
+    "minimum_strength_ratio": 0.65
+  },
+  "overdrive_rainbow": {
+    "cycle_seconds": 3.0
+  },
+  "combat": {
+    "asset": "../../data/runtime/catalog/prerender/player_contact_runtime_aligned_20261117/combat/catalog.json",
+    "interpolation": "../../data/runtime/frame_interpolation/player_contact_runtime_aligned_20261117/catalog.json",
+    "playback_speed": 1.5,
+    "damage_by_energy_level": [
+      60,
+      80,
+      100
+    ],
+    "easing": "linear",
+    "acceleration": "constant"
+  },
+  "sword_effects": {
+    "standby_tint_ratio": 0.65,
+    "enabled": true,
+    "trajectory": "../../data/runtime/animations/player_mech/contact_runtime_aligned_20261117/blade_trajectory.json",
+    "demo_trajectory": "trail_sample.json",
+    "energy_level": 1,
+    "sample_seconds": 0.004166666666666667,
+    "half_width_pixels": 2,
+    "trail_inner_ratio": 0.62,
+    "trail_min_sweep_ratio": 0.12,
+    "flow_strands": 18,
+    "flow_softness": 0.018,
+    "flow_texture_directory": "../../data/runtime/effects/sword_trail",
+    "demo_flow_texture_directory": "generated/trail_flow",
+    "max_sections": 192,
+    "dash_reach_scale": 1.35,
+    "hit_y_margin_m": 1.5,
+    "contact_effects": {
+      "enabled": true,
+      "level_size_scales": [
+        1.0,
+        1.25,
+        1.5
+      ],
+      "slash_seconds": 0.2,
+      "slash_width_pixels": 9,
+      "sparks_per_hit": 22,
+      "spark_seconds": 0.55,
+      "spark_speed_pixels_per_second": 1800,
+      "spark_width_pixels": 3.2,
+      "max_sparks": 176,
+      "max_slashes": 8,
+      "slash_length_scale": 4.5,
+      "slash_grow_seconds": 0.1,
+      "slash_hold_seconds": 0,
+      "size_jitter": 0.1,
+      "angle_jitter_degrees": 6,
+      "rim_lighting": {
+        "power": 1.4,
+        "edge_feather": 0.04,
+        "strength": 1,
+        "body_color": "#E6F9FF",
+        "color": "#BFEFFF",
+        "metal_color": "#FFD228",
+        "metal_power": 0.6
+      },
+      "slash_front_peak_ratio": 0.825,
+      "slash_center_width_ratio": 0.35,
+      "fade_blur_ratio": 0.18,
+      "fade_blur_samples": 8,
+      "fade_opacity_ratio": 0.1,
+      "slash_segments": 24,
+      "slash_fade_exponent": 6,
+      "slash_shrink_exponent": 10
+    },
+    "body_wind": {
+      "enabled": false,
+      "radius_pixels": 96,
+      "center_offset_pixels": [
+        0,
+        -80
+      ],
+      "rear_half_angle_degrees": 30,
+      "segments": 60,
+      "band_width_pixels": 26,
+      "opacity": 0.28,
+      "color": "#B8B8B8",
+      "ground_color_blend": 0.45,
+      "level_scales": [
+        1.0,
+        1.25,
+        1.5
+      ]
+    },
+    "thrust_width_ratio": 0.46153846153846156,
+    "thrust_visual_scale": 2.5,
+    "thrust_outer_half_width_pixels": 7.384615384615384,
+    "thrust_core_half_width_pixels": 2.3630769230769233,
+    "thrust_tail_opacity": 0.8,
+    "thrust_transition_fade_seconds": 0.08,
+    "active_phase_windows": [
+      [
+        0.3333333333,
+        0.5
+      ],
+      [
+        0.3333333333,
+        0.5
+      ],
+      [
+        0.3333333333,
+        0.5
+      ],
+      [
+        0,
+        0.375
+      ]
+    ],
+    "levels": [
+      {
+        "reach_scale": 2.4,
+        "trail_seconds": 0.26,
+        "trail_opacity": 0.5,
+        "color": "#50B8F2",
+        "echo_count": 0,
+        "echo_seconds": 0.22,
+        "echo_interval_seconds": 0.02,
+        "echo_opacity": 0.3,
+        "echo_tint_mix": 0.55
+      },
+      {
+        "reach_scale": 3.6,
+        "trail_seconds": 0.36,
+        "trail_opacity": 0.65,
+        "color": "#78D0FF",
+        "echo_count": 4,
+        "echo_seconds": 0.3,
+        "echo_interval_seconds": 0.018,
+        "echo_opacity": 0.4,
+        "echo_tint_mix": 0.7
+      },
+      {
+        "reach_scale": 5,
+        "trail_seconds": 0.48,
+        "trail_opacity": 0.8,
+        "color": "#A0E6FF",
+        "echo_count": 8,
+        "echo_seconds": 0.38,
+        "echo_interval_seconds": 0.016,
+        "echo_opacity": 0.5,
+        "echo_tint_mix": 0.85
+      }
+    ],
+    "targets": []
+  },
+  "interpolation": {
+    "enabled": true,
+    "source": "../../data/runtime/frame_interpolation/player_contact_runtime_aligned_20261117/catalog.json",
+    "easing": "linear",
+    "shutter_seconds": 0.008,
+    "blur_direction": "trailing",
+    "blur_strength": 0.2,
+    "cache_capacity": 128
+  },
+  "movement": {
+    "map_size_m": 1000,
+    "radius_m": 2.5,
+    "run_speed_mps": 30,
+    "dash_speed_mps": 100,
+    "movement_acceleration_seconds": 0.2,
+    "attack_run_speed_mps": 50,
+    "attack_dash_speed_mps": 90,
+    "third_attack_run_speed_mps": 70,
+    "third_attack_dash_speed_mps": 120,
+    "fourth_attack_run_speed_mps": 50,
+    "fourth_attack_dash_speed_mps": 90,
+    "boost_start_speed_mps": 250,
+    "boost_prepare_seconds": 0.08,
+    "boost_duration_seconds": 0.2
+  },
+  "presentation": {
+    "pixels_per_meter": 25.6,
+    "projection_y_scale": 0.3209,
+    "sprite_scale": 0.6336633663366337,
+    "shadow_opacity": 0.5,
+    "shadow_softness_pixels": 5,
+    "shadow_contact_radius_pixels": 56,
+    "transition_seconds": 0.12,
+    "run_reference_speed_mps": 12.22,
+    "tile_m": 10,
+    "grid_m": 10,
+    "major_grid_m": 100,
+    "font": "../../data/fonts/SUITE-otf/SUITE-Bold.otf",
+    "asset": "../../data/runtime/catalog/prerender/player_contact_runtime_aligned_20261117/movement/catalog.json",
+    "ground": "../../data/runtime/images/textures/polyhaven/dirt/dirt_diff_1k.png",
+    "energy_mask_enabled": true,
+    "energy_mask_gain": 4
+  },
+  "weapons": {
+    "enabled": true,
+    "range_m": 75,
+    "damage_by_energy_level": [15, 20, 25],
+    "overdrive_damage": 25,
+    "penetration_count": 1,
+    "overdrive_explosion": {"radius_m": 3, "damage": 13},
+    "contact_effects": {
+      "sparks_per_hit": 10,
+      "lifetime_seconds": 0.24,
+      "speed_pixels_per_second": 900,
+      "width_pixels": 3.2,
+      "max_sparks": 256,
+      "energy_impact": {"lifetime_seconds": 0.2, "radius_pixels": 44, "max_impacts": 64},
+      "explosion": {"lifetime_seconds": 0.28, "max_count": 48, "rays": 10}
+    },
+    "swap_speed": 2,
+    "aim_speed": 2,
+    "gun": {
+      "magazine_rounds": 60,
+      "shot_interval_seconds": 0.06666666666666667,
+      "ammo_recovery_initial_rounds_per_second": 4.0,
+      "bullet_speed_units_per_second": 5500
+    },
+    "effects": {
+      "fire_recoil": {"amplitude_pixels": 2, "duration_seconds": 0.09, "frequency_hz": 18, "damping": 2},
+        "muzzle_flash": {"length_pixels": 84, "width_pixels": 90, "lifetime_seconds": 0.045,
+                         "size_scale_range": [0.8, 1.2]},
+      "length_pixels": 108,
+      "length_scales_by_energy_level": [1.0, 1.25, 1.5],
+      "hit_camera_pixels": 10,
+      "overdrive_hit_camera_pixels": 16,
+      "width_pixels": 6,
+      "tail_color": "#FFB843",
+      "core_color": "#FFF5D9"
+    },
+    "muzzle_tracks": "../../data/runtime/animations/player_mech/contact_runtime_aligned_20261117/muzzle_tracks.json",
+    "motion_frames": {
+      "gun_ready": 12,
+      "gun_hip_fire": 6,
+      "gun_aim_enter": 8,
+      "gun_aim_hold": 12,
+      "gun_aim_fire": 6,
+      "gun_aim_exit": 8,
+      "gun_hip_run_forward": 6,
+      "gun_hip_run_backward": 6,
+      "gun_hip_run_left": 6,
+      "gun_hip_run_right": 6,
+      "gun_hip_dash": 4,
+      "gun_aim_run_forward": 6,
+      "gun_aim_run_backward": 6,
+      "gun_aim_run_left": 6,
+      "gun_aim_run_right": 6,
+      "gun_aim_dash": 4,
+      "sword_sheath": 6,
+      "gun_draw": 6,
+      "gun_holster": 6,
+      "sword_draw": 6,
+      "sword_combo_01": 6,
+      "sword_combo_02": 6,
+      "sword_combo_03": 6,
+      "sword_combo_04": 8,
+      "sword_run": 6,
+      "sword_dash": 4,
+      "sword_idle": 12
+    }
+  }
+}

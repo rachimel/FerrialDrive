@@ -1,0 +1,18 @@
+[
+  {"frame": 1, "reset": true, "energy_level": 1, "keys": [], "mouse": [1500, 540], "attack_held": true},
+  {"frame": 14, "capture": "level_1.png"},
+  {"frame": 54, "capture": "level_1_thrust.png"},
+  {"frame": 80, "attack_held": false},
+  {"frame": 101, "reset": true, "energy_level": 2, "keys": [], "mouse": [1500, 540], "attack_held": true},
+  {"frame": 114, "capture": "level_2.png"},
+  {"frame": 154, "capture": "level_2_thrust.png"},
+  {"frame": 180, "attack_held": false},
+  {"frame": 201, "reset": true, "energy_level": 3, "keys": [], "mouse": [1500, 540], "attack_held": true},
+  {"frame": 214, "capture": "level_3.png"},
+  {"frame": 254, "capture": "level_3_thrust.png"},
+  {"frame": 280, "attack_held": false},
+  {"frame": 301, "reset": true, "energy_level": 3, "keys": ["left_shift"], "mouse": [1500, 540], "attack_held": true},
+  {"frame": 314, "capture": "level_3_dash.png"},
+  {"frame": 354, "capture": "level_3_dash_thrust.png"},
+  {"frame": 380, "attack_held": false}
+]
