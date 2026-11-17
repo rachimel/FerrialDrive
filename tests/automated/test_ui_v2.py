@@ -3,6 +3,7 @@
 from dataclasses import replace
 from contextlib import nullcontext
 import importlib.util
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -14,7 +15,7 @@ from unittest.mock import MagicMock, Mock, patch
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-SPEC = importlib.util.spec_from_file_location("ui_v2_sample", ROOT / "tests/ui_unit_test_v2.py")
+SPEC = importlib.util.spec_from_file_location("ui_v2_sample", ROOT / "ferrial_drive/ui_v2/preview.py")
 SAMPLE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(SAMPLE)
 
@@ -30,9 +31,41 @@ from ferrial_drive.ui_v2.panels import (build_panel_geometry, build_scanlines,
 
 
 class UiV2Tests(unittest.TestCase):
+    def test_half_resolution_blur_is_scoped_to_moving_hit_digits(self):
+        renderer = Mock()
+        renderer.text_size.return_value = (32, 64)
+        renderer.digit_ink_bottom.return_value = 50
+        renderer.clip.side_effect = lambda *args: nullcontext()
+        renderer.directional_blur.side_effect = lambda *args, **kwargs: nullcontext()
+        view = UiV2View(self.program.config, renderer)
+        moving = CounterVisual(99, 100, 0.09, 0.18)
+        view.perspective_counter(moving, "combo_number", "combo", 300, 1)
+        self.assertEqual(renderer.directional_blur.call_args.kwargs["resolution_scale"], 0.5)
+        renderer.directional_blur.reset_mock()
+        view.perspective_counter(moving, "damage_total", "damage", 450, 1)
+        self.assertEqual(renderer.directional_blur.call_args.kwargs["resolution_scale"], 1)
+        renderer.directional_blur.reset_mock()
+        view.perspective_counter(replace(moving, elapsed_seconds=0.18), "combo_number", "combo", 300, 1)
+        renderer.directional_blur.assert_not_called()
+
+    def test_training_camera_blur_uses_motion_axis_and_direction_bias(self):
+        renderer = Mock()
+        renderer.directional_blur.side_effect = lambda *args, **kwargs: nullcontext()
+        view = UiV2View(self.program.config, renderer)
+        tuning = json.loads((ROOT / "samples/sword_movement/movement_config.json").read_text(encoding="utf-8"))["hud"]["camera_motion_blur"]
+        view.config.data["v2"]["camera_motion_blur"].update(tuning)
+        for velocity, expected in (((10000, 0), (-9, 0)), ((0, 10000), (0, -9)),
+                                   ((-6000, 8000), (5.4, -7.2))):
+            with view.world_motion_blur(velocity):
+                pass
+            for actual, value in zip(renderer.directional_blur.call_args.args[1], expected):
+                self.assertAlmostEqual(actual, value)
+            self.assertEqual(renderer.directional_blur.call_args.args[3], 17)
+            self.assertEqual(renderer.directional_blur.call_args.kwargs["forward_bias"], 0.65)
+
     def test_camera_blur_caps_length_and_skips_stationary_or_disabled_draws(self):
         renderer = Mock()
-        renderer.directional_blur.side_effect = lambda *args: nullcontext()
+        renderer.directional_blur.side_effect = lambda *args, **kwargs: nullcontext()
         view = UiV2View(self.program.config, renderer)
         for velocity, enabled in (((0, 0), True), ((1000, 0), False)):
             with view.world_motion_blur(velocity, enabled=enabled):
@@ -249,7 +282,8 @@ class UiV2Tests(unittest.TestCase):
             self.assertAlmostEqual(current.velocity(300), (after - before) / (2 * epsilon), delta=0.01)
 
     def test_camera_projection_and_mouse_auto_target_share_world_coordinates(self):
-        self.program.mouse = (1000, 360)
+        center_x, center_y = self.program.camera.screen_center
+        self.program.mouse = (center_x + 360, center_y)
         self.program.update(0)
         self.program.update(0.5)
         self.assertEqual(self.program.selected_target_id, "enemy_a")
@@ -258,8 +292,9 @@ class UiV2Tests(unittest.TestCase):
         enemy_screen = self.program.camera.world_to_screen(self.program.enemies["enemy_b"]["position"])
         body = self.program.state.target_body
         self.assertAlmostEqual(body.x + body.width / 2, enemy_screen[0])
-        self.assertLess(self.program.camera.world_to_screen(self.program.player_world)[0], 640)
+        self.assertLess(self.program.camera.world_to_screen(self.program.player_world)[0], center_x)
         self.program.perform("damage_target")
+        self.program.damage_numbers.update(.1)
         popup = self.program.damage_numbers.visuals[0]
         self.program.renderer, self.program.view = Mock(), MagicMock()
         self.program.draw()
@@ -310,6 +345,8 @@ class UiV2Tests(unittest.TestCase):
     def test_fast_damage_entry_and_exit_keep_full_lifetime(self):
         self.program.perform("damage_player")
         numbers = self.program.damage_numbers
+        self.assertFalse(numbers.visuals)
+        numbers.update(.1)
         self.assertAlmostEqual(numbers.width_expand_seconds + numbers.height_expand_seconds, 0.06)
         self.assertEqual(numbers.duration_seconds, 1.15)
         numbers.update(0.06)
@@ -322,7 +359,7 @@ class UiV2Tests(unittest.TestCase):
 
     def test_counter_brightness_changes_glyphs_while_plaque_opacity_stays_fixed(self):
         renderer = Mock()
-        renderer.text_size.side_effect = lambda text, role: (len(text) * 16, 24)
+        renderer.text_size.side_effect = lambda text, role, **kwargs: (len(text) * 16, 24)
         renderer.digit_ink_bottom.return_value = 24
         view = UiV2View(self.program.config, renderer)
         view._scanline_visual = ScanlineVisual(elapsed_seconds=0.06)
@@ -333,7 +370,7 @@ class UiV2Tests(unittest.TestCase):
 
     def test_only_hit_and_damage_counters_use_the_blink_effect(self):
         renderer = Mock()
-        renderer.text_size.side_effect = lambda text, role: (len(str(text)) * 16, 24)
+        renderer.text_size.side_effect = lambda text, role, **kwargs: (len(str(text)) * 16, 24)
         renderer.digit_ink_bottom.return_value = 24
         renderer.scaled.side_effect = lambda *args: nullcontext()
         renderer.clip.side_effect = lambda *args: nullcontext()
@@ -413,19 +450,20 @@ class UiV2Tests(unittest.TestCase):
         self.assertFalse(self.program.player_flash.visuals)
 
     def setUp(self):
-        self.program = SAMPLE.create_test()
+        self.program = SAMPLE.create_preview()
 
     def test_runner_reads_standalone_header_without_execution(self):
         from Tools.unit_test_runner.entrypoints import inspect_entrypoint, read_test_header, read_test_source
 
-        path = ROOT / "tests/ui_unit_test_v2.py"
+        path = ROOT / "tests/sword_movement_test.py"
         self.assertEqual(inspect_entrypoint(path), "standalone")
-        self.assertEqual(read_test_header(read_test_source(path))[0], "ui-unit-test-v2")
+        self.assertEqual(read_test_header(read_test_source(path))[0], "이동·UI 훈련장")
 
     def test_import_and_construction_from_other_directory_do_not_load_pico(self):
         code = ("import runpy,sys; "
-                f"m=runpy.run_path({str(ROOT / 'tests/ui_unit_test_v2.py')!r}); "
-                "m['create_test'](); "
+                f"sys.path.insert(0, {str(ROOT)!r}); "
+                f"m=runpy.run_path({str(ROOT / 'ferrial_drive/ui_v2/preview.py')!r}); "
+                "m['create_preview'](); "
                 "assert not any(n == 'pico2d' or n.startswith('pico2d.') for n in sys.modules)")
         result = subprocess.run([sys.executable, "-c", code], cwd=ROOT.parent,
                                  capture_output=True, text=True)
@@ -465,23 +503,22 @@ class UiV2Tests(unittest.TestCase):
         self.program.apply_target("enemy_b")
         self.assertEqual(self.program.selected_target_id, "enemy_b")
         body = self.program.state.target_body
-        self.assertEqual(body.x + body.width / 2, 920)
+        self.assertEqual(body.x + body.width / 2,
+                         self.program.camera.world_to_screen(self.program.enemies["enemy_b"]["position"])[0])
         self.assertEqual(self.program.state.hud.target.health.current, 680)
         self.program.apply_target("enemy_c")
         self.program.apply_target("enemy_a")
         self.assertEqual(self.program.selected_target_id, "enemy_a")
         self.assertEqual(self.program.state.hud.target.health, damaged)
 
-    def test_empty_candidate_toggle_clears_pending_and_reacquires_after_margin(self):
+    def test_empty_candidate_toggle_clears_pending_and_reacquires_immediately(self):
         self.program.perform("toggle_target")
         self.assertIsNone(self.program.state.hud.target)
         self.assertIsNone(self.program.state.target_body)
         self.assertIsNone(self.program.auto_target.pending_id)
         self.program.perform("toggle_target")
-        self.program.mouse = (640, 0)
+        self.program.mouse = (self.program.camera.screen_center[0], 0)
         self.program.update(0)
-        self.assertIsNone(self.program.selected_target_id)
-        self.program.update(1)
         self.assertEqual(self.program.selected_target_id, "enemy_c")
 
     def test_right_mouse_aiming_range_and_release(self):
@@ -489,20 +526,21 @@ class UiV2Tests(unittest.TestCase):
                             SDL_MOUSEBUTTONDOWN=4, SDL_MOUSEBUTTONUP=5, SDL_BUTTON_RIGHT=3)
         self.program.pico = p
         self.program.enemies["enemy_b"]["position"] = (1050, 360)
-        self.program.mouse = (1050, 360)
+        self.program.mouse = self.program.camera.world_to_screen((1050, 360))
+        mouse_x, mouse_y = self.program.mouse
         self.program.update(0)
         self.program.update(1)
         self.assertEqual(self.program.selected_target_id, "enemy_c")
-        self.program.handle_event(SimpleNamespace(type=4, button=3, x=1050, y=360))
+        self.program.handle_event(SimpleNamespace(type=4, button=3, x=mouse_x, y=mouse_y))
         self.assertTrue(self.program.aiming)
         self.program.update(0)
         self.program.update(1)
         self.assertEqual(self.program.selected_target_id, "enemy_b")
-        self.program.handle_event(SimpleNamespace(type=5, button=3, x=1050, y=360))
+        self.program.handle_event(SimpleNamespace(type=5, button=3, x=mouse_x, y=mouse_y))
         self.assertFalse(self.program.aiming)
 
     def test_dialogue_toggle_preserves_selection_and_three_enemy_drawing(self):
-        self.program.mouse = (640, 0)
+        self.program.mouse = (self.program.camera.screen_center[0], 0)
         self.program.apply_target("enemy_c")
         self.assertEqual(self.program.selected_target_id, "enemy_c")
         self.program.renderer = Mock()
@@ -627,9 +665,9 @@ class UiV2Tests(unittest.TestCase):
         self.assertAlmostEqual(abs(section[1][0] - section[2][0]), 5)
 
     def test_weapon_panels_use_flat_text_and_horizontal_edges(self):
-        renderer = SimpleNamespace(text_size=lambda text, role: (len(text) * 16, 24),
+        renderer = SimpleNamespace(text_size=lambda text, role, **kwargs: (len(text) * 16, 24),
                                    scaled=lambda *args: nullcontext(), text=Mock(), warped_text=Mock(),
-                                   scanline_layer=Mock(), film_grain=Mock(), neon_text=Mock())
+                                   scanline_layer=Mock(), film_grain=Mock(), neon_text=Mock(), filtered_polygons=Mock())
         view = UiV2View(self.program.config, renderer)
         view.style["weapon_card_shape"] = "trapezoid"
         with patch.object(view, "polygon") as polygon, patch.object(view, "stroke"), patch.object(view, "weapon_image"):
@@ -637,7 +675,7 @@ class UiV2Tests(unittest.TestCase):
         renderer.warped_text.assert_not_called()
         self.assertEqual([call.args[0] for call in renderer.neon_text.call_args_list],
                          ["01", "02", "MELEE", "RANGED", "45"])
-        self.assertEqual(renderer.film_grain.call_count, 4)
+        renderer.film_grain.assert_not_called()
         for call in polygon.call_args_list[-2:]:
             a, b, c, d = call.args[0]
             self.assertEqual(a[1], b[1])
@@ -748,13 +786,12 @@ class UiV2Tests(unittest.TestCase):
         self.program.draw()
         self.assertEqual(self.program.view.menu.call_args.kwargs["scanline_visual"], self.program.scanline_motion.visual)
 
-    def test_menu_panels_share_phase_and_scene_scope_restores_after_errors(self):
+    def test_plain_title_has_no_panel_scanlines_and_scene_scope_restores_after_errors(self):
         renderer = Mock()
         view = UiV2View(self.program.config, renderer)
         visual = ScanlineVisual(2, 80)
         view.menu(1, 0, self.program.inputs, scanline_visual=visual)
-        self.assertTrue(renderer.scanline_layer.call_args_list)
-        self.assertTrue(all(call.args[5] == 2 for call in renderer.scanline_layer.call_args_list))
+        renderer.scanline_layer.assert_not_called()
         self.assertEqual(view._scanline_visual, ScanlineVisual())
         with self.assertRaises(RuntimeError):
             with view.scanline_frame(visual):
@@ -763,7 +800,7 @@ class UiV2Tests(unittest.TestCase):
 
     def test_resource_scanlines_exclude_hp_ultimate_and_energy_level(self):
         renderer = Mock()
-        renderer.text_size.side_effect = lambda text, role: (len(text) * 10, 18)
+        renderer.text_size.side_effect = lambda text, role, **kwargs: (len(text) * 10, 18)
         view = UiV2View(self.program.config, renderer)
         with patch.object(view, "panel_scanlines") as scanlines:
             view.resources(self.program.state, 1, 0, 0.8)
@@ -771,8 +808,8 @@ class UiV2Tests(unittest.TestCase):
         geometry = resource_geometry(self.program.config.data["v2"]["layout"],
                                      self.program.config.data["v2"]["style"]["level_bevel_pixels"])
         self.assertEqual(scanlines.call_args.args[0].surface, geometry.energy_channel)
-        self.assertEqual(renderer.film_grain.call_count, 1)
-        self.assertEqual(renderer.film_grain.call_args.args[0], geometry.energy_channel)
+        renderer.film_grain.assert_not_called()
+        self.assertTrue(any(call.kwargs.get("grain") for call in renderer.filtered_polygons.call_args_list))
 
     def test_bright_band_joins_occupied_y_ranges_without_spending_time_in_gaps(self):
         ranges = merge_panel_y_ranges(((100, 150), (20, 40), (30, 50), (200, 200)))
@@ -870,8 +907,8 @@ class UiV2Tests(unittest.TestCase):
         self.assertEqual((d[0] - a[0], d[1] - a[1]), (c[0] - b[0], c[1] - b[1]))
 
     def test_counter_digit_growth_keeps_last_digit_size_and_right_edge(self):
-        renderer = SimpleNamespace(text_size=lambda text, role: (len(text) * 40, 60),
-                                   digit_ink_bottom=lambda role: 50, warped_text=Mock(), scanline_layer=Mock())
+        renderer = SimpleNamespace(text_size=lambda text, role, **kwargs: (len(text) * 40, 60),
+                                   digit_ink_bottom=lambda role: 50, warped_text=Mock(), scanline_layer=Mock(), filtered_polygons=Mock())
         view = UiV2View(self.program.config, renderer)
         for label, role in (("combo", "combo_number"), ("damage", "damage_total")):
             previous_left = None
@@ -893,13 +930,13 @@ class UiV2Tests(unittest.TestCase):
                     digit_bounds = bounds
                     self.assertEqual(last.kwargs["scale_x"], 1)
                     self.assertEqual(last.kwargs["scale_y"], 1)
-                    plate = polygon.call_args_list[0].args[0]
+                    plate = renderer.filtered_polygons.call_args.args[0][0]
                     if right_edge is not None:
                         for actual, expected in zip(plate[1], right_edge):
                             self.assertAlmostEqual(actual, expected)
                         self.assertLess(plate[0][0], previous_left)
                     right_edge, previous_left = plate[1], plate[0][0]
-                    fragments = [call.args[0] for call in polygon.call_args_list[1:]]
+                    fragments = [call.args[0] for call in polygon.call_args_list]
                     self.assertEqual(len(fragments), 3)
                     self.assertTrue(all(max(point[0] for point in fragment) < plate[0][0]
                                         for fragment in fragments))

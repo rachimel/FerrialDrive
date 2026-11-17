@@ -31,7 +31,7 @@ class ProcessTests(unittest.TestCase):
         path = self.source("읽기 전용.py", 'UNIT_TEST_ENTRYPOINT = "standalone"\n'
                            'raise RuntimeError("부모에서 실행하면 안 된다")\n')
         plan = prepare_test(path)
-        self.assertIn(str(path), plan.command)
+        self.assertIn(path, tuple(Path(part) for part in plan.command))
         self.assertNotIn("worker.py", " ".join(plan.command))
 
     def test_syntax_error_is_rejected_before_replacing_active_process(self):
@@ -68,7 +68,7 @@ class ProcessTests(unittest.TestCase):
 
     def test_ui_file_import_needs_neither_runner_nor_open_canvas(self):
         script = ('import runpy, sys\n'
-                  f'runpy.run_path({str(ROOT / "tests/ui_test.py")!r}, run_name="ui_import_check")\n'
+                  f'runpy.run_path({str(ROOT / "tests/sword_movement_test.py")!r}, run_name="ui_import_check")\n'
                   'assert "unit_test_runner" not in sys.modules\n'
                   'assert "pico2d" not in sys.modules\n')
         result = subprocess.run([sys.executable, "-B", "-c", script], cwd=self.directory,

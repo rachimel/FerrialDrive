@@ -21,6 +21,33 @@ BROWSER_ROW_HEIGHT = 32
 BROWSER_VISIBLE_ROWS = 11
 
 
+def preset_layout(width, height, count):
+    panel_width, panel_height = min(760, width - 64), 148 + count * 44
+    return (width - panel_width) // 2, (height - panel_height) // 2, panel_width, panel_height
+
+
+def handle_preset_event(session, event, pico, width, height):
+    """선택창 입력은 파일 목록으로 전달하지 않는다."""
+    plan = session.pending_plan
+    if plan is None:
+        return False
+    if event.type == pico.SDL_KEYDOWN:
+        if event.key == pico.SDLK_ESCAPE:
+            session.pending_plan = None
+        elif event.key in (pico.SDLK_UP, pico.SDLK_DOWN):
+            direction = -1 if event.key == pico.SDLK_UP else 1
+            session.preset_index = (session.preset_index + direction) % len(plan.presets)
+        elif event.key in (pico.SDLK_RETURN, pico.SDLK_KP_ENTER):
+            session.launch_selected()
+    elif event.type == pico.SDL_MOUSEBUTTONDOWN and event.button == pico.SDL_BUTTON_LEFT:
+        x, y, panel_width, _ = preset_layout(width, height, len(plan.presets))
+        row = (event.y - y - 76) // 44
+        if x + 20 <= event.x < x + panel_width - 20 and 0 <= row < len(plan.presets):
+            session.preset_index = row
+            session.launch_selected()
+    return True
+
+
 def handle_browser_event(browser, event, pico, width):
     """선택·탐색만 처리하고 실행 요청 경로는 호출자에게 돌려준다."""
     if event.type == pico.SDL_KEYDOWN:
@@ -75,16 +102,24 @@ class DropSession:
         self.path: Path | None = None
         self.error = ""
         self.error_detail = ""
+        self.pending_plan = None
+        self.preset_index = 0
 
-    def drop(self, paths):
+    def drop(self, paths, *, preset=None):
+        self.pending_plan = None
         if len(paths) != 1:
             self.error = "테스트 .py 파일 하나만 드롭한다."
             return
         try:
-            plan = self.prepare(Path(paths[0]))
+            plan = self.prepare(Path(paths[0])) if preset is None else self.prepare(Path(paths[0]), preset=preset)
         except Exception as error:
             self.error = f"불러오기 실패: {error}"
             traceback.print_exc()
+            return
+        if plan.presets and preset is None:
+            self.pending_plan = plan
+            self.preset_index = 0
+            self.error = self.error_detail = ""
             return
         try:
             self.close()
@@ -96,6 +131,11 @@ class DropSession:
         self.path = plan.path
         self.error = ""
         self.error_detail = ""
+
+    def launch_selected(self):
+        plan = self.pending_plan
+        if plan is not None:
+            self.drop((plan.path,), preset=plan.presets[self.preset_index].preset_id)
 
     def poll(self):
         if self.child is None:
@@ -236,6 +276,23 @@ class DropView:
                                         byref(width), byref(height))
         return width.value if result == 0 else len(text) * RUNNER_FONTS[role][1]
 
+    def presets(self, plan, selected_index):
+        width, height = self.backend.spec.width, self.backend.spec.height
+        x, y, panel_width, panel_height = preset_layout(width, height, len(plan.presets))
+        colors = RUNNER_COLORS
+        self._section(x, y, panel_width, panel_height, colors["panel_surface"])
+        self._label("실행 시나리오 선택", x + 24, y + 25, colors["accent"], panel_width - 48, role="title")
+        self._label(plan.path.name, x + 24, y + 53, colors["muted"], panel_width - 48)
+        for index, preset in enumerate(plan.presets):
+            top = y + 76 + index * 44
+            self._fill(x + 20, top, panel_width - 40, 40,
+                       colors["selected"] if index == selected_index else colors["panel"])
+            self._label(preset.label, x + 36, top + 20, colors["text"], panel_width - 72)
+        self._label("선택한 시나리오를 별도 테스트 창에서 실행한다.", x + 24, y + panel_height - 44,
+                    colors["text"], panel_width - 48)
+        self._label("클릭 / ↑↓·Enter: 실행  |  Esc: 취소", x + 24, y + panel_height - 18,
+                    colors["muted"], panel_width - 48)
+
     def _wrap_error(self, message, max_width, max_lines):
         lines = []
         for paragraph in message.splitlines():
@@ -300,6 +357,8 @@ def run_gui(*, frame_limit=None, backend=None, view_factory=DropView, browser=No
                     break
                 if isinstance(event, FilesDropped):
                     session.drop(event.paths)
+                elif handle_preset_event(session, event, backend.pico, backend.spec.width, backend.spec.height):
+                    continue
                 else:
                     path = handle_browser_event(browser, event, backend.pico, backend.spec.width)
                     if path is not None:
@@ -310,6 +369,8 @@ def run_gui(*, frame_limit=None, backend=None, view_factory=DropView, browser=No
                 backend.raise_window()
             view.browser(browser, session.path)
             view.error(session.error or browser.error)
+            if session.pending_plan is not None:
+                view.presets(session.pending_plan, session.preset_index)
             backend.present()
             frames += 1
             if frame_limit is not None and frames >= frame_limit:

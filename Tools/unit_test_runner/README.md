@@ -24,6 +24,33 @@ python Tools/unit_test_runner/run.py
 - 마우스 휠·위/아래·PageUp/PageDown: 목록 탐색.
 - F5: 파일 추가·수정과 실행 가능 여부 갱신.
 
+## 시나리오 선택 실행
+
+`tests/hardware_profile_benchmark.py`를 더블클릭·Enter·드롭으로 열면 **Combat / Movement** 선택창을 표시한다. 클릭 또는 위/아래·Enter로 선택한다. Esc로 취소하면 실행 중인 테스트를 유지한다. 선택창이 열린 동안에는 파일 목록을 조작하지 않는다. 실행 선택 뒤 소스를 다시 검사하고 문제가 없을 때 기존 테스트를 종료·교체한다.
+
+| 선택 | 실행 장면 | 입력·저장 |
+| --- | --- | --- |
+| Combat | `EncounterApplication`의 현재 다수 적 교전 | 직접 조작, 상세 계측, 창 종료 시 보고서 저장 |
+| Movement | 이동·검 훈련장(`--scenario sword`) | 직접 조작, 상세 계측, 창 종료 시 보고서 저장 |
+
+두 선택 모두 자동 공격과 프레임 제한을 넣지 않는다. 현재 저장 품질을 격리 복사하며 기존 CPU·메모리 제한과 GPU 기능 가드를 사용한다. 테스트 창을 정상 종료하면 `output/performance/hardware_profile/<실행시각>/report.json`·`report.md`를 저장한다. Runner 종료·다른 테스트로 강제 교체하면 저장을 보장하지 않는다. [측정·보고서 안내](../../docs/tool-usage/hardware_profile_benchmark.md)를 따른다. Runner 코드 변경은 실행기를 완전히 닫고 다시 열어 반영한다.
+
+다른 독립 테스트도 최상위 리터럴 `UNIT_TEST_PRESETS`를 선언하면 같은 선택창을 재사용한다. 1~8개 선택지에 중복되지 않는 `id`, 표시용 `label`, 문자열 인자 목록 `args`를 지정한다. 인자는 셸을 거치지 않고 자식 프로그램에 전달하며 Runner는 테스트 파일을 import하지 않는다. 잘못된 메타데이터는 목록에서 실행 불가로 표시한다. 선언이 없는 기존 테스트는 즉시 실행 흐름을 유지한다.
+
+```python
+UNIT_TEST_PRESETS = (
+    {"id": "combat", "label": "Combat", "args": ["--scenario", "combat", "--detail"]},
+    {"id": "movement", "label": "Movement", "args": ["--scenario", "sword", "--detail"]},
+)
+```
+
+파일 인자 실행은 선택 ID를 지정할 수 있다. `--preset`을 생략한 CLI는 테스트 자체 기본값을 유지하며 선택창을 열지 않는다.
+
+```text
+python Tools/unit_test_runner/run.py tests/hardware_profile_benchmark.py --preset combat
+python Tools/unit_test_runner/run.py tests/hardware_profile_benchmark.py --preset movement
+```
+
 문법 검사 후 최상위 `UNIT_TEST_ENTRYPOINT = "standalone"` 선언 또는 필수 인자 없는 일반 `create_test()` 정의를 확인한다. 실행할 수 없는 파일도 선택할 수 있지만 흐리게 표시하고 실행을 차단한다. 동적 생성·외부 import로만 제공하는 진입점은 자동 판별하지 않는다. **실행 가능 표시는 진입 규약 확인 결과**이며, 라이브러리 누락·리소스 오류·반환값 등 실제 실행 오류는 별도 테스트 프로세스의 오류로 표시한다.
 
 기존처럼 열린 **Runner GUI 창**에 테스트 `.py` 하나를 드롭해 바로 실행할 수도 있다. 테스트 창은 파일을 받는 실행기 창과 구분한다. 같은 파일을 다시 실행·드롭하면 이전 테스트를 종료하고 새 프로세스에서 다시 실행한다. UI 모듈·설정 변경은 재실행으로 반영한다. 실행 직전에도 소스를 다시 판별하므로 목록 표시 이후 생긴 오류는 기존 테스트를 종료하기 전에 거절한다.
@@ -38,7 +65,7 @@ python Tools/unit_test_runner/run.py
 파일 인자 실행도 별도 프로세스를 사용한다.
 
 ```text
-python Tools/unit_test_runner/run.py tests/ui_test.py
+python Tools/unit_test_runner/run.py tests/sword_movement_test.py
 python Tools/unit_test_runner/run.py samples/unit_test_runner/basic_flow.py
 ```
 
@@ -56,13 +83,13 @@ python Tools/unit_test_runner/run.py samples/unit_test_runner/basic_flow.py
 """
 ```
 
-소개는 소스의 AST에서 읽으며 테스트를 import하거나 실행하지 않는다. `tests/ui_test.py`와 기본 화면 전환 샘플에 적용했다. 수정 후 Runner에서 F5로 새로고침하면 소개를 다시 읽는다.
+소개는 소스의 AST에서 읽으며 테스트를 import하거나 실행하지 않는다. `tests/sword_movement_test.py`와 기본 화면 전환 샘플에 적용했다. 수정 후 Runner에서 F5로 새로고침하면 소개를 다시 읽는다.
 
 새 테스트는 일반 Python 프로그램으로 직접 실행할 수 있어야 한다. Runner를 import하거나 TestProgram을 상속하지 않는다. 최상위에 리터럴 메타데이터 `UNIT_TEST_ENTRYPOINT = "standalone"`을 선언하고 `__main__`에서 자체 실행을 시작한다. `--frames`를 쓰려면 해당 인자를 지원한다.
 
 Runner는 소스 구문·메타데이터를 AST로 확인한 뒤 현재 Python 환경으로 파일을 실행한다. 파일 경로는 인자 목록으로 전달하며 shell을 사용하지 않는다. 작업 폴더는 선택 파일의 부모 폴더이므로 데이터·에셋은 파일 위치 기준 경로를 사용한다.
 
-`tests/ui_test.py`가 이 방식이다. `python tests/ui_test.py`는 `Tools/unit_test_runner` 없이 동작하는 코드 경로이며, 자체 Pico2D 루프는 `ferrial_drive/ui/standalone.py`에 있다. 프로젝트 UI 모듈·설정·폰트·Pico2D는 여전히 필요하다. UI 모듈 import만으로 창·루프를 시작하지 않는다.
+`tests/sword_movement_test.py`가 이 방식이다. `python tests/sword_movement_test.py`는 `Tools/unit_test_runner` 없이 동작하는 코드 경로이며, 공통 Pico2D 실행 루프는 `ferrial_drive/runtime.py`에 있다. 프로젝트 UI 모듈·설정·폰트·Pico2D는 여전히 필요하다. UI 모듈 import만으로 창·루프를 시작하지 않는다.
 
 ## 기존 create_test 호환
 

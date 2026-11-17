@@ -15,14 +15,17 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="독립 테스트 .py를 Pico2D 창에서 실행한다.")
     parser.add_argument("test_file", type=Path, nargs="?", help="테스트 .py 경로. 생략하면 파일 탐색 GUI 실행")
     parser.add_argument("--frames", type=int, default=None, help="자동 확인용 최대 프레임 수")
+    parser.add_argument("--preset", help="테스트의 실행 선택지 ID")
     args = parser.parse_args(argv)
     if args.frames is not None and args.frames <= 0:
         parser.error("--frames는 양수여야 한다.")
     if args.test_file is None:
+        if args.preset is not None:
+            parser.error("--preset에는 테스트 파일 경로가 필요하다.")
         run_gui(frame_limit=args.frames)
         return 0
     else:
-        return run_file(args.test_file, frame_limit=args.frames)
+        return run_file(args.test_file, frame_limit=args.frames, preset=args.preset)
 
 
 if __name__ == "__main__":

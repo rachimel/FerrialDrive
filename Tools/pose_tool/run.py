@@ -18,7 +18,7 @@ def launch_command(source=None, *, sample=False, profile=None, blender=None, wor
     blender = find_blender(blender)
     source = Path(source).expanduser().resolve() if source else None
     if source is None and not sample:
-        default = ROOT / "data/models/basic_weapons/base_pose.blend"
+        default = ROOT / "data/source/models/basic_weapons/base_pose.blend"
         if not default.is_file():
             raise FileNotFoundError("모델 .blend 파일을 실행기에 전달하거나 --sample을 지정한다.")
         source = default

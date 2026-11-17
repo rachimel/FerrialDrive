@@ -1,17 +1,25 @@
 # 직접 실행 확인
 
-`massive_energy_particle_stress.py`는 **Massive Energy Particle Stress** 독립 Unit Test다. 생성·갱신 Compute Ubershader의 입자 수별 CPU 제출/GPU 단계 시간을 비교하며 Runner에서도 실행한다. [실행·입력·벤치마크](../samples/massive_energy_particle_stress/README.md)를 따른다.
+Pico2D가 설치된 Python으로 실행하거나 Unit Test Runner에서 파일을 선택·드롭한다. Runner는 별도 프로세스로 실행하며 새 파일을 실행하면 이전 테스트를 종료한다.
 
-`combat_test.py`는 도형 기체로 이동·검/기관단총·적 한 기와의 교전·승패를 확인하는 독립 전투 프로토타입이다. `python tests/combat_test.py`로 직접 실행하거나 Runner에서 선택·드롭한다. Enter 시작, WASD 이동, Shift 달리기, Space 대시, E 검/총 전환, 좌클릭 공격, 총 장착 중 우클릭 조준, Esc 일시정지, R 재시작, F10 종료다. [샘플과 조작 안내](../samples/combat_prototype/README.md)와 [구현·검증 범위](../docs/unit-tests/combat_prototype.md)를 따른다.
+| 진입점 | 확인 범위 |
+| --- | --- |
+| `sword_movement_test.py` | 이동·검 4타·부스트·보간·훈련 표적·UI v2 |
+| `sword_movement_speed_test.py` | 동일 훈련장의 3배속 시험 |
+| `overdrive_rainbow_test.py` | 오버드라이브 기체 림·검 Trail·HUD의 무지개 순환 시험 |
+| `combat_test.py` | 기본 도형의 검/기관단총·적 한 기 교전·승패 |
+| `combat_test_v1_5.py` | 소형 22기·중형 6기·인간형 2기의 다수 교전·검 넉백·기존 플레이어/HUD 연결 |
+| `combat_test_v1_5_speed_test.py` | 같은 30기 교전에서 플레이어 이동·공격 전진 3배 |
+| `asset_loader_test.py` | 2D 에셋 툴 |
+| `frame_interpolation_unreal_test.py` | 로컬 Unreal 검 동작의 보간·블러 비교 |
+| `texture_compression_test.py` | 텍스처 압축·화질·저장량 비교 |
+| `massive_energy_particle_stress.py` | GPU 입자 부하·단계별 시간 비교 |
 
-1. `Unit Test Runner.lnk`를 더블클릭해 Python GUI를 연다.
-2. 같은 폴더의 **`ui_test.py`를 열린 GUI 창에 드롭**한다.
-3. 별도 UI 테스트 창에서 피해·타겟·초기화 버튼과 Esc 일시정지·계속·타이틀 복귀를 확인한다. 설정 버튼은 타이틀·일시정지에 비활성으로 배치돼 있다. 메뉴 종료·UI 창 X는 해당 테스트만 닫고 Runner는 유지한다. 같은 파일을 Runner에 다시 드롭하면 이전 테스트를 종료하고 새로 실행한다.
+~~~text
+python tests/sword_movement_test.py
+python tests/sword_movement_test.py --demo
+~~~
 
-`ui_test.py`는 Runner 없이 `python tests/ui_test.py`로 직접 실행할 수 있는 메뉴·전투 HUD 테스트다. Runner 창 X는 소유한 테스트도 종료한다. [표시 규칙과 조작 순서](../samples/ui_unit_test/README.md)를 따른다. [현재 작업 상태](../docs/unit-tests/ui_checkpoint.md)에서 사용자 시안 마감과 최근 변경의 실행 미확인을 구분한다.
+이동·UI 조작은 [훈련장 안내](../samples/sword_movement/README.md), UI 범위는 [공통 명세](../docs/unit-tests/ui_unit_test.md)를 따른다. `--demo`는 실제 게임 에셋 없이 공개 도형·수치로 실행한다.
 
-`basic_flow.py`는 바로 확인하기 위해 `samples/unit_test_runner/basic_flow.py`를 복사한 샘플이다. 독립 실행 규약은 [공통 실행기 안내](../Tools/unit_test_runner/README.md)를 따른다.
-
-`asset_load_test.py`는 기본 도형의 실제 Blender 8방향 렌더·본체/그림자 시트 생성·Pico2D 로딩을 확인한다. Runner 목록에서 선택하거나 창에 드롭한다. 최초 생성에 Blender가 필요하며 설정이 같은 다음 실행은 성공 결과를 재사용한다. R로 다시 생성하고 Space·방향 카드·본체/그림자 토글로 확인한다. [샘플과 실행 안내](../samples/asset_load_test/README.md)를 따른다.
-
-자동 검사 코드는 `automated/`에 분리했다. GUI에 드롭할 파일은 `ui_test.py`, `asset_load_test.py` 또는 공통 실행기 최소 샘플 `basic_flow.py`다. 바로가기는 현재 로컬 Python에 연결되며 Git에서 제외한다.
+`automated/`는 화면을 직접 조작하는 프로그램 목록과 분리한 자동 검사다. Unreal 수치·이관 검사도 이 폴더에서 실행한다. `rendering/`은 실제 GPU 픽셀 검사를 담는다. 자동 검사 통과와 사용자 직접 조작·외관 승인은 구분한다.

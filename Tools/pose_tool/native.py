@@ -10,7 +10,7 @@ from mathutils import Matrix, Vector
 from . import scene as engine
 from .part_editing import PartEditing, FINGERS
 
-MODELS_DIR = Path(__file__).resolve().parents[2] / "data/models"
+MODELS_DIR = Path(__file__).resolve().parents[2] / "data/source/models"
 
 _clip_items = []
 _part_items = []
@@ -290,24 +290,6 @@ class ExportPoseClip(bpy.types.Operator):
             return {"CANCELLED"}
 
 
-class OpenPoseRender(bpy.types.Operator):
-    bl_idname = "fdpose.open_render"
-    bl_label = "출력 → Asset Tool 3D 렌더"
-
-    def execute(self, context):
-        path = Path(context.scene.fd_pose_export)
-        if not path.is_file():
-            self.report({"ERROR"}, "먼저 현재 동작을 출력한다.")
-            return {"CANCELLED"}
-        python = Path(context.scene.fd_pose_python)
-        if not python.is_file() or not python.stem.lower().startswith("python"):
-            self.report({"ERROR"}, "실행기로 다시 열거나 Asset Tool에서 출력 설정을 불러온다.")
-            return {"CANCELLED"}
-        import subprocess
-        root = Path(__file__).resolve().parents[2]
-        subprocess.Popen([str(python), str(root/"Tools/asset_loader/run.py"), "--render-preset", str(path)],
-                         cwd=root, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-        return {"FINISHED"}
 
 
 def command(layout, label, action, target="", icon="NONE", **fields):
@@ -402,15 +384,13 @@ class PosePanel(bpy.types.Panel):
         command(row, "작업본 저장", "save", icon="FILE_TICK")
         row.operator("fdpose.save_work", text="다른 이름")
         layout.operator("fdpose.export_clip", icon="EXPORT")
-        if scene.fd_pose_export:
-            layout.operator("fdpose.open_render", icon="FILE_FOLDER")
         layout.label(text="G 이동 · R 회전 · X/Y/Z 월드 축")
         layout.label(text="Ctrl+Z 되돌리기 · 자동 키 켜짐")
         layout.label(text="팔꿈치·무릎 원 좌우 드래그: 굽힘 각도")
         layout.label(text="바깥 원: IK 방향 · 상박·허벅지 점: 선택 후 R")
 
 
-CLASSES = (PoseCommand, SavePoseWork, OpenPoseModel, ExportPoseClip, OpenPoseRender, PosePanel)
+CLASSES = (PoseCommand, SavePoseWork, OpenPoseModel, ExportPoseClip, PosePanel)
 PROPERTIES = {
     "fd_pose_clip": lambda: EnumProperty(name="동작", items=clip_items),
     "fd_pose_category": lambda: EnumProperty(name="분류", update=category_changed, items=[("body", "몸체 · IK", ""), ("fingers", "손가락", ""), ("equipment", "총 · 칼 · 칼집", ""), ("detail", "기타 파츠", ""), ("all", "전체", "")]),

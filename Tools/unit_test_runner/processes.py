@@ -8,22 +8,28 @@ import sys
 import tempfile
 from uuid import uuid4
 
-from .entrypoints import inspect_entrypoint
+from .entrypoints import RunPreset, entrypoint_from_tree, read_test_source, run_presets_from_tree
 
 
 @dataclass(frozen=True)
 class LaunchPlan:
     path: Path
     command: tuple[str, ...]
+    presets: tuple[RunPreset, ...] = ()
 
 
-def prepare_test(path: Path, frame_limit=None) -> LaunchPlan:
+def prepare_test(path: Path, frame_limit=None, *, preset=None) -> LaunchPlan:
     path = Path(path).resolve()
     if not path.is_file() or path.suffix.lower() != ".py":
         raise ValueError("실행할 테스트 .py 파일이 필요하다.")
     if frame_limit is not None and (not isinstance(frame_limit, int) or frame_limit <= 0):
         raise ValueError("프레임 제한은 양수 정수여야 한다.")
-    mode = inspect_entrypoint(path)
+    tree = read_test_source(path)
+    mode = entrypoint_from_tree(tree)
+    presets = run_presets_from_tree(tree)
+    selected = next((item for item in presets if item.preset_id == preset), None)
+    if preset is not None and selected is None:
+        raise ValueError("선택한 실행 옵션이 없다. 파일을 다시 확인한다.")
     # 프로세스마다 다른 캐시 경로를 쓰고 -B로 쓰기를 막아 기존 pyc도 읽지 않는다.
     cache_prefix = Path(tempfile.gettempdir()) / f"unit-test-cache-{uuid4().hex}"
     command = [sys.executable, "-B", "-X", f"pycache_prefix={cache_prefix}"]
@@ -31,9 +37,11 @@ def prepare_test(path: Path, frame_limit=None) -> LaunchPlan:
         command.append(str(path))
     else:
         command.extend((str(Path(__file__).with_name("worker.py")), str(path)))
+    if selected is not None:
+        command.extend(selected.arguments)
     if frame_limit is not None:
         command.extend(("--frames", str(frame_limit)))
-    return LaunchPlan(path, tuple(command))
+    return LaunchPlan(path, tuple(command), presets)
 
 
 def child_environment():
@@ -88,8 +96,8 @@ class RunningTest:
         self.closed = True
 
 
-def run_file(path: Path, frame_limit=None) -> int:
-    plan = prepare_test(path, frame_limit)
+def run_file(path: Path, frame_limit=None, *, preset=None) -> int:
+    plan = prepare_test(path, frame_limit, preset=preset)
     # CLI도 별도 프로세스를 사용하며 예외·중단 시 소유한 자식만 정리한다.
     with subprocess.Popen(list(plan.command), cwd=plan.path.parent,
                           env=child_environment(), shell=False) as process:

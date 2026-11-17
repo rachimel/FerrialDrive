@@ -1,8 +1,49 @@
 """테스트 소스를 실행하거나 import하지 않고 진입 규약을 확인한다."""
 
 import ast
+from dataclasses import dataclass
 from pathlib import Path
 import tokenize
+
+
+@dataclass(frozen=True)
+class RunPreset:
+    preset_id: str
+    label: str
+    arguments: tuple[str, ...]
+
+
+def run_presets_from_tree(tree: ast.Module) -> tuple[RunPreset, ...]:
+    """선택 실행 인자는 리터럴만 읽는다. 테스트 소스는 실행하지 않는다."""
+    value = None
+    for statement in tree.body:
+        if isinstance(statement, ast.Assign) and any(
+                isinstance(target, ast.Name) and target.id == "UNIT_TEST_PRESETS" for target in statement.targets):
+            value = statement.value
+        elif (isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name)
+              and statement.target.id == "UNIT_TEST_PRESETS"):
+            value = statement.value
+    if value is None:
+        return ()
+    try:
+        rows = ast.literal_eval(value)
+    except (ValueError, TypeError):
+        raise ValueError("UNIT_TEST_PRESETS는 리터럴 목록이어야 한다.") from None
+    if not isinstance(rows, (tuple, list)) or not 1 <= len(rows) <= 8:
+        raise ValueError("실행 선택지는 1~8개여야 한다.")
+    presets, identifiers = [], set()
+    for row in rows:
+        if not isinstance(row, dict) or set(row) != {"id", "label", "args"}:
+            raise ValueError("실행 선택지는 id·label·args 필드를 사용한다.")
+        identifier, label, arguments = row["id"], row["label"], row["args"]
+        if (not isinstance(identifier, str) or not identifier.strip() or identifier in identifiers
+                or not isinstance(label, str) or not label.strip() or "\n" in label
+                or not isinstance(arguments, (list, tuple))
+                or any(not isinstance(argument, str) or "\0" in argument for argument in arguments)):
+            raise ValueError("실행 선택지 ID·표시명·문자열 인자 목록이 올바르지 않다.")
+        presets.append(RunPreset(identifier, label, tuple(arguments)))
+        identifiers.add(identifier)
+    return tuple(presets)
 
 
 def read_test_source(path: Path) -> ast.Module:

@@ -63,8 +63,8 @@ class ParticleRequestTests(unittest.TestCase):
                 system.emit((10, 20), (30, 40), (50, 60), **options)
 
     def test_ui_default_uses_compute_burst_and_pause_freezes_command_stream(self):
-        sample = load_sample('compute_ui_sample', 'tests/ui_unit_test_v2.py')
-        program = sample.UiUnitTestV2(initial_scene='combat')
+        sample = load_sample('compute_ui_sample', 'ferrial_drive/ui_v2/preview.py')
+        program = sample.HudPreview(initial_scene='combat')
         self.assertIsNotNone(program.particle_system)
         program.perform('damage_target')
         requests = [command for command in program.particle_system.commands if isinstance(command, SpawnParticles)]
