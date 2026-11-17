@@ -5,7 +5,6 @@ from copy import deepcopy
 import json
 from pathlib import Path
 import sys
-import time
 
 from ferrial_drive.assets import AssetCatalog, AssetDefinition, detect_kind
 from ferrial_drive.assets.catalog import read_document
@@ -21,6 +20,7 @@ from .part_model import add_part, add_state, remove_part, remove_state
 API_VERSION = 1
 # 필수 필드는 '?' 없이 표기한다. describe와 요청 검증이 같은 정의를 사용한다.
 OPERATIONS = {
+    "unreal.import": {"summary": "Unreal RGBA 파츠 프레임을 기존 메카 묶음으로 패킹", "fields": {"source": "path", "output": "path", "trim_padding?": "boolean"}},
     "describe": {"summary": "지원 작업·필드·편집 예제 조회", "fields": {}},
     "catalog.list": {"summary": "카탈로그 목록 조회", "fields": {"catalog?": "path"}},
     "asset.inspect": {"summary": "메타데이터·실제 이미지 크기·클립 검증 및 조회",
@@ -42,9 +42,7 @@ OPERATIONS = {
                       "fields": {"plan": "path", "check_sheets?": "boolean"}},
     "plan.export": {"summary": "색상·마스크·상태 시트를 분리한 메카 번들 출력",
                     "fields": {"plan": "path", "output": "path"}},
-    "render.run": {"summary": "기존 Blender 백그라운드 렌더·패킹 실행. 완료까지 대기",
-                   "fields": {"config": "path", "source_blend?": "path", "blender?": "path",
-                              "output_root?": "path", "sample?": "boolean", "timeout_seconds?": "number"}},
+
 }
 EDIT_FIELDS = {
     "set": {"path": "array", "value": "any"},
@@ -77,7 +75,7 @@ def describe():
                     {"action": "order.preset", "motion": "equipped_idle", "direction": "s", "preset": "front"}]}},
             "limits": ["실행 중 GUI의 저장하지 않은 편집 내용은 읽지 않는다. 파일 저장/다시 불러오기로 교환한다.",
                        "plan.validate 기본은 구조만 검증한다. check_sheets=true가 분리 시트 정합을 검사한다.",
-                       "Blender 메카 레이어별 렌더·게임 전투 연동은 이 진입점에서 새로 구현하지 않는다."]}
+                       "3D 제작·게임 전투 규칙은 이 API의 범위에 포함하지 않는다."]}
 
 
 def check_fields(data, fields, *, discriminator):
@@ -315,8 +313,10 @@ def execute(request, *, base_dir=None):
             mech = build_mech(plan)
             image_sizes(read_document_for_mech(mech, plan))
             return {"source": str(copy_mech(mech, resolve(request["output"])))}
-    if operation == "render.run":
-        return run_render(request, resolve)
+    if operation == "unreal.import":
+        from .unreal_import import import_render
+        return import_render(resolve(request["source"]), resolve(request["output"]),
+                             trim_padding=request.get("trim_padding", False))
     raise ValueError("지원하지 않는 작업")
 
 
@@ -324,39 +324,3 @@ def read_document_for_mech(mech, plan):
     from ferrial_drive.assets.catalog import AssetDocument
     return AssetDocument(AssetDefinition(plan["asset_id"], "mech", plan["source"]), mech.sheets,
                          mech.dependencies, mech.asset_id, next(iter(mech.clips)), mech)
-
-
-def run_render(request, resolve):
-    from math import isfinite
-    from Tools.blender_pipeline.asset_build import AssetBuild
-    from .production import load_render_preset
-
-    config = resolve(request["config"])
-    _, source = load_render_preset(config)
-    if "source_blend" in request:
-        source = resolve(request["source_blend"])
-    if source is None and not request.get("sample", False):
-        raise ValueError("렌더할 source_blend 또는 명시적인 sample=true가 필요하다.")
-    if source is not None and (not source.is_file() or source.suffix.lower() != ".blend"):
-        raise ValueError("렌더할 .blend 파일이 없다.")
-    seconds = request.get("timeout_seconds", 300)
-    if not isfinite(seconds) or seconds <= 0:
-        raise ValueError("timeout_seconds는 유한한 양수여야 한다.")
-    build = AssetBuild(config, source_blend=source,
-                       blender=resolve(request["blender"]) if "blender" in request else None,
-                       output_root=resolve(request["output_root"]) if "output_root" in request else ROOT / "output/asset_loader/renders")
-    try:
-        build.start()
-        started = time.monotonic()
-        while True:
-            status = build.poll()
-            if status is not None:
-                if not status:
-                    raise RuntimeError(build.error)
-                return {"source": str(build.result), "directory": str(build.directory),
-                        "completed_images": build.completed_images, "total_images": build.total_images}
-            if time.monotonic() - started >= seconds:
-                raise TimeoutError(f"렌더 제한 시간 초과. 작업을 정리한다: {build.directory}")
-            time.sleep(0.1)
-    finally:
-        build.close()

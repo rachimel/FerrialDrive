@@ -263,6 +263,45 @@ class PicoAssetLoaderTests(unittest.TestCase):
         finally:
             app.exit()
 
+    def test_scaled_fractional_pivot_stays_at_requested_actor_center(self):
+        from ferrial_drive.assets.sprites import SpriteFrame
+
+        with self.manager.acquire("sample_mech") as handle:
+            frame = SpriteFrame((0, 0, 274, 364), (117.6050711446, 169.2236234561))
+            target = handle.resource.target_rect(frame, 640, 360, 0.7183098591549296)
+            x = target.x + frame.pivot[0] * target.w / 274
+            y = target.y + (364-frame.pivot[1]) * target.h / 364
+            self.assertLessEqual(abs(x-640), 0.5)
+            self.assertLessEqual(abs(y-(self.pico.get_canvas_height()-360)), 0.5)
+
+    def test_asset_opacity_updates_all_parts_once_and_restores_nested_values(self):
+        from ctypes import byref, c_ubyte
+
+        with self.manager.acquire("sample_mech") as handle:
+            resource = handle.resource
+            self.pico.SDL_SetTextureAlphaMod(resource.textures["body"], 200)
+            self.pico.SDL_SetTextureAlphaMod(resource.textures["shadow"], 100)
+            resource.textures["shared_body"] = resource.textures["body"]
+
+            def values():
+                result = []
+                for layer in ("body", "shadow", "shared_body"):
+                    alpha = c_ubyte()
+                    self.pico.SDL_GetTextureAlphaMod(resource.textures[layer], byref(alpha))
+                    result.append(alpha.value)
+                return result
+
+            with resource.opacity(0.5):
+                self.assertEqual(values(), [100, 50, 100])
+                with resource.opacity(0.5):
+                    self.assertEqual(values(), [50, 25, 50])
+                self.assertEqual(values(), [100, 50, 100])
+            self.assertEqual(values(), [200, 100, 200])
+            with self.assertRaisesRegex(RuntimeError, "sample failure"):
+                with resource.opacity(0.25):
+                    raise RuntimeError("sample failure")
+            self.assertEqual(values(), [200, 100, 200])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -12,7 +12,6 @@ from ferrial_drive.assets import AssetCatalog, MechBundle
 from ferrial_drive.assets.sprites import SpriteBundle
 from Tools.asset_loader.automation import execute
 from Tools.asset_loader.mech_plan import default_plan, load_plan, save_plan, plan_path
-from Tools.asset_loader.production import render_config
 from samples.mech_asset.make_sample import write_sample
 
 
@@ -188,24 +187,3 @@ class AssetAutomationTests(unittest.TestCase):
         self.assertEqual(self.request("catalog.list", catalog="catalog.json")["assets"][0]["asset_id"], "registered")
         with self.assertRaisesRegex(ValueError, "읽기 전용"):
             self.request("catalog.register", source=str(SAMPLE), asset_id="other", catalog=str(SAMPLE.parent / "catalog.json"))
-
-    def test_render_wait_success_failure_and_timeout_always_close_child(self):
-        config = render_config(asset_id="render_sample", animation_name="idle", frames="1,3", fps=8,
-                               width=96, height=96, ortho_scale=4.5, samples=2)
-        (self.root / "render.json").write_text(json.dumps(config), encoding="utf-8")
-        for outcome in (True, False, None):
-            with self.subTest(outcome=outcome):
-                build = MagicMock(result=self.root / "bundle.json", directory=self.root / "rendered",
-                                  completed_images=32, total_images=32, error="렌더 실패")
-                build.poll.return_value = outcome
-                with patch("Tools.blender_pipeline.asset_build.AssetBuild", return_value=build), \
-                     patch("Tools.asset_loader.automation.time.monotonic", side_effect=[0, 2]):
-                    fields = {"config": "render.json",
-                              "sample": True, "timeout_seconds": 1}
-                    if outcome is True:
-                        result = self.request("render.run", **fields)
-                        self.assertEqual(result["completed_images"], 32)
-                    else:
-                        with self.assertRaises(TimeoutError if outcome is None else RuntimeError):
-                            self.request("render.run", **fields)
-                build.close.assert_called_once()

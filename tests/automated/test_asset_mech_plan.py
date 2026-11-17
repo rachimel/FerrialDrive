@@ -253,13 +253,13 @@ class MechPanelTests(unittest.TestCase):
         self.panel.fields["right_hand.objects"].text = "RightHand,Gun"
         self.panel.switch(tab=0)
         self.panel.toggle("advanced")
-        self.panel.fields["scale"].text = "6.5"
+        self.panel.fields["pivot"].text = "0.5,1"
         self.panel.toggle("advanced")
-        self.assertNotIn("scale", self.panel.fields)
+        self.assertNotIn("pivot", self.panel.fields)
         self.panel.submit()
         self.panel.reload()
         self.panel.toggle("advanced")
-        self.assertEqual(self.panel.value("scale"), "6.5")
+        self.assertEqual(self.panel.value("pivot"), "0.5,1")
         self.panel.switch(tab=1)
         self.panel.select_part("left_hand")
         self.assertEqual(self.panel.value("left_hand.objects"), "LeftHand,Sword")

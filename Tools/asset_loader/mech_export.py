@@ -12,7 +12,7 @@ from ferrial_drive.assets.catalog import AssetDocument
 from ferrial_drive.assets.sprites import read_json
 from .mech_plan import DIRECTIONS, MOTIONS, validate_plan
 from .part_model import part_defaults, state_defaults, replace_parts
-from .production import frame_numbers
+from .plan_fields import frame_numbers
 
 
 def build_mech(plan):

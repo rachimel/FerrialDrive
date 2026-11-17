@@ -199,15 +199,6 @@ class AssetPipelineTests(unittest.TestCase):
         self.assertEqual(len(project.animations), 8)
         self.assertEqual(project.animations[0].frames[0].pivot, (2, 1))
 
-    def test_standalone_import_does_not_start_a_process_or_open_a_window(self):
-        script = ('import runpy\nfrom unittest.mock import patch\n'
-                  'with patch("subprocess.Popen", side_effect=AssertionError("unexpected process")):\n'
-                  f'    data=runpy.run_path({str(ROOT / "tests/asset_load_test.py")!r}, run_name="import_check")\n'
-                  '    app=data["create_test"]()\n'
-                  '    assert app.renderer is None and app.build.process is None\n')
-        result = subprocess.run([sys.executable, '-B', '-c', script], cwd=self.directory,
-                                capture_output=True, text=True, timeout=15)
-        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == '__main__':

@@ -1,4 +1,4 @@
-"""data/catalog의 로컬 샘플·완성 에셋·등록 목록. import 시 파일을 쓰지 않는다."""
+"""data/runtime/catalog의 로컬 샘플·완성 에셋·등록 목록. import 시 파일을 쓰지 않는다."""
 
 from datetime import datetime
 from pathlib import Path
@@ -11,7 +11,7 @@ from .assembly import SpriteAssembly
 
 
 ROOT = Path(__file__).resolve().parents[2]
-LIBRARY_ROOT = ROOT / "data/catalog"
+LIBRARY_ROOT = ROOT / "data/runtime/catalog"
 DEFAULT_CATALOG = LIBRARY_ROOT / "catalog.json"
 SAMPLE_ROOT = LIBRARY_ROOT / "samples/asset_loader"
 SAMPLE = SAMPLE_ROOT / "bundle.json"

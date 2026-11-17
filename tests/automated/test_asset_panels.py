@@ -16,7 +16,7 @@ from samples.asset_loader.make_sample import write_samples
 from ferrial_drive.assets import SpriteBundle
 from ferrial_drive.ui.standalone import _events, run_preview
 from Tools.asset_loader.app import AssetLoaderApp
-from Tools.asset_loader.editors import AssemblyPanel, RenderPanel
+from Tools.asset_loader.editors import AssemblyPanel
 from Tools.asset_loader.file_panel import FilePanel, IdPanel
 from Tools.asset_loader.map_panel import MapPanel
 from samples.asset_loader.map.make_sample import write_sample as write_map
@@ -152,7 +152,7 @@ class AssetPanelTests(unittest.TestCase):
             return original_import(name, *args, **kwargs)
         window = self.pico.window
         with patch("builtins.__import__", side_effect=no_tk):
-            for action, kind in (("render", RenderPanel), ("compose", AssemblyPanel), ("id", IdPanel),
+            for action, kind in (("compose", AssemblyPanel), ("id", IdPanel),
                                  ("open", FilePanel), ("catalog", FilePanel)):
                 with self.subTest(action=action):
                     self.app.action(action)
@@ -165,7 +165,7 @@ class AssetPanelTests(unittest.TestCase):
                     self.assertTrue(self.app.running)
 
     def test_visible_close_button_and_window_close_work_with_panel_open(self):
-        self.app.action("render")
+        self.app.action("compose")
         self.click(self.app.panel.close_rect)
         self.assertIsNone(self.app.panel)
         self.app.action("compose")
@@ -190,16 +190,6 @@ class AssetPanelTests(unittest.TestCase):
         self.key(self.pico.SDLK_F4, self.pico.KMOD_ALT)
         self.assertFalse(self.app.running)
 
-    def test_file_browser_cancel_returns_to_render_settings_without_losing_fields(self):
-        self.app.action("render")
-        panel = self.app.panel
-        panel.fields["fps"].text = "24"
-        panel.browse()
-        self.assertIsInstance(self.app.panel, FilePanel)
-        self.app.draw()
-        self.key(self.pico.SDLK_ESCAPE)
-        self.assertIs(self.app.panel, panel)
-        self.assertEqual(panel.value("fps"), "24")
 
     def test_file_selection_supports_paths_and_keeps_bad_input_visible(self):
         self.app.action("open")
@@ -324,13 +314,13 @@ class AssetPanelTests(unittest.TestCase):
 
 
 class AssetPanelLoopTests(unittest.TestCase):
-    def test_quit_event_still_reaches_main_loop_while_render_settings_are_open(self):
+    def test_quit_event_still_reaches_main_loop_while_file_browser_is_open(self):
         import pico2d.pico2d as pico
         app = AssetLoaderApp()
         original_enter = app.enter
         def enter():
             original_enter()
-            app.action("render")
+            app.action("open")
             event = pico.SDL_Event()
             event.type = pico.SDL_QUIT
             pico.SDL_PushEvent(byref(event))

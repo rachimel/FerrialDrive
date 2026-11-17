@@ -111,14 +111,6 @@ class AssetProgressTests(unittest.TestCase):
         self.assertEqual(self.job.progress_percent, 0)
         self.assertEqual(self.job.completed_images, 0)
 
-    def test_tool_message_follows_shared_build_progress(self):
-        from Tools.asset_loader.app import AssetLoaderApp
-        app = AssetLoaderApp()
-        app.build = SimpleNamespace(process=object(), poll=lambda: None,
-                                    progress_text='프리렌더 45% (29/64)')
-        app.update(0.1)
-        self.assertEqual(app.message, '프리렌더 45% (29/64)')
-        self.assertFalse(app.error)
 
 
 if __name__ == '__main__':

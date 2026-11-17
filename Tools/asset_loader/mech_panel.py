@@ -5,14 +5,14 @@ from copy import deepcopy
 from ferrial_drive.ui.components import Rect
 from .mech_plan import (CHECKS, DIRECTIONS, ENERGY_MODES, EVENTS, MOTIONS, OCCLUSION, STATUSES,
                         default_plan, load_plan, plan_path, save_plan, with_energy_defaults)
-from .production import frame_numbers
+from .plan_fields import frame_numbers
 from .widgets import Panel
 from .mech_presets import ORDER_PRESETS, apply_all_directions, apply_mapping, apply_order_preset, mapping_options
 from .mech_preview import draw_preview
 from .part_model import remove_part, remove_state
 
 
-TABS = ("공통 렌더", "출력 파츠", "동작·순서", "전환 시점", "무기 조건·검수", "조립 미리보기")
+TABS = ("조립 기준", "출력 파츠", "동작·순서", "전환 시점", "무기 조건·검수", "조립 미리보기")
 EVENT_HINTS = ("손이 손잡이를 잡는 시점", "수납 부착점 → 손목", "칼집·장착부를 완전히 벗어남",
                "손목 → 수납 부착점", "빈손으로 전환", "수납 부착점 → 독립 위치·회전")
 
@@ -93,7 +93,7 @@ class MechPanel(Panel):
 
     def remember(self):
         if self.tab == 0:
-            for key in ("camera", "frames", "fps", "width", "height", "scale", "pivot"):
+            for key in ("frames", "fps", "width", "height", "pivot"):
                 if key in self.fields:
                     self.data["render"][key] = self.value(key)
         elif self.tab == 1:
@@ -127,7 +127,7 @@ class MechPanel(Panel):
                     except ValueError as error:
                         raise ValueError("전환 프레임은 정수로 지정한다.") from error
                     if frame not in frame_numbers(self.motion_frames):
-                        raise ValueError("전환 시점은 선택 동작의 Blender 프레임에서 지정한다.")
+                        raise ValueError("전환 시점은 선택 동작의 원본 프레임에서 지정한다.")
                     events.append({"kind": key, "side": self.side, "weapon": self.weapon, "frame": frame})
             self.current_motion["events"] = events
         elif self.tab == 4:
@@ -256,7 +256,7 @@ class MechPanel(Panel):
 
     def sample_preview(self):
         from samples.mech_asset.make_sample import write_sample
-        from .production import ROOT
+        from .plan_fields import ROOT
         self.remember()
         self.sample_paths = write_sample(ROOT / "output/asset_loader/mech_sample")
         self.load_sample_preview()
@@ -303,8 +303,7 @@ class MechPanel(Panel):
         self.button("미리보기로", Rect(32, 736, 192, 32), self.close)
         self.disclosure("도움말", Rect(32, 684, 192, 30), lambda: self.toggle("help_open"), expanded=self.help_open)
         if self.tab == 0:
-            for key, label, x, y, width in (("camera", "카메라 오브젝트", 264, 150, 460),
-                    ("frames", "기본 프레임 · 쉼표 구분", 756, 150, 460),
+            for key, label, x, y, width in (("frames", "원본 프레임 · 쉼표 구분", 264, 150, 952),
                     ("width", "너비 (px)", 264, 254, 210), ("height", "높이 (px)", 494, 254, 210),
                     ("fps", "FPS", 724, 254, 144)):
                 self.field(key, label, self.data["render"][key], x, y, width)
@@ -313,7 +312,6 @@ class MechPanel(Panel):
                         lambda value: self.choose(self.data["render"], "purpose", value))
             self.disclosure("세부 설정", Rect(264, 316, 172, 30), lambda: self.toggle("advanced"), expanded=self.advanced)
             if self.advanced:
-                self.field("scale", "정사영 범위", self.data["render"]["scale"], 264, 390, 300)
                 self.field("pivot", "기준점 X,Y · bottom-left", self.data["render"]["pivot"], 596, 390, 300)
         elif self.tab == 1:
             self.button("추가", Rect(264, 92, 88, 30), self.part_dialog)
@@ -383,7 +381,7 @@ class MechPanel(Panel):
                 self.disclosure("프레임별 순서", Rect(744, 504, 224, 30),
                                 lambda: self.toggle("frame_options"), expanded=self.frame_options)
                 if self.frame_options:
-                    self.field("override_frame", "Blender 프레임", self.order_frame if self.order_frame is not None else "", 744, 568, 144)
+                    self.field("override_frame", "원본 프레임", self.order_frame if self.order_frame is not None else "", 744, 568, 144)
                     self.button("이 프레임 편집", Rect(900, 568, 164, 30), self.add_override)
                     self.button("기본 순서", Rect(1076, 568, 140, 30), self.base_order)
                     if self.order_frame is not None:
@@ -432,7 +430,7 @@ class MechPanel(Panel):
         frame = int(self.value("override_frame"))
         self.remember()
         if frame not in frame_numbers(self.motion_frames):
-            raise ValueError("선택 동작에 포함된 Blender 프레임을 지정한다.")
+            raise ValueError("선택 동작에 포함된 원본 프레임을 지정한다.")
         direction = DIRECTIONS[self.direction]
         if not any((row["direction"], row["frame"]) == (direction, frame) for row in self.current_motion["overrides"]):
             self.current_motion["overrides"].append({"direction": direction, "frame": frame,
@@ -558,13 +556,13 @@ class MechPanel(Panel):
             r.text("실제 결과를 검수한 뒤 상태 지정", 264, 560, "small", c["muted"])
         if self.help_open:
             explanations = (
-                ("한 장면에서 모든 레이어를 출력한다. 레이어별 자동 맞춤은 사용하지 않는다.",
-                 "세부 설정에서 정사영 범위와 기준점을 조정한다. 동작별 프레임은 비우면 공통 값을 사용한다."),
+                ("출력된 시트의 프레임 번호·크기·FPS와 공통 기준점을 지정한다.",
+                 "동작별 프레임은 비우면 공통 값을 사용한다."),
                 ("파츠를 추가·복제·삭제하고 선택한 파츠의 부착점·시트·상태를 편집한다. 이름을 바꿔도 ID는 유지한다.",
                  "상태 시트가 비어 있으면 기본 시트를 사용한다. 새 색상 시트를 지정한 상태의 마스크는 따로 연결한다."),
                 ("기본 순서와 프레임별 예외는 독립적이다. 프레임별 순서를 펼쳐 특정 프레임을 편집한다.",
                  "몸 앞뒤를 동시에 가로지르는 무기는 가림 방식에서 추가 분할 또는 가림 처리를 지정한다."),
-                ("재생 인덱스가 아닌 Blender 원본 프레임을 입력한다.",
+                ("재생 인덱스가 아닌 원본 프레임을 입력한다.",
                  "부착 전후의 위치·회전 연속성과 무기 중복/누락은 실제 동작에서 확인한다."),
                 ("검 길이 복귀 시작은 수납 동작에 포함된 프레임으로 지정한다.",
                  "손·팔 수납과 에임 보정기 접기는 미정이다. 검수 상태는 자동 검증 결과가 아니다."),
@@ -576,5 +574,5 @@ class MechPanel(Panel):
                 r.text(line, 274, 660 + index * 18, "small", c["muted"], max_width=930)
         r.line(264, 726, 1240, 726, c["line"])
         if not self.error:
-            r.text("저장 완료" if self.saved else "작업본 · Blender 분리 렌더 미연결", 264, 746, "small", c["muted"])
+            r.text("저장 완료" if self.saved else "2D 조립 작업본", 264, 746, "small", c["muted"])
         self.draw_choices()

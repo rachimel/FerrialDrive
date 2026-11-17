@@ -1,5 +1,9 @@
 # Asset Tool AI·자동화 진입점
 
+> 현행 입력은 Unreal에서 프리렌더한 RGBA 파츠와 JSON이다. `unreal.import`로 기존 메카 묶음으로 패킹한 뒤 GUI·plan.create/update/export로 2D 조립한다. 3D 파지·부착·가림은 Unreal에서 유지한다. 기존 Blender 렌더는 호환 기능이다. [인계 규약](../ai-asset-pipeline/unreal_pipeline.md)을 따른다.
+
+공통 실행 진입점은 `python automate/run.py asset`이다. 인자는 기존 모듈에 그대로 전달한다. 필수 실행 파일·런타임·보존 입력의 위치는 [자동화 경로](../../automate/README.md)를 따른다.
+
 사용자는 기존 `Tools/asset_loader/run.py` GUI를 사용한다. AI는 **`Tools/asset_loader/asset_pipeline.py`**로 같은 조립·메카 작업본·검증·내보내기 로직을 호출한다. 화면이나 GUI 이벤트 루프를 시작하지 않는다. 이미지 검증·조립·패킹은 기존 Pico2D의 SDL 이미지 디코더를 사용하며, 모델 렌더에는 별도 Blender가 필요하다.
 
 ## 호출
@@ -43,9 +47,14 @@ python Tools/asset_loader/asset_pipeline.py --request -
 | `plan.update` | `plan`, `edits` | 편집 목록을 메모리에서 적용·구조 검증 후 저장. 선택 `output`으로 새 작업본 저장 |
 | `plan.validate` | `plan` | 기본은 구조만 확인. `check_sheets: true`면 분리 색상/마스크/상태 시트의 프레임·FPS·피봇·실제 크기 정합 검사 |
 | `plan.export` | `plan`, `output` | 정합 확인 후 색상·마스크·상태 시트가 분리된 새 폴더와 `mech.json` 출력 |
-| `render.run` | `config` | GUI의 출력 설정 JSON으로 기존 Blender 렌더·패킹 실행. 선택 `source_blend`, `blender`, `output_root`, `timeout_seconds` |
 
-`catalog.list`는 없는 카탈로그를 자동 생성하지 않는다. `catalog.register`는 저장 직전에 현재 목록을 읽고 중복 ID를 거절한다. 기본 카탈로그는 필요한 파일을 `data/catalog/prerender/`로 복사하며, 별도 카탈로그는 지정 원본을 참조한다. 공개 `samples/` 카탈로그는 등록할 수 없다.
+`catalog.list`는 없는 카탈로그를 자동 생성하지 않는다. `catalog.register`는 저장 직전에 현재 목록을 읽고 중복 ID를 거절한다. 기본 카탈로그는 필요한 파일을 `data/runtime/catalog/prerender/`로 복사하며, 별도 카탈로그는 지정 원본을 참조한다. 공개 `samples/` 카탈로그는 등록할 수 없다.
+
+`unreal.import`는 여러 방향의 클립을 하나의 메카 묶음으로 가져온다. 프레임·피봇·픽셀을 유지하며 각 변 8192px 안의 격자 시트로 배치한다. 짧은 입력은 기존 한 열 배치를 유지한다. 최대 시트 면적을 넘는 입력은 출력 전에 거절한다. 완성 `mech.json`은 Asset Tool과 공통 Pico2D 에셋 로더에서 읽는다.
+
+선택 `trim_padding: true`는 모든 방향·프레임·파츠의 공통 투명 여백만 제거한다. 색상·Energy Mask에 같은 영역을 적용하고 피봇·필터 여백을 보존한다. 원본 PNG와 manifest는 변경하지 않으며 원본 크기·피봇·잘라낸 영역은 `packing.json`에 기록한다. 원본 대비 표시 배율은 그대로 사용한다. 기본값은 `false`다.
+
+입력 manifest의 `clips[].pivot`은 방향별 bottom-left 기준점을 지정하며 생략하면 최상위 `pivot`을 사용한다. 같은 클립의 모든 색상·마스크 프레임에 동일하게 적용한다. 방향 정렬은 메카의 같은 3D 기준점을 각 렌더 카메라로 투영해 지정한다. 프레임마다 실루엣의 bounding box 중심을 다시 계산하지 않는다. 공통 여백 제거 시 클립별 피봇도 함께 보정하며 `packing.json.clip_pivots`에 기록한다.
 
 ## 메카 편집과 GUI 교환
 
@@ -81,12 +90,11 @@ python Tools/asset_loader/asset_pipeline.py --request samples/asset_loader/reque
 
 편집 종류는 `set`, `part.add/remove`, `state.add/remove`, `order.preset`, `order.copy_all`, `mapping.apply`다. `part.add`는 `duplicate`로 복제할 파츠 ID를 지정할 수 있다. 새 매핑은 `default/mech/npc` 또는 프리셋 파일 경로를 사용한다. 한 요청의 편집 중 오류가 나면 그 요청은 작업본을 저장하지 않는다. ID·원본·버전은 `set`으로 변경하지 않는다.
 
-## 스프라이트 조립과 렌더
+## 스프라이트 조립
 
 `sprite.assemble.edits`의 각 항목은 `source_clip`, 출력 동작 `name`, 0부터 시작하는 프레임 인덱스 `order`, 출력 프레임별 `durations_ms`를 포함한다. 기존 `fps` 요청도 읽는다. `pivot`은 `[x,y]` 또는 `null`/생략으로 원본 유지, `all_directions`의 기본값은 `true`다. 번들은 본체/그림자를 함께 편집한다. 예: `{"source_clip":"idle/s","name":"reverse","order":[3,2,1,0],"durations_ms":[100,40,60,180]}`.
 
 맵 형식·GUI 조작·경로 해석은 [맵 번들·프레임 시간](asset_maps_timing.md)을 따른다.
 
-`render.run.config`는 GUI에서 사용하는 `animation_name`을 포함한 출력 설정 JSON이다. 모델은 설정의 `source_blend` 또는 요청의 `source_blend`로 지정한다. 모델 없이 기본 도형을 렌더할 때는 `sample: true`를 명시한다. 기본 제한 시간은 300초, 기본 출력은 `output/asset_loader/renders/`다. 결과는 완료된 번들 경로와 실제 이미지 완료 수이며 Blender 로그는 결과 폴더에 남는다. 실패·시간 초과·중단 시 소유 Blender 작업을 정리한다.
 
-조립·메카 내보내기는 기존 폴더를 덮어쓰지 않는다. `plan.update`는 지정한 입력 작업본만 갱신하거나 존재하지 않는 새 `output`에 저장한다. 원본 모델과 시트 픽셀을 수정하지 않는다. 메카 레이어별 Blender 렌더, 전투 모션 제작, 게임 전투 연동은 기존 미구현 범위를 유지한다.
+조립·메카 내보내기는 기존 폴더를 덮어쓰지 않는다. `plan.update`는 지정한 입력 작업본만 갱신하거나 존재하지 않는 새 `output`에 저장한다. 원본 모델과 시트 픽셀을 수정하지 않는다. 3D 제작은 이 API의 범위에 포함하지 않는다.

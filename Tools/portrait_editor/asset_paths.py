@@ -2,7 +2,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-DATA_DIR = ROOT / 'data' / 'portrait_editor'
+DATA_DIR = ROOT / 'data' / 'source' / 'portrait_editor'
 RIG_DIR = DATA_DIR / 'rig'
 WORKSPACE_DIR = Path(__file__).resolve().parent / 'workspace'
 EXPORT_DIR = DATA_DIR / 'exports'

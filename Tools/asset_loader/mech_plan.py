@@ -6,7 +6,7 @@ import json
 from math import isfinite
 from pathlib import Path
 
-from .production import WORKSPACE, frame_numbers
+from .plan_fields import WORKSPACE, frame_numbers
 from .part_model import part_defaults, state_defaults, valid_id
 
 

@@ -19,7 +19,7 @@
 
 현재 Blender 원본 생성 경로는 `Tools/blender_pipeline/`에 있다. 예전
 `Tools/capability_test`의 데모·진단·이전 생성기와 옛 실행 스크립트는 제거했다.
-원본·생성 입력은 `data/portrait_editor/`, 저장 프로젝트·레이아웃·영역 작업은 툴 내부 `Tools/portrait_editor/workspace/`에 보관한다. 작업 폴더는 실행 시 생성하며 Git에서 제외한다. `output/`은 재생성 가능한 캐시·검증 결과에만 사용한다.
+원본·생성 입력은 `data/source/portrait_editor/`, 저장 프로젝트·레이아웃·영역 작업은 툴 내부 `Tools/portrait_editor/workspace/`에 보관한다. 작업 폴더는 실행 시 생성하며 Git에서 제외한다. `output/`은 재생성 가능한 캐시·검증 결과에만 사용한다.
 
 ## Layout 02
 
@@ -89,7 +89,7 @@ AI 자동 전송·추출·복원과 추출된 파츠의 Blender 자동 연결은
 - [파일 → .moc3 내보내기], Ctrl+E: 선택한 폴더에 모델 설정, MOC3, 모든 텍스처를 함께 출력. 미적용 형태 변경이 있으면 최신 빌드를 기다린다.
 - [파일 → 화면 저장], Ctrl+Shift+P: `output/portrait_editor/captures/`에 현재 편집 화면 저장.
 
-리깅 원본은 `data/portrait_editor/rig/blender-keyforms.json`과 같은 폴더 아래 `textures/`다. 레이아웃은 `Tools/portrait_editor/workspace/layout.json`, 내보내기 기본 폴더는 `data/portrait_editor/exports/`다. 에디터는 리깅 원본과 `.blend`를 덮어쓰지 않는다. 생성되는 실행용 모델은 `output/portrait_editor/.runtime/`에 둔다. 프로젝트는 편집 데이터이고, MOC3는 파생 출력이다.
+리깅 원본은 `data/source/portrait_editor/rig/blender-keyforms.json`과 같은 폴더 아래 `textures/`다. 레이아웃은 `Tools/portrait_editor/workspace/layout.json`, 내보내기 기본 폴더는 `data/source/portrait_editor/exports/`다. 에디터는 리깅 원본과 `.blend`를 덮어쓰지 않는다. 생성되는 실행용 모델은 `output/portrait_editor/.runtime/`에 둔다. 프로젝트는 편집 데이터이고, MOC3는 파생 출력이다.
 
 현재 모델 지원 범위는 `ParamSmile` 한 축과 왼눈·오른눈·입 세 트랙이다. ComfyUI/Anima 워크플로우 연결과 임의 Blender 리그 가져오기는 이 에디터 버전에 구현되어 있지 않다.
 

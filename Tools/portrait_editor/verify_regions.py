@@ -42,7 +42,7 @@ def main():
         app.click('ai_regions')
         assert app.regions is not None
         region = app.regions
-        paths = {'image': ROOT / 'data' / 'live2d-test-image.png',
+        paths = {'image': ROOT / 'data' / 'source' / 'portrait_editor' / 'inputs' / 'live2d-test-image.png',
                  'save': qa / 'checked.regions.zip', 'open': qa / 'checked.regions.zip',
                  'export': qa}
         region.dialog = lambda kind: str(paths[kind])

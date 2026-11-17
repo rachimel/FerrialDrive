@@ -2,9 +2,7 @@
 
 from math import isfinite
 from pathlib import Path
-import json
 import re
-from uuid import uuid4
 
 from ferrial_drive.assets import AssetCatalog, AssetDefinition, AssetManager, detect_kind
 from ferrial_drive.assets.pico_assets import PicoAssetBackend
@@ -20,7 +18,7 @@ WINDOW = {"width": 1280, "height": 800, "title": "FDrive | Asset Loader"}
 VIEW = Rect(276, 88, 696, 616)
 PRODUCTION_MENU = Rect(1152, 10, 112, 30)
 PRODUCTION_ITEMS = [("ID 변경", "id"), ("카탈로그 열기", "catalog"),
-                    ("핫 로드 전환", "debug"), ("새로고침", "reload"), ("렌더 취소", "cancel_render")]
+                    ("핫 로드 전환", "debug"), ("새로고침", "reload")]
 FILTER_RECT = Rect(992, 664, 264, 28)
 CATALOG_RECT = Rect(24, 132, 232, 442)
 ANIMATION_RECT = Rect(992, 132, 264, 476)
@@ -33,11 +31,9 @@ FILTERS = ('nearest', 'linear', 'bicubic')
 class AssetLoaderApp:
     accept_text = True
 
-    def __init__(self, *, source=None, catalog=DEFAULT_CATALOG, debug=False, timings=None, capture=None,
-                 pose=False, pose_sample=False, render_preset=None):
+    def __init__(self, *, source=None, catalog=DEFAULT_CATALOG, debug=False, timings=None, capture=None):
         self.running = True
         self.initial_source = Path(source).resolve() if source else SAMPLE
-        self.model_source = self.initial_source if self.initial_source.suffix.lower() == ".blend" else None
         self.catalog_path = Path(catalog).resolve()
         self.debug = debug
         self.timings = timings
@@ -57,12 +53,8 @@ class AssetLoaderApp:
         self.clip_offset = 0
         self.frame_strip = FrameStrip()
         self.first_draw = True
-        self.startup_pose, self.pose_sample = pose or pose_sample, pose_sample
-        self.startup_render_preset = Path(render_preset).resolve() if render_preset else None
-        self.build = None
         self.menu_open = False
         self.panel = None
-        self.pose_editor = None
         self.mech_drafts = {}
         self.show_details = False
         self.mouse = (0, 0)
@@ -72,9 +64,7 @@ class AssetLoaderApp:
             ("등록", "register", Rect(304, 10, 80, 30)),
             ("메카 설정", "mech", Rect(412, 10, 120, 30)),
             ("애니메이션 조립", "compose", Rect(540, 10, 152, 30)),
-            ("3D 렌더", "render", Rect(700, 10, 112, 30)),
-            ("맵 작업", "map", Rect(820, 10, 112, 30)),
-            ("포즈 편집", "pose", Rect(940, 10, 112, 30)),
+            ("맵 작업", "map", Rect(700, 10, 112, 30)),
             ("맞춤", "fit", Rect(276, 716, 88, 30)),
             ("1:1", "actual", Rect(372, 716, 56, 30)),
             ("재생 / 정지", "play", Rect(456, 716, 112, 30)),
@@ -107,18 +97,7 @@ class AssetLoaderApp:
             except (OSError, ValueError, KeyError, TypeError) as error:
                 self.report(error)
                 return
-        if self.initial_source.suffix.lower() == ".blend":
-            self.configure_render(self.initial_source)
-        else:
-            self.open_source(self.initial_source)
-        if self.startup_pose:
-            self.launch_pose(sample=self.pose_sample)
-        if self.startup_render_preset:
-            try:
-                self.configure_render()
-                self.panel.load_preset(self.startup_render_preset)
-            except (OSError, ValueError, KeyError) as error:
-                self.report(error)
+        self.open_source(self.initial_source)
 
     def report(self, error):
         self.message, self.error = str(error), True
@@ -235,33 +214,6 @@ class AssetLoaderApp:
             self.open_source(stored.source, kind=stored.kind, asset_id=stored.asset_id)
         self.message, self.error = f"등록 완료: {self.asset_id}", False
 
-    def configure_render(self, source=None):
-        from .editors import RenderPanel
-        if self.build and self.build.process is not None:
-            raise ValueError("렌더 작업이 진행 중이다.")
-        if source:
-            self.model_source = Path(source).expanduser().resolve()
-        self.set_panel(RenderPanel(self, source or self.model_source))
-
-    def launch_pose(self, source=None, *, sample=False):
-        from Tools.pose_tool.run import launch_native
-        try:
-            launch_native(None if sample else source or self.model_source, sample=sample)
-            self.message, self.error = "Blender 포즈 편집 창을 연다.", False
-        except (OSError, ValueError) as error:
-            self.report(error)
-
-    def configure_pose(self, source=None):
-        """이전 내장 편집 화면의 검사·호환 진입점."""
-        from .pose_panel import PosePanel
-        incoming = source or self.model_source
-        if self.pose_editor is None:
-            self.pose_editor = PosePanel(self, incoming)
-        self.set_panel(self.pose_editor)
-        if source:
-            self.pose_editor.attempt(lambda: self.pose_editor.load_source(source))
-        elif incoming and self.pose_editor.loaded_source != Path(incoming).expanduser().resolve():
-            self.pose_editor.attempt(lambda: self.pose_editor.load_source(incoming))
 
     def set_panel(self, panel):
         self.panel, self.menu_open = panel, False
@@ -273,9 +225,7 @@ class AssetLoaderApp:
                 self.pico.SDL_StopTextInput()
 
     def choose_source(self, path):
-        if Path(path).suffix.lower() == ".blend":
-            self.configure_render(path)
-        elif not self.open_source(path):
+        if not self.open_source(path):
             raise ValueError(self.message)
 
     def choose_catalog(self, path):
@@ -283,20 +233,6 @@ class AssetLoaderApp:
         self.catalog, self.catalog_path, self.list_offset = candidate, candidate.path, 0
         self.message, self.error = "카탈로그 열기 완료", False
 
-    def start_render(self, source, config, *, blender=None):
-        from .production import WORKSPACE
-        from Tools.blender_pipeline.asset_build import AssetBuild
-        if self.build and self.build.process is not None:
-            raise ValueError("렌더 작업이 진행 중이다.")
-        path = WORKSPACE / "render_jobs" / (uuid4().hex + ".json")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
-        if self.build:
-            self.build.close()
-        self.build = AssetBuild(path, source_blend=source, blender=blender,
-                                output_root=ROOT / "output/asset_loader/renders")
-        self.build.start()
-        self.message, self.error = self.build.progress_text, False
 
     def compose(self):
         from .editors import AssemblyPanel
@@ -306,8 +242,6 @@ class AssetLoaderApp:
             raise ValueError("맵은 맵 작업에서 레이어·이동 구역을 편집한다.")
         if self.handle.resource.definition.kind == "mech":
             raise ValueError("분리 메카는 메카 설정에서 순서·조립 미리보기를 편집한다.")
-        if self.build and self.build.process is not None:
-            raise ValueError("렌더 완료 후 조립한다.")
         self.set_panel(AssemblyPanel(self))
 
     def action(self, action):
@@ -315,7 +249,7 @@ class AssetLoaderApp:
             if action == "open":
                 from .file_panel import FilePanel
                 self.set_panel(FilePanel(self, self.choose_source,
-                    extensions={".blend", ".png", ".jpg", ".jpeg", ".bmp", ".json"}, initial=self.source or ROOT))
+                    extensions={".png", ".jpg", ".jpeg", ".bmp", ".json"}, initial=self.source or ROOT))
             elif action == "id":
                 from .file_panel import IdPanel
                 self.set_panel(IdPanel(self))
@@ -338,10 +272,6 @@ class AssetLoaderApp:
                 self.fit()
             elif action == "actual":
                 self.zoom = 1.0
-            elif action == "render":
-                self.configure_render()
-            elif action == "pose":
-                self.launch_pose()
             elif action == "map":
                 from .map_panel import MapPanel
                 self.set_panel(MapPanel(self))
@@ -365,9 +295,6 @@ class AssetLoaderApp:
                 self.show_shadow = not self.show_shadow
             elif action == "details":
                 self.show_details = not self.show_details
-            elif action == "cancel_render" and self.build:
-                self.build.close()
-                self.message, self.error = "렌더 취소", False
         except (OSError, ValueError, KeyError, TypeError, RuntimeError) as error:
             self.report(error)
 
@@ -465,21 +392,10 @@ class AssetLoaderApp:
             raise ValueError("갱신 시간은 0 이상의 유한한 초 단위다.")
         if self.manager and self.panel is None:
             self.apply_reload(self.manager.poll_reload())
-        if self.build and self.build.process is not None:
-            result = self.build.poll()
-            if result is True:
-                if self.open_source(self.build.result):
-                    self.message = self.build.progress_text
-            elif result is False:
-                self.report(self.build.error)
-            else:
-                self.message, self.error = self.build.progress_text, False
         if not self.paused:
             self.elapsed += delta_seconds
         if self.panel is not None:
             self.panel.update(delta_seconds)
-        if self.pose_editor is not None and self.panel is not self.pose_editor:
-            self.pose_editor.update(delta_seconds)
 
     def draw(self):
         r, c = self.renderer, self.theme["colors"]
@@ -607,10 +523,6 @@ class AssetLoaderApp:
                     current.close_resources()
                 current = getattr(current, "parent", None)
             self.set_panel(None)
-            if self.pose_editor is not None:
-                self.pose_editor.close_resources()
-            if self.build:
-                self.build.close()
             if self.manager:
                 self.manager.close()
         finally:

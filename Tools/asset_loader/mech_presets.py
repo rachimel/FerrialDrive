@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .mech_plan import DIRECTIONS, LAYERS, default_plan, validate_plan, with_energy_defaults
 from .part_model import part_defaults, replace_parts
-from .production import WORKSPACE
+from .plan_fields import WORKSPACE
 
 
 PRESETS = WORKSPACE / "mech_presets"

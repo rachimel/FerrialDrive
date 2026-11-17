@@ -1,4 +1,4 @@
-"""data/catalog 초기화·등록 목록 보존·에셋 종속 파일의 로컬 보관을 검사한다."""
+"""data/runtime/catalog 초기화·등록 목록 보존·에셋 종속 파일의 로컬 보관을 검사한다."""
 
 import json
 from pathlib import Path
@@ -15,7 +15,7 @@ class AssetLibraryTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory(prefix="asset-library-")
         self.root = Path(self.temporary.name)
         self.source = write_samples(self.root / "public_sample")
-        self.library = self.root / "data/catalog"
+        self.library = self.root / "data/runtime/catalog"
 
     def tearDown(self):
         self.temporary.cleanup()

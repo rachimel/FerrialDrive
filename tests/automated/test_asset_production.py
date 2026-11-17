@@ -1,4 +1,4 @@
-"""모델 렌더 설정과 본체/그림자 동시 조립·원본 보존·로더 연결을 검사한다."""
+"""본체/그림자 동시 조립·원본 보존·로더 연결을 검사한다."""
 
 from copy import deepcopy
 import json
@@ -12,7 +12,6 @@ from ferrial_drive.assets import AssetDefinition, SpriteBundle
 from ferrial_drive.assets.sprites import SpriteSheet
 from samples.asset_loader.make_sample import write_samples
 from Tools.asset_loader.assembly import SpriteAssembly
-from Tools.asset_loader.production import frame_numbers, render_config, load_render_preset
 
 
 class AssetProductionTests(unittest.TestCase):
@@ -25,43 +24,6 @@ class AssetProductionTests(unittest.TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
-    def test_render_preset_resolves_model_and_preserves_frame_contract(self):
-        config = render_config(asset_id="player", animation_name="sword_idle", frames="11,12,13",
-                               fps=8, width=192, height=192, ortho_scale=5.8, samples=16)
-        model = self.root / "animations.blend"
-        model.write_bytes(b"test path only")
-        config["source_blend"] = "animations.blend"
-        path = self.root / "preset.json"
-        path.write_text(json.dumps(config), encoding="utf-8")
-        loaded, source = load_render_preset(path)
-        self.assertEqual(source, model.resolve())
-        self.assertEqual(loaded["frames"], [11, 12, 13])
-        self.assertEqual(loaded["fps"], 8)
-        config["camera"]["target"] = [float("nan"), 0, 0]
-        path.write_text(json.dumps(config), encoding="utf-8")
-        with self.assertRaises(ValueError):
-            load_render_preset(path)
-
-    def test_recipe_keeps_existing_rig_options_and_rejects_invalid_work(self):
-        values = dict(asset_id="rig", animation_name="walk", frames="1,3", fps="24", width="128", height="128",
-                      ortho_scale="4.5", samples="2", root_object="SampleRig", use_scene_camera=False)
-        config = render_config(**values)
-        self.assertEqual(config["frames"], [1, 3])
-        self.assertEqual(config["root_object"], "SampleRig")
-        self.assertEqual(len(config["directions"]), 8)
-        self.assertFalse(config["use_scene_camera"])
-        self.assertEqual(config["light"]["position"], [-3, -4, 12])
-        self.assertEqual(config["light"]["energy"], 1400)
-        self.assertFalse(config["use_scene_lighting"])
-        self.assertEqual(config["postprocess"], {"sharpen": 0.35})
-        self.assertTrue(config["auto_fit"])
-        self.assertFalse(render_config(**(values | {"use_scene_camera": True}))["auto_fit"])
-        self.assertFalse(render_config(**(values | {"auto_fit": False}))["auto_fit"])
-        for key, value in (("fps", "nan"), ("frames", "1,1"), ("width", "0"), ("animation_name", "../walk"),
-                           ("samples", "0"), ("ortho_scale", "inf"), ("fps", "23.5")):
-            with self.subTest(key=key), self.assertRaises(ValueError):
-                render_config(**(values | {key: value}))
-        self.assertEqual(frame_numbers("3,1,2"), [3, 1, 2])
 
     def test_directional_reorder_repeat_and_pivot_keep_layers_equal(self):
         self.assembly.apply("idle/e", "attack", [3, 1, 1, 0], 12.5, (20, 8))
@@ -129,38 +91,6 @@ class AssetProductionTests(unittest.TestCase):
         clip = next(clip for clip in project.animations if clip.name == "attack/e")
         self.assertEqual(clip.fps, 18)
         self.assertEqual(clip.frames[0].rect[0], 128)
-
-    def test_completed_render_opens_result_and_failed_render_keeps_preview(self):
-        from Tools.asset_loader.app import AssetLoaderApp
-        app = AssetLoaderApp()
-        app.build = SimpleNamespace(process=object(), poll=lambda: True, result=self.definition.source,
-                                    progress_text="프리렌더 완료 100% (64/64)")
-        with patch.object(app, "open_source") as opened:
-            app.update(0.1)
-            opened.assert_called_once_with(self.definition.source)
-        self.assertEqual(app.message, "프리렌더 완료 100% (64/64)")
-        app.build = SimpleNamespace(process=object(), poll=lambda: False, error="render failed")
-        with patch.object(app, "open_source") as opened:
-            app.update(0.1)
-            opened.assert_not_called()
-        self.assertEqual(app.message, "render failed")
-
-    def test_render_panel_returns_recipe_without_starting_another_loop(self):
-        from Tools.asset_loader.app import AssetLoaderApp
-        from Tools.asset_loader.editors import RenderPanel
-        app = AssetLoaderApp()
-        source = self.root / "model.blend"
-        source.write_bytes(b"fixture")
-        app.configure_render(source)
-        self.assertIsInstance(app.panel, RenderPanel)
-        app.panel.fields["frames"].text = "1,5"
-        with patch.object(app, "start_render") as start:
-            app.panel.submit()
-        self.assertIsNone(app.panel)
-        model, config = start.call_args.args
-        self.assertEqual(model, source)
-        self.assertEqual(config["frames"], [1, 5])
-        self.assertTrue(config["auto_fit"])
 
 
 if __name__ == "__main__":
