@@ -80,7 +80,7 @@ class CombatConfig:
     magazine_rounds: int = 45
     shot_interval_seconds: float = 0.085
     ammo_recovery_delay_seconds: float = 1.0
-    ammo_recovery_initial_rounds_per_second: float = 2.0
+    ammo_recovery_initial_rounds_per_second: float = 4.0
     ammo_recovery_growth_per_second: float = 1.6
     bullet_speed_units_per_second: float = 1100
     bullet_range_units: float = 900

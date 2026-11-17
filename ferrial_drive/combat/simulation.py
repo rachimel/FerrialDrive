@@ -6,7 +6,8 @@ from math import ceil, cos, exp, expm1, floor, isfinite, log1p, radians, sin
 from random import Random
 
 from .config import Arena, CombatConfig
-from .geometry import Vec2, moving_circle_touches_polygon
+from .geometry import Vec2, moving_circle_touches_polygon, segment_circle
+from .ammo import recovery_time, recovered_rounds
 from .trails import BladePose, TrailSection, blade_pose, trail_section
 
 
@@ -104,22 +105,6 @@ def segment_box(start, end, box):
             if low > high:
                 return None
     return low
-
-
-def segment_circle(start, end, center, radius):
-    delta, offset = end - start, start - center
-    a = delta.x * delta.x + delta.y * delta.y
-    c = offset.x * offset.x + offset.y * offset.y - radius * radius
-    if c <= 0:
-        return 0.0
-    if a < 1e-12:
-        return None
-    b = 2 * (offset.x * delta.x + offset.y * delta.y)
-    discriminant = b * b - 4 * a * c
-    if discriminant < 0:
-        return None
-    result = (-b - discriminant ** 0.5) / (2 * a)
-    return result if 0 <= result <= 1 else None
 
 
 class CombatWorld:
@@ -274,11 +259,7 @@ class CombatWorld:
                    - (self.elapsed_seconds - self.last_shot_seconds))
 
     def _ammo_recovery_time(self, time_seconds):
-        c = self.config
-        # 빈 탄창 완충에 필요한 시간까지만 계산하여 장시간 대기 중 지수 발산을 막는다.
-        full_seconds = log1p(c.magazine_rounds * c.ammo_recovery_growth_per_second
-                            / c.ammo_recovery_initial_rounds_per_second) / c.ammo_recovery_growth_per_second
-        return min(full_seconds, max(0.0, time_seconds - self.last_shot_seconds - c.ammo_recovery_delay_seconds))
+        return recovery_time(self.config, time_seconds, self.last_shot_seconds)
 
     @property
     def ammo_recovery_rate_rounds_per_second(self):
@@ -293,12 +274,7 @@ class CombatWorld:
         if self.ammo >= c.magazine_rounds:
             self.ammo_recovery_fraction = 0.0
             return
-        before = self._ammo_recovery_time(self.elapsed_seconds - seconds)
-        after = self._ammo_recovery_time(self.elapsed_seconds)
-        # 회복 속도 r(t)=r0*exp(k*t)를 구간 적분한다. 부분 탄약도 다음 갱신으로 이월한다.
-        restored = (c.ammo_recovery_initial_rounds_per_second / c.ammo_recovery_growth_per_second
-                    * exp(c.ammo_recovery_growth_per_second * before)
-                    * expm1(c.ammo_recovery_growth_per_second * (after - before)))
+        restored = recovered_rounds(c, self.elapsed_seconds - seconds, self.elapsed_seconds, self.last_shot_seconds)
         progress = self.ammo_recovery_fraction + restored
         rounds = min(c.magazine_rounds - self.ammo, floor(progress + 1e-9))
         self.ammo += rounds

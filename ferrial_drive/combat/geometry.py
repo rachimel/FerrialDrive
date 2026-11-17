@@ -30,6 +30,60 @@ def cross(first, second):
     return first.x * second.y - first.y * second.x
 
 
+def segment_circle(start, end, center, radius):
+    """선분이 원에 처음 들어가는 0~1 시각. 출발점이 내부면 0이다."""
+    delta, offset = end - start, start - center
+    a = delta.x * delta.x + delta.y * delta.y
+    c = offset.x * offset.x + offset.y * offset.y - radius * radius
+    if c <= 0:
+        return 0.0
+    if a < 1e-12:
+        return None
+    b = 2 * (offset.x * delta.x + offset.y * delta.y)
+    discriminant = b * b - 4 * a * c
+    if discriminant < 0:
+        return None
+    result = (-b - discriminant ** 0.5) / (2 * a)
+    return result if 0 <= result <= 1 else None
+
+
+@dataclass(frozen=True)
+class Capsule:
+    start: Vec2
+    end: Vec2
+    radius: float
+
+
+def bounding_capsule(points, axis_start, axis_end, margin=0):
+    """점 구름 전체를 포함하는 단순 캡슐. 정렬·볼록 껍질·삼각분할을 하지 않는다."""
+    dx,dy = axis_end.x-axis_start.x,axis_end.y-axis_start.y
+    size = hypot(dx,dy)
+    ux,uy = (dx/size,dy/size) if size>1e-9 else (1.0,0.0)
+    low,high,radius = float("inf"),float("-inf"),0.0
+    for point in points:
+        x,y = point.x-axis_start.x,point.y-axis_start.y
+        along = x*ux+y*uy
+        low,high = min(low,along),max(high,along)
+        radius = max(radius,abs(x*uy-y*ux))
+    if not points:
+        raise ValueError("캡슐을 감쌀 점이 없다.")
+    return Capsule(Vec2(axis_start.x+ux*low,axis_start.y+uy*low),
+                   Vec2(axis_start.x+ux*high,axis_start.y+uy*high),radius+max(0,margin))
+
+
+def capsule_touches_circle(capsule, center, radius):
+    """현재 정적 원형 표적의 캡슐 접촉. AABB 조기 제외 후 제곱 거리만 계산한다."""
+    a,b,r = capsule.start,capsule.end,capsule.radius+radius
+    if (center.x<min(a.x,b.x)-r or center.x>max(a.x,b.x)+r or
+            center.y<min(a.y,b.y)-r or center.y>max(a.y,b.y)+r):
+        return False
+    dx,dy = b.x-a.x,b.y-a.y
+    length = dx*dx+dy*dy
+    t = max(0,min(1,((center.x-a.x)*dx+(center.y-a.y)*dy)/length)) if length>1e-12 else 0
+    x,y = center.x-a.x-dx*t,center.y-a.y-dy*t
+    return x*x+y*y<=r*r+1e-9
+
+
 def convex_hull(points):
     """칼날의 이전·현재 폭을 포함하는 볼록 외곽선을 만든다."""
     points = [Vec2(x, y) for x, y in sorted({(p.x, p.y) for p in points})]
