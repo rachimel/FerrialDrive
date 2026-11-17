@@ -3,7 +3,7 @@
 from collections import defaultdict, deque
 from contextlib import contextmanager
 import ctypes as ct
-import os
+from ferrial_drive.diagnostics.gpu_profile import bind_gl
 
 from ferrial_drive.particles import SpawnParticles, StepParticles
 from ferrial_drive.ui_v2.particle_texture import ATLAS_SIZE, build_particle_atlas
@@ -79,12 +79,8 @@ class ComputeParticles(InstancedParticles):
             'glGetQueryObjectiv': (None, [uint, uint, pointer]),
             'glGetQueryObjectui64v': (None, [uint, uint, pointer]),
         }
-        prototype = ct.WINFUNCTYPE if os.name == 'nt' else ct.CFUNCTYPE
         for name, (result, arguments) in signatures.items():
-            address = self.pico.SDL_GL_GetProcAddress(name.encode())
-            if not address:
-                raise RuntimeError('Compute 파티클 기능 미지원: ' + name)
-            setattr(self, name, prototype(result, *arguments)(address))
+            setattr(self, name, bind_gl(self.pico, name, result, arguments))
 
     def _compile_compute(self, source, names):
         shader, program = self.glCreateShader(0x91B9), 0

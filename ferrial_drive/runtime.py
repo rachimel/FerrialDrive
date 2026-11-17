@@ -47,6 +47,8 @@ def run_application(program, *, width, height, title, frames_per_second=60, fram
     import pico2d.pico2d as pico
 
     with PicoCanvas(width, height, title, driver=getattr(program, 'render_driver', 'opengl'), vsync=vsync) as canvas:
+        if getattr(program, "preview_hidden", False):
+            pico.SDL_HideWindow(pico.window)
         for event_type in (pico.SDL_DROPBEGIN, pico.SDL_DROPFILE,
                            pico.SDL_DROPTEXT, pico.SDL_DROPCOMPLETE):
             pico.SDL_EventState(event_type, pico.SDL_DISABLE)
@@ -57,6 +59,7 @@ def run_application(program, *, width, height, title, frames_per_second=60, fram
                 present = timings.wrap(present, name="loop.present")
                 frame_wait = timings.wrap(frame_wait, name="loop.frame_wait")
             previous_seconds = perf_counter()
+            after_present = getattr(program, "after_present", None)
             frames = 0
             while program.running:
                 frame_start = perf_counter()
@@ -76,6 +79,8 @@ def run_application(program, *, width, height, title, frames_per_second=60, fram
                     break
                 program.draw()
                 present()
+                if after_present is not None:
+                    after_present()
                 frames += 1
                 if frame_limit is not None and frames >= frame_limit:
                     break

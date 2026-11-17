@@ -2,7 +2,7 @@
 
 from contextlib import contextmanager
 import ctypes as ct
-import os
+from ferrial_drive.diagnostics.gpu_profile import bind_gl
 
 from .canvas import renderer_info
 
@@ -119,12 +119,8 @@ class BicubicSampler:
             'glScissor': (None, [integer]*4), 'glBegin': (None, [uint]), 'glEnd': (None, []),
             'glTexCoord2f': (None, [floating, floating]), 'glVertex2f': (None, [floating, floating]),
         }
-        prototype = ct.WINFUNCTYPE if os.name == 'nt' else ct.CFUNCTYPE
         for name, (result, arguments) in signatures.items():
-            address = self.pico.SDL_GL_GetProcAddress(name.encode())
-            if not address:
-                raise RuntimeError('OpenGL 기능 미지원: ' + name)
-            setattr(self, name, prototype(result, *arguments)(address))
+            setattr(self, name, bind_gl(self.pico, name, result, arguments))
 
     def integer(self, name, count=1):
         value = (ct.c_int * count)()

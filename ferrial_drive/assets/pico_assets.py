@@ -1,7 +1,7 @@
 """열린 Pico2D 렌더러에 이미지·시트·번들을 올리는 공통 백엔드."""
 
 from ctypes import byref, c_int, c_void_p, cast
-from contextlib import nullcontext
+from contextlib import ExitStack, contextmanager, nullcontext
 
 from .sprites import SpriteClip, SpriteFrame
 from .pico_opacity import DEFAULT_SHADOW_OPACITY, shadow_opacity as modulate_shadow
@@ -9,15 +9,19 @@ from ferrial_drive.rendering.bicubic import acquire_sampler
 
 
 class PicoAssetBackend:
-    def __init__(self, filtering='bicubic'):
+    def __init__(self, filtering='bicubic', *, layers=None, alpha_layers=(), alpha_scale=None):
         self.filtering = filtering
+        self.layers = None if layers is None else tuple(layers)
+        self.alpha_layers = tuple(alpha_layers)
+        self.alpha_scale = alpha_scale
 
     def load(self, document):
-        return PicoAssetResource(document, filtering=self.filtering)
+        return PicoAssetResource(document, filtering=self.filtering, layers=self.layers,
+                                 alpha_layers=self.alpha_layers, alpha_scale=self.alpha_scale)
 
 
 class PicoAssetResource:
-    def __init__(self, document, *, filtering='bicubic'):
+    def __init__(self, document, *, filtering='bicubic', layers=None, alpha_layers=(), alpha_scale=None):
         import pico2d.pico2d as pico
 
         if not pico.renderer:
@@ -27,31 +31,54 @@ class PicoAssetResource:
         self.suggested_id = document.suggested_id or document.definition.source.stem
         self.textures = {}
         self.sizes = {}
+        self.texture_sizes = {}
         self.estimated_bytes = 0
         self.closed = False
         self.clips = {}
         self.sampler = None
+        self.alpha_layers, self.alpha_scale = tuple(alpha_layers), alpha_scale
         self.mech = document.mech
         self.map_bundle = document.map_bundle
         try:
+            selected_layers = layers
             layers = ({"body": document.definition.source} if not document.sheets
                       else {layer: sheet.image_path for layer, sheet in document.sheets.items()})
+            if selected_layers is not None:
+                if not selected_layers or any(layer not in layers for layer in selected_layers):
+                    raise ValueError("선택한 에셋 레이어가 없다.")
+                layers = {layer: layers[layer] for layer in selected_layers}
+            self.layer_paths = dict(layers)
             loaded = {}
             for layer, path in layers.items():
-                if path not in loaded:
-                    texture = pico.IMG_LoadTexture(pico.renderer, str(path).encode("utf-8"))
+                alpha_only = layer in alpha_layers
+                key = (path, alpha_only)
+                if key not in loaded:
+                    if alpha_only:
+                        from .alpha_data import png_dimensions
+                        from ferrial_drive.rendering.pico_alpha_texture import load_alpha_texture
+                        if self.sampler is None:
+                            self.sampler = acquire_sampler(pico)
+                        if self.sampler is None:
+                            raise RuntimeError("알파 단일 채널 적재에는 OpenGL이 필요하다.")
+                        logical_size = document.sheets[layer].size if document.sheets else png_dimensions(path)
+                        texture = load_alpha_texture(pico, path, self.sampler, expected_size=logical_size, scale=alpha_scale)
+                    else:
+                        texture = pico.IMG_LoadTexture(pico.renderer, str(path).encode("utf-8"))
                     if not texture:
                         raise OSError(f"이미지 로딩 실패: {path}")
                     self.textures[layer] = texture
                     width, height = c_int(), c_int()
                     if pico.SDL_QueryTexture(texture, None, None, byref(width), byref(height)) != 0:
                         raise RuntimeError(f"이미지 크기 조회 실패: {path}")
-                    size = (width.value, height.value)
-                    loaded[path] = (texture, size)
-                    self.estimated_bytes += size[0] * size[1] * 4
+                    texture_size = (width.value, height.value)
+                    # 축소 텍스처도 원래 프레임·피봇 좌표로 표시한다.
+                    size = logical_size if alpha_only else texture_size
+                    loaded[key] = (texture, size, texture_size)
+                    self.estimated_bytes += texture_size[0] * texture_size[1] * (1 if alpha_only else 4)
                     pico.SDL_SetTextureBlendMode(texture, pico.SDL_BLENDMODE_BLEND)
-                texture, size = loaded[path]
+                texture, size, texture_size = loaded[key]
                 self.textures[layer], self.sizes[layer] = texture, size
+                self.texture_sizes[layer] = texture_size
                 if document.sheets and size != document.sheets[layer].size:
                     raise ValueError(f"PNG 실제 크기와 시트 메타데이터 불일치: {path}")
             if document.sheets:
@@ -72,13 +99,32 @@ class PicoAssetResource:
         if mode == 'bicubic' and self.sampler is None:
             self.sampler = acquire_sampler(self.pico)
         self.filtering = 'linear' if mode == 'bicubic' and self.sampler is None else mode
-        quality = self.pico.SDL_ScaleModeLinear if self.filtering == 'linear' else self.pico.SDL_ScaleModeNearest
-        for texture in self.textures.values():
-            if self.pico.SDL_SetTextureScaleMode(texture, quality) != 0:
-                raise RuntimeError('텍스처 표시 필터 설정 실패')
+        for layer,texture in self.textures.items():
+            self._set_texture_filter(layer,texture)
+
+    def _set_texture_filter(self,layer,texture):
+        linear = self.filtering == 'linear' or (self.filtering == 'bicubic' and
+                                               (layer in self.alpha_layers or layer == 'shadow'))
+        quality = self.pico.SDL_ScaleModeLinear if linear else self.pico.SDL_ScaleModeNearest
+        if self.pico.SDL_SetTextureScaleMode(texture,quality) != 0:
+            raise RuntimeError('텍스처 표시 필터 설정 실패')
 
     def render_batch(self):
         return self.sampler.batch() if self.filtering == 'bicubic' else nullcontext()
+
+    @contextmanager
+    def opacity(self, opacity):
+        """공유 텍스처를 한 번씩 조절하고 중첩·예외 뒤에도 이전 알파를 복원한다."""
+        if self.closed:
+            raise RuntimeError("해제한 에셋이다.")
+        with ExitStack() as stack:
+            seen = set()
+            for texture in self.textures.values():
+                identity = cast(texture, c_void_p).value
+                if identity not in seen:
+                    seen.add(identity)
+                    stack.enter_context(modulate_shadow(self.pico, texture, opacity))
+            yield
 
     def draw(self, clip_name, frame_index, x, y, *, scale=1.0, body=True, shadow=True,
              shadow_opacity=DEFAULT_SHADOW_OPACITY, layer_order=None, part_states=None, part_visibility=None):
@@ -147,8 +193,7 @@ class PicoAssetResource:
             if not visible or layer not in self.textures:
                 continue
             source = pico.SDL_Rect(left, self.sizes[layer][1] - bottom - height, width, height)
-            target = pico.to_sdl_rect(x - frame.pivot[0] * scale, y - frame.pivot[1] * scale,
-                                      width * scale, height * scale)
+            target = self.target_rect(frame, x, y, scale)
             if layer == "shadow":
                 with modulate_shadow(pico, self.textures[layer], shadow_opacity):
                     self._copy(layer, source, target)
@@ -164,9 +209,62 @@ class PicoAssetResource:
     def _draw_sheet(self, layer, frame, x, y, scale):
         left, bottom, width, height = frame.rect
         source = self.pico.SDL_Rect(left, self.sizes[layer][1] - bottom - height, width, height)
-        target = self.pico.to_sdl_rect(x - frame.pivot[0] * scale, y - frame.pivot[1] * scale,
-                                      width * scale, height * scale)
+        target = self.target_rect(frame, x, y, scale)
         self._copy(layer, source, target)
+
+    def target_rect(self, frame, x, y, scale):
+        """최종 정수 픽셀 크기로 피봇을 계산해 축소 시 중심의 밀림을 막는다."""
+        width, height = frame.rect[2:]
+        target_width, target_height = round(width * scale), round(height * scale)
+        left = round(x - frame.pivot[0] * target_width / width)
+        top = round(self.pico.get_canvas_height() - y - (height - frame.pivot[1]) * target_height / height)
+        return self.pico.SDL_Rect(left, top, target_width, target_height)
+
+    @contextmanager
+    def prepare_alpha_scale(self, scale):
+        """설정 저장 후에만 교체한다. 논리 크기·프레임·피봇·클립은 유지한다."""
+        if self.closed:
+            raise RuntimeError("해제한 에셋이다.")
+        from ferrial_drive.rendering.pico_alpha_texture import load_alpha_texture
+        staged, installed = {}, False
+        try:
+            for layer in self.alpha_layers:
+                if layer not in self.textures or scale == self.alpha_scale:
+                    continue
+                old = self.textures[layer]
+                identity = cast(old,c_void_p).value
+                if identity in staged:
+                    staged[identity]["layers"].append(layer)
+                    continue
+                width,height = c_int(),c_int()
+                if self.pico.SDL_QueryTexture(old,None,None,byref(width),byref(height)):
+                    raise RuntimeError("그림자 크기 조회 실패")
+                before = width.value*height.value
+                texture = load_alpha_texture(self.pico,self.layer_paths[layer],self.sampler,
+                                             expected_size=self.sizes[layer],scale=scale)
+                row = {"old":old,"new":texture,"before":before,"layers":[layer]}
+                staged[identity] = row
+                self._set_texture_filter(layer,texture)
+                if self.pico.SDL_QueryTexture(texture,None,None,byref(width),byref(height)):
+                    raise RuntimeError("새 그림자 크기 조회 실패")
+                row["after"] = width.value*height.value
+                row["size"] = (width.value,height.value)
+
+            def apply():
+                nonlocal installed
+                if installed:
+                    raise RuntimeError("그림자 교체를 이미 적용했다.")
+                for row in staged.values():
+                    for layer in row["layers"]:
+                        self.textures[layer] = row["new"]
+                        self.texture_sizes[layer] = row["size"]
+                self.estimated_bytes += sum(row["after"]-row["before"] for row in staged.values())
+                self.alpha_scale = scale
+                installed = True
+            yield apply
+        finally:
+            for row in staged.values():
+                self.pico.SDL_DestroyTexture(row["old"] if installed else row["new"])
 
     def close(self):
         if not self.closed:

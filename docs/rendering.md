@@ -12,6 +12,16 @@
 
 공통 실행부는 `Tools`·테스트·특정 게임 장면을 참조하지 않는다. 본편 진입점과 전투/ADV 장면 관리는 아직 별도로 구성해야 한다.
 
+## 검 Trail 정점 생성
+
+훈련장의 기본 Trail은 `compute_sword_trail.ComputeSwordTrail`을 사용한다. CPU는 실제 궤적·판정과 표시 구간 분류를 유지하고, 작은 제어점 배열만 전송한다. GPU Compute가 곡선 보간·띠 정점·UV·색/알파를 생성하고 같은 SSBO를 vertex shader에서 바로 읽어 Instancing으로 표시한다. 런타임에서 정점을 CPU로 다시 읽지 않는다.
+
+생성 다음의 shader storage 접근은 `glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT)`로 연결한다. 검사에서만 사용하는 CPU readback에는 별도 buffer update barrier를 사용한다. 메모리 가시성은 [Khronos 공식 설명](https://wikis.khronos.org/opengl/GLAPI/glMemoryBarrier)을 따른다.
+
+OpenGL 4.3 기능이 없는 경로는 CPU 표시로 돌아간다. Compute 컴파일·실행 오류를 정상 CPU 성공으로 숨기지 않는다. CPU 기준 구현은 `PicoSwordEffects(..., trail_backend="cpu")`, 훈련장 설정은 `sword_effects.trail_renderer`로 선택한다. 기본 프로그램은 Compute를 요청하며 첫 Trail 표시 때 프로그램을 준비한다.
+
+검 궤적·충돌·타격당 중복 명중 방지는 CPU 전투 모듈의 책임이다. GPU 정점과 CPU 원본의 좌표·UV·알파 및 실제 화면은 별도 검사한다. 실측과 미검증 범위는 [최신 기록](ai-dev-log/2026-11-15-compute-trail-shadow-quality.md)을 따른다.
+
 ## 본편 연결
 
 일반적인 실행은 `ferrial_drive.runtime.run_application(program, width=..., height=..., title=...)`을 호출한다. `program`은 다음 규약을 제공한다.
@@ -49,12 +59,18 @@ OpenGL 요청을 위해 바꾼 SDL 드라이버 힌트는 초기화 후 원래 �
 
 ## 독립 실행·검증
 
+### 지면 효과 배치
+
+`PicoGroundEffects`의 기본 `backend="batched"`는 로딩 중 원본 PNG 시트를 공통 RGBA 아틀라스로 조립한다. 원본 파일은 수정하지 않는다. 파티클별 위치·회전·반전·색·수명·가림 수치는 재사용 CPU 버퍼에 채워 한 번 업로드하고 `GroundEffectBatch`가 인스턴싱한다. 현재 공통 아틀라스에서는 파티클 수와 관계없이 비어 있지 않은 레이어마다 한 번 제출한다. 기체 앞·뒤 레이어는 각각 제출하며 입자 순서는 정렬하지 않는다. 연기 알파·마찰 cutout·Trail 음영 계산은 개별 경로와 공통 GLSL 본문을 사용한다.
+
+버퍼와 데이터 텍스처는 용량이 늘어날 때만 확장하며 매 호출 재생성하지 않는다. texture unit 1·unpack/PBO·clip·scale·render target 상태를 복원하고 기존 Pico2D/SDL 그리기와 합성한다. `backend="individual"`은 대조용으로 보존하며 원본 개별 텍스처는 이 경로를 처음 쓸 때만 불러온다. 기본 실행은 공통 아틀라스만 GPU에 보관한다. 개별/배치 대조 실행은 두 텍스처 세트를 함께 보유하므로 메모리 비교 결과로 사용하지 않는다.
+
+`tests/automated/test_ground_effect_batch.py`는 원본 게임 에셋 없는 최소 패턴으로 순서·버퍼 재사용을 검사한다. `FDRIVE_GPU_TESTS=1`로 실행하면 회전·반전·앞뒤 가림·스케일·클리핑·렌더 타깃의 개별/배치 픽셀 비교와 GL 상태·실패 복구를 검사한다. 실기 UHD 630 성능 검증과 구분한다. 자동 대조 명령은 [하드웨어 벤치마크 안내](tool-usage/hardware_profile_benchmark.md)를 따른다.
+
 ```text
-python tests/rendering_test.py
-python tests/rendering_test.py --frames 2
 python -m unittest tests.automated.test_rendering_runtime -q
 ```
 
-도형 샘플은 공개 `samples/asset_loader/`만 사용하며 Blender·실제 게임 모델·카탈로그 등록이 필요 없다. 15개 스프라이트와 SDL 문자/선을 합성한다. **1/2/3**으로 Nearest/Linear/Bicubic을 바꾸고 **Esc**로 닫는다. 독립 Runner에서도 선택할 수 있다.
+표시 확인은 `tests/asset_loader_test.py`의 공개 도형 샘플 또는 `tests/sword_movement_test.py --demo`로 수행한다.
 
-실제 GPU 검사는 `FDRIVE_GPU_TESTS=1`을 지정하고 `python -m unittest tests.automated.test_asset_bicubic_gpu -q`로 실행한다. Windows에서는 숨긴 실제 OpenGL 창을 사용한다. 자동 검사는 import 부작용·자원 종료 순서·예외 정리·재시작·힌트 복원과 Bicubic 픽셀/클립/SDL 합성을 구분한다. 대상 Iris 기기의 수백 기·이펙트·HUD 동시 성능과 60FPS는 별도 실측 대상이다.
+실제 GPU 검사는 `FDRIVE_GPU_TESTS=1`을 지정하고 `python -m unittest tests.automated.test_asset_bicubic_gpu -q`로 실행한다. Windows에서는 숨긴 실제 OpenGL 창을 사용한다. 자동 검사는 import 부작용·자원 종료 순서·예외 정리·재시작·힌트 복원과 Bicubic 픽셀/클립/SDL 합성을 구분한다. 대상 내장 그래픽 기기의 FHD 165FPS·수백 기·이펙트·HUD 동시 성능은 별도 실측 대상이다.

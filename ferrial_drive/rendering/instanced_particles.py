@@ -2,7 +2,7 @@
 
 import ctypes as ct
 from math import hypot
-import os
+from ferrial_drive.diagnostics.gpu_profile import bind_gl
 
 from .bicubic import BicubicSampler
 from ferrial_drive.ui_v2.particle_texture import ATLAS_SIZE, build_particle_atlas
@@ -104,12 +104,8 @@ class InstancedParticles(BicubicSampler):
             'glPixelStorei': (None, [uint, integer]),
             'glBindBuffer': (None, [uint, uint]),
         }
-        prototype = ct.WINFUNCTYPE if os.name == 'nt' else ct.CFUNCTYPE
         for name, (result, arguments) in signatures.items():
-            address = self.pico.SDL_GL_GetProcAddress(name.encode())
-            if not address:
-                raise RuntimeError('파티클 Instancing 미지원: ' + name)
-            setattr(self, name, prototype(result, *arguments)(address))
+            setattr(self, name, bind_gl(self.pico, name, result, arguments))
 
     def _texture(self, unit, width, height, pixels=None, *, floating=True):
         self.glActiveTexture(0x84C0 + unit)

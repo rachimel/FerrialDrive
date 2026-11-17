@@ -1,0 +1,4 @@
+{
+  "ktx_executable": "KTX 도구의 ktx.exe 절대 경로",
+  "oodle_library": "보유한 Oodle Texture SDK의 oo2tex DLL 절대 경로"
+}

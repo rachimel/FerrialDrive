@@ -1,11 +1,39 @@
 """Pico2D 원본을 유지하며 SDL OpenGL 캔버스의 수명을 관리한다."""
 
-from ctypes import byref
+from contextlib import contextmanager
+from ctypes import byref, c_int
 from dataclasses import dataclass
 import os
 
 
 _active_canvas = None
+
+
+@contextmanager
+def prepare_output_resolution(resolution, logical_size):
+    """출력 크기를 준비하고 저장 실패 시 이전 창·논리 크기로 복귀한다."""
+    canvas = _active_canvas
+    if resolution is None or canvas is None:
+        yield lambda: None
+        return
+    previous = (canvas.width, canvas.height), canvas.logical_size
+    canvas.resize_output(*resolution, logical_size=logical_size)
+    committed = False
+
+    def commit():
+        nonlocal committed
+        committed = True
+
+    try:
+        yield commit
+    finally:
+        if not committed:
+            canvas.resize_output(*previous[0], logical_size=previous[1])
+
+
+def apply_output_resolution(resolution, logical_size):
+    with prepare_output_resolution(resolution, logical_size) as commit:
+        commit()
 
 
 @dataclass(frozen=True)
@@ -38,6 +66,7 @@ class PicoCanvas:
         if type(vsync) is not bool:
             raise ValueError('vsync는 bool이어야 한다.')
         self.width, self.height, self.title = width, height, title
+        self.logical_size = width, height
         self.driver, self.vsync = driver, vsync
         self.pico = self.info = None
         self.opened = False
@@ -54,6 +83,10 @@ class PicoCanvas:
         driver = None if os.environ.get('SDL_VIDEODRIVER') == 'dummy' else self.driver
         previous = pico.SDL_GetHint(pico.SDL_HINT_RENDER_DRIVER)
         try:
+            if os.name == 'nt':
+                # 비디오 초기화 전에 지정한다. SDL 좌표를 물리 픽셀로 유지한다.
+                pico.SDL_SetHint(pico.SDL_HINT_WINDOWS_DPI_AWARENESS, b'permonitorv2')
+                pico.SDL_SetHint(pico.SDL_HINT_WINDOWS_DPI_SCALING, b'0')
             if driver:
                 pico.SDL_SetHint(pico.SDL_HINT_RENDER_DRIVER, driver.encode('utf-8'))
             pico.open_canvas(self.width, self.height, sync=self.vsync)
@@ -85,6 +118,26 @@ class PicoCanvas:
         if not self.opened:
             raise RuntimeError('닫힌 캔버스다.')
         self.pico.update_canvas()
+
+    def resize_output(self, width, height, *, logical_size):
+        """UI·월드 논리 좌표를 유지하며 실제 출력 픽셀 수와 창 크기를 바꾼다."""
+        if not self.opened:
+            raise RuntimeError('닫힌 캔버스다.')
+        if not all(type(value) is int and value > 0 for value in (width, height, *logical_size)):
+            raise ValueError('출력·논리 크기는 양수 정수 픽셀이어야 한다.')
+        p = self.pico
+        if p.SDL_RenderFlush(p.renderer) != 0:
+            raise RuntimeError('해상도 변경 전 렌더 제출 실패')
+        previous = (self.width, self.height), self.logical_size
+        p.SDL_SetWindowSize(p.window, width, height)
+        if p.SDL_RenderSetLogicalSize(p.renderer, *logical_size) != 0:
+            p.SDL_SetWindowSize(p.window, *previous[0])
+            p.SDL_RenderSetLogicalSize(p.renderer, *previous[1])
+            raise RuntimeError('화면 해상도 적용 실패')
+        actual_width, actual_height = c_int(), c_int()
+        p.SDL_GetWindowSize(p.window, byref(actual_width), byref(actual_height))
+        self.width, self.height = actual_width.value, actual_height.value
+        self.logical_size = tuple(logical_size)
 
     def close(self):
         global _active_canvas

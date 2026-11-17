@@ -247,12 +247,14 @@ void main() {
     } else {
         vec2 corner = vec2(float(gl_VertexID / 2), float(gl_VertexID % 2));
         float radius = orb_radius * (layer == 0u ? 2.4 : (layer == 1u ? 1.0 : 0.45));
-        if (int(p.target.z) == 1) radius *= p.payload.w;
+        if (int(p.target.z) == 1) radius *= p.payload.w * (layer == 0u ? 1.6 : 1.0);
         point = p.motion.xy + (corner * 2.0 - 1.0) * radius;
         ink = layer == 2u ? core_color : base_color;
         ink.a *= (p.motion.z <= 1.0 ? 1.0 : 0.0) * (layer == 0u ? 0.1 : (layer == 1u ? 0.9 : 1.0));
         if (int(p.target.z) == 1) {
-            float twinkle = 0.45 + 0.55 * pow(sin(p.life.x * 22.0 + p.target.w), 2.0);
+            // 흰 코어와 넓은 흰 halo를 함께 사용하며 강도에 따라 점멸이 빨라진다.
+            ink = vec4(core_color.rgb, core_color.a * (layer == 0u ? 0.3 : (layer == 1u ? 0.85 : 1.0)));
+            float twinkle = 0.65 + 0.35 * pow(sin(p.life.x * 22.0 * sqrt(p.life.w) + p.target.w), 2.0);
             ink.a *= pow(max(0.0, 1.0 - p.motion.z), 1.4) * twinkle;
         }
         uv = (vec2(0.5) + corner * 63.0) / vec2(128.0, 64.0);

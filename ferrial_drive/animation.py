@@ -14,6 +14,12 @@ def smooth_step(progress: float) -> float:
     return progress * progress * (3.0 - 2.0 * progress)
 
 
+def exponential_out(progress: float) -> float:
+    """양 끝을 정확히 유지하며 초반에 빠르고 끝에서 느려지는 지수 곡선."""
+    progress = linear(progress)
+    return (1 - 2 ** (-10 * progress)) / (1 - 2 ** -10)
+
+
 def ease_in_quad(progress: float) -> float:
     progress = max(0.0, min(1.0, progress))
     return progress * progress

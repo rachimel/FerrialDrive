@@ -1,0 +1,9 @@
+{
+  "size_pixels": 192,
+  "duration_seconds": 0.16666666666666666,
+  "scenes": [
+    {"name": "직선 이동", "description": "한 물체의 일정한 이동을 확인한다.", "center_a": [58, 116], "center_b": [126, 76], "angle_a_degrees": 0, "angle_b_degrees": 0, "half_size": [30, 38], "occluder": false},
+    {"name": "가는 검 회전", "description": "회전 궤적과 선형 픽셀 이동의 차이를 확인한다.", "center_a": [96, 96], "center_b": [96, 96], "angle_a_degrees": -35, "angle_b_degrees": 35, "half_size": [65, 4], "occluder": false},
+    {"name": "가림과 재등장", "description": "앞쪽 장갑 뒤로 이동할 때의 보간 결함을 확인한다.", "center_a": [58, 116], "center_b": [126, 76], "angle_a_degrees": 0, "angle_b_degrees": 0, "half_size": [30, 38], "occluder": true}
+  ]
+}
