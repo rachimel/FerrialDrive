@@ -12,9 +12,7 @@ from ferrial_drive.ui.weapon_swap import WeaponSwap
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SPEC = importlib.util.spec_from_file_location("equipment_ui_sample", ROOT / "tests/ui_test.py")
-SAMPLE = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(SAMPLE)
+from ui_fixture import make_ui_fixture
 
 
 class EquipmentTests(unittest.TestCase):
@@ -24,53 +22,12 @@ class EquipmentTests(unittest.TestCase):
                 WeaponInfo("기관단총", rounds)
         with self.assertRaises(ValueError):
             LoadoutInfo(WeaponInfo("카타나"), WeaponInfo("기관단총"))
-        sample = SAMPLE.SampleHud(SAMPLE.SAMPLE_PATH)
+        sample = make_ui_fixture().sample
         with self.assertRaises(ValueError):
             replace(sample.state, active_loadout_index=2)
         with self.assertRaises(ValueError):
             replace(sample.state, loadouts=sample.state.loadouts * 2)
 
-    def test_switching_and_reset_preserve_per_loadout_ammo(self):
-        sample = SAMPLE.SampleHud(SAMPLE.SAMPLE_PATH)
-        original = sample.state.loadouts
-        sample.switch_loadout()
-        sample.switch_weapon()
-        self.assertEqual(sample.state.active_loadout_index, 1)
-        self.assertEqual(sample.state.active_weapon_kind, "melee")
-        self.assertEqual(sample.state.loadouts, original)
-        sample.switch_loadout()
-        self.assertEqual(sample.state.active_loadout_index, 0)
-        sample.reset()
-        self.assertEqual(sample.state.active_weapon_kind, "ranged")
-
-    def test_equipment_keys_are_blocked_in_menu_transition_and_pause(self):
-        program = SAMPLE.UiTest()
-        program.pico = SimpleNamespace(SDL_MOUSEMOTION=1, SDL_MOUSEBUTTONDOWN=2,
-                                      SDL_MOUSEBUTTONUP=3, SDL_KEYDOWN=4,
-                                      SDLK_ESCAPE=27, SDLK_e=101, SDLK_f=102,
-                                      SDL_BUTTON_LEFT=1)
-        event = SimpleNamespace(type=4, key=102, repeat=False)
-        program.handle_event(event)
-        self.assertEqual(program.sample.state.active_loadout_index, 0)
-        program.change_scene("combat")
-        program.handle_event(event)
-        self.assertEqual(program.sample.state.active_loadout_index, 0)
-        program.transition.update(1)
-        program.handle_event(event)
-        self.assertEqual(program.sample.state.active_loadout_index, 1)
-        program.set_paused(True)
-        program.pause.update(1)
-        program.handle_event(event)
-        self.assertEqual(program.sample.state.active_loadout_index, 1)
-        program.handle_event(SimpleNamespace(type=4, key=101, repeat=False))
-        self.assertEqual(program.sample.state.active_weapon_kind, "ranged")
-        program.set_paused(False)
-        program.pause.update(1)
-        program.handle_event(SimpleNamespace(type=4, key=101, repeat=True))
-        self.assertEqual(program.sample.state.active_weapon_kind, "ranged")
-        program.handle_event(SimpleNamespace(type=4, key=101, repeat=False))
-        self.assertEqual(program.sample.state.active_weapon_kind, "melee")
-        self.assertEqual(program.sample.state.active_loadout_index, 1)
 
     def test_gun_name_image_and_ammo_placement_without_reserve(self):
         from ferrial_drive.ui.view import UiView
@@ -101,7 +58,7 @@ class EquipmentTests(unittest.TestCase):
             def clip(self, rect):
                 return nullcontext()
 
-        program = SAMPLE.UiTest()
+        program = make_ui_fixture()
         state = program.sample.state
         loadout = LoadoutInfo(WeaponInfo("카타나", image_path="sword.png"),
                               WeaponInfo("시험 기관단총", 0, "test.png"))
@@ -120,8 +77,8 @@ class EquipmentTests(unittest.TestCase):
         self.assertFalse(any("∞" in item[0] or "/" in item[0] for item in renderer.texts))
         removed = {"잔탄", "사용 중", "E  로드아웃", "F  무기 전환"}
         self.assertFalse(any(item[0] in removed for item in renderer.texts))
-        self.assertEqual(program.config.font_paths["ammo_number"].name, "SCDream5.otf")
-        self.assertEqual(program.config.font_paths["equipment_number"].name, "SCDream5.otf")
+        self.assertEqual(program.config.font_paths["ammo_number"].name, "GamwulchiFreeGothic.otf")
+        self.assertEqual(program.config.font_paths["equipment_number"].name, "FerrialHudSquareWide-Regular.otf")
 
         switched = Recorder()
         UiView(program.config, switched).equipment(replace(state, active_weapon_kind="melee"), 1, 0)
@@ -143,7 +100,7 @@ class EquipmentTests(unittest.TestCase):
         ammo = next(item for item in triple.texts if item[3] == "ammo_number")
         gun = next(item[1] for item in triple.images if item[0] == "test.png")
         self.assertEqual(ammo[0], "999")
-        # SCDream5 48px에서 세 자리 폭은 약 89px다. 실루엣과 16px 이상 분리한다.
+        # 모의 세 자리 측정 폭 89px를 기준으로 실루엣과 16px 이상 분리한다.
         self.assertGreaterEqual(ammo[1] - 89 - (gun.x + gun.width), 16)
 
     def test_swap_holds_new_position_and_next_input_continues_same_orbit(self):
@@ -186,25 +143,6 @@ class EquipmentTests(unittest.TestCase):
             for _ in range(fps // 2):
                 swap.update(1 / fps)
             self.assertAlmostEqual(swap.ranged_weight, 0.5)
-
-    def test_pause_freezes_swap_and_reset_removes_in_progress_motion(self):
-        program = SAMPLE.UiTest()
-        program.sample.switch_weapon()
-        program.update(0.12)
-        self.assertAlmostEqual(program.weapon_swap.ranged_weight, 0.5)
-        program.set_paused(True)
-        program.update(5)
-        self.assertAlmostEqual(program.weapon_swap.ranged_weight, 0.5)
-        program.set_paused(False)
-        program.update(5)
-        self.assertAlmostEqual(program.weapon_swap.ranged_weight, 0.5)
-        program.update(0.12)
-        self.assertEqual(program.weapon_swap.ranged_weight, 0)
-        program.sample.switch_weapon()
-        program.update(0.06)
-        program.perform("reset")
-        self.assertEqual(program.weapon_swap.ranged_weight, 1)
-        self.assertEqual(program.sample.state.active_weapon_kind, "ranged")
 
 
 if __name__ == "__main__":

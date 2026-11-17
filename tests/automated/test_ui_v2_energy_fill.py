@@ -11,7 +11,7 @@ from ferrial_drive.ui.energy_fill import EnergyFillMotion
 from ferrial_drive.ui_v2.view import UiV2View
 
 ROOT = Path(__file__).resolve().parents[2]
-SPEC = importlib.util.spec_from_file_location('energy_fill_sample', ROOT / 'tests/ui_unit_test_v2.py')
+SPEC = importlib.util.spec_from_file_location('energy_fill_sample', ROOT / 'ferrial_drive/ui_v2/preview.py')
 SAMPLE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(SAMPLE)
 
@@ -36,7 +36,7 @@ class EnergyFillTests(unittest.TestCase):
             self.assertAlmostEqual(motion.visual.total, target + 0.2)
 
     def test_repeated_scene_charge_updates_catch_up_without_delaying_real_energy(self):
-        program = SAMPLE.create_test()
+        program = SAMPLE.create_preview()
         program.set_energy_charge(EnergyCharge(0))
         for frame in range(12):
             total = (frame + 1) / 10
@@ -82,7 +82,7 @@ class EnergyFillTests(unittest.TestCase):
         self.assertFalse(motion.visual.active)
 
     def test_actual_charge_is_immediate_while_display_freezes_on_pause_and_resets(self):
-        program = SAMPLE.create_test()
+        program = SAMPLE.create_preview()
         program.set_energy_charge(EnergyCharge(0.2))
         program.set_energy_charge(EnergyCharge(0.8))
         self.assertEqual(EnergyCharge.from_state(program.state).total, 0.8)
@@ -101,7 +101,7 @@ class EnergyFillTests(unittest.TestCase):
         self.assertEqual(program.energy_fill.visual, EnergyCharge.from_state(program.state))
 
     def test_view_uses_display_boundary_without_changing_logical_readiness(self):
-        program = SAMPLE.create_test()
+        program = SAMPLE.create_preview()
         state = replace(program.state, energy_level=3, energy_ratio=1)
         renderer = Mock()
         renderer.text_size.return_value = (12, 18)

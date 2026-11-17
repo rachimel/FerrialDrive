@@ -20,30 +20,35 @@ def draw_attribute_icon(view, attribute, x, y, size, opacity):
 
 
 def draw_auxiliary_slot(view, weapon, left, top, diameter, opacity):
-    r, c = view.renderer, view.config.colors
-    cx, cy, radius = left + diameter / 2, top + diameter / 2, diameter / 2
-    circle = tuple((cx + cos(i * pi / 24) * radius, cy + sin(i * pi / 24) * radius)
-                   for i in range(48))
-    view.panel_layer(circle, c["panel_surface"], opacity, grain=True)
-    view.stroke(circle + circle[:1], view.ui_accent, opacity * 0.75,
-                view.style["weapon_card"]["auxiliary_border_pixels"])
+    """이미지 캐시를 재사용하며 투명 문양은 공통 원형 패널 위에 합성한다."""
+    settings = view.style["shared_swap_slot"]
+    kind = "empty" if weapon.auxiliary_image_path else weapon.auxiliary_kind or "empty"
+    path = view.config.path.parent / settings["images"][kind]
+    if kind in settings.get("glyph_kinds", []):
+        radius = diameter / 2
+        circle = tuple((left + radius + cos(i * pi / 32) * radius,
+                        top + radius + sin(i * pi / 32) * radius) for i in range(64))
+        view.renderer.filtered_polygons((circle,), view.config.colors["panel_surface"],
+                                        opacity * view.style["surface_opacity"], 2)
+        if kind != "counter":
+            border = view.style["weapon_card"]["auxiliary_border_pixels"]
+            quads = []
+            for a, b in zip(circle, circle[1:] + circle[:1]):
+                length = hypot(b[0] - a[0], b[1] - a[1])
+                nx, ny = -(b[1] - a[1]) / length * border / 2, (b[0] - a[0]) / length * border / 2
+                quads.append(((a[0] + nx, a[1] + ny), (b[0] + nx, b[1] + ny),
+                              (b[0] - nx, b[1] - ny), (a[0] - nx, a[1] - ny)))
+            view.renderer.filtered_polygons(tuple(quads), view.ui_accent,
+                opacity * view.style["weapon_card"]["auxiliary_border_opacity"], 2)
+        inset = settings["glyph_inset_pixels"]
+        view.renderer.image(path, Rect(left + inset, top + inset, diameter - inset * 2, diameter - inset * 2), opacity,
+                            tint=view.config.colors["text"] if view.hud_theme is not None else "#FFFFFF")
+        return
+    view.renderer.image(path, Rect(left, top, diameter, diameter), opacity)
     if weapon.auxiliary_image_path:
-        r.image(weapon.auxiliary_image_path, Rect(left + 8, top + 8, diameter - 16, diameter - 16), opacity)
-    elif weapon.auxiliary_kind == "back_weapon":
-        # 쌍 발사관과 연결 프레임을 나타내는 공개 가능한 임시 도형이다.
-        for dx in (0.22, 0.57):
-            shape = tuple((left + u * diameter, top + v * diameter) for u, v in
-                          ((dx, 0.24), (dx + 0.16, 0.17), (dx + 0.23, 0.57), (dx + 0.07, 0.64)))
-            view.polygon(shape, c["text"], opacity * 0.8, filled=True)
-        view.stroke(((left + diameter * 0.36, top + diameter * 0.57),
-                     (cx, top + diameter * 0.78),
-                     (left + diameter * 0.71, top + diameter * 0.55)), c["text"], opacity, 2)
-    elif weapon.auxiliary_kind == "counter":
-        shield = tuple((left + u * diameter, top + v * diameter) for u, v in
-                       ((0.27, 0.24), (0.73, 0.24), (0.68, 0.61), (0.5, 0.8), (0.32, 0.61)))
-        view.stroke(shield + shield[:1], c["text"], opacity * 0.85, 2)
-        view.stroke(((left + diameter * 0.38, top + diameter * 0.56),
-                     (left + diameter * 0.61, top + diameter * 0.38)), c["text"], opacity, 2)
+        size = diameter * settings["icon_scale"] * 0.75
+        view.renderer.image(weapon.auxiliary_image_path,
+                            Rect(left + (diameter - size) / 2, top + (diameter - size) / 2, size, size), opacity)
 
 
 def draw_weapon_card(view, weapon, kind, left, top, right, height, opacity):
@@ -79,18 +84,17 @@ def draw_weapon_card(view, weapon, kind, left, top, right, height, opacity):
     if weapon.base_attribute:
         text_left = spine_band_x + horizontal_width + 5
         clip = Rect(text_left, band_top, max(0, label_left - text_left - 9), band_height)
-        tw, th = r.text_size(weapon.base_attribute, "v2_weapon_attribute")
+        spacing = settings.get("attribute_letter_spacing_pixels", 0)
+        tw, th = r.text_size(weapon.base_attribute, "v2_weapon_attribute", letter_spacing_pixels=spacing)
         scale = min(1, clip.width / max(1, tw))
         r.text(weapon.base_attribute, clip.x, band_top + (band_height - th) / 2,
                "v2_weapon_attribute", c["text"], opacity * settings["attribute_opacity"],
-               scale_x=scale, clip_rect=clip)
+               scale_x=scale, clip_rect=clip, letter_spacing_pixels=spacing,
+               stroke_inset_pixels=settings.get("attribute_stroke_inset_pixels", 0))
     # 가는 선의 아래 시작점을 굵은 선의 오른쪽 위 끝에 붙인다.
     upper_bottom = spine_band_x + horizontal_width
     upper_top = upper_bottom + slope * (band_top - spine_top)
-    diameter = settings["auxiliary_diameter_pixels"]
     line_mid_x = (upper_bottom + upper_top + upper_horizontal_width) / 2
-    circle_x = line_mid_x - diameter / 2 - settings["auxiliary_gap_pixels"]
-    circle_y = (band_top + spine_top) / 2
     content_start = max(line_mid_x, upper_top + upper_horizontal_width) + settings["content_gap_pixels"]
     lower = ((content_left, spine_bottom), (spine_band_x, band_top),
              (spine_band_x + horizontal_width, band_top), (content_left + horizontal_width, spine_bottom))
@@ -115,7 +119,8 @@ def draw_weapon_card(view, weapon, kind, left, top, right, height, opacity):
                                        max(1, band_top - image_top - 5)), opacity)
     if weapon.rounds is not None:
         r.neon_text(str(weapon.rounds), right - ammo_width - 6, top + 9, "v2_ammo", c["text"],
-                    text_alpha, **view.style["weapon_text_neon"])
+                    text_alpha, gradient_bottom_ratio=settings.get("ammo_gradient_bottom_ratio", 1),
+                    **view.style["weapon_text_neon"])
     label = "MELEE" if kind == "melee" else "RANGED"
     label_w, label_h = r.text_size(label, "v2_weapon_kind")
     label_scale = min(1, (label_width - right_cut - 9) / max(1, label_w), (band_height - 7) / max(1, label_h))
@@ -130,4 +135,4 @@ def draw_weapon_card(view, weapon, kind, left, top, right, height, opacity):
     for index, attribute in enumerate(weapon.additional_attributes):
         draw_attribute_icon(view, attribute, right - icon_width * icon_scale + index * step * icon_scale,
                             band_top - icon_size * icon_scale - 4, icon_size * icon_scale, text_alpha)
-    draw_auxiliary_slot(view, weapon, circle_x - diameter / 2, circle_y - diameter / 2, diameter, opacity)
+    # 보조 기능은 HUD의 공통 스왑 슬롯에서 한 번 표시한다.

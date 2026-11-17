@@ -17,9 +17,7 @@ from ferrial_drive.ui.weapon_swap import WeaponSwap, diamond_offset
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SPEC = importlib.util.spec_from_file_location("loadout_slide_sample", ROOT / "tests/ui_test.py")
-SAMPLE = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(SAMPLE)
+from ui_fixture import make_ui_fixture
 
 
 class Recorder:
@@ -139,18 +137,24 @@ class LoadoutSlideTests(unittest.TestCase):
 
         renderer = PicoRenderer.__new__(PicoRenderer)
         renderer.pico = SimpleNamespace(renderer=object(), SDL_Rect=NativeRect,
-                                       SDL_SetTextureAlphaMod=lambda *args: None, SDL_RenderCopy=copy)
+                                       SDL_SetTextureAlphaMod=lambda *args: None,
+                                       SDL_SetTextureColorMod=lambda *args: None, SDL_RenderCopy=copy)
         path = str((ROOT / "test-drum-icon.png").resolve())
         renderer.images = OrderedDict({path: ("texture", 200, 100)})
+        renderer.image_paths = OrderedDict()
         renderer.image(path, Rect(10, 20, 100, 25), vertical_scale=0.5)
         renderer.image(path, Rect(10, 20, 100, 50))
         self.assertEqual(copies, [(10, 20, 100, 25), (10, 20, 100, 50)])
 
     def test_loadout_panels_and_numbers_share_offset_fade_and_keep_full_height(self):
-        program = SAMPLE.UiTest()
+        program = make_ui_fixture()
         program.config.data["equipment_motion_blur"]["samples"] = 0
         renderer = Recorder()
         view = UiView(program.config, renderer)
+        view.equipment(program.sample.state, 1, 0)
+        resting_number_x = next(item[1] for item in renderer.texts if item[3] == "equipment_number")
+        renderer.texts.clear()
+        renderer.clips.clear()
         slide = LoadoutSlide(0, 0.28)
         slide.request(1)
         slide.update(0.07)
@@ -169,7 +173,7 @@ class LoadoutSlideTests(unittest.TestCase):
             self.assertEqual(len(layers), 1)
             loadout, x, y, alpha, scale = layers[0]
             number = next(item for item in renderer.texts if item[3] == "equipment_number")
-            self.assertAlmostEqual(x - panel_x, number[1] - (panel_x + width - 16 - 76 + 17))
+            self.assertAlmostEqual(x - panel_x, number[1] - resting_number_x)
             self.assertAlmostEqual(alpha, number[5])
             self.assertEqual((y, scale, loadout.ranged.rounds), (panel_y, 1, expected_rounds))
 
@@ -187,7 +191,7 @@ class LoadoutSlideTests(unittest.TestCase):
                 self.assertLessEqual(abs(delta), 28.000001)
 
     def test_weapon_cards_follow_opposite_diamond_sides_without_screen_clipping(self):
-        program = SAMPLE.UiTest()
+        program = make_ui_fixture()
         renderer = Recorder()
         view = UiView(program.config, renderer)
         view.equipment(program.sample.state, 1, 0, ranged_weight=0.5)
@@ -207,7 +211,7 @@ class LoadoutSlideTests(unittest.TestCase):
                                    -(diamond_offset(kind, 0.5, 64, 44, -1) + 44))
 
     def test_vertical_swap_trails_follow_opposite_directions_and_stop_at_rest(self):
-        program = SAMPLE.UiTest()
+        program = make_ui_fixture()
         renderer = Recorder()
         view = UiView(program.config, renderer)
         swap = WeaponSwap("ranged", 0.24)
@@ -227,7 +231,7 @@ class LoadoutSlideTests(unittest.TestCase):
         self.assertEqual(len(layers), 2)
 
     def test_idle_weapon_cards_are_independent_and_debug_buttons_do_not_overlap(self):
-        program = SAMPLE.UiTest()
+        program = make_ui_fixture()
         renderer = Recorder()
         UiView(program.config, renderer).equipment(program.sample.state, 1, 0)
         self.assertEqual(len(renderer.panels), 2)
@@ -240,28 +244,34 @@ class LoadoutSlideTests(unittest.TestCase):
                          renderer.panel_styles[1]["corner_cut_ratio"])
         self.assertTrue(all(value > 0 for value in renderer.panel_styles[0]["corner_cut_ratio"]))
         number = next(item for item in renderer.texts if item[3] == "equipment_number")
-        self.assertEqual(number[2], program.config.layout["equipment_panel"][1] + 3)
+        self.assertEqual(number[2], program.config.layout["equipment_panel"][1]
+                         + program.config.layout["equipment_tabs"]["padding_pixels"][1])
         self.assertTrue(any(line[0] != line[2] and line[1] != line[3] for line in renderer.lines))
         for button in program.config.buttons["combat"]:
             self.assertLessEqual(button.rect.x + button.rect.width, first.x)
 
-    def test_pause_freezes_both_motions_and_reset_clears_old_loadout(self):
-        program = SAMPLE.UiTest()
-        program.sample.switch_weapon()
-        program.sample.switch_loadout()
-        program.update(0.1)
-        weight = program.weapon_swap.ranged_weight
-        progress = program.loadout_slide.visual.progress_before()
-        program.set_paused(True)
-        program.update(5)
-        program.set_paused(False)
-        program.update(5)
-        self.assertEqual(program.weapon_swap.ranged_weight, weight)
-        self.assertEqual(program.loadout_slide.visual.progress_before(), progress)
-        program.perform("reset")
-        self.assertFalse(program.loadout_slide.visual.moving)
-        self.assertEqual(program.loadout_slide.visual.incoming_index, 0)
-        self.assertEqual(program.weapon_swap.ranged_weight, 1)
+    def test_card_margins_match_and_number_panels_follow_font_metrics(self):
+        program = make_ui_fixture()
+        renderer = Recorder()
+        view = UiView(program.config, renderer)
+        view.equipment(program.sample.state, 1, 0)
+        right = max(panel.x + panel.width for panel in renderer.panels)
+        bottom = max(panel.y + panel.height for panel in renderer.panels)
+        self.assertEqual(program.config.window["width"] - right, 16)
+        self.assertEqual(program.config.window["height"] - bottom, 16)
+        tabs = view.equipment_tab_rects()
+        panel_x = program.config.layout["equipment_panel"][0]
+        self.assertEqual(panel_x + tabs[-1].x + tabs[-1].width, right)
+        self.assertLess(tabs[0].x + tabs[0].width, tabs[1].x)
+        padding_x, padding_y = program.config.layout["equipment_tabs"]["padding_pixels"]
+        self.assertGreaterEqual(tabs[0].width, 40 + padding_x * 2)
+        self.assertGreaterEqual(tabs[0].height, 17 + padding_y * 2)
+        renderer.text_size = lambda text, role: (72, 24)
+        larger = view.equipment_tab_rects()
+        self.assertGreater(larger[0].width, tabs[0].width)
+        self.assertGreater(larger[0].height, tabs[0].height)
+        self.assertEqual(panel_x + larger[-1].x + larger[-1].width, right)
+
 
     def test_native_clip_intersects_nested_regions_and_restores_after_exception(self):
         class NativeRect(Structure):

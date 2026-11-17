@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-spec = importlib.util.spec_from_file_location('energy_ui_sample', ROOT / 'tests/ui_unit_test_v2.py')
+spec = importlib.util.spec_from_file_location('energy_ui_sample', ROOT / 'ferrial_drive/ui_v2/preview.py')
 SAMPLE = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(SAMPLE)
 
@@ -21,7 +21,7 @@ from ferrial_drive.ui.energy import EnergyCharge, energy_color
 
 class EnergyFeedbackTests(unittest.TestCase):
     def setUp(self):
-        self.program = SAMPLE.UiUnitTestV2(initial_scene='combat')
+        self.program = SAMPLE.HudPreview(initial_scene='combat')
 
     def test_six_particles_route_below_bar_without_ultimate_icon(self):
         for target_id, side in (('enemy_a', -1), ('enemy_b', 1)):
@@ -176,13 +176,16 @@ class EnergyFeedbackTests(unittest.TestCase):
         self.assertEqual(self.program.state.overdrive_charge_ratio, 0.5)
         self.assertFalse(self.program.state.overdrive)
         self.program.set_energy_charge(EnergyCharge(4))
+        self.assertFalse(self.program.state.overdrive)
+        self.assertTrue(self.program.state.overdrive_ready)
+        self.program.perform("activate_overdrive")
         self.assertTrue(self.program.state.overdrive)
         self.assertEqual(self.program.state.overdrive_charge_ratio, 1)
 
     def test_red_tint_is_shared_by_bar_and_particles(self):
         style, colors = self.program.config.data['v2']['style'], self.program.config.colors
         self.program.set_energy_charge(EnergyCharge(3.5))
-        middle = energy_color(colors['energy'], style['overdrive_red'], 0.5)
+        middle = energy_color(style['energy_level_colors'][2], style['overdrive_red'], 0.5)
         self.assertNotEqual(middle, colors['energy'])
         renderer = Mock()
         renderer.text_size.side_effect = lambda text, role: (len(text) * 10, 18)
@@ -190,9 +193,30 @@ class EnergyFeedbackTests(unittest.TestCase):
         with patch.object(view, 'polygon') as polygon:
             view.resources(self.program.state, 1, 0, 1)
         self.assertTrue(any(call.args[1] == middle for call in polygon.call_args_list))
-        view.absorption((), 1, self.program.particle_system, 0.5)
+        view.absorption((), 1, self.program.particle_system, 0.5, level=3)
         self.assertEqual(renderer.draw_compute_particles.call_args.args[2], middle)
         self.assertEqual(energy_color(colors['energy'], style['overdrive_red'], 1), '#FF4044')
+
+    def test_level_palette_matches_trail_and_spark_activity_increases(self):
+        import json
+        settings = json.loads((ROOT / 'samples/sword_movement/movement_config.json').read_text(encoding='utf-8'))
+        renderer = Mock()
+        renderer.text_size.side_effect = lambda text, role: (len(text) * 10, 18)
+        view = UiV2View(self.program.config, renderer)
+        counts, intensities = [], []
+        for level, trail in enumerate(settings['sword_effects']['levels'], 1):
+            self.program.set_energy_charge(EnergyCharge(level - 1 + 0.5))
+            with patch.object(view, 'polygon') as polygon:
+                view.resources(self.program.state, 1, 0, 1)
+            self.assertTrue(any(call.args[1] == trail['color'] for call in polygon.call_args_list))
+            view.absorption((), 1, self.program.particle_system, level=level)
+            self.assertEqual(renderer.draw_compute_particles.call_args.args[2], trail['color'])
+            self.program.emit_boundary_particles(0.1)
+            command = self.program.particle_system.commands[-1]
+            counts.append(command.count)
+            intensities.append(command.intensity)
+        self.assertTrue(counts[0] < counts[1] < counts[2])
+        self.assertTrue(intensities[0] < intensities[1] < intensities[2])
 
     def test_selection_exit_preserves_live_health_then_fades(self):
         old = self.program.selected_target_id

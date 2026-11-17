@@ -17,7 +17,7 @@ class PanelProbeRenderer:
         if name in ("text_size", "text_ascent", "digit_ink_bottom", "rgba"):
             return getattr(self.source, name)
         if name in ("clear", "text", "rich_text", "neon_text", "line", "rect", "ring", "filled_triangle",
-                    "warped_text", "filtered_polygons", "scanline_layer", "film_grain",
+                    "warped_text", "filtered_polygons", "scanline_layer", "film_grain", "soft_line",
                     "weapon_silhouette", "image", "metallic_rect", "particle_quads"):
             return lambda *args, **kwargs: None
         raise AttributeError(name)
@@ -37,7 +37,8 @@ class PanelProbeRenderer:
             self.ranges.append(bounds)
 
     @contextmanager
-    def directional_blur(self, bounds, displacement, strength, samples=33, *, forward_bias=0):
+    def directional_blur(self, bounds, displacement, strength, samples=33, *, forward_bias=0,
+                         resolution_scale=1):
         yield
 
     @contextmanager

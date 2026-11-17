@@ -3,12 +3,13 @@
 from contextlib import contextmanager
 from collections import OrderedDict
 from ctypes import byref, c_float, c_int, c_ubyte, memmove, string_at
-from math import ceil, exp, floor, isfinite, log2
+from math import ceil, exp, floor, hypot, isfinite, log2
 from random import Random
 from struct import Struct
 
 from ferrial_drive.ui.pico_renderer import PicoRenderer
 from .panels import clip_panel_band, clip_panel_rect, visible_panel_y_range
+from ferrial_drive.rendering.hud_batch import HudBatchQueue, batch_barrier
 
 
 PARTICLE_VERTEX = Struct("=ff4Bff")
@@ -21,9 +22,11 @@ class PicoV2Renderer(PicoRenderer):
         self.scanline_textures = OrderedDict()
         self.grain_textures = OrderedDict()
         self.neon_textures = OrderedDict()
+        self.soft_line_textures = OrderedDict()
         self.neon_font_sizes = dict(font_sizes)
         self.motion_texture = None
         self.motion_size = None
+        self.motion_textures = OrderedDict()
         self.motion_sampler = None
         self.particle_texture = None
         self.particle_indices = None
@@ -31,6 +34,23 @@ class PicoV2Renderer(PicoRenderer):
         self.compute_particles = None
         self.particle_instancing_supported = None
         super().__init__(font_paths, font_sizes)
+        self.batch_queue = HudBatchQueue(self.pico)
+
+    def _geometry_polygon(self, points, rgba, *, texture=None, uv=None, colors=None, separate_triangles=False):
+        if self.batch_queue.active:
+            self.batch_queue.polygon(points, rgba, texture=texture, uv=uv, colors=colors,
+                                     separate_triangles=separate_triangles)
+            return
+        p = self.pico
+        fan = tuple(value for index in range(1, len(points) - 1) for value in (0, index, index + 1))
+        order = fan if separate_triangles else range(len(points))
+        vertices = (p.SDL_Vertex * len(order))(*(
+            p.SDL_Vertex(p.SDL_FPoint(*points[index]), p.SDL_Color(*(rgba if colors is None else colors[index])),
+                         p.SDL_FPoint(*(uv[index] if uv is not None else (0, 0)))) for index in order))
+        indices = tuple(range(len(order))) if separate_triangles else fan
+        faces = (c_int * len(indices))(*indices)
+        if p.SDL_RenderGeometry(p.renderer, texture, vertices, len(order), faces, len(indices)):
+            raise RuntimeError('HUD 도형 제출 실패: ' + p.SDL_GetError().decode('utf-8', errors='replace'))
 
     def draw_transform(self):
         p = self.pico
@@ -80,6 +100,7 @@ class PicoV2Renderer(PicoRenderer):
             self.grain_textures[key] = texture
             if len(self.grain_textures) > 16:
                 _, old = self.grain_textures.popitem(last=False)
+                self.flush_batch()
                 p.SDL_DestroyTexture(old)
         self.grain_textures.move_to_end(key)
         return self.grain_textures[key]
@@ -101,21 +122,74 @@ class PicoV2Renderer(PicoRenderer):
         if len(screen) < 3:
             return
         texture = self._grain_texture(ceil(tile_pixels / cell_pixels), seed, frame_index)
-        p.SDL_SetTextureAlphaMod(texture, 255)
-        color = p.SDL_Color(255, 255, 255, self.rgba("#FFFFFF", opacity)[3])
+        rgba = (255, 255, 255, self.rgba("#FFFFFF", opacity)[3])
         for row in range(floor(min(y for _, y in screen) / tile_pixels), ceil(max(y for _, y in screen) / tile_pixels)):
             for column in range(floor(min(x for x, _ in screen) / tile_pixels), ceil(max(x for x, _ in screen) / tile_pixels)):
                 left, top = column * tile_pixels, row * tile_pixels
                 polygon = clip_panel_rect(screen, left, top, tile_pixels, tile_pixels)
                 if len(polygon) < 3:
                     continue
-                vertices = tuple(p.SDL_Vertex(p.SDL_FPoint(x / sx.value - viewport.x, y / sy.value - viewport.y),
-                                              color, p.SDL_FPoint((x - left) / tile_pixels, (y - top) / tile_pixels))
-                                 for x, y in polygon)
-                for index in range(1, len(vertices) - 1):
-                    triangle = (p.SDL_Vertex * 3)(vertices[0], vertices[index], vertices[index + 1])
-                    if p.SDL_RenderGeometry(p.renderer, texture, triangle, 3, None, 0) != 0:
-                        raise RuntimeError("Film grain 표시 실패")
+                points = tuple((x / sx.value - viewport.x, y / sy.value - viewport.y) for x, y in polygon)
+                uv = tuple(((x - left) / tile_pixels, (y - top) / tile_pixels) for x, y in polygon)
+                self._geometry_polygon(points, rgba, texture=texture, uv=uv, separate_triangles=True)
+
+    @batch_barrier
+    def soft_line(self, first, last, color, opacity=1, width_pixels=1):
+        """선분에서 멀어질수록 투명해지는 둥근 빛띠를 캐시해 합성한다."""
+        dx, dy = last[0] - first[0], last[1] - first[1]
+        length = hypot(dx, dy)
+        if opacity <= 0 or length <= 0 or width_pixels <= 0:
+            return
+        # 이동·회전·색·맥동은 정점에만 적용하고 같은 마스크를 재사용한다.
+        key = round(length, 6), round(width_pixels, 6)
+        radius = max(1.0, width_pixels / 2)
+        pad = radius + 1
+        width, height = ceil(length + pad * 2), ceil(pad * 2)
+        p = self.pico
+        if key not in self.soft_line_textures:
+            samples = 4
+            pixel_width, pixel_height = width * samples, height * samples
+            surface = p.SDL_CreateRGBSurfaceWithFormat(
+                0, pixel_width, pixel_height, 32, p.SDL_PIXELFORMAT_RGBA32)
+            if not surface:
+                raise RuntimeError("빛띠 surface 생성 실패")
+            try:
+                if p.SDL_LockSurface(surface) != 0:
+                    raise RuntimeError("빛띠 surface 잠금 실패")
+                try:
+                    distances = tuple(max(0, pad - (x + 0.5) / samples,
+                                          (x + 0.5) / samples - pad - length) ** 2
+                                      for x in range(pixel_width))
+                    for y in range(pixel_height):
+                        vertical = ((y + 0.5) / samples - height / 2) ** 2
+                        row = bytearray()
+                        for horizontal in distances:
+                            coverage = max(0, 1 - (horizontal + vertical) / radius ** 2) ** 2
+                            row.extend((255, 255, 255, round(coverage * 255)))
+                        memmove(surface.contents.pixels + y * surface.contents.pitch,
+                                bytes(row), pixel_width * 4)
+                finally:
+                    p.SDL_UnlockSurface(surface)
+                texture = p.SDL_CreateTextureFromSurface(p.renderer, surface)
+            finally:
+                p.SDL_FreeSurface(surface)
+            if not texture:
+                raise RuntimeError("빛띠 텍스처 생성 실패")
+            if (p.SDL_SetTextureBlendMode(texture, p.SDL_BLENDMODE_BLEND) != 0
+                    or p.SDL_SetTextureScaleMode(texture, p.SDL_ScaleModeLinear) != 0):
+                p.SDL_DestroyTexture(texture)
+                raise RuntimeError("빛띠 합성·필터 설정 실패")
+            self.soft_line_textures[key] = texture
+            if len(self.soft_line_textures) > 64:
+                _, old = self.soft_line_textures.popitem(last=False)
+                p.SDL_DestroyTexture(old)
+        self.soft_line_textures.move_to_end(key)
+        ux, uy = dx / length, dy / length
+        points = tuple((first[0] + ux * x - uy * y, first[1] + uy * x + ux * y)
+                       for x, y in ((-pad, -height / 2), (width - pad, -height / 2),
+                                    (width - pad, height / 2), (-pad, height / 2)))
+        self._geometry_polygon(points, self.rgba(color, opacity), texture=self.soft_line_textures[key],
+                               uv=((0, 0), (1, 0), (1, 1), (0, 1)), separate_triangles=True)
 
     def _neon_texture(self, text, role, color, radius, *, bold=False):
         p = self.pico
@@ -183,6 +257,7 @@ class PicoV2Renderer(PicoRenderer):
         self.neon_textures.move_to_end(key)
         return self.neon_textures[key]
 
+    @batch_barrier
     def _draw_neon_glow(self, text, x, y, role, color, opacity, radius, *, bold=False):
         texture, width, height, pad = self._neon_texture(text, role, color, radius, bold=bold)
         self.pico.SDL_SetTextureAlphaMod(texture, self.rgba(color, opacity)[3])
@@ -190,18 +265,25 @@ class PicoV2Renderer(PicoRenderer):
         if self.pico.SDL_RenderCopyF(self.pico.renderer, texture, None, byref(destination)) != 0:
             raise RuntimeError("네온 광 표시 실패")
 
-    def _draw_neon_core(self, text, x, y, role, color, opacity, *, bold=False):
-        """본문은 3배 해상도에서 만들어 광과 같은 소수점 좌표에 축소한다."""
+    @batch_barrier
+    def _draw_neon_core(self, text, x, y, role, color, opacity, *, bold=False, gradient_bottom_ratio=1):
+        """탄약은 1배, 나머지는 3배 해상도로 만들고 같은 표시 크기를 쓴다."""
         p = self.pico
-        key = (text, role, color, bold, "neon_core")
+        resolution_scale = 1 if role == "v2_ammo" else 3
+        key = (text, role, color, bold, "neon_core", gradient_bottom_ratio, resolution_scale)
         if key not in self.textures:
             width, height = self.text_size(text, role, bold=bold)
             size = self.neon_font_sizes[role]
             with self._font_style(role, bold) as font:
-                if p.TTF_SetFontSize(font, size * 3) != 0:
+                if p.TTF_SetFontSize(font, max(1, round(size * resolution_scale))) != 0:
                     raise RuntimeError("네온 본문 확대 실패")
                 try:
-                    surface = p.TTF_RenderUTF8_Blended(font, text.encode("utf-8"), p.SDL_Color(*self.rgba(color)))
+                    if gradient_bottom_ratio < 1:
+                        from ferrial_drive.ui.text_style import styled_text_surface
+                        surface = styled_text_surface(p, font, text, p.SDL_Color(*self.rgba(color)), 0, 0,
+                                                      gradient_bottom_ratio)
+                    else:
+                        surface = p.TTF_RenderUTF8_Blended(font, text.encode("utf-8"), p.SDL_Color(*self.rgba(color)))
                 finally:
                     if p.TTF_SetFontSize(font, size) != 0:
                         raise RuntimeError("네온 본문 글꼴 크기 복원 실패")
@@ -228,14 +310,14 @@ class PicoV2Renderer(PicoRenderer):
             raise RuntimeError("네온 본문 표시 실패")
 
     def neon_text(self, text, x, y, role, color, opacity=1, *, glow_color, radius_pixels=4, glow_opacity=0.12,
-                  glow_passes=1, bold=False):
+                  glow_passes=1, bold=False, gradient_bottom_ratio=1):
         """캐시한 가우시안 광을 먼저 그리고 원래 글자를 같은 위치에 겹친다."""
         if opacity <= 0 or not text:
             return
         if glow_opacity > 0 and radius_pixels > 0:
             for _ in range(glow_passes):
                 self._draw_neon_glow(text, x, y, role, glow_color, opacity * glow_opacity, radius_pixels, bold=bold)
-        self._draw_neon_core(text, x, y, role, color, opacity, bold=bold)
+        self._draw_neon_core(text, x, y, role, color, opacity, bold=bold, gradient_bottom_ratio=gradient_bottom_ratio)
 
     def _scanline_texture(self, height, spacing, thickness, color):
         """위상과 무관한 세로 반복 패턴. 두 배 해상도로 만들어 선형 보간한다."""
@@ -271,6 +353,7 @@ class PicoV2Renderer(PicoRenderer):
             self.scanline_textures[key] = texture
             if len(self.scanline_textures) > 8:
                 _, old = self.scanline_textures.popitem(last=False)
+                self.flush_batch()
                 p.SDL_DestroyTexture(old)
         self.scanline_textures.move_to_end(key)
         return self.scanline_textures[key], logical_height
@@ -303,24 +386,21 @@ class PicoV2Renderer(PicoRenderer):
         if not polygons:
             return
         texture, texture_height = self._scanline_texture(output_height.value, spacing_pixels, thickness_pixels, color)
-        p.SDL_SetTextureAlphaMod(texture, 255)
         offset = spacing_pixels - offset_pixels % spacing_pixels
         for polygon in polygons:
-            vertices = []
+            colors, uv = [], []
             for x, y in polygon:
                 weight = 1
                 if bright_band is not None:
                     weight = max(0, 1 - abs((screen_y(y) - band_top - band_height / 2) / (band_height / 2)))
-                tint = p.SDL_Color(255, 255, 255, self.rgba(color, opacity * weight)[3])
-                vertices.append(p.SDL_Vertex(p.SDL_FPoint(x, y), tint,
-                                             p.SDL_FPoint((x - left) / width, (screen_y(y) + offset) / texture_height)))
+                colors.append((255, 255, 255, self.rgba(color, opacity * weight)[3]))
+                uv.append(((x - left) / width, (screen_y(y) + offset) / texture_height))
             # 사각형 복사 경로를 피하고 배율이 달라도 UV 위상을 유지한다.
-            for index in range(1, len(vertices) - 1):
-                triangle = (p.SDL_Vertex * 3)(vertices[0], vertices[index], vertices[index + 1])
-                if p.SDL_RenderGeometry(p.renderer, texture, triangle, 3, None, 0) != 0:
-                    raise RuntimeError("Scanline 스크롤 표시 실패")
+            self._geometry_polygon(polygon, (255, 255, 255, 255), texture=texture, uv=uv, colors=colors,
+                                   separate_triangles=True)
 
-    def filtered_polygons(self, polygons, color, opacity=1, samples=2):
+    @batch_barrier
+    def filtered_polygons(self, polygons, color, opacity=1, samples=2, *, grain=None):
         """확대 렌더를 선형 축소하고 이동·투명도와 무관한 도형 텍스처를 재사용한다."""
         if opacity <= 0:
             return
@@ -332,11 +412,11 @@ class PicoV2Renderer(PicoRenderer):
         height = ceil(max(y for polygon in polygons for _, y in polygon)) - top + 1
         local = tuple(tuple((round(x - left, 6), round(y - top, 6)) for x, y in polygon)
                       for polygon in polygons)
-        key = (local, color, samples)
+        key = (local, color, samples) if grain is None else (local, color, samples, grain)
         p = self.pico
         if key not in self.filtered_textures:
-            self.filtered_textures[key] = self._filtered_texture(local, color, width, height, samples)
-            if len(self.filtered_textures) > 32:
+            self.filtered_textures[key] = self._filtered_texture(local, color, width, height, samples, grain=grain)
+            if len(self.filtered_textures) > 128:
                 _, old = self.filtered_textures.popitem(last=False)
                 p.SDL_DestroyTexture(old)
         self.filtered_textures.move_to_end(key)
@@ -346,7 +426,8 @@ class PicoV2Renderer(PicoRenderer):
         if p.SDL_RenderCopyF(p.renderer, texture, None, byref(destination)) != 0:
             raise RuntimeError("필터 도형 표시 실패")
 
-    def _filtered_texture(self, polygons, color, width, height, samples):
+    @batch_barrier
+    def _filtered_texture(self, polygons, color, width, height, samples, *, grain=None):
         p = self.pico
         texture = p.SDL_CreateTexture(p.renderer, p.SDL_PIXELFORMAT_RGBA8888,
                                       p.SDL_TEXTUREACCESS_TARGET, width * samples, height * samples)
@@ -377,13 +458,23 @@ class PicoV2Renderer(PicoRenderer):
                     points = tuple((x * samples, y * samples) for x, y in polygon)
                     for index in range(1, len(points) - 1):
                         self.filled_triangle(points[0], points[index], points[index + 1], color)
+                if grain is not None:
+                    opacity, tile, cell, seed = grain
+                    p.SDL_SetRenderDrawBlendMode(p.renderer, p.SDL_BLENDMODE_BLEND)
+                    for polygon in polygons:
+                        points = tuple((x * samples, y * samples) for x, y in polygon)
+                        self.film_grain(points, opacity, 0, tile_pixels=tile * samples,
+                                        cell_pixels=cell * samples, seed=seed)
             finally:
-                p.SDL_SetRenderTarget(p.renderer, target)
-                p.SDL_RenderSetScale(p.renderer, sx.value, sy.value)
-                p.SDL_RenderSetViewport(p.renderer, byref(viewport))
-                p.SDL_RenderSetClipRect(p.renderer, byref(clip) if clipped else None)
-                p.SDL_SetRenderDrawBlendMode(p.renderer, blend.value)
-                p.SDL_SetRenderDrawColor(p.renderer, *(value.value for value in rgba))
+                try:
+                    self.flush_batch()
+                finally:
+                    p.SDL_SetRenderTarget(p.renderer, target)
+                    p.SDL_RenderSetScale(p.renderer, sx.value, sy.value)
+                    p.SDL_RenderSetViewport(p.renderer, byref(viewport))
+                    p.SDL_RenderSetClipRect(p.renderer, byref(clip) if clipped else None)
+                    p.SDL_SetRenderDrawBlendMode(p.renderer, blend.value)
+                    p.SDL_SetRenderDrawColor(p.renderer, *(value.value for value in rgba))
             if (p.SDL_SetTextureBlendMode(texture, p.SDL_BLENDMODE_BLEND) != 0
                     or p.SDL_SetTextureScaleMode(texture, p.SDL_ScaleModeLinear) != 0):
                 raise RuntimeError("도형 축소 필터 설정 실패")
@@ -393,27 +484,35 @@ class PicoV2Renderer(PicoRenderer):
         return texture
 
     @contextmanager
-    def directional_blur(self, bounds, displacement, strength, samples=33, *, forward_bias=0):
+    def directional_blur(self, bounds, displacement, strength, samples=33, *, forward_bias=0,
+                         resolution_scale=1):
         """UI 레이어를 같은 화면 좌표에 렌더한 뒤 방향성 필터로 합성한다."""
+        self.flush_batch()
         from ferrial_drive.rendering.canvas import renderer_info
+        if not isfinite(resolution_scale) or not 0 < resolution_scale <= 1:
+            raise ValueError("블러 해상도 배율은 0 초과 1 이하여야 한다.")
         if strength <= 0 or renderer_info(self.pico).name != 'opengl':
             yield
             return
         p = self.pico
         scale, viewport_values, output_size, clipping = self.draw_transform()
+        texture_size = tuple(max(1, round(value * resolution_scale)) for value in output_size)
+        fx, fy = (value / original for value, original in zip(texture_size, output_size))
         if self.motion_sampler is None:
             from ferrial_drive.rendering.directional_blur import DirectionalBlurSampler
             self.motion_sampler = DirectionalBlurSampler(p)
-        if self.motion_size != output_size:
-            if self.motion_texture:
-                p.SDL_DestroyTexture(self.motion_texture)
-                self.motion_texture = None
+        if texture_size not in self.motion_textures:
             texture = p.SDL_CreateTexture(p.renderer, p.SDL_PIXELFORMAT_RGBA8888,
-                                          p.SDL_TEXTUREACCESS_TARGET, *output_size)
+                                          p.SDL_TEXTUREACCESS_TARGET, *texture_size)
             if not texture:
                 raise RuntimeError('모션 블러 대상 텍스처 생성 실패')
             p.SDL_SetTextureScaleMode(texture, p.SDL_ScaleModeLinear)
-            self.motion_texture, self.motion_size = texture, output_size
+            self.motion_textures[texture_size] = texture
+            if len(self.motion_textures) > 2:
+                _, old = self.motion_textures.popitem(last=False)
+                p.SDL_DestroyTexture(old)
+        self.motion_textures.move_to_end(texture_size)
+        self.motion_texture, self.motion_size = self.motion_textures[texture_size], texture_size
         target = p.SDL_GetRenderTarget(p.renderer)
         viewport = p.SDL_Rect(*viewport_values)
         clip = p.SDL_Rect(*clipping) if clipping is not None else None
@@ -426,17 +525,20 @@ class PicoV2Renderer(PicoRenderer):
                 raise RuntimeError('모션 블러 대상 연결 실패')
             p.SDL_SetRenderDrawColor(p.renderer, 0, 0, 0, 0)
             p.SDL_RenderClear(p.renderer)
-            p.SDL_RenderSetScale(p.renderer, *scale)
+            p.SDL_RenderSetScale(p.renderer, scale[0] * fx, scale[1] * fy)
             p.SDL_RenderSetViewport(p.renderer, byref(viewport))
             p.SDL_RenderSetClipRect(p.renderer, byref(clip) if clip is not None else None)
             yield
         finally:
-            p.SDL_SetRenderTarget(p.renderer, target)
-            p.SDL_RenderSetScale(p.renderer, *scale)
-            p.SDL_RenderSetViewport(p.renderer, byref(viewport))
-            p.SDL_RenderSetClipRect(p.renderer, byref(clip) if clip is not None else None)
-            p.SDL_SetRenderDrawBlendMode(p.renderer, blend.value)
-            p.SDL_SetRenderDrawColor(p.renderer, *(value.value for value in rgba))
+            try:
+                self.flush_batch()
+            finally:
+                p.SDL_SetRenderTarget(p.renderer, target)
+                p.SDL_RenderSetScale(p.renderer, *scale)
+                p.SDL_RenderSetViewport(p.renderer, byref(viewport))
+                p.SDL_RenderSetClipRect(p.renderer, byref(clip) if clip is not None else None)
+                p.SDL_SetRenderDrawBlendMode(p.renderer, blend.value)
+                p.SDL_SetRenderDrawColor(p.renderer, *(value.value for value in rgba))
         sx, sy = scale
         vx, vy, _, _ = viewport_values
         pad_x, pad_y = abs(displacement[0]) + 8, abs(displacement[1]) + 8
@@ -446,11 +548,12 @@ class PicoV2Renderer(PicoRenderer):
         bottom = min(output_size[1], ceil((bounds.y + bounds.height + pad_y + vy) * sy))
         if right <= left or bottom <= top:
             return
-        source = p.SDL_Rect(left, top, right - left, bottom - top)
-        # 이미 화면 배율로 그린 레이어는 화면 픽셀에 1:1로 합성한다.
-        # 논리 좌표로 되돌려 재확대하면 SDL viewport의 정수 반올림과 겹쳐
-        # 가로 블러에서도 세로 방향으로 소수 픽셀만큼 재필터링된다.
-        destination = p.SDL_FRect(left, top, source.w, source.h)
+        source_left, source_top = floor(left * fx), floor(top * fy)
+        source_right, source_bottom = ceil(right * fx), ceil(bottom * fy)
+        source = p.SDL_Rect(source_left, source_top, source_right - source_left, source_bottom - source_top)
+        # 축소 텍스처의 경계를 원래 화면 픽셀로 환산한다.
+        # 논리 좌표로 되돌리지 않아 viewport 반올림에 따른 위치 흔들림을 피한다.
+        destination = p.SDL_FRect(source.x / fx, source.y / fy, source.w / fx, source.h / fy)
         try:
             p.SDL_RenderSetScale(p.renderer, 1, 1)
             p.SDL_RenderSetViewport(p.renderer, None)
@@ -460,8 +563,8 @@ class PicoV2Renderer(PicoRenderer):
                 screen_clip = p.SDL_Rect(round((cx + vx) * sx), round((cy + vy) * sy),
                                          round(cw * sx), round(ch * sy))
             p.SDL_RenderSetClipRect(p.renderer, byref(screen_clip) if screen_clip is not None else None)
-            self.motion_sampler.draw_blurred(self.motion_texture, output_size, source, destination,
-                                             (displacement[0] * sx, displacement[1] * sy), strength, samples,
+            self.motion_sampler.draw_blurred(self.motion_texture, texture_size, source, destination,
+                                             (displacement[0] * sx * fx, displacement[1] * sy * fy), strength, samples,
                                              forward_bias=forward_bias)
         finally:
             p.SDL_RenderSetScale(p.renderer, *scale)
@@ -474,12 +577,11 @@ class PicoV2Renderer(PicoRenderer):
                 self.compute_particles.profiling = True
             return self.compute_particles
         import ctypes as ct
-        import os
+        from ferrial_drive.diagnostics.gpu_profile import bind_gl
         from ferrial_drive.rendering.canvas import renderer_info
         if renderer_info(self.pico).name != 'opengl':
             raise RuntimeError('Compute 파티클은 OpenGL 4.3 이상이 필요하다.')
-        prototype = ct.WINFUNCTYPE if os.name == 'nt' else ct.CFUNCTYPE
-        query = prototype(ct.c_char_p, ct.c_uint)(self.pico.SDL_GL_GetProcAddress(b'glGetString'))
+        query = bind_gl(self.pico, 'glGetString', ct.c_char_p, [ct.c_uint])
         version = query(0x1F02).decode().split()[0].split('.')
         if not all(v.isdigit() for v in version[:2]) or tuple(map(int, version[:2])) < (4, 3):
             raise RuntimeError('Compute 파티클은 OpenGL 4.3 이상이 필요하다.')
@@ -491,21 +593,22 @@ class PicoV2Renderer(PicoRenderer):
             self.compute_particles = ComputeParticles(self.pico, system, profiling=profiling)
         return self.compute_particles
 
+    @batch_barrier
     def draw_compute_particles(self, system, settings, color, core_color, opacity):
         backend = self.prepare_compute_particles(system)
         scale, _, _, _ = self.draw_transform()
         backend.render(settings, tuple(v / 255 for v in self.rgba(color, opacity)),
                        tuple(v / 255 for v in self.rgba(core_color, opacity)), scale)
 
+    @batch_barrier
     def draw_instanced_particles(self, trails, settings, color, core_color, opacity):
         from ferrial_drive.rendering.canvas import renderer_info
         if settings.get("renderer") != "instanced" or renderer_info(self.pico).name != "opengl":
             return False
         if self.particle_instancing_supported is None:
             import ctypes as ct
-            import os
-            prototype = ct.WINFUNCTYPE if os.name == "nt" else ct.CFUNCTYPE
-            query = prototype(ct.c_char_p, ct.c_uint)(self.pico.SDL_GL_GetProcAddress(b"glGetString"))
+            from ferrial_drive.diagnostics.gpu_profile import bind_gl
+            query = bind_gl(self.pico, "glGetString", ct.c_char_p, [ct.c_uint])
             version = query(0x1F02).decode().split()[0].split(".")
             self.particle_instancing_supported = (len(version) >= 2 and all(v.isdigit() for v in version[:2])
                                                   and tuple(map(int, version[:2])) >= (3, 3))
@@ -524,6 +627,7 @@ class PicoV2Renderer(PicoRenderer):
         self.particle_instances.render(trails, settings, base, core, scale)
         return True
 
+    @batch_barrier
     def particle_quads(self, quads):
         """공용 오브/Trail 텍스처 하나로 모든 파티클의 사각형을 한 번에 그린다."""
         if not quads:
@@ -574,7 +678,11 @@ class PicoV2Renderer(PicoRenderer):
         if p.SDL_RenderGeometry(p.renderer, self.particle_texture, vertices, len(vertices), self.particle_indices, index_count) != 0:
             raise RuntimeError("파티클 묶음 렌더 실패: " + p.SDL_GetError().decode("utf-8", errors="replace"))
 
+    @batch_barrier
     def close(self):
+        queue = getattr(self, 'batch_queue', None)
+        if queue is not None:
+            queue.close()
         if self.compute_particles is not None:
             self.compute_particles.close()
             self.compute_particles = None
@@ -588,13 +696,17 @@ class PicoV2Renderer(PicoRenderer):
         if self.motion_sampler is not None:
             self.motion_sampler.close()
             self.motion_sampler = None
-        if self.motion_texture:
-            self.pico.SDL_DestroyTexture(self.motion_texture)
-            self.motion_texture = None
-            self.motion_size = None
+        for texture in self.motion_textures.values():
+            self.pico.SDL_DestroyTexture(texture)
+        self.motion_textures.clear()
+        self.motion_texture = None
+        self.motion_size = None
         for texture, _, _, _ in self.neon_textures.values():
             self.pico.SDL_DestroyTexture(texture)
         self.neon_textures.clear()
+        for texture in self.soft_line_textures.values():
+            self.pico.SDL_DestroyTexture(texture)
+        self.soft_line_textures.clear()
         for texture in self.grain_textures.values():
             self.pico.SDL_DestroyTexture(texture)
         self.grain_textures.clear()
@@ -624,6 +736,7 @@ class PicoV2Renderer(PicoRenderer):
 
     @contextmanager
     def translated(self, dx, dy):
+        self.flush_batch()
         p = self.pico
         viewport = p.SDL_Rect()
         p.SDL_RenderGetViewport(p.renderer, byref(viewport))
@@ -632,11 +745,15 @@ class PicoV2Renderer(PicoRenderer):
             p.SDL_RenderSetViewport(p.renderer, byref(target))
             yield
         finally:
-            p.SDL_RenderSetViewport(p.renderer, byref(viewport))
+            try:
+                self.flush_batch()
+            finally:
+                p.SDL_RenderSetViewport(p.renderer, byref(viewport))
 
     @contextmanager
     def scaled(self, amount, anchor):
         """HUD 묶음의 앵커를 유지하며 크기만 조절하고 SDL 상태를 복원한다."""
+        self.flush_batch()
         if not isfinite(amount) or amount <= 0:
             raise ValueError("HUD 크기 배율은 양수여야 한다.")
         p = self.pico
@@ -653,20 +770,17 @@ class PicoV2Renderer(PicoRenderer):
             p.SDL_RenderSetViewport(p.renderer, byref(target))
             yield
         finally:
-            p.SDL_RenderSetScale(p.renderer, sx.value, sy.value)
-            p.SDL_RenderSetViewport(p.renderer, byref(viewport))
+            try:
+                self.flush_batch()
+            finally:
+                p.SDL_RenderSetScale(p.renderer, sx.value, sy.value)
+                p.SDL_RenderSetViewport(p.renderer, byref(viewport))
 
     def filled_triangle(self, first, second, third, color, opacity=1):
         """축소 후에도 면 사이 틈이 생기지 않게 SDL의 삼각형 채움을 사용한다."""
         if opacity <= 0:
             return
-        p = self.pico
-        color_mod = p.SDL_Color(*self.rgba(color, opacity))
-        vertices = (p.SDL_Vertex * 3)(*(
-            p.SDL_Vertex(p.SDL_FPoint(*point), color_mod, p.SDL_FPoint(0, 0))
-            for point in (first, second, third)))
-        if p.SDL_RenderGeometry(p.renderer, None, vertices, 3, None, 0) != 0:
-            raise RuntimeError("v2 도형 채움 실패: " + p.SDL_GetError().decode("utf-8", errors="replace"))
+        self._geometry_polygon((first, second, third), self.rgba(color, opacity))
 
     def warped_text(self, text, x, y, role, color, project, opacity=1, *,
                     scale_x=1, scale_y=1, clip_rect=None, bold=False):
@@ -683,14 +797,8 @@ class PicoV2Renderer(PicoRenderer):
         if right <= left or bottom <= top:
             return
         coordinates = ((left, top), (right, top), (right, bottom), (left, bottom))
-        p = self.pico
-        color_mod = p.SDL_Color(255, 255, 255, self.rgba(color, opacity)[3])
-        vertices = (p.SDL_Vertex * 4)(*(
-            p.SDL_Vertex(p.SDL_FPoint(*project(px, py)), color_mod,
-                         p.SDL_FPoint((px - x) / draw_width, (py - y) / draw_height))
-            for px, py in coordinates))
-        indices = (c_int * 6)(0, 1, 2, 0, 2, 3)
-        p.SDL_SetTextureAlphaMod(texture, 255)
-        p.SDL_SetTextureScaleMode(texture, p.SDL_ScaleModeLinear)
-        if p.SDL_RenderGeometry(p.renderer, texture, vertices, 4, indices, 6) != 0:
-            raise RuntimeError("v2 글자 투영 실패: " + p.SDL_GetError().decode("utf-8", errors="replace"))
+        self.flush_batch()
+        self.pico.SDL_SetTextureScaleMode(texture, self.pico.SDL_ScaleModeLinear)
+        points = tuple(project(px, py) for px, py in coordinates)
+        uv = tuple(((px - x) / draw_width, (py - y) / draw_height) for px, py in coordinates)
+        self._geometry_polygon(points, (255, 255, 255, self.rgba(color, opacity)[3]), texture=texture, uv=uv)

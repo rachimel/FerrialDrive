@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-spec = importlib.util.spec_from_file_location('ready_vfx_sample', ROOT / 'tests/ui_unit_test_v2.py')
+spec = importlib.util.spec_from_file_location('ready_vfx_sample', ROOT / 'ferrial_drive/ui_v2/preview.py')
 SAMPLE = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(SAMPLE)
 
@@ -26,7 +26,7 @@ from ferrial_drive.ui_v2.view import UiV2View
 
 class ReadyVfxTests(unittest.TestCase):
     def setUp(self):
-        self.program = SAMPLE.UiUnitTestV2(initial_scene='combat')
+        self.program = SAMPLE.HudPreview(initial_scene='combat')
 
     def test_matching_bevel_vectors_and_longer_vertical_side(self):
         geometry = resource_geometry(self.program.config.data['v2']['layout'], 12)
@@ -107,7 +107,7 @@ class ReadyVfxTests(unittest.TestCase):
         self.assertTrue(self.program.state.overdrive)
         self.assertEqual(EnergyCharge.from_state(self.program.state).total, 4)
         self.assertEqual(self.program.energy_tint.ratio, 0)
-        self.program.update(0.12)
+        self.program.update(0.06)
         self.assertAlmostEqual(self.program.energy_tint.ratio, 0.5)
         self.program.renderer, self.program.view = Mock(), MagicMock()
         self.program.draw_layers()
@@ -117,7 +117,7 @@ class ReadyVfxTests(unittest.TestCase):
         self.assertAlmostEqual(self.program.energy_tint.ratio, 0.5)
         self.program.pause.reset()
         self.program.renderer = None
-        self.program.update(0.12)
+        self.program.update(0.06)
         self.assertEqual(self.program.energy_tint.ratio, 1)
         self.program.perform('overdrive')
         self.program.update(0.12)
@@ -301,6 +301,7 @@ class ReadyVfxTests(unittest.TestCase):
             self.program.emit_boundary_particles(0.1)
             self.assertFalse(self.program.particle_system.commands)
         self.program.set_energy_charge(EnergyCharge(4))
+        self.program.perform("activate_overdrive")
         self.program.emit_boundary_particles(0.1)
         sparks = self.program.particle_system.commands[-1]
         self.assertEqual(sparks.effect_type, 1)

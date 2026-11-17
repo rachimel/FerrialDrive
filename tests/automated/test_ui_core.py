@@ -63,7 +63,12 @@ class ButtonTests(unittest.TestCase):
         self.assertIsNone(self.inputs.handle("up", 50, 50, [self.button]).action)
 
     def test_import_has_no_rendering_dependency(self):
-        self.assertNotIn("pico2d", sys.modules)
+        import subprocess
+        from pathlib import Path
+
+        code = "import sys; from ferrial_drive.ui.components import Button; assert 'pico2d' not in sys.modules"
+        subprocess.run([sys.executable, "-c", code], cwd=Path(__file__).resolve().parents[2],
+                       check=True, capture_output=True)
 
 
 if __name__ == "__main__":

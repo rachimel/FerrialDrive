@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-SPEC = importlib.util.spec_from_file_location("feedback_ui_sample", ROOT / "tests/ui_unit_test_v2.py")
+SPEC = importlib.util.spec_from_file_location("feedback_ui_sample", ROOT / "ferrial_drive/ui_v2/preview.py")
 SAMPLE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(SAMPLE)
 
@@ -49,7 +49,7 @@ class HealthHitTests(unittest.TestCase):
         self.assertAlmostEqual(other.visual.offset_pixels[1], before.offset_pixels[1])
 
     def test_damage_pause_target_switch_zero_damage_and_reset(self):
-        program = SAMPLE.UiUnitTestV2(initial_scene="combat")
+        program = SAMPLE.HudPreview(initial_scene="combat")
         program.perform("damage_target")
         self.assertEqual(program.particle_system.commands[0].count, 6)
         self.assertEqual(program.target_hit.elapsed_seconds, 0)
@@ -72,7 +72,7 @@ class HealthHitTests(unittest.TestCase):
         self.assertEqual(program.player_hit.visual, HealthHitVisual())
 
     def test_player_health_offset_uses_screen_pixels_without_an_individual_blur(self):
-        program = SAMPLE.UiUnitTestV2(initial_scene="combat")
+        program = SAMPLE.HudPreview(initial_scene="combat")
         renderer = Mock()
         renderer.text_size.return_value = (20, 18)
         renderer.directional_blur.side_effect = lambda *args: nullcontext()

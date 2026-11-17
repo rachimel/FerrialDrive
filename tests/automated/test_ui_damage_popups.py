@@ -1,6 +1,9 @@
 """개별 피해 숫자의 겹침·크기·고정 위치와 TV 펼침 연결을 확인한다."""
 
 from dataclasses import replace
+from math import atan2, cos, hypot, pi, sin, sqrt
+from pathlib import Path
+import runpy
 from types import SimpleNamespace
 import unittest
 
@@ -9,6 +12,77 @@ from ferrial_drive.ui.view import UiView
 
 
 class DamagePopupTests(unittest.TestCase):
+    def test_targets_keep_independent_deadlines_and_first_hit_position(self):
+        numbers = self.make_numbers(accumulation_seconds=.1)
+        numbers.add('A', 25, 640, 360)
+        numbers.update(.05)
+        numbers.add('B', 13, 800, 420)
+        numbers.add('A', 13, 1000, 500)
+        numbers.update(.05)
+        self.assertEqual([(v.owner, v.amount) for v in numbers.visuals], [('A', 38)])
+        self.assertEqual((numbers.popups[0].x, numbers.popups[0].y), (640, 360))
+        self.assertEqual(list(numbers.pending), ['B'])
+        numbers.update(.05)
+        self.assertEqual([(v.owner, v.amount) for v in numbers.visuals], [('A', 38), ('B', 13)])
+
+    def test_short_window_sums_same_owner_once_without_merging_other_targets(self):
+        numbers = self.make_numbers(accumulation_seconds=.1)
+        numbers.add('A', 25, 640, 360, direction=(1, 0))
+        numbers.add('A', 13, 640, 360, direction=(1, 0))
+        numbers.add('B', 13, 700, 420, direction=(1, 0))
+        self.assertFalse(numbers.popups)
+        numbers.update(.099)
+        self.assertFalse(numbers.visuals)
+        numbers.update(.001)
+        self.assertEqual([(v.owner, v.amount) for v in numbers.visuals], [('A', 38), ('B', 13)])
+        self.assertEqual(len(numbers.pending), 0)
+        self.assertAlmostEqual(numbers.popups[0].animation.elapsed_seconds, 0)
+
+    def test_continuous_hits_do_not_extend_first_deadline_or_change_shown_sum(self):
+        numbers = self.make_numbers(accumulation_seconds=.1)
+        numbers.add('A', 9, 640, 360)
+        numbers.update(.06)
+        numbers.add('A', 9, 650, 370)
+        numbers.update(.04)
+        first = numbers.popups[0]
+        self.assertEqual(first.amount, 18)
+        self.assertEqual(first.font_scale, 1)
+        numbers.add('A', 5, 650, 370)
+        numbers.update(.1)
+        self.assertEqual([v.amount for v in numbers.visuals], [18, 5])
+        self.assertEqual(first.amount, 18)
+
+    def test_accumulation_frame_rates_remainder_and_long_frame_expiry(self):
+        for fps in (30, 60, 144):
+            numbers = self.make_numbers(accumulation_seconds=.1)
+            numbers.add('A', 25, 640, 360)
+            for _ in range(round(fps * .2)):
+                numbers.update(1 / fps)
+            self.assertEqual([v.amount for v in numbers.visuals], [25])
+            self.assertAlmostEqual(numbers.popups[0].animation.elapsed_seconds,
+                                   round(fps * .2) / fps - .1)
+            numbers.clear()
+            numbers.add('A', 13, 640, 360)
+            numbers.update(2)
+            self.assertFalse(numbers.pending)
+            self.assertFalse(numbers.visuals)
+
+    def test_clear_removes_unshown_damage_and_invalid_window_is_rejected(self):
+        numbers = self.make_numbers(accumulation_seconds=.1)
+        numbers.add('A', 25, 640, 360)
+        numbers.add('B', 13, 700, 360)
+        numbers.clear('A')
+        numbers.update(.1)
+        self.assertEqual([(v.owner, v.amount) for v in numbers.visuals], [('B', 13)])
+        numbers.add('A', 5, 640, 360)
+        numbers.clear()
+        numbers.update(1)
+        self.assertFalse(numbers.visuals)
+        self.assertFalse(numbers.pending)
+        for value in (-.1, float('nan'), float('inf')):
+            with self.assertRaises(ValueError):
+                self.make_numbers(accumulation_seconds=value)
+
     def make_numbers(self, **kwargs):
         settings = dict(measure_text=lambda text: (len(text) * 20, 36),
                         digit_scales=(0.75, 1, 1.3, 1.6, 1.9), gap_pixels=6,
@@ -98,9 +172,73 @@ class DamagePopupTests(unittest.TestCase):
             self.assertAlmostEqual(args[2] + 36 * kwargs["scale_y"] / 2, center)
             self.assertEqual(kwargs["scale_x"], 1.3)
 
+    def test_overall_scale_reduces_every_digit_tier_and_reserved_size(self):
+        normal, smaller = self.make_numbers(), self.make_numbers(overall_scale=0.9)
+        for amount in (9, 99, 999, 9999, 10000):
+            normal.add("target", amount, 640, 360)
+            smaller.add("target", amount, 640, 360)
+            before, after = normal.popups[-1], smaller.popups[-1]
+            self.assertAlmostEqual(after.font_scale, before.font_scale * 0.9)
+            self.assertAlmostEqual(after.width, before.width * 0.9)
+            self.assertAlmostEqual(after.height, before.height * 0.9)
+
+    def test_consecutive_hits_widen_from_axis_then_reset_after_expiration_or_clear(self):
+        numbers = self.make_numbers(spawn_min_radius_pixels=1000, spawn_max_radius_pixels=1000)
+        numbers.random.uniform = lambda low, high: low + (high - low) * 0.85
+        angles = []
+        for _ in range(4):
+            previous = [(popup.x, popup.y) for popup in numbers.popups]
+            numbers.add("target", 9, 640, 360, direction=(1, 0))
+            popup = numbers.popups[-1]
+            angles.append(atan2(popup.y + popup.height / 2 - 360, popup.x - 640))
+            self.assertEqual([(item.x, item.y) for item in numbers.popups[:-1]], previous)
+        self.assertAlmostEqual(angles[0], 0)
+        self.assertTrue(all(first < second for first, second in zip(angles, angles[1:])))
+        self.assertLessEqual(angles[-1], pi / 4)
+        # 다른 대상의 연속 적중 상태는 독립적이다.
+        numbers.add("other", 9, 640, 5000, direction=(1, 0))
+        other = numbers.popups[-1]
+        self.assertAlmostEqual(other.y + other.height / 2, 5000)
+        numbers.clear("target")
+        numbers.add("target", 9, 640, 360, direction=(1, 0))
+        self.assertAlmostEqual(numbers.popups[-1].y + numbers.popups[-1].height / 2, 360)
+        numbers.update(2)
+        numbers.add("target", 9, 640, 360, direction=(1, 0))
+        self.assertAlmostEqual(numbers.popups[-1].y + numbers.popups[-1].height / 2, 360)
+
+    def test_entire_popup_stays_in_forward_cone_for_eight_directions_and_bursts(self):
+        for index in range(8):
+            angle = index * pi / 4
+            direction = (cos(angle), sin(angle))
+            numbers = self.make_numbers(overall_scale=0.9)
+            numbers.random.seed(7)
+            for amount in (9, 99, 999, 9999, 10000, 125, 1, 256):
+                old_positions = [(item.x, item.y) for item in numbers.popups]
+                numbers.add("target", amount, 640, 360, direction=direction, offset_x_range=(0, 36))
+                self.assertEqual([(item.x, item.y) for item in numbers.popups[:-1]], old_positions)
+                popup = numbers.popups[-1]
+                # 실측 완료 크기의 네 모서리도 적 중심 기준 ±45도 안에 있어야 한다.
+                for x in (popup.x - popup.width / 2, popup.x + popup.width / 2):
+                    for y in (popup.y, popup.y + popup.height):
+                        dx, dy = x - 640, y - 360
+                        forward = dx * direction[0] + dy * direction[1]
+                        self.assertGreater(forward, 0)
+                        self.assertGreaterEqual(forward / hypot(dx, dy), sqrt(0.5) - 1e-8)
+            for position, first in enumerate(numbers.popups):
+                a = first.bounds
+                for second in numbers.popups[position + 1:]:
+                    b = second.bounds
+                    self.assertTrue(a.x + a.width + 6 <= b.x or b.x + b.width + 6 <= a.x
+                                    or a.y + a.height + 6 <= b.y or b.y + b.height + 6 <= a.y)
+
+
     def test_invalid_layout_inputs_are_rejected_and_zero_damage_is_ignored(self):
         for settings in ({"digit_scales": ()}, {"digit_scales": (1, 0.5)},
-                         {"digit_scales": (float("nan"),)}, {"gap_pixels": -1}):
+                         {"digit_scales": (float("nan"),)}, {"gap_pixels": -1},
+                         {"overall_scale": 0}, {"overall_scale": float("nan")},
+                         {"cone_half_angle_degrees": 0}, {"cone_half_angle_degrees": 90},
+                         {"cone_expand_hits": 1}, {"cone_expand_hits": 2.5}, {"cone_expand_hits": True},
+                         {"spawn_min_radius_pixels": -1}, {"spawn_max_radius_pixels": 1}):
             with self.assertRaises(ValueError):
                 self.make_numbers(**settings)
         numbers = self.make_numbers()
@@ -112,6 +250,9 @@ class DamagePopupTests(unittest.TestCase):
             numbers.add("target", 3, float("inf"), 360)
         with self.assertRaises(ValueError):
             self.make_numbers(measure_text=lambda text: (0, 36)).add("target", 3, 640, 360)
+        for direction in ((0, 0), (float("nan"), 1), (1,)):
+            with self.assertRaises(ValueError):
+                numbers.add("target", 3, 640, 360, direction=direction)
 
 
 if __name__ == "__main__":

@@ -26,6 +26,17 @@ class HudV2State:
     overdrive_charge_ratio: float = 0
     ultimate_cooldown_seconds: float = 0
     ultimate_cooldown_duration_seconds: float = 5
+    radar_scale: float = 1
+    radar_solid_ratio: float = 0
+    overdrive_standby_seconds: float = 0
+    overdrive_remaining_seconds: float = 0
+    overdrive_cooldown_seconds: float = 0
+    skill_cooldown_seconds: float = 0
+    back_weapon_cooldown_seconds: float = 0
+
+    @property
+    def overdrive_ready(self):
+        return self.overdrive_standby_seconds > 0 and not self.overdrive
 
     @property
     def ultimate_ready(self):
@@ -36,6 +47,14 @@ class HudV2State:
         return max(0, 1 - self.ultimate_cooldown_seconds / self.ultimate_cooldown_duration_seconds)
 
     def __post_init__(self):
+        for name in ("overdrive_standby_seconds", "overdrive_remaining_seconds", "overdrive_cooldown_seconds",
+                     "skill_cooldown_seconds", "back_weapon_cooldown_seconds"):
+            if not isfinite(getattr(self, name)) or getattr(self, name) < 0:
+                raise ValueError("Overdrive·쿨다운 시간은 0 이상의 유한값이어야 한다.")
+        if not isfinite(self.radar_scale) or self.radar_scale <= 0:
+            raise ValueError("레이더 배율은 유한한 양수여야 한다.")
+        if not isfinite(self.radar_solid_ratio) or not 0 <= self.radar_solid_ratio <= 1:
+            raise ValueError("레이더 불투명 전환 비율은 0~1이어야 한다.")
         if not isfinite(self.energy_ratio) or not 0 <= self.energy_ratio <= 1:
             raise ValueError("에너지 표시 비율은 0~1이어야 한다.")
         if type(self.energy_level) is not int or not 1 <= self.energy_level <= 3:

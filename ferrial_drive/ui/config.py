@@ -31,6 +31,11 @@ class UiConfig:
         if len(corner) != 2 or not all(isfinite(value) and 0 <= value < 0.5 for value in corner):
             raise ValueError("웨폰 카드 모서리의 가로·세로 절단 비율은 0 이상 0.5 미만이어야 한다.")
         equipment = self.data["equipment_style"]
+        tabs = self.layout["equipment_tabs"]
+        tab_padding = tabs["padding_pixels"]
+        if (len(tab_padding) != 2 or not all(isfinite(value) and value >= 0 for value in tab_padding)
+                or not isfinite(tabs["gap_pixels"]) or tabs["gap_pixels"] < 0):
+            raise ValueError("로드아웃 번호 패널의 안쪽 여백과 간격은 0 이상의 유한한 픽셀 값이어야 한다.")
         padding = equipment["name_plate_padding_pixels"]
         if len(padding) != 2 or not all(isfinite(value) and value >= 0 for value in padding):
             raise ValueError("무기명 플레이트 여백은 0 이상의 가로·세로 픽셀 값이어야 한다.")

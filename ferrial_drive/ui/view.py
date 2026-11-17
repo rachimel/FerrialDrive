@@ -122,18 +122,19 @@ class UiView:
             r.rect(Rect(rect.x, rect.y, rect.width * ratio, rect.height), c[color], opacity)
         r.rect(rect, c["line"], opacity, filled=False)
 
-    def radar(self, contacts, opacity, *, center=None):
+    def radar(self, contacts, opacity, *, center=None, scale=1, solid_ratio=0):
         r, c = self.renderer, self.config
         settings = c.data["radar"]
         x, y = c.actor_anchor("player") if center is None else center
-        radius = settings["radius_pixels"]
+        radius = settings["radius_pixels"] * scale
         distance_limit = settings["range_units"]
         length = settings["arrow_length_pixels"]
         half_width = settings["arrow_half_width_pixels"]
         min_scale = settings.get("arrow_min_scale", 0.45)
         min_opacity = settings.get("arrow_min_opacity", 0.3)
         thickness = settings["ring_thickness_pixels"]
-        r.ring(x, y, radius, thickness, self.ui_accent, opacity * settings["ring_opacity"])
+        ring_opacity = settings["ring_opacity"] + (1 - settings["ring_opacity"]) * solid_ratio
+        r.ring(x, y, radius, thickness, self.ui_accent, opacity * ring_opacity)
         for contact in contacts:
             distance = hypot(contact.x, contact.y)
             if contact.kind != "enemy" or distance == 0 or distance > distance_limit:
@@ -144,7 +145,7 @@ class UiView:
                 continue
             distance_ratio = min(1.0, distance / distance_limit)
             scale = 1.0 + (min_scale - 1.0) * distance_ratio
-            arrow_opacity = opacity * (1.0 + (min_opacity - 1.0) * distance_ratio)
+            arrow_opacity = opacity * (1.0 + (min_opacity - 1.0) * distance_ratio * (1 - solid_ratio))
             direction_x, direction_y = screen_dx / screen_distance, screen_dy / screen_distance
             tip_x, tip_y = x + direction_x * radius, y + direction_y * radius
             base_x = tip_x - direction_x * length * scale
@@ -278,7 +279,6 @@ class UiView:
         c, r = self.config, self.renderer
         x, y, width, height = c.layout["equipment_panel"]
         x += offset_x
-        right = x + width - 16
         displayed_index = (state.active_loadout_index if loadout_visual is None
                            else loadout_visual.incoming_index)
         if swap_visual is not None:
@@ -345,15 +345,30 @@ class UiView:
         if loadout_visual is not None:
             tab_offset, tab_opacity, displayed_index = loadout_visual.pose(exit_distance)
         tabs_alpha = opacity * tab_opacity
-        for index in range(2):
-            tab = Rect(right - 76 + index * 40 + tab_offset, y + c.layout["equipment_tabs_y"], 34, 24)
+        for index, local_tab in enumerate(self.equipment_tab_rects()):
+            tab = local_tab.translated(x + tab_offset, y)
             active = index == displayed_index
             available = index < len(state.loadouts)
             r.rect(tab, self.ui_accent if active else c.colors["line"], tabs_alpha,
                    filled=active)
-            r.text(f"{index + 1:02}" if available else "—", tab.x + 17, tab.y + 3,
+            text = f"{index + 1:02}" if available else "—"
+            _, text_height = r.text_size(text, "equipment_number")
+            r.text(text, tab.x + tab.width / 2, tab.y + (tab.height - text_height) / 2,
                    "equipment_number", c.colors["menu_button_text"] if active else c.colors["muted"],
                    tabs_alpha, align="center")
+
+    def equipment_tab_rects(self):
+        """글꼴 실측과 안쪽 여백으로 번호 패널을 만들고 웨폰 카드 오른쪽 끝에 맞춘다."""
+        c, r = self.config, self.renderer
+        settings = c.layout["equipment_tabs"]
+        padding_x, padding_y = settings["padding_pixels"]
+        sizes = [r.text_size(text, "equipment_number") for text in ("01", "02", "—")]
+        width = max(size[0] for size in sizes) + 2 * padding_x
+        height = max(size[1] for size in sizes) + 2 * padding_y
+        right = max(slot["panel"][0] + slot["panel"][2] for slot in c.layout["equipment_slots"].values())
+        gap = settings["gap_pixels"]
+        return tuple(Rect(right - (2 - index) * width - (1 - index) * gap,
+                          c.layout["equipment_tabs_y"], width, height) for index in range(2))
 
     def equipment_loadout(self, loadout, ranged_weight, x, y, opacity, *, scale_y=1.0, orbit_direction=-1):
         rows = ((loadout.melee, "melee", 1 - ranged_weight),

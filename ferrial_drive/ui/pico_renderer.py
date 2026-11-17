@@ -10,6 +10,7 @@ import re
 
 from .components import Rect
 from .weapon_icons import weapon_icon_pixels
+from ferrial_drive.rendering.hud_batch import batch_barrier
 
 
 @lru_cache(maxsize=64)
@@ -44,10 +45,12 @@ class PicoRenderer:
         import pico2d.pico2d as pico
 
         self.pico = pico
+        self.batch_queue = None
         self.fonts = {}
         self.textures = OrderedDict()
         self.panel_textures = OrderedDict()
         self.images = OrderedDict()
+        self.image_paths = OrderedDict()
         self.weapon_icons = {}
         self.measurements = OrderedDict()
         self.ascents = {}
@@ -63,17 +66,39 @@ class PicoRenderer:
     def rgba(color: str, opacity: float = 1) -> tuple[int, int, int, int]:
         return (*_rgb(color), round(max(0.0, min(1.0, opacity)) * 255))
 
+    def flush_batch(self):
+        queue = getattr(self, 'batch_queue', None)
+        if queue is not None:
+            queue.flush()
+
+    @contextmanager
+    def hud_batch(self):
+        queue = getattr(self, 'batch_queue', None)
+        if queue is None:
+            yield
+        else:
+            with queue.frame():
+                yield
+
+    @batch_barrier
     def clear(self, color: str):
         self.pico.SDL_SetRenderDrawColor(self.pico.renderer, *self.rgba(color))
         self.pico.SDL_RenderClear(self.pico.renderer)
 
     def rect(self, rect: Rect, color: str, opacity: float = 1, filled: bool = True):
+        queue = getattr(self, 'batch_queue', None)
+        if filled and queue is not None and queue.active:
+            queue.rectangles(((round(rect.x), round(rect.y), round(rect.width), round(rect.height)),),
+                             self.rgba(color, opacity))
+            return
+        self.flush_batch()
         pico = self.pico
         pico.SDL_SetRenderDrawColor(pico.renderer, *self.rgba(color, opacity))
         target = pico.SDL_Rect(round(rect.x), round(rect.y), round(rect.width), round(rect.height))
         draw = pico.SDL_RenderFillRect if filled else pico.SDL_RenderDrawRect
         draw(pico.renderer, byref(target))
 
+    @batch_barrier
     def line(self, x1: float, y1: float, x2: float, y2: float,
              color: str, opacity: float = 1):
         pico = self.pico
@@ -83,6 +108,7 @@ class PicoRenderer:
     @contextmanager
     def clip(self, rect):
         """패널 경계에서 그리기를 잘라내고 중첩·예외 시에도 이전 영역을 복원한다."""
+        self.flush_batch()
         pico = self.pico
         previous = pico.SDL_Rect()
         enabled = pico.SDL_RenderIsClipEnabled(pico.renderer)
@@ -99,8 +125,12 @@ class PicoRenderer:
         try:
             yield
         finally:
-            pico.SDL_RenderSetClipRect(pico.renderer, byref(previous) if enabled else None)
+            try:
+                self.flush_batch()
+            finally:
+                pico.SDL_RenderSetClipRect(pico.renderer, byref(previous) if enabled else None)
 
+    @batch_barrier
     def metallic_rect(self, rect: Rect, color: str, opacity: float = 1, *,
                       contrast: float = 0.28, highlight_center=(0.5, 1.15),
                       highlight_radius=(1.25, 1.3), corner_cut_ratio=(0.0, 0.0)):
@@ -173,12 +203,19 @@ class PicoRenderer:
             return
         base_x, base_y = floor(x), floor(y)
         spans = _ring_spans(radius, thickness, x - base_x, y - base_y)
+        queue = getattr(self, 'batch_queue', None)
+        if queue is not None and queue.active and queue.unit_scale():
+            queue.rectangles(((base_x + start, base_y + pixel_y, end - start + 1, 1)
+                              for start, pixel_y, end in spans), self.rgba(color, opacity))
+            return
+        self.flush_batch()
         pico = self.pico
         pico.SDL_SetRenderDrawColor(pico.renderer, *self.rgba(color, opacity))
         for start, pixel_y, end in spans:
             pico.SDL_RenderDrawLine(pico.renderer, base_x + start, base_y + pixel_y,
                                     base_x + end, base_y + pixel_y)
 
+    @batch_barrier
     def filled_triangle(self, first, second, third, color: str, opacity: float = 1):
         """픽셀 중심을 기준으로 내부를 한 번씩 채워 전환 중 알파 중첩을 막는다."""
         if opacity <= 0:
@@ -230,7 +267,13 @@ class PicoRenderer:
             self.measurements.popitem(last=False)
         return size
 
-    def text_size(self, text: str, role: str, *, bold=False) -> tuple[int, int]:
+    def text_size(self, text: str, role: str, *, bold=False, letter_spacing_pixels=0) -> tuple[int, int]:
+        if letter_spacing_pixels:
+            from .text_style import validate_text_style
+
+            validate_text_style(letter_spacing_pixels)
+            width, height = self._measure(text, role, bold=bold)
+            return ceil(width + max(0, len(text) - 1) * letter_spacing_pixels), height
         return self._measure(text, role, bold=bold)
 
     def text_ascent(self, role: str, *, bold=False) -> int:
@@ -270,18 +313,23 @@ class PicoRenderer:
                 break
             cursor += width
 
+    @batch_barrier
     def text(self, text: str, x: float, y: float, role: str, color: str,
              opacity: float = 1, max_width: float | None = None, align: str = "left",
-             scale_x: float = 1, scale_y: float = 1, clip_rect: Rect | None = None, *, bold=False):
+             scale_x: float = 1, scale_y: float = 1, clip_rect: Rect | None = None, *, bold=False,
+             letter_spacing_pixels=0, stroke_inset_pixels=0):
         if opacity <= 0 or not text or scale_x <= 0 or scale_y <= 0:
             return
-        if max_width is not None and self._measure(text, role, bold=bold)[0] > max_width:
-            while text and self._measure(text + "…", role, bold=bold)[0] > max_width:
+        measure = lambda value: self.text_size(value, role, bold=bold, letter_spacing_pixels=letter_spacing_pixels)
+        if max_width is not None and measure(text)[0] > max_width:
+            while text and measure(text + "…")[0] > max_width:
                 text = text[:-1]
             if not text:
                 return
             text += "…"
-        texture, width, height = self._text_texture(text, role, color, bold=bold)
+        texture, width, height = self._text_texture(text, role, color, bold=bold,
+                                                  letter_spacing_pixels=letter_spacing_pixels,
+                                                  stroke_inset_pixels=stroke_inset_pixels)
         pico = self.pico
         draw_width, draw_height = round(width * scale_x), round(height * scale_y)
         if draw_width <= 0 or draw_height <= 0:
@@ -310,13 +358,22 @@ class PicoRenderer:
         pico.SDL_RenderCopy(pico.renderer, texture, byref(source) if source is not None else None,
                             byref(destination))
 
-    def _text_texture(self, text: str, role: str, color: str, *, bold=False):
-        key = (text, role, color, bold)
+    def _text_texture(self, text: str, role: str, color: str, *, bold=False,
+                      letter_spacing_pixels=0, stroke_inset_pixels=0):
+        styled = bool(letter_spacing_pixels or stroke_inset_pixels)
+        key = ((text, role, color, bold, letter_spacing_pixels, stroke_inset_pixels) if styled
+               else (text, role, color, bold))
         pico = self.pico
         if key not in self.textures:
             red, green, blue, _ = self.rgba(color)
             with self._font_style(role, bold) as font:
-                surface = pico.TTF_RenderUTF8_Blended(font, text.encode("utf-8"), pico.SDL_Color(red, green, blue, 255))
+                color_mod = pico.SDL_Color(red, green, blue, 255)
+                if styled:
+                    from .text_style import styled_text_surface
+
+                    surface = styled_text_surface(pico, font, text, color_mod, letter_spacing_pixels, stroke_inset_pixels)
+                else:
+                    surface = pico.TTF_RenderUTF8_Blended(font, text.encode("utf-8"), color_mod)
             if not surface:
                 raise RuntimeError(f"텍스트 렌더링 실패: {text}")
             width, height = surface.contents.w, surface.contents.h
@@ -327,14 +384,24 @@ class PicoRenderer:
             self.textures[key] = (texture, width, height)
             if len(self.textures) > 256:
                 _, (old_texture, _, _) = self.textures.popitem(last=False)
+                self.flush_batch()
                 pico.SDL_DestroyTexture(old_texture)
         self.textures.move_to_end(key)
         return self.textures[key]
 
-    def image(self, path, rect, opacity=1, *, vertical_scale=1.0):
-        """무기 이미지는 비율을 유지하며 영역 중앙에 맞춘다."""
+    @batch_barrier
+    def image(self, path, rect, opacity=1, *, vertical_scale=1.0, tint="#FFFFFF",
+              source_rect=None, preserve_aspect=True):
+        """이미지 또는 원본의 선택 영역을 표시한다. 기본은 비율 유지다."""
         pico = self.pico
-        key = str(Path(path).resolve())
+        absolute = Path(path).absolute()
+        key = self.image_paths.get(absolute)
+        if key is None:
+            key = str(absolute.resolve())
+            self.image_paths[absolute] = key
+            if len(self.image_paths) > 64:
+                self.image_paths.popitem(last=False)
+        self.image_paths.move_to_end(absolute)
         if key not in self.images:
             surface = pico.IMG_Load(key.encode("utf-8"))
             if not surface:
@@ -353,16 +420,30 @@ class PicoRenderer:
                 pico.SDL_DestroyTexture(old_texture)
         self.images.move_to_end(key)
         texture, width, height = self.images[key]
+        source = None
+        if source_rect is not None:
+            source = pico.SDL_Rect(round(source_rect.x), round(source_rect.y),
+                                   round(source_rect.width), round(source_rect.height))
+            if (min(source.x, source.y) < 0 or min(source.w, source.h) <= 0
+                    or source.x + source.w > width or source.y + source.h > height):
+                raise ValueError("이미지 선택 영역은 원본 범위 안의 양수 크기여야 한다.")
+            width, height = source.w, source.h
+            pico.SDL_SetTextureScaleMode(texture, pico.SDL_ScaleModeLinear)
         if vertical_scale <= 0:
             return
-        scale = min(rect.width / width, rect.height / vertical_scale / height)
-        draw_height = height * scale * vertical_scale
-        destination = pico.SDL_Rect(round(rect.x + (rect.width - width * scale) / 2),
-                                    round(rect.y + (rect.height - draw_height) / 2),
-                                    round(width * scale), round(draw_height))
+        if preserve_aspect:
+            scale = min(rect.width / width, rect.height / vertical_scale / height)
+            draw_height = height * scale * vertical_scale
+            destination = pico.SDL_Rect(round(rect.x + (rect.width - width * scale) / 2),
+                                        round(rect.y + (rect.height - draw_height) / 2),
+                                        round(width * scale), round(draw_height))
+        else:
+            destination = pico.SDL_Rect(round(rect.x), round(rect.y), round(rect.width), round(rect.height))
         pico.SDL_SetTextureAlphaMod(texture, self.rgba("#FFFFFF", opacity)[3])
-        pico.SDL_RenderCopy(pico.renderer, texture, None, byref(destination))
+        pico.SDL_SetTextureColorMod(texture, *self.rgba(tint)[:3])
+        pico.SDL_RenderCopy(pico.renderer, texture, byref(source) if source is not None else None, byref(destination))
 
+    @batch_barrier
     def weapon_silhouette(self, kind, rect, color, opacity, outline_color, outline_width):
         """부품별 반올림 대신 합쳐 둔 원본을 일정 비율로 그린다."""
         pico = self.pico
@@ -399,9 +480,14 @@ class PicoRenderer:
         target = pico.SDL_Rect(round(rect.x), round(rect.y), round(rect.width), round(rect.height))
         pico.SDL_RenderCopy(pico.renderer, texture, None, byref(target))
 
+    @batch_barrier
     def save_frame(self, path: Path, width: int, height: int):
         """자동 실행 확인용 PNG. 프레젠트하기 전의 현재 화면을 저장한다."""
         pico = self.pico
+        output_width, output_height = c_int(), c_int()
+        if pico.SDL_GetRendererOutputSize(pico.renderer, byref(output_width), byref(output_height)) != 0:
+            raise RuntimeError("화면 저장 크기 조회 실패")
+        width, height = output_width.value, output_height.value
         surface = pico.SDL_CreateRGBSurfaceWithFormat(0, width, height, 32,
                                                       pico.SDL_PIXELFORMAT_RGBA32)
         if not surface:
@@ -416,6 +502,7 @@ class PicoRenderer:
         finally:
             pico.SDL_FreeSurface(surface)
 
+    @batch_barrier
     def close(self):
         for texture in self.weapon_icons.values():
             self.pico.SDL_DestroyTexture(texture)
@@ -423,6 +510,7 @@ class PicoRenderer:
         for texture, _, _ in self.images.values():
             self.pico.SDL_DestroyTexture(texture)
         self.images.clear()
+        self.image_paths.clear()
         for texture in self.panel_textures.values():
             self.pico.SDL_DestroyTexture(texture)
         self.panel_textures.clear()

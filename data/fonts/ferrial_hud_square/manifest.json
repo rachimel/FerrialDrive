@@ -1,0 +1,30 @@
+{
+  "family": "Ferrial HUD Square",
+  "source": "data/fonts/학교안심 운동장/HakgyoansimUndongjangOTFL.otf",
+  "source_sha256": "dd370e205d784fddae359199a1b5f0d3a138523a9e2db71663012e13ef7ef393",
+  "output_sha256": "d8ba3003147963ffec9f782e50c629aa6871da5767b10521b832743bc0feb5dc",
+  "changes": [
+    "Square ASCII digit contours",
+    "Remove slash from ASCII zero"
+  ],
+  "preserved": [
+    "Other glyph outlines",
+    "Character mapping",
+    "Advance widths",
+    "Sidebearings",
+    "Original copyright"
+  ],
+  "changed_glyphs": [
+    "uni0030",
+    "uni0031",
+    "uni0032",
+    "uni0033",
+    "uni0034",
+    "uni0035",
+    "uni0036",
+    "uni0037",
+    "uni0038",
+    "uni0039"
+  ],
+  "unchanged_glyphs": 12604
+}

@@ -1,4 +1,4 @@
-"""레벨 세 구간과 추가 Overdrive 충전 한 구간의 예제 규칙."""
+"""실제 에너지량과 구분한 레벨 세 구간·Overdrive 한 구간의 표시 값."""
 
 from dataclasses import dataclass
 from math import isfinite
@@ -16,7 +16,9 @@ class EnergyCharge:
     def from_state(cls, state):
         if state.overdrive:
             return cls(4)
-        return cls(min(4, state.energy_level - 1 + state.energy_ratio + state.overdrive_charge_ratio))
+        general = state.energy_level - 1 + state.energy_ratio
+        # 별도 보존한 추가 충전량을 낮아진 일반 레벨의 에너지로 합산하지 않는다.
+        return cls(min(4, general + (state.overdrive_charge_ratio if general >= 3 else 0)))
 
     def add(self, amount):
         if not isfinite(amount):

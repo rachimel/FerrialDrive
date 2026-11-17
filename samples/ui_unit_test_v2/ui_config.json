@@ -1,7 +1,37 @@
 {
+    "graphics_settings": {
+        "restart_required_fields": [],
+        "panel_size_pixels": [760, 680],
+        "padding_pixels": 36,
+        "gap_pixels": 16,
+        "quality_row_y_pixels": 152,
+        "resolution_label_y_pixels": 236,
+        "resolution_row_y_pixels": 284,
+        "key_hints_row_y_pixels": 400,
+        "notice_y_pixels": 480,
+        "restart_y_pixels": 516,
+        "option_height_pixels": 64,
+        "button_width_pixels": 184,
+        "button_height_pixels": 52,
+        "labels": {
+            "title": "설정",
+            "texture_quality": "텍스처 품질",
+            "screen_resolution": "화면 해상도",
+            "key_hints": "사용키 표시",
+            "on": "켬",
+            "off": "끔",
+            "high": "높음 · 75%",
+            "medium": "보통 · 50%",
+            "low": "낮음 · 25%",
+            "restart": "다시 시작시 적용",
+            "applying": "설정 적용 중",
+            "cancel": "뒤로",
+            "save": "저장"
+        }
+    },
     "window": {
-        "width": 1280,
-        "height": 720,
+        "width": 1920,
+        "height": 1080,
         "initial_scene": "combat"
     },
     "animation": {
@@ -30,6 +60,30 @@
         "pause_heading": {
             "path": "../../data/fonts/ferrial_hud_square_wide/FerrialHudSquareWide-Regular.otf",
             "size": 26
+        },
+        "pause_button": {
+            "path": "../../data/fonts/ferrial_hud_square_wide/FerrialHudSquareWide-Regular.otf",
+            "size": 26
+        },
+        "pause_footer": {
+            "path": "../../data/fonts/ferrial_hud_square_wide/FerrialHudSquareWide-Regular.otf",
+            "size": 48
+        },
+        "pause_brand": {
+            "path": "../../data/fonts/SUITE-otf/SUITE-Bold.otf",
+            "size": 34
+        },
+        "title_menu": {
+            "path": "../../data/fonts/SUITE-otf/SUITE-Regular.otf",
+            "size": 36
+        },
+        "title_submenu": {
+            "path": "../../data/fonts/SUITE-otf/SUITE-Regular.otf",
+            "size": 30
+        },
+        "title_version": {
+            "path": "../../data/fonts/SUITE-otf/SUITE-Regular.otf",
+            "size": 16
         },
         "combat_title": {
             "path": "../../data/fonts/ferrial_hud_square_wide/FerrialHudSquareWide-Regular.otf",
@@ -133,7 +187,7 @@
         },
         "v2_ammo": {
             "path": "../../data/fonts/gamwulchifreegothic/GamwulchiFreeGothic.otf",
-            "size": 46
+            "size": 54
         },
         "v2_counter": {
             "path": "../../data/fonts/ferrial_hud_square_wide/FerrialHudSquareWide-Regular.otf",
@@ -159,13 +213,71 @@
     "pause": {
         "duration_seconds": 0.16,
         "dim_opacity": 0.75,
-        "panel_fill_opacity": 0.85
+        "panel_fill_opacity": 0.85,
+        "button_style": {
+            "bezel_texture": "../../data/runtime/images/ui/pause_menu/bezel_v005.png",
+            "bezel_source_rect_pixels": [26, 104, 2130, 506],
+            "texture_surface_points": [[49, 11], [402, 11], [415, 24], [415, 69], [402, 82], [49, 82], [26, 62], [26, 34]],
+            "texture_light_center_pixels": [17, 48],
+            "hover_motion": {
+                "offset_pixels": 8,
+                "transition_seconds": 0.14,
+                "breathing_seconds": 1.4,
+                "minimum_light": 0.35
+            },
+            "font_role": "pause_button",
+            "filter_samples": 3,
+            "text_inset_pixels": 88,
+            "surface_opacity": 0.9,
+            "disabled_opacity": 0.3,
+            "scanline_opacity": 0.12,
+            "band_height_pixels": 26,
+            "band_speed_pixels_per_second": 32,
+            "band_opacity": 0.14
+        },
+        "footer": {
+            "logo_path": "../../data/runtime/images/ui/logo.png",
+            "logo_rect_pixels": [0, 870, 480, 210],
+            "logo_position_pixels": [72, 972],
+            "logo_font_role": "pause_brand",
+            "logo_gap_pixels": 10,
+            "heading_position_pixels": [1848, 976],
+            "heading_font_role": "pause_footer"
+        }
     },
-    "counter_visibility": {
+    "title_menu": {
+        "duration_seconds": 0.2,
+        "hover_seconds": 0.18,
+        "hover_tracking_pixels": 12,
+        "expand_pixels": 144,
+        "font_role": "title_menu",
+        "submenu_font_role": "title_submenu",
+        "text_top_pixels": 7,
+        "disabled_opacity": 0.35,
+        "logo_rect_pixels": [100, 60, 480, 111],
+        "logo_source_rect_pixels": [300, 290, 1300, 300],
+        "fallback_logo_position_pixels": [100, 88],
+        "submenu_clip_pixels": [126, 494, 400, 144],
+        "version_position_pixels": [1848, 1000],
+        "version_font_role": "title_version",
+        "version_label": "VER.",
+        "submenu_buttons": [
+            {"id": "new_game", "action": "new_game", "label": "NEW GAME", "rect": [144, 494, 360, 52], "enabled": false},
+            {"id": "survival", "action": "survival", "label": "SURVIVAL", "rect": [144, 558, 360, 52], "enabled": false}
+        ]
+    },
+    "popup_style": {
+        "fill_color_role": "panel",
+        "fill_opacity": 0.98,
+        "motion": {"duration_seconds": 0.16, "initial_scale": 0.97}
+    },
+    "shared_swap_slot": {"diameter_pixels": 96, "gap_pixels": 16, "bottom_margin_pixels": 30, "icon_scale": 1.12},
+            "counter_visibility": {
         "hold_seconds": 2.0,
         "fade_seconds": 0.3
     },
     "damage_popup": {
+        "accumulation_seconds": 0.1,
         "width_expand_seconds": 0.025,
         "height_expand_seconds": 0.035,
         "digit_scales": [
@@ -241,7 +353,11 @@
         "duration_seconds": 0.6
     },
     "radar": {
-        "radius_pixels": 144.0,
+        "radius_pixels": 260.0,
+        "motion": {
+            "transition_seconds": 0.2,
+            "scale_by_state": {"idle": 1.0, "run": 0.9, "dash": 0.75, "boost": 0.7}
+        },
         "range_units": 1.0,
         "ring_thickness_pixels": 1.8,
         "arrow_length_pixels": 14.4,
@@ -286,9 +402,9 @@
     "labels": {
         "menu_title_first": "FERRIAL",
         "menu_title_second": "DRIVE",
-        "menu_subtitle": "ui-unit-test-v2 / UI 배치와 스타일 확인",
-        "menu_heading": "UI UNIT TEST V2",
-        "menu_description": "사용자 도안 기반 독립 미리보기",
+        "menu_subtitle": "이동·전투·HUD 통합 확인",
+        "menu_heading": "이동·UI 훈련장",
+        "menu_description": "이동·검 공격·표적과 HUD 확인",
         "menu_notice": "전투 화면의 조작 가이드에서 확인한다.",
         "combat_heading": "전투 HUD",
         "combat_subtitle": "샘플 상태",
@@ -301,26 +417,26 @@
     },
     "layout": {
         "menu_title": [
-            72,
-            196
+            392,
+            359
         ],
         "menu_panel": [
-            760,
-            170,
+            1080,
+            333,
             448,
             414
         ],
         "menu_heading": [
-            792,
-            194
+            1112,
+            357
         ],
         "menu_description": [
-            792,
-            238
+            1112,
+            401
         ],
         "menu_notice": [
-            792,
-            537
+            1112,
+            700
         ],
         "combat_heading": [
             28,
@@ -443,14 +559,14 @@
             }
         },
         "pause_panel": [
-            440,
-            166,
+            760,
+            346,
             400,
             388
         ],
         "pause_heading": [
-            472,
-            190
+            792,
+            370
         ],
         "target_panel": [
             454,
@@ -497,38 +613,52 @@
     "buttons": {
         "menu": [
             {
-                "id": "enter_hud",
-                "action": "show_hud",
-                "label": "전투 HUD 보기",
+                "id": "continue",
+                "action": "continue",
+                "label": "CONTINUE",
+                "rect": [100, 330, 360, 64],
+                "enabled": false
+            },
+            {
+                "id": "start",
+                "action": "toggle_start",
+                "label": "START",
                 "rect": [
-                    792,
-                    302,
-                    384,
-                    58
+                    100,
+                    414,
+                    360,
+                    64
                 ],
                 "hit_padding": 0
             },
             {
+                "id": "load",
+                "action": "load",
+                "label": "LOAD",
+                "rect": [100, 498, 360, 64],
+                "enabled": false
+            },
+            {
                 "id": "menu_settings",
                 "action": "settings",
-                "label": "설정",
+                "label": "CONFIG",
                 "rect": [
-                    792,
-                    378,
-                    384,
-                    58
+                    100,
+                    582,
+                    360,
+                    64
                 ],
                 "enabled": false
             },
             {
                 "id": "exit",
                 "action": "quit",
-                "label": "테스트 종료",
+                "label": "EXIT",
                 "rect": [
-                    792,
-                    454,
-                    384,
-                    58
+                    100,
+                    666,
+                    360,
+                    64
                 ],
                 "hit_padding": 0
             }
@@ -539,10 +669,10 @@
                 "action": "resume",
                 "label": "계속",
                 "rect": [
-                    472,
-                    252,
-                    336,
-                    52
+                    72,
+                    438,
+                    420,
+                    94
                 ]
             },
             {
@@ -550,10 +680,10 @@
                 "action": "settings",
                 "label": "설정",
                 "rect": [
-                    472,
-                    320,
-                    336,
-                    52
+                    528,
+                    548,
+                    420,
+                    94
                 ],
                 "enabled": false
             },
@@ -562,10 +692,10 @@
                 "action": "show_menu",
                 "label": "타이틀로",
                 "rect": [
-                    472,
-                    388,
-                    336,
-                    52
+                    984,
+                    658,
+                    420,
+                    94
                 ]
             },
             {
@@ -573,16 +703,33 @@
                 "action": "quit",
                 "label": "테스트 종료",
                 "rect": [
-                    472,
-                    456,
-                    336,
-                    52
+                    1440,
+                    768,
+                    420,
+                    94
                 ]
             }
         ],
         "combat": []
     },
     "v2": {
+        "player_asset": {
+            "source": "../../data/runtime/catalog/prerender/player_mech_idle_centered_8dir/mech.json",
+            "scale": 0.6336633663366337,
+            "direction": "se",
+            "combo_source": "../../data/runtime/catalog/prerender/player_mech_combo_follow_8dir/mech.json",
+            "combo_playback_speed": 1.25,
+            "combo_easing": "accelerate",
+            "size_reference": "front_arms_down_outer_shoulder_width_128px",
+            "interpolation": {
+                "enabled": true,
+                "source": "../../data/runtime/frame_interpolation/ui_v2_matched/catalog.json",
+                "easing": "smoothstep",
+                "shutter_seconds": 0.016,
+                "blur_direction": "trailing",
+                "blur_strength": 0.65
+            }
+        },
         "camera": {
             "dead_zone_pixels": 80,
             "offset_ratio": 0.2,
@@ -642,8 +789,16 @@
             "ultimate_key": "V"
         },
         "layout": {
-            "dialogue": [360, 20, 560, 130],
-            "target_hp_offset_pixels": [11, -62.5],
+            "dialogue": [
+                680,
+                20,
+                560,
+                130
+            ],
+            "target_hp_offset_pixels": [
+                11,
+                -62.5
+            ],
             "minimap": [
                 20,
                 20,
@@ -657,31 +812,31 @@
                 6
             ],
             "hp_bar": [
-                350,
-                655,
+                670,
+                1015,
                 372,
                 16
             ],
             "energy_bar": [
-                370,
-                670,
+                690,
+                1030,
                 390,
                 26
             ],
-            "dash_x": 870,
+            "dash_x": 480,
             "weapons": [
-                844,
-                432,
+                1484,
+                792,
                 420,
                 132
             ],
-            "hit_y": 276,
-            "damage_y": 366,
+            "hit_y": 456,
+            "damage_y": 546,
             "counter_message": [
-                810,
-                342
+                1130,
+                522
             ],
-            "ultimate_center_x": 320,
+            "ultimate_center_x": 640,
             "energy_level_width_pixels": 78,
             "level_right_bevel_pixels": 7,
             "ultimate_radius_pixels": 43
@@ -725,6 +880,12 @@
             ]
         ],
         "style": {
+            "shared_swap_slot": {"diameter_pixels": 120, "gap_pixels": 16, "bottom_margin_pixels": 30,
+                "icon_scale": 1.28, "icon_stroke_pixels": 2.5,
+                "panel_image": "icons/panel_slot.png", "glyph_kinds": ["back_weapon", "counter"], "glyph_inset_pixels": 4,
+                "images": {"back_weapon": "icons/back_weapon_glyph.png", "counter": "icons/counter_glyph.png", "empty": "icons/empty_slot.png"}},
+            "energy_level_colors": ["#50B8F2", "#78D0FF", "#A0E6FF"],
+            "counter_visibility": {"enter_seconds": 0.24, "hold_seconds": 2.5, "exit_seconds": 0.28, "label_spacing_pixels": 5, "slide_pixels": 54},
             "text_flicker": {
                 "minimum_opacity": 0.9,
                 "period_seconds": 0.12,
@@ -856,7 +1017,11 @@
                 "upper_rail_ratio": 0.27,
                 "lower_rail_ratio": 0.16,
                 "rail_width_pixels": 3,
-                "fragment_lengths_pixels": [12, 9, 6],
+                "fragment_lengths_pixels": [
+                    12,
+                    9,
+                    6
+                ],
                 "fragment_gap_pixels": 4,
                 "fragment_height_pixels": 2,
                 "fragment_slant_pixels": 3
@@ -868,7 +1033,10 @@
                 "corner_hold_pixels": 3,
                 "filter_samples": 2
             },
-            "dialogue_padding_pixels": [28, 8],
+            "dialogue_padding_pixels": [
+                28,
+                8
+            ],
             "dialogue_body_role": "small",
             "dialogue_body_offset_pixels": 28,
             "dialogue_line_spacing_pixels": 20,
@@ -876,6 +1044,7 @@
             "surface_opacity": 0.55,
             "counters": {
                 "combo": {
+                  "blur_resolution_scale": 0.5,
                     "ui_scale": 0.9,
                     "depth": 0.16,
                     "lean": 0.14,
@@ -894,7 +1063,7 @@
                     "right_margin_pixels": 14
                 }
             },
-            "hud_scale": 0.81,
+            "hud_scale": 1.0,
             "lock_thickness_pixels": 2,
             "ultimate_icon_scale": 0.62,
             "ultimate_border_width_pixels": 3,
@@ -908,8 +1077,9 @@
             "overdrive_entry_streak": {"expand_seconds": 0.045, "hold_seconds": 0.025, "fade_seconds": 0.17,
                 "length_ratio": 0.88, "width_pixels": 3.2, "glow_width_pixels": 14, "opacity": 0.95},
             "energy_boundary": {"rate_per_second": 40, "duration_seconds": 0.8, "spread_pixels": 2,
-                "glow_width_pixels": 5, "color": "#FFFFFF",
-                "overdrive_rate_per_second": 96, "overdrive_duration_seconds": 1, "overdrive_intensity": 1.8},
+                "level_rates_per_second": [40, 64, 88], "level_intensities": [1, 1.3, 1.65],
+                "glow_width_pixels": 9, "color": "#FFFFFF",
+                "overdrive_rate_per_second": 112, "overdrive_duration_seconds": 1, "overdrive_intensity": 2},
             "level_text": {"number_scale": 0.85, "label_scale": 0.65, "right_inset_pixels": 12, "gap_pixels": 6},
             "counter_label_right_inset_pixels": 3,
             "counter_label_gap_pixels": 4,
@@ -947,10 +1117,14 @@
                 "right_cut_pixels": 9,
                 "kind_width_pixels": 82,
                 "attribute_opacity": 0.32,
+                "attribute_letter_spacing_pixels": 10,
+                "attribute_stroke_inset_pixels": 0.55,
+                "ammo_gradient_bottom_ratio": 0.93,
                 "ammo_min_width_pixels": 76,
                 "image_top_pixels": 40,
                 "auxiliary_diameter_pixels": 80,
-                "auxiliary_border_pixels": 3.2,
+                "auxiliary_border_pixels": 3.5,
+                "auxiliary_border_opacity": 0.6,
                 "auxiliary_gap_pixels": 12,
                 "additional_icon_pixels": 16,
                 "additional_icon_gap_pixels": 5

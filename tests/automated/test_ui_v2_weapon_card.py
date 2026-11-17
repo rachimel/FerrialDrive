@@ -14,13 +14,13 @@ if str(ROOT) not in sys.path:
 from ferrial_drive.ui.config import UiConfig
 from ferrial_drive.ui.state import WeaponInfo
 from ferrial_drive.ui_v2.view import UiV2View
-from ferrial_drive.ui_v2.weapon_card import draw_weapon_card
+from ferrial_drive.ui_v2.weapon_card import draw_auxiliary_slot, draw_weapon_card
 
 
 class WeaponCardTests(unittest.TestCase):
     def setUp(self):
         self.renderer = Mock()
-        self.renderer.text_size.side_effect = lambda text, role: (len(text) * 18, 44 if role == "v2_weapon_attribute" else 20)
+        self.renderer.text_size.side_effect = lambda text, role, **kwargs: (len(text) * 18 + max(0, len(text) - 1) * kwargs.get("letter_spacing_pixels", 0), 44 if role == "v2_weapon_attribute" else 20)
         self.renderer.scaled.side_effect = lambda *args: nullcontext()
         self.config = UiConfig(ROOT / "samples/ui_unit_test_v2/ui_config.json")
         self.view = UiV2View(self.config, self.renderer)
@@ -60,8 +60,7 @@ class WeaponCardTests(unittest.TestCase):
             self.assertEqual(icons.call_count, 1)
             self.assertEqual(icons.call_args.args[1], "FIRE")
             self.assertAlmostEqual(icons.call_args.args[-1], 0.25 * self.view.style["weapon_text_opacity"])
-            self.assertEqual(self.renderer.image.call_args.args[0], "fixture.png")
-            self.assertEqual(self.renderer.image.call_args.args[2], 0.25)
+            self.renderer.image.assert_not_called()
             icons.reset_mock()
             draw_weapon_card(self.view, replace(weapon, additional_attributes=()), "melee", 20, 30, 390, 132, 0.25)
             icons.assert_not_called()
@@ -90,27 +89,59 @@ class WeaponCardTests(unittest.TestCase):
         self.assertEqual(lower_shape[0][1], lower_shape[3][1])
         right_band = panels.call_args_list[1].args[0]
         self.assertGreater(right_band[1][0], right_band[2][0])
-        # 원의 선만 남고 하단 패널 외곽선은 그리지 않는다.
-        self.assertEqual(strokes.call_count, 1)
-        self.assertEqual(len(strokes.call_args.args[0]), 49)
+        strokes.assert_not_called()
 
-    def test_circle_has_gap_from_thin_spine_midpoint_and_content_stays_to_its_right(self):
-        weapon = WeaponInfo("PDW", 45, auxiliary_image_path="fixture.png")
-        with patch.object(self.view, "polygon") as polygons, patch.object(self.view, "stroke"), \
-                patch.object(self.view, "panel_layer"), patch.object(self.view, "weapon_image") as image:
-            draw_weapon_card(self.view, weapon, "ranged", 0, 0, 420, 132, 1)
-        lower_piece, upper_piece = polygons.call_args_list[1].args[0], polygons.call_args_list[-1].args[0]
-        endpoints = (lower_piece[0], lower_piece[3], upper_piece[1], upper_piece[2])
-        center_x, center_y = tuple(sum(point[axis] for point in endpoints) / 4 for axis in (0, 1))
-        icon = self.renderer.image.call_args.args[1]
-        radius = self.view.style["weapon_card"]["auxiliary_diameter_pixels"] / 2
-        gap = self.view.style["weapon_card"]["auxiliary_gap_pixels"]
-        self.assertAlmostEqual(icon.x + icon.width / 2 + radius + gap, center_x)
-        self.assertAlmostEqual(icon.y + icon.height / 2, center_y)
-        circle_right = center_x - gap
-        self.assertGreater(image.call_args.args[2].x, circle_right)
-        name = next(call for call in self.renderer.text.call_args_list if call.args[0] == "PDW")
-        self.assertGreater(name.args[1], circle_right)
+    def test_shared_slot_previews_next_swap_at_center_between_panels(self):
+        from ferrial_drive.ui_v2.preview import HudPreview
+        state = HudPreview().state.hud
+        box = self.view.swap_slot_rect()
+        raw_left = self.view.layout["weapons"][0] - self.view.style["weapon_depth_offset_pixels"] - self.view.style["weapon_card_cut_pixels"]
+        self.assertLess(box.x + box.width, raw_left)
+        from ferrial_drive.ui_v2.geometry import resource_geometry
+        resource_right = max(point[0] for point in resource_geometry(self.view.layout, self.view.style["level_bevel_pixels"]).level_shape)
+        self.assertAlmostEqual(box.x + box.width / 2, (resource_right + raw_left) / 2)
+        with patch("ferrial_drive.ui_v2.weapon_card.draw_auxiliary_slot") as slot:
+            self.view.shared_swap_slot(replace(state, active_weapon_kind="melee"), 0.6)
+            self.assertEqual(slot.call_count, 1)
+            self.assertEqual(slot.call_args.args[1], state.loadouts[state.active_loadout_index].ranged)
+            self.view.shared_swap_slot(replace(state, active_weapon_kind="ranged"), 0.6)
+            self.assertEqual(slot.call_args.args[1], state.loadouts[state.active_loadout_index].melee)
+
+    def test_hiding_key_hints_preserves_swap_and_dash_icons(self):
+        from ferrial_drive.ui_v2.preview import HudPreview
+        state = HudPreview().state
+        self.view.show_key_hints = False
+        with patch("ferrial_drive.ui_v2.weapon_card.draw_auxiliary_slot") as slot:
+            self.view.shared_swap_slot(state.hud, 1)
+            slot.assert_called_once()
+            self.renderer.text.assert_not_called()
+        with patch.object(self.view, "slanted_text") as label:
+            before = self.renderer.filtered_polygons.call_count
+            self.view.dash_indicator(state, 1)
+            self.assertEqual(self.renderer.filtered_polygons.call_count - before, 2)
+            label.assert_not_called()
+
+    def test_missile_and_counter_use_one_cached_image_without_runtime_strokes(self):
+        for kind in ("back_weapon", "counter"):
+            self.renderer.reset_mock()
+            with patch.object(self.view, "stroke") as stroke, patch.object(self.view, "panel_layer") as panel:
+                draw_auxiliary_slot(self.view, WeaponInfo("test", auxiliary_kind=kind), 20, 30, 120, .6)
+            self.renderer.image.assert_called_once()
+            self.assertTrue(self.renderer.image.call_args.args[0].is_file())
+            self.assertEqual(self.renderer.image.call_args.args[2], .6)
+            self.assertEqual(self.renderer.filtered_polygons.call_count, 2 if kind == "back_weapon" else 1)
+            stroke.assert_not_called()
+            panel.assert_not_called()
+
+    def test_transparent_slot_glyph_uses_shared_panel_and_keeps_counter_without_ring(self):
+        self.view.style["shared_swap_slot"]["glyph_kinds"] = ["back_weapon", "counter"]
+        for kind in ("back_weapon", "counter"):
+            self.renderer.reset_mock()
+            draw_auxiliary_slot(self.view, WeaponInfo("test", auxiliary_kind=kind), 20, 30, 120, .6)
+            self.renderer.image.assert_called_once()
+            self.assertEqual(self.renderer.filtered_polygons.call_count, 2 if kind == "back_weapon" else 1)
+            self.assertEqual(self.renderer.image.call_args.args[2], .6)
+
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ from ctypes import byref, c_float, c_int, c_ubyte
 import os
 from pathlib import Path
 import unittest
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from ferrial_drive.rendering import PicoCanvas
@@ -16,6 +17,58 @@ from ferrial_drive.ui_v2.lock_on import LockOnVisual
 
 
 class UiV2FilteringTests(unittest.TestCase):
+    def test_attribute_spacing_keeps_kerning_and_reuses_the_styled_texture(self):
+        root = Path(__file__).resolve().parents[2]
+        config = UiConfig(root / "samples/ui_unit_test_v2/ui_config.json")
+        renderer = PicoV2Renderer(config.font_paths, config.font_sizes)
+        try:
+            for text in ("SLASH", "IMPACT"):
+                before = renderer.text_size(text, "v2_weapon_attribute")
+                after = renderer.text_size(text, "v2_weapon_attribute", letter_spacing_pixels=5)
+                self.assertEqual(after, (before[0] + (len(text) - 1) * 5, before[1]))
+                options = {"letter_spacing_pixels": 5, "stroke_inset_pixels": 0.55}
+                first = renderer._text_texture(text, "v2_weapon_attribute", "#FFFFFF", **options)
+                second = renderer._text_texture(text, "v2_weapon_attribute", "#FFFFFF", **options)
+                self.assertIs(first, second)
+                self.assertEqual(first[1:], after)
+                renderer.text(text, 8, 12, "v2_weapon_attribute", "#FFFFFF",
+                              clip_rect=Rect(10, 20, 40, 24), **options)
+        finally:
+            renderer.close()
+
+    def test_attribute_weight_reduces_edge_ink_without_dimming_solid_cores(self):
+        from ctypes import string_at
+        from ferrial_drive.ui.text_style import styled_text_surface
+
+        root = Path(__file__).resolve().parents[2]
+        config = UiConfig(root / "samples/ui_unit_test_v2/ui_config.json")
+        renderer = PicoV2Renderer(config.font_paths, config.font_sizes)
+        p = self.pico
+        try:
+            for text in ("SLASH", "IMPACT"):
+                masks = []
+                with renderer._font_style("v2_weapon_attribute") as font:
+                    for inset in (0, 0.55):
+                        surface = styled_text_surface(p, font, text, p.SDL_Color(255, 255, 255, 255), 5, inset)
+                        try:
+                            self.assertEqual(p.SDL_LockSurface(surface), 0)
+                            try:
+                                masks.append(bytes(alpha for row in range(surface.contents.h)
+                                    for alpha in string_at(surface.contents.pixels + row * surface.contents.pitch,
+                                                           surface.contents.w * 4)[3::4]))
+                            finally:
+                                p.SDL_UnlockSurface(surface)
+                        finally:
+                            p.SDL_FreeSurface(surface)
+                before, after = masks
+                self.assertEqual(len(before), len(after))
+                self.assertEqual(max(after), 255)
+                self.assertLess(sum(after), sum(before))
+                self.assertGreater(sum(after), sum(before) * 0.75)
+                self.assertTrue(all(a <= b for a, b in zip(after, before)))
+        finally:
+            renderer.close()
+
     def test_lock_label_caret_renders_with_actual_renderer(self):
         root = Path(__file__).resolve().parents[2]
         config = UiConfig(root / "samples/ui_unit_test_v2/ui_config.json")
@@ -163,7 +216,7 @@ class UiV2FilteringTests(unittest.TestCase):
             original_height = p.TTF_FontHeight(renderer.fonts["text"].font)
             original_size = renderer.text_size("OVERDRIVE", "text")
             renderer.neon_text("OVERDRIVE", 4.25, 20.5, "text", "#FFFFFF", glow_color="#9DDFEA")
-            key = ("OVERDRIVE", "text", "#FFFFFF", False, "neon_core")
+            key = ("OVERDRIVE", "text", "#FFFFFF", False, "neon_core", 1, 3)
             texture, width, height = renderer.textures[key]
             texture_width, texture_height, mode = c_int(), c_int(), c_int()
             self.assertEqual(p.SDL_QueryTexture(texture, None, None, byref(texture_width), byref(texture_height)), 0)
@@ -181,6 +234,34 @@ class UiV2FilteringTests(unittest.TestCase):
         finally:
             renderer.close()
         self.assertFalse(renderer.textures)
+
+    def test_image_cache_resolves_a_loaded_path_once_and_clears_on_close(self):
+        path = Path(__file__).resolve().parents[2] / "samples/ui_unit_test_v2/icons/empty_slot.png"
+        original = Path.resolve
+        with patch.object(Path, "resolve", autospec=True, side_effect=original) as resolve:
+            self.renderer.image(path, Rect(0, 0, 32, 32))
+            self.renderer.image(path, Rect(16, 16, 48, 48), .5)
+            self.assertEqual(resolve.call_count, 1)
+        self.assertEqual(len(self.renderer.images), 1)
+        self.renderer.close()
+        self.assertFalse(self.renderer.image_paths)
+
+    def test_image_cache_separates_relative_paths_in_different_working_directories(self):
+        root = Path(__file__).resolve().parents[2]
+        image = (root / "samples/ui_unit_test_v2/icons/empty_slot.png").read_bytes()
+        previous = Path.cwd()
+        with TemporaryDirectory() as directory:
+            try:
+                for name in ("first", "second"):
+                    folder = Path(directory) / name
+                    folder.mkdir()
+                    (folder / "icon.png").write_bytes(image)
+                    os.chdir(folder)
+                    self.renderer.image("icon.png", Rect(0, 0, 32, 32))
+            finally:
+                os.chdir(previous)
+        self.assertEqual(len(self.renderer.image_paths), 2)
+        self.assertEqual(len(self.renderer.images), 2)
 
     def test_panel_probe_matches_real_scale_viewport_and_clip_without_drawing(self):
         shape = ((10, 10), (80, 10), (80, 80), (10, 80))

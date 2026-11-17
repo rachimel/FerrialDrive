@@ -1,5 +1,6 @@
 {
     "player_name": "플레이어",
+    "player_world_position": [640, 360],
     "player_health": {
         "current": 800,
         "maximum": 1000
@@ -16,7 +17,6 @@
                 "name": "PDW",
                 "rounds": 45,
                 "base_attribute": "IMPACT",
-                "additional_attributes": ["FIRE"],
                 "auxiliary_kind": "back_weapon"
             }
         },
@@ -41,26 +41,44 @@
         {
             "id": "enemy_a",
             "name": "훈련 표적 A",
-            "position_pixels": [333, 364],
-            "health": {"current": 540, "maximum": 800}
+            "position_pixels": [
+                333,
+                364
+            ],
+            "health": {
+                "current": 540,
+                "maximum": 800
+            }
         },
         {
             "id": "enemy_b",
             "name": "훈련 표적 B",
-            "position_pixels": [920, 460],
-            "health": {"current": 680, "maximum": 800}
+            "position_pixels": [
+                920,
+                460
+            ],
+            "health": {
+                "current": 680,
+                "maximum": 800
+            }
         },
         {
             "id": "enemy_c",
             "name": "훈련 표적 C",
-            "position_pixels": [640, 150],
-            "health": {"current": 400, "maximum": 800}
+            "position_pixels": [
+                640,
+                150
+            ],
+            "health": {
+                "current": 400,
+                "maximum": 800
+            }
         }
     ],
     "dialogue": {
         "speaker": "조작 가이드",
         "lines": [
-            "**마우스** 자동 표적   **우클릭** 조준   **E** 무기   **F** 로드아웃",
+            "**마우스** 표적   **좌클릭** 콤보   **우클릭** 조준   **E/F** 무기·로드아웃",
             "**1/2** 적·플레이어 피해   **3/4** 에너지   **5** 레벨   **6** Overdrive",
             "**7** 표적 크기   **G** 흡수 Trail   **T** 후보 유무   **C** COUNTER   **V** 필살기",
             "**Space** 대시 표시   **D** 가이드 표시   **F5** 초기화   **Esc** 정지"

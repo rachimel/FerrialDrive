@@ -1,0 +1,31 @@
+[
+  {
+    "frame": 1,
+    "reset": true,
+    "energy_level": 3,
+    "mouse": [
+      1050,
+      540
+    ]
+  },
+  {
+    "frame": 2,
+    "ui_action": "energy_up"
+  },
+  {
+    "frame": 3,
+    "ui_action": "energy_up"
+  },
+  {
+    "frame": 4,
+    "ui_action": "energy_up"
+  },
+  {
+    "frame": 5,
+    "ui_action": "energy_up"
+  },
+  {
+    "frame": 6,
+    "ui_action": "energy_up"
+  }
+]

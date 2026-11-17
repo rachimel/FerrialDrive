@@ -3,10 +3,12 @@
 from math import atan2, cos, hypot, pi, sin
 from dataclasses import replace
 from contextlib import contextmanager, nullcontext
+from collections import OrderedDict
 
 from ferrial_drive.ui.components import Rect
 from ferrial_drive.ui.counter import CounterVisual
 from ferrial_drive.ui.energy import energy_color
+from ferrial_drive.ui.theme import WIDGET_LABELS, resolve_widget_colors, themed_widget, widget_colors
 from ferrial_drive.ui.view import UiView
 from .geometry import (PerspectivePlane, body_diamond, counter_plaque, hatched_stroke_mesh, quad_fill,
                        resource_geometry, segmented_stroke_mesh, slanted_meter, tapered_stroke_mesh)
@@ -17,6 +19,8 @@ from .effects import (DialoguePanelVisual, HealthHitVisual, OverdriveVisual, Sca
                       UltimateReadyVisual, breathing_opacity, subtle_flicker)
 from .lock_on import LockOnVisual, accent_position, outline_segment
 from .weapon_card import draw_weapon_card
+from .pause_menu import draw_pause_button, draw_pause_menu
+from .title_menu import draw_title_menu
 
 
 class UiV2View(UiView):
@@ -28,6 +32,64 @@ class UiV2View(UiView):
         self._scanline_visual = ScanlineVisual()
         self._panel_probe = None
         self._panel_y_ranges = None
+        self.show_key_hints = True
+        self.base_theme_colors = dict(config.colors)
+        self._overdrive_palettes = OrderedDict()
+        self.overdrive_palette = False
+        self.overdrive_color = None
+        self.hud_theme = None
+        logo = config.data.get("pause", {}).get("footer", {}).get("logo_path")
+        logo_path = (config.path.parent / logo).resolve() if logo else None
+        self.pause_logo_path = logo_path if logo_path is not None and logo_path.is_file() else None
+        bezel = config.data.get("pause", {}).get("button_style", {}).get("bezel_texture")
+        bezel_path = (config.path.parent / bezel).resolve() if bezel else None
+        self.pause_bezel_path = bezel_path if bezel_path is not None and bezel_path.is_file() else None
+        self._pause_button_visuals = {}
+
+    @property
+    def hud_theme(self):
+        return self._hud_theme
+
+    @hud_theme.setter
+    def hud_theme(self, document):
+        self._hud_theme = document
+        self._overdrive_palettes.clear()
+        # 발동 전에 기본 빨간색을 준비한다. 테마 재로딩도 같은 경로를 사용한다.
+        for widget in WIDGET_LABELS:
+            colors = resolve_widget_colors(self.base_theme_colors, document, widget)
+            self._cached_overdrive_colors(colors, None)
+            if self.overdrive_color is not None:
+                self._cached_overdrive_colors(colors, self.overdrive_color)
+
+    def _cached_overdrive_colors(self, colors, overdrive_color):
+        # 값으로 구분해 편집기의 같은 문서 내부 수정도 다음 조회에 반영한다.
+        key = overdrive_color, tuple(colors.items())
+        if key in self._overdrive_palettes:
+            self._overdrive_palettes.move_to_end(key)
+            return self._overdrive_palettes[key]
+        result = {}
+        for role, color in colors.items():
+            if role in ("energy", "energy_fill"):
+                result[role] = color
+                continue
+            brightness = max(int(color[index:index + 2], 16) for index in (1, 3, 5))
+            ratios = (1, .65, .67) if role in ("text", "muted", "menu_button_text", "hud_button_text") else (1, .25, .27)
+            if overdrive_color is not None:
+                minimum = .65 if role in ("text", "muted", "menu_button_text", "hud_button_text") else .25
+                ratios = tuple(minimum + (1 - minimum) * int(overdrive_color[index:index + 2], 16) / 255
+                               for index in (1, 3, 5))
+            result[role] = "#" + "".join(f"{round(brightness * ratio):02X}" for ratio in ratios)
+        self._overdrive_palettes[key] = result
+        # 무지개 팔레트가 바뀌어도 과거 프레임의 색을 계속 보관하지 않는다.
+        if len(self._overdrive_palettes) > 64:
+            self._overdrive_palettes.popitem(last=False)
+        return result
+
+    def transform_ui_colors(self, colors):
+        """원본 테마를 보존하며 준비한 Overdrive 팔레트를 재사용한다."""
+        if not self.overdrive_palette:
+            return colors
+        return dict(self._cached_overdrive_colors(colors, self.overdrive_color))
 
     def prepare_panel_effects(self, draw_panels):
         """이번 프레임의 같은 UI 경로를 그리기 없이 살펴 전역 띠 경로를 만든다."""
@@ -50,13 +112,66 @@ class UiV2View(UiView):
         finally:
             self._scanline_visual = previous
 
-    def menu(self, opacity, offset_x, input_state, *, scanline_visual=None):
-        with self.scanline_frame(scanline_visual):
-            super().menu(opacity, offset_x, input_state)
+    @themed_widget("menus")
+    def menu(self, opacity, offset_x, input_state, *, scanline_visual=None, expansion=0, hover_amounts=None):
+        with self.draw_batch(), self.scanline_frame(scanline_visual):
+            draw_title_menu(self, opacity, offset_x, input_state, expansion, hover_amounts)
 
-    def pause(self, opacity, input_state, *, scanline_visual=None):
-        with self.scanline_frame(scanline_visual):
-            super().pause(opacity, input_state)
+    @themed_widget("menus")
+    def pause(self, opacity, input_state, *, scanline_visual=None, button_visuals=None):
+        previous = self._pause_button_visuals
+        self._pause_button_visuals = button_visuals or {}
+        try:
+            with self.draw_batch(), self.scanline_frame(scanline_visual):
+                draw_pause_menu(self, opacity, input_state)
+        finally:
+            self._pause_button_visuals = previous
+
+    @themed_widget("menus")
+    def graphics_settings(self, menu, opacity=1):
+        panel = menu.panel_rect(self.config)
+        amount = opacity * menu.motion.opacity
+        self.renderer.rect(Rect(0, 0, self.config.window["width"], self.config.window["height"]),
+                           self.config.colors["background"], amount * .82)
+        center = panel.x + panel.width / 2, panel.y + panel.height / 2
+        with self.draw_batch(), self.renderer.scaled(menu.motion.scale, center):
+            self._graphics_settings_contents(menu, amount)
+
+    def _graphics_settings_contents(self, menu, opacity):
+        layout, r, c = self.config.data["graphics_settings"], self.renderer, self.config.colors
+        panel = menu.panel_rect(self.config)
+        labels, padding = layout["labels"], layout["padding_pixels"]
+        self.popup_panel(panel, opacity)
+        r.text(labels["title"], panel.x+padding, panel.y+28, "pause_heading", c["text"], opacity)
+        r.text(labels["texture_quality"], panel.x+padding, panel.y+95, "body", c["text"], opacity)
+        r.text(labels.get("screen_resolution", "화면 해상도"), panel.x+padding,
+               panel.y+layout.get("resolution_label_y_pixels", 236), "body", c["text"], opacity)
+        buttons = menu.buttons(self.config)
+        self.buttons("settings", menu.inputs, opacity, 0, buttons=buttons)
+        selected = next(button for button in buttons if button.action == f"texture_{menu.draft.texture_quality}")
+        r.rect(selected.rect, self.ui_accent, opacity, filled=False)
+        width, height = menu.draft.screen_resolution or (self.config.window["width"], self.config.window["height"])
+        selected_resolution = next((button for button in buttons if button.action == f"resolution_{width}x{height}"), None)
+        if selected_resolution is not None:
+            r.rect(selected_resolution.rect, self.ui_accent, opacity, filled=False)
+        if menu.requires_restart:
+            back = next(button.rect for button in buttons if button.action == "settings_cancel")
+            save = next(button.rect for button in buttons if button.action == "settings_save")
+            text = labels["restart"]
+            _, height = r.text_size(text, "small")
+            left, right = back.x + back.width, save.x
+            r.text(text, (left + right) / 2, back.y + (back.height - height) / 2, "small",
+                   c["muted"], opacity, align="center", max_width=right-left-24)
+        if menu.applying or menu.error:
+            status = labels.get("applying", "설정 적용 중") if menu.applying else menu.error
+            r.text(status, panel.x+padding, panel.y+layout.get("restart_y_pixels", 386), "small",
+                   c["text"], opacity, max_width=panel.width-padding*2)
+
+    def popup_panel(self, rect, opacity=1):
+        """설정 등 팝업의 공통 바탕. 모서리 절단·외곽선·스캔은 사용하지 않는다."""
+        settings = self.config.data["popup_style"]
+        self.renderer.rect(rect, self.config.colors[settings["fill_color_role"]],
+                           opacity * settings["fill_opacity"])
 
     @property
     def layout(self):
@@ -65,6 +180,28 @@ class UiV2View(UiView):
     @property
     def style(self):
         return self.config.data["v2"]["style"]
+
+    def level_energy_color(self, level, tint=0):
+        """게이지·흡수 표현에 동일한 레벨별 Trail 팔레트를 적용한다."""
+        target = (tuple(int(self.overdrive_color[index:index + 2], 16) for index in (1, 3, 5))
+                  if self.overdrive_color is not None else self.style["overdrive_red"])
+        return energy_color(self.style["energy_level_colors"][level - 1],
+                            target, tint)
+
+    @themed_widget("radar")
+    def radar(self, *args, **kwargs):
+        return super().radar(*args, **kwargs)
+
+    @themed_widget("damage")
+    def damage_number(self, *args, **kwargs):
+        return super().damage_number(*args, **kwargs)
+
+    def weapon_image(self, weapon, kind, rect, opacity, *, vertical_scale=1.0):
+        if weapon.image_path is not None and self.hud_theme is not None:
+            self.renderer.image(weapon.image_path, rect, opacity, vertical_scale=vertical_scale,
+                                tint=self.config.colors["text"])
+            return
+        return super().weapon_image(weapon, kind, rect, opacity, vertical_scale=vertical_scale)
 
     def background(self):
         self.renderer.clear(self.config.colors["background"])
@@ -83,7 +220,7 @@ class UiV2View(UiView):
         displacement = tuple(-value / speed * length for value in camera_velocity)
         return self.renderer.directional_blur(
             Rect(0, 0, self.config.window["width"], self.config.window["height"]),
-            displacement, 1.0, settings["samples"])
+            displacement, 1.0, settings["samples"], forward_bias=settings.get("forward_bias", 0))
 
     def stroke(self, points, color, opacity=1, width=1):
         for a, b in zip(points, points[1:]):
@@ -158,14 +295,39 @@ class UiV2View(UiView):
     def panel_layer(self, points, color, opacity, *, fill_opacity=None, grain=False, effect_surface=None):
         """임의 패널의 배경만 반투명·스캔 처리한다. 내용은 호출자가 이후 그린다."""
         fill = self.style["surface_opacity"] if fill_opacity is None else min(fill_opacity, self.style["surface_opacity"])
-        self.polygon(points, color, opacity * fill, filled=True)
+        settings = self.style["panel_film_grain"]
+        noise = ((settings["opacity"], settings["tile_pixels"], settings["cell_pixels"], settings["seed"])
+                 if grain else None)
+        self.renderer.filtered_polygons((points,), color, opacity * fill, 2, grain=noise)
         mask = points if effect_surface is None else effect_surface
         self.panel_scanlines(PanelGeometry(mask, ()), opacity, self.style["panel_scanlines"]["panels"])
-        if grain:
-            settings = self.style["panel_film_grain"]
-            frame = int(self._scanline_visual.elapsed_seconds * settings["frames_per_second"] + 1e-9) % settings["frame_count"]
-            self.renderer.film_grain(mask, opacity * settings["opacity"], frame,
-                                     tile_pixels=settings["tile_pixels"], cell_pixels=settings["cell_pixels"], seed=settings["seed"])
+
+    def swap_slot_rect(self):
+        settings = self.style["shared_swap_slot"]
+        width, height = self.config.window["width"], self.config.window["height"]
+        x = self.layout["weapons"][0] - self.style["weapon_depth_offset_pixels"] - self.style["weapon_card_cut_pixels"]
+        scale = self.style["equipment_scale"]
+        right_limit = width + (x - width) * scale - settings["gap_pixels"]
+        size = settings["diameter_pixels"]
+        geometry = resource_geometry(self.layout, self.style["level_bevel_pixels"])
+        resource_right = max(point[0] for point in geometry.level_shape)
+        resource_right = width / 2 + (resource_right - width / 2) * self.style["hud_scale"]
+        right = min(right_limit, (resource_right + right_limit + settings["gap_pixels"] + size) / 2)
+        return Rect(right - size, height - settings["bottom_margin_pixels"] - size, size, size)
+
+    @themed_widget("swap_slot")
+    def shared_swap_slot(self, hud, opacity):
+        if not hud.loadouts:
+            return
+        from .weapon_card import draw_auxiliary_slot
+
+        loadout = hud.loadouts[hud.active_loadout_index]
+        next_weapon = loadout.ranged if hud.active_weapon_kind == "melee" else loadout.melee
+        box = self.swap_slot_rect()
+        draw_auxiliary_slot(self, next_weapon, box.x, box.y, box.width, opacity)
+        if self.show_key_hints:
+            self.renderer.text("E", box.x + box.width / 2, box.y + box.height + 4, "hud_small",
+                               self.config.colors["text"], opacity, align="center")
 
     def panel_border(self, parts, opacity, *, part_opacities=None):
         """테두리만 그린다. 각 조각의 표시값은 외부 효과 제어부가 공급할 수 있다."""
@@ -214,6 +376,7 @@ class UiV2View(UiView):
         if draw_border:
             self.panel_border(geometry.border_parts, opacity)
 
+    @themed_widget("dialogue")
     def dialogue(self, info, opacity, scanline_visual=None, *, panel_visual=None):
         if info is None:
             return
@@ -273,6 +436,9 @@ class UiV2View(UiView):
     def buttons(self, scene, input_state, opacity, offset_x, buttons=None, *, offset_y=0):
         r, c = self.renderer, self.config.colors
         for index, button in enumerate(self.config.buttons[scene] if buttons is None else buttons):
+            if scene == "pause":
+                draw_pause_button(self, button, input_state, opacity, offset_x, offset_y)
+                continue
             rect = button.rect.translated(offset_x, offset_y)
             x, y, width, height = rect.x, rect.y, rect.width, rect.height
             hovered = button.enabled and input_state.hovered_id == button.button_id
@@ -327,7 +493,8 @@ class UiV2View(UiView):
         self.stroke(((x + 5, y + height + 4), (x + width * 0.63, y + height + 4)),
                      self.ui_accent, opacity * 0.35)
 
-    def minimap(self, hud, opacity, scanline_visual=None):
+    @themed_widget("minimap")
+    def minimap(self, hud, opacity, scanline_visual=None, *, player_position=None):
         r, c = self.renderer, self.config.colors
         rect = Rect(*self.layout["minimap"])
         settings = self.style["panel_scanlines"]["minimap"]
@@ -340,7 +507,9 @@ class UiV2View(UiView):
                 r.line(rect.x + a * rect.width, rect.y + b * rect.height,
                        rect.x + d * rect.width, rect.y + e * rect.height, self.ui_accent, opacity * 0.5)
             cx, cy = rect.x + rect.width / 2, rect.y + rect.height / 2
-            r.filled_triangle((cx, cy - 6), (cx - 4, cy + 4), (cx + 4, cy + 4),
+            px, py = ((cx, cy) if player_position is None else
+                      (rect.x + player_position[0] * rect.width, rect.y + player_position[1] * rect.height))
+            r.filled_triangle((px, py - 6), (px - 4, py + 4), (px + 4, py + 4),
                               c["accent"], opacity)
             for contact in hud.radar_contacts:
                 if abs(contact.x) <= 1 and abs(contact.y) <= 1:
@@ -348,6 +517,7 @@ class UiV2View(UiView):
                     r.rect(Rect(px - 2, py - 2, 4, 4), c["enemy" if contact.kind == "enemy" else "accent"], opacity)
         r.text("MAP", rect.x, rect.y + rect.height + 6, "v2_map_label", c["muted"], opacity)
 
+    @themed_widget("target")
     def target(self, state, opacity, offset_x, *, draw_marker=True):
         r, c = self.renderer, self.config.colors
         hud, body = state.hud, state.target_body
@@ -360,6 +530,7 @@ class UiV2View(UiView):
             r.text(hud.target.name, x + offset_x, y + max(ry + 7, body.height * 2), "target_name", c["text"], opacity,
                    align="center", max_width=200)
 
+    @themed_widget("lock")
     def lock_marker(self, visual, opacity, offset_x=0):
         r, c, body = self.renderer, self.config.colors, visual.body
         x, y, rx, ry = body_diamond((body.x, body.y, body.width, body.height), self.style["lock_body_scale"])
@@ -441,6 +612,7 @@ class UiV2View(UiView):
         pad = self.style['resource_hit_blur']['bounds_padding_pixels']
         return Rect(left - pad, top - pad, right - left + pad * 2, bottom - top + pad * 2)
 
+    @themed_widget("health")
     def player_health(self, hud, geometry, opacity, trailing_ratio, damage_flashes, hit_visual):
         r, c = self.renderer, self.config.colors
         dx, dy = self.health_hit_offset(hit_visual)
@@ -456,6 +628,7 @@ class UiV2View(UiView):
         r.text(value, x, top - value_height - gap, "v2_hp", c["text"], opacity)
         r.text("HP", x + value_width + 9, top - hp_height - gap, "hud_small", c["muted"], opacity)
 
+    @themed_widget("resources")
     def resources(self, state, opacity, offset_x, player_trailing_ratio, *, damage_flashes=(),
                   hit_visual=HealthHitVisual(), energy_flash=0, level_visual=None,
                   overdrive_visual=None, ultimate_visual=None, energy_tint_ratio=None, energy_visual=None):
@@ -487,8 +660,8 @@ class UiV2View(UiView):
             charge = energy_visual.overdrive_ratio
             boundary_ratio = energy_visual.arrival_ratio
         tint = charge if energy_tint_ratio is None else energy_tint_ratio
-        color = energy_color(c['energy'], self.style['overdrive_red'], tint)
-        fill_color = energy_color(c['energy_fill'], self.style['overdrive_red'], tint)
+        color = self.level_energy_color(state.energy_level, tint)
+        fill_color = color
         boundary_color = self.style['energy_boundary']['color']
         self.panel_layer(geometry.energy_body, c["panel"], opacity, grain=True, effect_surface=channel)
         self.polygon(geometry.level_shape, c["panel"], opacity * self.style["surface_opacity"], filled=True)
@@ -507,9 +680,14 @@ class UiV2View(UiView):
             self.polygon(channel, color, opacity * energy_flash * 0.55, filled=True)
         self.stroke((outline[-1], geometry.level_shape[-2]),
                      color if charge > 0 else self.ui_accent, opacity, self.style['resource_border_width_pixels'])
-        self.energy_boundary(channel, boundary_ratio, energy_alpha, overdrive=state.overdrive)
+        self.energy_boundary(channel, boundary_ratio, energy_alpha, level=state.energy_level, overdrive=state.overdrive)
         overdrive_visual = overdrive_visual or OverdriveVisual(float(state.overdrive))
         self.overdrive_label(channel, overdrive_visual, energy_alpha)
+        if state.overdrive_ready:
+            center = tuple(sum(point[axis] for point in channel) / len(channel) for axis in (0, 1))
+            label = "R · OVERDRIVE" if self.show_key_hints else "STANDBY"
+            text_height = r.text_size(label, "v2_overdrive")[1]
+            r.text(label, center[0], center[1] - text_height / 2, "v2_overdrive", c["text"], energy_alpha, align="center")
         level_right = x + width + self.layout["energy_level_width_pixels"]
         settings = self.style['level_text']
         number_scale = settings['number_scale']
@@ -537,8 +715,9 @@ class UiV2View(UiView):
         key_height = r.text_size(key, "hud_small")[1]
         gap = self.style["ultimate_label_gap_pixels"]
         label_right = cx - radius / 2 - gap
-        self.ultimate_label(key, label_right, cy - radius / 2 - key_height - gap,
-                            c["text"], opacity)
+        if self.show_key_hints:
+            self.ultimate_label(key, label_right, cy - radius / 2 - key_height - gap,
+                                c["text"], opacity)
         self.ultimate_label(level, label_right, cy + radius / 2 + gap,
                             c["muted"], opacity, scale=0.85, slant_right=True)
 
@@ -595,7 +774,7 @@ class UiV2View(UiView):
         spacing = max(0, (bar_width * self.style['overdrive_width_ratio'] - text_width) / (len(label) - 1))
         width = text_width + spacing * (len(label) - 1)
         cursor = -width / 2
-        glow_color = energy_color(c['energy'], self.style['overdrive_red'], 1)
+        glow_color = self.overdrive_color or energy_color(c['energy'], self.style['overdrive_red'], 1)
         self.overdrive_entry_streak((center_x, center_y), bar_width, visual, glow_color, opacity)
         for index, (letter, (letter_width, letter_height)) in enumerate(zip(label, sizes)):
             x = center_x + (cursor + letter_width / 2) * visual.spread - letter_width / 2
@@ -626,30 +805,32 @@ class UiV2View(UiView):
                      (x + length / 2, y), (x, y + width / 2))
             self.polygon(shape, ink, alpha * weight, filled=True)
 
-    def energy_boundary(self, channel, ratio, opacity, *, overdrive=False):
+    def energy_boundary(self, channel, ratio, opacity, *, level=1, overdrive=False):
         if not (0 < ratio < 1 or overdrive and ratio == 1):
             return
         edge = quad_fill(channel, ratio)[1:3]
         time = self._scanline_visual.elapsed_seconds
         settings = self.style['energy_boundary']
         color = settings['color']
-        pulse = 0.5 + 0.5 * sin(time * 17) ** 2
-        strength = settings['overdrive_intensity'] if overdrive else 1
-        self.stroke(edge, color, opacity * 0.25 * pulse, settings['glow_width_pixels'] * strength)
-        self.stroke(edge, color, opacity * 0.85 * pulse, 1)
+        strength = settings['overdrive_intensity'] if overdrive else settings['level_intensities'][level - 1]
+        pulse = 0.65 + 0.35 * sin(time * 17 * strength) ** 2
+        for width, alpha in ((settings['glow_width_pixels'] * strength * 2, 0.12),
+                             (settings['glow_width_pixels'] * strength, 0.4), (1, 0.85)):
+            self.renderer.soft_line(*edge, color, opacity * alpha * pulse, width)
 
+    @themed_widget("dash")
     def dash_indicator(self, state, opacity):
         """현재 가로 위치에서 아이콘·키 안내를 화면 하단 기준으로 배치한다."""
         r, c, settings = self.renderer, self.config.colors, self.style["dash_icon"]
         x = self.layout["dash_x"]
         label_width, label_height = r.text_size("SPACE", "hud_small")
         key_scale = settings["key_scale"]
-        y = (self.config.window["height"] - settings["bottom_margin_pixels"] / self.style["hud_scale"]
-             - label_height * key_scale)
         width, height = settings["chevron_width_pixels"], settings["height_pixels"]
         step, thickness = settings["spacing_pixels"], settings["thickness_pixels"]
         left = x + (label_width * key_scale - width - step) / 2
-        top = y - settings["label_gap_pixels"] - height
+        geometry = resource_geometry(self.layout, self.style["level_bevel_pixels"])
+        top = geometry.icon_center[1] - height / 2
+        y = top + height + settings["label_gap_pixels"]
         alpha = opacity * (1 if state.dash_ready else 0.25)
         for index, color in enumerate((self.ui_accent, c["text"])):
             px = left + step * index
@@ -657,8 +838,10 @@ class UiV2View(UiView):
             quads = (((px, top), (px + thickness, top), (px + width, middle), (px + width - thickness, middle)),
                      ((px + width - thickness, middle), (px + width, middle), (px + thickness, bottom), (px, bottom)))
             r.filtered_polygons(quads, color, alpha, self.style["panel_border"]["filter_samples"])
-        self.slanted_text("SPACE", x, y, "hud_small", c["text"], alpha, scale=key_scale)
+        if self.show_key_hints:
+            self.slanted_text("SPACE", x, y, "hud_small", c["text"], alpha, scale=key_scale)
 
+    @themed_widget("weapons")
     def weapons(self, hud, opacity, offset_x, *, loadout_visual=None, weapon_swap_visual=None):
         if not hud.loadouts:
             return
@@ -747,8 +930,8 @@ class UiV2View(UiView):
                                     top + 10, "v2_ammo", c["text"], alpha * self.style["weapon_text_opacity"],
                                     **self.style["weapon_text_neon"])
 
-    def absorption(self, trails, opacity, particle_system=None, charge=0):
-        color = energy_color(self.config.colors['energy'], self.style['overdrive_red'], charge)
+    def absorption(self, trails, opacity, particle_system=None, charge=0, *, level=1):
+        color = self.level_energy_color(level, charge)
         settings = self.style["absorption_trail"]
         if particle_system is not None:
             self.renderer.draw_compute_particles(particle_system, settings, color, self.config.colors["text"], opacity)
@@ -802,7 +985,8 @@ class UiV2View(UiView):
                          color, opacity * alpha * self.style["surface_opacity"], filled=True)
             cursor = start
 
-    def perspective_counter(self, visual, role, label, y, opacity):
+    @themed_widget("counters")
+    def perspective_counter(self, visual, role, label, y, opacity, *, label_spacing_pixels=0):
         """회전 숫자를 평면에서 자르고 한 투영면에 올려 원근을 유지한다."""
         r, c = self.renderer, self.config.colors
         settings = self.style["counters"][label]
@@ -838,18 +1022,24 @@ class UiV2View(UiView):
                                            text_alpha, scale, viewport, slot_width * scale, smear=False)
                 x += slot_width * scale
         if visual.moving and any(a != b and b != ',' for a, b in zip(old, new)):
-            with self.counter_motion_blur(visual, project, width, height, ink_bottom, scale):
+            with self.counter_motion_blur(visual, project, width, height, ink_bottom, scale,
+                                          resolution_scale=settings.get("blur_resolution_scale", 1)):
                 draw_digits(True)
         draw_digits(False)
         label_text = self.config.labels[label]
         label_role = f"{label}_label"
-        label_width = r.text_size(label_text, label_role)[0]
-        r.warped_text(label_text, width - label_width - self.style['counter_label_right_inset_pixels'],
-                      ink_bottom + self.style["counter_plaque_height_pixels"] + self.style['counter_label_gap_pixels'],
-                      label_role, c["muted"], project, text_alpha)
+        label_width = r.text_size(label_text, label_role)[0] + max(0, len(label_text) - 1) * label_spacing_pixels
+        label_x = width - label_width - self.style['counter_label_right_inset_pixels']
+        label_y = ink_bottom + self.style["counter_plaque_height_pixels"] + self.style['counter_label_gap_pixels']
+        if label_spacing_pixels == 0:
+            r.warped_text(label_text, label_x, label_y, label_role, c["muted"], project, text_alpha)
+            return
+        for char in label_text:
+            r.warped_text(char, label_x, label_y, label_role, c["muted"], project, text_alpha)
+            label_x += r.text_size(char, label_role)[0] + label_spacing_pixels
 
     @contextmanager
-    def counter_motion_blur(self, visual, project, width, height, ink_bottom, scale):
+    def counter_motion_blur(self, visual, project, width, height, ink_bottom, scale, *, resolution_scale=1):
         """변하는 숫자만 실제 화면 이동축에 연속 GPU 필터를 적용한다."""
         settings = self.style['counter_motion_blur']
         # 로드아웃과 같이 순간 속도에 노출 시간을 곱한다. 탄성 보간의 속도는 중앙 차분으로 구한다.
@@ -878,7 +1068,8 @@ class UiV2View(UiView):
         pad_y = max(settings['overscan_pixels'], abs(motion[1]) * reach + 8)
         clip = Rect(bounds.x - pad_x, bounds.y - pad_y, bounds.width + pad_x * 2, bounds.height + pad_y * 2)
         with self.renderer.clip(clip):
-            with self.renderer.directional_blur(bounds, motion, strength, settings['samples'], forward_bias=bias):
+            with self.renderer.directional_blur(bounds, motion, strength, settings['samples'], forward_bias=bias,
+                                                 resolution_scale=resolution_scale):
                 yield
 
     def rolling_digit(self, visual, before, after, x, height, role, color, project, opacity, scale, viewport,
@@ -886,8 +1077,12 @@ class UiV2View(UiView):
         """v01의 탄성 이동·퇴장 감쇠·방향성 잔상을 투영면 안에서 재사용한다."""
         r, settings = self.renderer, self.config.data['damage_counter']
         moving = visual.moving and before != after and after != ','
+        new_slot = moving and before == ' '
         faces = ((before, -height * visual.vertical_progress, (1 - visual.progress) ** settings['outgoing_fade_power']),
                  (after, height * (1 - visual.vertical_progress), 1)) if moving else ((after, 0, 1),)
+        if new_slot:
+            faces = ((after, 0, 1),)
+            viewport = Rect(x, viewport.y, slot_width or viewport.width, viewport.height)
         samples = settings['blur_samples'] if moving and smear else 0
         p = visual.progress
         previous = replace(visual, elapsed_seconds=max(0, visual.elapsed_seconds - settings['blur_shutter_seconds']))
@@ -909,30 +1104,41 @@ class UiV2View(UiView):
                 continue
             width = r.text_size(char, role)[0] * scale
             left = x + ((slot_width - width) / 2 if slot_width is not None else 0)
+            if new_slot:
+                left += (slot_width or width) * (1 - visual.progress)
             for smear_x, smear_y, weight in passes:
                 if weight > 0:
                     r.warped_text(char, left + smear_x, top + smear_y, role, color, project,
                                   opacity * alpha * weight, scale_x=scale, scale_y=scale, clip_rect=viewport)
 
+    def draw_batch(self):
+        batch = getattr(type(self.renderer), 'hud_batch', None)
+        return batch(self.renderer) if batch is not None else nullcontext()
+
     def combat(self, state, damage_visuals=(), opacity=1, offset_x=0, *, scanline_visual=None, **kwargs):
-        with self.scanline_frame(scanline_visual):
+        with self.draw_batch(), self.scanline_frame(scanline_visual):
             self._combat(state, damage_visuals, opacity, offset_x, scanline_visual=scanline_visual, **kwargs)
 
+    @themed_widget("global")
     def _combat(self, state, damage_visuals=(), opacity=1, offset_x=0, *,
-               counter_visual=None, combo_visual=None, counters_opacity=1,
+               counter_visual=None, combo_visual=None, counters_opacity=1, counter_motion_visual=None,
                cursor_position=None, player_trailing_ratio=None, target_trailing_ratio=None,
                absorption_trails=(), scanline_visual=None, dialogue_visual=None, lock_visuals=None,
                player_damage_flashes=(), target_damage_flashes=(), counter_message_opacity=None, player_screen=None,
                loadout_visual=None, weapon_swap_visual=None,
                player_hit_visual=HealthHitVisual(), target_hit_visual=HealthHitVisual(), particle_system=None,
                defeated_targets=(), energy_flash=0, level_visual=None, overdrive_visual=None, ultimate_visual=None,
-               energy_tint_ratio=None, energy_visual=None):
+                 energy_tint_ratio=None, energy_visual=None, minimap_player_position=None):
         r, c, hud = self.renderer, self.config.colors, state.hud
         scale = self.style["hud_scale"]
         width, height = self.config.window["width"], self.config.window["height"]
         with r.scaled(self.style["map_scale"], self.layout["minimap"][:2]):
-            self.minimap(hud, opacity, scanline_visual)
-        self.radar(hud.radar_contacts, opacity, center=player_screen)
+            if minimap_player_position is None:
+                self.minimap(hud, opacity, scanline_visual)
+            else:
+                self.minimap(hud, opacity, scanline_visual, player_position=minimap_player_position)
+        self.radar(hud.radar_contacts, opacity, center=player_screen,
+                   scale=state.radar_scale, solid_ratio=state.radar_solid_ratio)
         body = state.target_body
         target_anchor = ((body.x + body.width / 2, body.y + body.height / 2)
                          if body is not None else self.config.actor_anchor("target"))
@@ -945,16 +1151,17 @@ class UiV2View(UiView):
             x, y = x + hit_x, y + hit_y
             target_rect = (x, y, bar_width, bar_height)
             if hud.target and hud.target.health.current > 0:
-                self.meter("target_hp", hud.target.health.ratio, "enemy", opacity, target_trailing_ratio,
-                           rect=target_rect, damage_flashes=target_damage_flashes)
-                r.text("TARGET", x + bar_width, y + bar_height + 4, "target_heading", c["muted"], opacity, align="right")
+                with widget_colors(self, "target"):
+                    self.meter("target_hp", hud.target.health.ratio, "enemy", opacity, target_trailing_ratio,
+                               rect=target_rect, damage_flashes=target_damage_flashes)
+                    r.text("TARGET", x + bar_width, y + bar_height + 4, "target_heading", c["muted"], opacity, align="right")
         for visual in defeated_targets:
             body = visual.body
             center = (body.x + body.width / 2, body.y + body.height / 2)
             dx, dy = self.layout['target_hp_offset_pixels']
             _, _, bar_width, bar_height = self.layout['target_hp']
             rect = (center[0] + dx, center[1] + dy, bar_width, bar_height)
-            with r.scaled(scale, center):
+            with r.scaled(scale, center), widget_colors(self, "target"):
                 self.meter('target_hp', visual.current_ratio, 'enemy', opacity * visual.opacity,
                            visual.trailing_ratio, rect=rect)
                 r.text('TARGET', rect[0] + bar_width, rect[1] + bar_height + 4, 'target_heading',
@@ -972,6 +1179,7 @@ class UiV2View(UiView):
         with r.scaled(self.style["equipment_scale"], (width, height)):
             self.weapons(hud, opacity, offset_x, loadout_visual=loadout_visual,
                          weapon_swap_visual=weapon_swap_visual)
+        self.shared_swap_slot(hud, opacity)
         alpha = opacity * counters_opacity
         combo_visual = combo_visual or CounterVisual(hud.combo_count, hud.combo_count, 1, 1)
         counter_visual = counter_visual or CounterVisual(hud.total_damage_dealt, hud.total_damage_dealt, 1, 1)
@@ -980,7 +1188,18 @@ class UiV2View(UiView):
             settings = self.style["counters"][label]
             right = width - settings["right_margin_pixels"]
             with r.scaled(scale * settings["ui_scale"], (right, y)):
-                self.perspective_counter(visual, role, label, y, alpha)
+                motion = counter_motion_visual
+                if motion is None:
+                    self.perspective_counter(visual, role, label, y, alpha)
+                elif motion.fraction > 0:
+                    digits = max(len(format(visual.previous_value, ",")), len(format(visual.value, ",")))
+                    span = max(r.text_size("0", role)[0], r.text_size(",", role)[0]) * digits * settings["text_scale"] + 48
+                    height = r.text_size("0", role)[1] * settings["text_scale"] + 64
+                    left = right - span
+                    clip_left = right - span * motion.fraction if motion.entering else left
+                    with r.translated(motion.offset_x, 0), r.clip(Rect(clip_left, y - 12, span * motion.fraction, height)):
+                        self.perspective_counter(visual, role, label, y, alpha,
+                                                 label_spacing_pixels=motion.label_spacing_pixels)
         counter_alpha = float(state.counter) if counter_message_opacity is None else counter_message_opacity
         if counter_alpha > 0:
             text_scale = self.style["counter_text_scale"]
@@ -991,7 +1210,8 @@ class UiV2View(UiView):
             with r.scaled(scale, (visual.x, visual.y)):
                 self.damage_number(visual, opacity, offset_x)
         self.absorption(absorption_trails, opacity, particle_system,
-                        (1 if state.overdrive else state.overdrive_charge_ratio) if energy_tint_ratio is None else energy_tint_ratio)
+                        (1 if state.overdrive else state.overdrive_charge_ratio) if energy_tint_ratio is None else energy_tint_ratio,
+                        level=state.energy_level)
         self.dialogue(state.dialogue, opacity, scanline_visual, panel_visual=dialogue_visual)
         if cursor_position is not None:
             x, y = cursor_position
