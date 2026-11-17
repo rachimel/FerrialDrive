@@ -5,9 +5,13 @@ JRPG식 3/4 Top-Down 화면과 사전 렌더링한 2D 에셋을 사용한다.
 
 ## 현재 상태
 
-**현재 UI Unit Test는 사용자 승인을 받았고, 배치·효과를 유지하며 최종 코드 정리를 반영했다.** `tests/ui_test.py`는 게임과 Runner 없이 직접 실행할 수 있는 UI 테스트이며, HP·HIT/DAMAGE·기체별 피해 숫자·레이더·크로스헤어를 가짜 상태로 확인한다. 타이틀·일시정지의 설정 버튼은 비활성 상태이며 설정 기능·실제 타겟 선택·적중 판정·게임 전투 프로토타입은 미구현이다. 코드 정리 후 자동 테스트·실행·화면 비교·성능 측정은 수행하지 않았다.
+3D 제작 기준은 **Blender 모델링 → 리그 없는 형상 → Unreal 새 리깅·애니메이션·프리렌더 → PNG 파츠+JSON → 툴 2D 조립·패킹 → Pico2D**다. 기존 Blender 리그는 재사용하지 않는다. 프리렌더는 Unreal에서 수행하고 PNG 파츠+JSON을 툴의 2D 조립·패킹으로 인계한다.  동작은 짧은 초안을 전체 재생하며 검수·수정한다. 별도 KeyPose 사전 승인과 Pose Tool은 현행 흐름에서 제외한다. [역할·지원 상태](docs/ai-asset-pipeline/unreal_pipeline.md)를 따른다.
+
+이동·UI 훈련장은 `tests/sword_movement_test.py`에서 이동·검 공격·표적 명중과 UI v2를 함께 확인한다. 게임 에셋 없는 공개 도형 시연은 `--demo`로 실행한다. [현재 범위와 조작](docs/unit-tests/ui_unit_test.md)을 따른다.
 
 - [사전 PRD](docs/Ferrial_Drive_PRE_PRD_v0.1.md): 게임 방향, 현재 결정한 규칙, 미정 사항
+- [전투 프로토타입](docs/unit-tests/combat_prototype.md): 도형 기체 1대1 교전·실행·조작·구현 및 검증 범위
+- [검 이동 Unit Test](docs/unit-tests/sword_movement.md): 검 장착 기체·1km 흙바닥·눈금·달리기/대시/부스트·그림자
 - [UI 작업 정리](docs/unit-tests/ui_checkpoint.md): 완료 범위·모듈 책임·미완료·다음 작업·검증 상태
 - [UI Unit Test 명세](docs/unit-tests/ui_unit_test.md): 현재 우선 검증할 두 장면·입력·HUD·애니메이션
 - [독립 Unit Test 실행기](Tools/unit_test_runner/README.md): 공통 실행 규약과 테스트 `.py` 실행 방법
@@ -15,6 +19,7 @@ JRPG식 3/4 Top-Down 화면과 사전 렌더링한 2D 에셋을 사용한다.
 - [공통 테마 기준](docs/theme_reference.md): 도구의 색상·글꼴·간격 역할과 공통 JSON
 - [선택적 성능 계측](docs/tool-usage/performance_timing.md): 게임·테스트 공통 시간/호출 수 수집·반복 측정·JSON 로그
 - [문서 목록](docs/README.md): 제작 도구와 데이터 준비 문서
+- [데이터 배치](data/README.md): 제작 원본·실행 데이터·참고 자료·보관 기록의 경로
 - [이미지 제작 파이프라인](docs/ai-asset-pipeline/image_pipeline.md): JANIMA 레퍼런스 생성 → GPT 디테일 보정
 - [상세 기획서 PPT](docs/presentation/기획서.pptx): 기존 29쪽 초안. 이후 결정은 PRE-PRD를 따른다.
 - [발표자료 PPT](docs/presentation/발표자료.pptx): AI 콘셉트 이미지를 제외한 기존 10쪽 공개본
@@ -25,7 +30,7 @@ JRPG식 3/4 Top-Down 화면과 사전 렌더링한 2D 에셋을 사용한다.
 
 1. 메카 이동, 장애물 충돌, 기본적인 앞뒤 가림 표현
 2. 카타나·기관단총의 기본 공격과 피격
-3. 근접 콤보, 무기 스와핑 후 공격 연계, 대시 공격
+3. 근접 콤보, 무기 스와핑 후 공격 연계, 부스트 공격
 4. 적과의 실시간 교전, 전투 종료 및 재시작
 
 세부 범위와 규칙은 사전 PRD를 기준으로 한다. 기획한 기능을 구현 완료 기능으로 표시하지 않는다.
@@ -37,7 +42,7 @@ JRPG식 3/4 Top-Down 화면과 사전 렌더링한 2D 에셋을 사용한다.
 | `docs/` | 기획과 제작 도구 사용 문서 |
 | `ferrial_drive/` | 재사용 UI·애니메이션 모듈 초안 |
 | `ferrial_drive/diagnostics/` | 화면·게임에 의존하지 않는 선택적 성능 계측 |
-| `samples/ui_unit_test/` | UI 표현 설정과 현재 확인 방법 |
+| `samples/ui_unit_test_v2/` | 훈련장 HUD 설정·시연 상태 |
 | `data/fonts/` | 지정 공개 폰트와 저작권·이용 조건 |
 | `tests/` | 실행기 바로가기와 직접 조작용 샘플 |
 | `tests/automated/` | 실행기·시간 진행·버튼 판정 자동 검사 |
@@ -47,11 +52,13 @@ JRPG식 3/4 Top-Down 화면과 사전 렌더링한 2D 에셋을 사용한다.
 | `samples/conversation_log_viewer/` | 실제 기록과 분리된 가짜 대화 시연 데이터 |
 | `samples/unit_test_runner/` | 공통 실행기의 두 화면·흐름 전환 샘플 |
 | `Tools/portrait_editor/` | 표정 스튜디오와 영역 지정 도구 |
-| `Tools/blender_pipeline/` | Blender 기반 원본 생성 도구 |
+| `Tools/blender_pipeline/` | Blender 모델링·반환 파일 검사·기존 렌더/패킹 |
+| `Tools/unreal_pipeline/` | Unreal FK/Sequencer 조작·기존 골격 FBX 왕복. 신규 리그 반환은 별도 연결 대상 |
+| `automate/` | 자동화 진입점·실행 파일/런타임·필수 입력 분리·Unreal 새 리그 작업 |
 | `Tools/SSheetCutil.py` | 기존 스프라이트 시트 편집 도구 |
 | `run_portrait_editor.cmd` | 로컬 표정 스튜디오 실행 파일 |
 
-실제 UI 테스트는 `tests/ui_test.py`다. 루트의 `Unit Test Runner.lnk`로 실행기를 열고 `tests/` 탐색 목록에서 `ui_test.py`를 더블클릭하거나 **열린 GUI 창에 드롭**한다. [확인할 조작과 기대 결과](samples/ui_unit_test/README.md)를 따른다. `python tests/ui_test.py`는 Runner 없이 자체 창·실행 루프로 직접 실행한다. GUI 실행은 별도 테스트 프로세스를 시작하며 재실행으로 모듈 변경을 새로 읽는다. 테스트 종료 시 Runner를 앞으로 올리며 Runner 종료는 소유한 테스트도 종료한다.
+루트 `Unit Test Runner.lnk`를 열고 `tests/sword_movement_test.py`를 선택하거나 열린 Runner 창에 드롭한다. `python tests/sword_movement_test.py`로도 직접 실행한다. [실행·입력·설정](samples/sword_movement/README.md)을 따른다.
 
 UI 실행에는 Python 3.11·`requirements-ui.txt`의 Pico2D가 필요하다. 현재 사용하는 [역할별 폰트와 이용 조건](data/fonts/README.md)은 저장소에 포함하므로 복제 후 별도 폰트 다운로드·시스템 설치 없이 프로젝트 파일을 직접 읽는다.
 
@@ -69,13 +76,15 @@ python Tools/unit_test_runner/run.py
 현재 실행 파일은 로컬 `.venv-capability-test` 환경을 사용한다.
 
 **저장소를 복제하는 것만으로 제작 도구를 바로 실행할 수는 없다.**
-표정 스튜디오와 Blender 생성기는 로컬 `data/portrait_editor/`의 원본·텍스처·생성 입력을 참조한다. 저장 프로젝트·레이아웃·영역 작업의 기본 위치는 툴 내부 `Tools/portrait_editor/workspace/`다. `output/`에는 재생성 가능한 출력·캐시·검증 결과만 둔다.
+표정 스튜디오와 Blender 생성기는 로컬 `data/source/portrait_editor/`의 원본·텍스처·생성 입력을 참조한다. 저장 프로젝트·레이아웃·영역 작업의 기본 위치는 툴 내부 `Tools/portrait_editor/workspace/`다. `output/`에는 재생성 가능한 출력·캐시·검증 결과만 둔다.
 스프라이트 시트 도구의 테스트 데이터도 별도로 준비해야 한다.
 
-툴마다 게임과 독립된 최소 시연 데이터를 제공하는 것을 요구사항으로 정했다. 공통 테스트 실행기는 두 화면 샘플을 제공한다. 기존 제작 도구의 샘플·시연 연결은 미구현이며, [툴 시연용 테스트 데이터 기준](docs/tool-usage/tool_demo_data.md)을 따른다.
+툴마다 게임과 독립된 최소 시연 데이터를 제공한다. 실행기·UI·모델링·에셋 렌더와 Unreal 교환의 샘플은 [시연 데이터 기준](docs/tool-usage/tool_demo_data.md)을 따른다. 샘플 존재, 일부 자동 확인, 실제 창 조작과 전체 제작 경로 완료를 구분한다. 신규 Unreal 리그에서 기존 출력까지의 독립 시연은 미검증이다.
 
 - [표정 스튜디오](docs/tool-usage/portrait_editor.md)
-- [Blender 원본 생성](docs/ai-asset-pipeline/blender_pipeline.md)
+- [Blender 모델링·기존 출력](docs/ai-asset-pipeline/blender_pipeline.md)
+- [Unreal 제작·프리렌더·2D 인계](docs/ai-asset-pipeline/unreal_pipeline.md)
+- [Unreal 도구와 기존 작업본](Tools/unreal_pipeline/README.md)
 
 ## Git 관리 범위
 

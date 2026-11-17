@@ -1,5 +1,7 @@
 # Pose Tool 제작과 Asset Tool 내부 편집
 
+> **과거 작업 기록.** 아래는 당시 도구 선택·작업·검사 결과를 보존한 기록이다. 현행 기준은 [Blender 모델링 → 리그 없는 형상 → Unreal 새 리그·애니메이션·프리렌더 → PNG 파츠+JSON → 툴 2D 조립·패킹](../ai-asset-pipeline/unreal_pipeline.md)과 [전체 동작 재생 검수](../ai-asset-pipeline/animation_workflow.md)다. Pose Tool·Blender 동작 제작·별도 KeyPose 사전 승인은 현행에서 제외한다. 과거 AI 통과 판정은 재확인 없이 정상 자세·현재 품질 승인의 근거로 사용하지 않는다.
+
 기록 ID: **2026-11-09-pose-tool-integration**. 현재 대화의 2026-11-09 KST 기준이다. 개별 발언 시각은 미확인이다. [[FDLOG_MISSING_TIME:2026-11-09-pose-tool-integration:scope]] 현재 대화의 “이거 기반으로 Pose Tool 하나”, “Asset Tool 화면 안에서 포즈 직접 편집”, “IK가 손바닥이 아니라 하박에 있는데”에서 시각을 보완한다.
 
 ## 1. 사용자가 제안한 것

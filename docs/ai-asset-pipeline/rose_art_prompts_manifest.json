@@ -1,7 +1,7 @@
 {
   "export_date": "2026-11-02",
   "prompt_source_count": 39,
-  "original_png": "C:\\Z_Workspace\\ComfyUI_windows_portable\\Anima-Style-Lab\\data\\images\\b00a7cf2f7.png",
+  "original_png": "C:\\Z_Workspace\\ComfyUI_windows_portable\\Anima-Style-Lab\\data\\runtime\\images\\b00a7cf2f7.png",
   "original_png_sha256": "56973a8472f6f511dddcb5506df836ebaaef99dceba4a65757684fc0e087e7f6",
   "original_png_recorded_settings": {
     "model": "anima_baseV10.safetensors",
@@ -256,7 +256,7 @@
   "assets": [
     {
       "source": "C:\\Z_Workspace\\ComfyUI_windows_portable\\Anima-Style-Lab\\output\\character_references\\white_hair_uniform_reference_v41_white_gloves_base_pose.png",
-      "destination_relative": "data/images/rose_references/rose_base_pose_v41.png",
+      "destination_relative": "data/references/characters/rose_references/rose_base_pose_v41.png",
       "sha256": "bf8da3af6c51e98ead36c86b4ac367bc115e22acb71064400b78ec708f4e6edc",
       "dimensions": [
         1106,
@@ -265,7 +265,7 @@
     },
     {
       "source": "C:\\Z_Workspace\\ComfyUI_windows_portable\\Anima-Style-Lab\\output\\character_references\\white_hair_uniform_reference_v42_A_pose_three_views.png",
-      "destination_relative": "data/images/rose_references/rose_A_pose_three_views_v42.png",
+      "destination_relative": "data/references/characters/rose_references/rose_A_pose_three_views_v42.png",
       "sha256": "d01c9375dcc8c2bf6f7741e85fee35d690c0077f5b3de6a4defd040cc5d070b8",
       "dimensions": [
         1536,
@@ -275,6 +275,6 @@
   ],
   "document": {
     "path": "docs/ai-asset-pipeline/rose_art_prompts.md",
-    "sha256": "81306c3012e66db9a33f203799cbfbbc1fe87bf448dbe1a2c6aeb74933e0d79b"
+    "sha256": "4b61c4a9da465242197b09df45d35549a046d1851fc64d1933420a35d34b8a62"
   }
 }

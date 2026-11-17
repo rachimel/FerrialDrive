@@ -19,7 +19,7 @@ A는 재생성 가능한 자료 위주, B는 이전 작업·원본 보관 여부
 | A7 | **Python 바이트코드 캐시** — `Tools/**/__pycache__/` | 12 | 0.28 | 소스에서 다시 생성. 가상환경과 vendor 원본은 포함하지 않음. |
 | B1 | **과거 Live2D 시험 자료** — 남은 `output/capability_test/` | 124 | 48.21 | 현행 원본은 옮겼지만 과거 모델·보정 전후 이미지·구버전 기록이 남음. 보관 여부 확인 후 판단. |
 | B2 | **발표자료 작업본·제작 스크립트** — 발표 폴더의 나머지 PPT·원본·JS·JSON | 134 | 40.78 | 수정 이력이나 유일한 제작 스크립트일 수 있음. 최종 보관본을 결정하기 전 전체 삭제 보류. |
-| B3 | **Blender 이전 저장본** — `data/portrait_editor/rig/portrait-refined-rig.blend1` | 1 | 1.50 | 현행 blend와 별개인 이전 저장본. 되돌릴 필요가 있는지 사용자가 판단. |
+| B3 | **Blender 이전 저장본** — `data/source/portrait_editor/rig/portrait-refined-rig.blend1` | 1 | 1.50 | 현행 blend와 별개인 이전 저장본. 되돌릴 필요가 있는지 사용자가 판단. |
 
 현재 output 합계는 약 **606.30 MiB**다. 도구 캐시를 다시 생성하면 수치는 변한다. 후보 분류는 중복 합산하지 않았으며, 아래 동일본 목록은 위 분류의 일부다.
 
@@ -36,11 +36,11 @@ SHA-256으로 동일함을 확인한 output 파일이다. 오른쪽 보관본을
 
 ## 현재 보존할 데이터
 
-- `data/portrait_editor/rig/`: 현행 리깅 JSON·텍스처·Blender 파일과 원본 모델 묶음. 위 B3만 별도 검토 후보다.
-- `data/portrait_editor/inputs/`: Blender 재생성 입력과 생성 기록.
-- `data/portrait_editor/workspace/`: 저장 프로젝트와 레이아웃.
-- `data/portrait_editor/exports/`: 기존 내보내기 보관본. 원본과 비교하기 전 제거 후보로 잡지 않았다.
-- `data/migrations/2026-11-03-output-assets/`: 이동 목록·해시와 프로젝트 원본 백업.
+- `data/source/portrait_editor/rig/`: 현행 리깅 JSON·텍스처·Blender 파일과 원본 모델 묶음. 위 B3만 별도 검토 후보다.
+- `data/source/portrait_editor/inputs/`: Blender 재생성 입력과 생성 기록.
+- `data/source/portrait_editor/workspace/`: 저장 프로젝트와 레이아웃.
+- `data/source/portrait_editor/exports/`: 기존 내보내기 보관본. 원본과 비교하기 전 제거 후보로 잡지 않았다.
+- `data/experiments/migrations/2026-11-03-output-assets/`: 이동 목록·해시와 프로젝트 원본 백업.
 - `Tools/`, 실행 가상환경, vendor의 제3자 소스·라이선스, Git 기록과 사용자가 재배치한 문서는 유지한다.
 
 ## 이번 이동

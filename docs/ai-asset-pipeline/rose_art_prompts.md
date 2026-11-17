@@ -6,8 +6,8 @@
 
 ## 현재 기준 레퍼런스
 
-- **기본 포즈 v41** — 로컬 `data/images/rose_references/rose_base_pose_v41.png`: 흰 장갑, 팔짱 포즈. 오른손 장갑 끝은 캐릭터 왼팔 아래에서 조금 보이며, 소매 버튼은 하나다. 코는 이전 버전보다 작고 낮게 조정했다.
-- **A-pose 삼면도 v42** — 로컬 `data/images/rose_references/rose_A_pose_three_views_v42.png`: 정면·측면·후면의 비율과 의상 구조를 확인하는 초안이다. 원본에 보이지 않는 후면 구조는 추정했으며, 3D 투영 정합성을 계측한 자료는 아니다.
+- **기본 포즈 v41** — 로컬 `data/references/characters/rose_references/rose_base_pose_v41.png`: 흰 장갑, 팔짱 포즈. 오른손 장갑 끝은 캐릭터 왼팔 아래에서 조금 보이며, 소매 버튼은 하나다. 코는 이전 버전보다 작고 낮게 조정했다.
+- **A-pose 삼면도 v42** — 로컬 `data/references/characters/rose_references/rose_A_pose_three_views_v42.png`: 정면·측면·후면의 비율과 의상 구조를 확인하는 초안이다. 원본에 보이지 않는 후면 구조는 추정했으며, 3D 투영 정합성을 계측한 자료는 아니다.
 
 현재 확정 방향은 백발 단발, 차분한 핑크 홍채와 작은 로즈색 동공, 부드러운 윗눈선, 작고 낮은 코와 입, 창백한 중성 피부와 연하게 블렌딩한 그림자, 검정/붉은 제복, 흰 장갑이다. 머리카락·장갑의 기름 같은 광택과 불필요한 잔주름은 줄인다.
 
@@ -15,7 +15,7 @@
 
 ## 최초 생성 프롬프트: 원본 PNG 메타데이터
 
-출처: `Anima-Style-Lab/data/images/b00a7cf2f7.png` 내부의 ComfyUI `prompt` 메타데이터. 아래 값은 파일에 기록된 값이며 생성 실행 로그를 재검증한 결과는 아니다. 이후 사용한 다른 워크플로우의 설정과 구분한다.
+출처: `Anima-Style-Lab/data/runtime/images/b00a7cf2f7.png` 내부의 ComfyUI `prompt` 메타데이터. 아래 값은 파일에 기록된 값이며 생성 실행 로그를 재검증한 결과는 아니다. 이후 사용한 다른 워크플로우의 설정과 구분한다.
 
 ### 긍정 프롬프트
 
@@ -58,7 +58,7 @@ worst quality, low quality, score_1, score_2, score_3, artist name, blurry, jpeg
 ````text
 # Character reference editing prompts
 
-Built-in GPT image editing. Original: Anima-Style-Lab/data/images/b00a7cf2f7.png
+Built-in GPT image editing. Original: Anima-Style-Lab/data/runtime/images/b00a7cf2f7.png
 
 ## Body correction
 
