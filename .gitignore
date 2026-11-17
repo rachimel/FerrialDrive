@@ -19,6 +19,7 @@ dist/
 !.env.example
 .idea/
 .vscode/
+/.codex/
 *.lnk
 Thumbs.db
 Desktop.ini
@@ -31,14 +32,10 @@ Desktop.ini
 **/heroine_references/
 **/rose_references/
 /data/*
+!/data/README.md
 !/data/fonts/
 /data/fonts/*
 !/data/fonts/README.md
-!/data/fonts/SUITE-otf/
-/data/fonts/SUITE-otf/*
-!/data/fonts/SUITE-otf/SUITE-Light.otf
-!/data/fonts/SUITE-otf/SUITE-Regular.otf
-!/data/fonts/SUITE-otf/LICENSE
 !/data/fonts/s_core_dream/
 !/data/fonts/Cafe24Ohsquare-v2.0/
 /data/fonts/Cafe24Ohsquare-v2.0/*
@@ -52,7 +49,42 @@ Desktop.ini
 /data/fonts/학교안심 운동장/*
 !/data/fonts/학교안심 운동장/HakgyoansimUndongjangOTFL.otf
 !/data/fonts/학교안심 운동장/LICENSE.txt
+!/data/fonts/gamwulchifreegothic/
+/data/fonts/gamwulchifreegothic/*
+!/data/fonts/gamwulchifreegothic/GamwulchiFreeGothic.otf
+!/data/fonts/gamwulchifreegothic/gamwulchifg.pdf
+!/data/fonts/gamwulchifreegothic/SOURCE.md
+!/data/fonts/Paperlogy-1.001/
+/data/fonts/Paperlogy-1.001/*
+!/data/fonts/Paperlogy-1.001/Paperlogy-7Bold.ttf
+!/data/fonts/Paperlogy-1.001/LICENSE.txt
+!/data/fonts/SUITE-otf/
+/data/fonts/SUITE-otf/*
+!/data/fonts/SUITE-otf/SUITE-Bold.otf
+!/data/fonts/SUITE-otf/SUITE-Light.otf
+!/data/fonts/SUITE-otf/SUITE-Regular.otf
+!/data/fonts/SUITE-otf/LICENSE
+!/data/fonts/ferrial_hud_square/
+/data/fonts/ferrial_hud_square/*
+!/data/fonts/ferrial_hud_square/FerrialHudSquare-Regular.otf
+!/data/fonts/ferrial_hud_square/LICENSE.txt
+!/data/fonts/ferrial_hud_square/manifest.json
+!/data/fonts/ferrial_hud_square/README.md
+!/data/fonts/ferrial_hud_square_wide/
+/data/fonts/ferrial_hud_square_wide/*
+!/data/fonts/ferrial_hud_square_wide/FerrialHudSquareWide-Regular.otf
+!/data/fonts/ferrial_hud_square_wide/LICENSE.txt
+!/data/fonts/ferrial_hud_square_wide/manifest.json
+!/data/fonts/ferrial_hud_square_wide/README.md
 /output/
+/samples/sword_movement/generated/
+/samples/sound_effects/generated/
+# 자동화의 로컬 실행 파일·의존성·보존 입력
+/automate/bin/
+/automate/runtime/
+/automate/packages/
+/automate/workspace/
+/automate/*.local.json
 # 툴의 로컬 저장 프로젝트·레이아웃·영역 작업
 /Tools/*/workspace/
 /Tools/blender_pipeline/99_Archives/
