@@ -1,0 +1,9 @@
+{
+  "bones": [
+    {"name": "pelvis", "parent": "Root", "position_cm": [0, 0, 0]},
+    {"name": "arm_upper_r", "parent": "pelvis", "position_cm": [0, 0, 0]},
+    {"name": "arm_lower_r", "parent": "arm_upper_r", "position_cm": [3, 4, 0]},
+    {"name": "hand_r", "parent": "arm_lower_r", "position_cm": [6, 0, 0]},
+    {"name": "weapon_sword", "parent": "pelvis", "position_cm": [6, 0, 0]}
+  ]
+}

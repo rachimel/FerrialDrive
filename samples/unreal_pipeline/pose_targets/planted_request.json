@@ -1,0 +1,75 @@
+{
+  "rig_plan": "samples/unreal_pipeline/pose_targets/planted_rig.json",
+  "idle_request": "samples/unreal_pipeline/pose_targets/idle.json",
+  "idle_evaluation": "samples/unreal_pipeline/pose_targets/evaluation.json",
+  "blade_axis_local": [
+    1,
+    0,
+    0
+  ],
+  "blade_normal_local": [
+    0,
+    0,
+    1
+  ],
+  "chains": [
+    {
+      "bones": [
+        "upper",
+        "lower",
+        "tip"
+      ]
+    }
+  ],
+  "frame_count": 4,
+  "targets": [
+    {
+      "frame": 0,
+      "tip": [
+        6,
+        0,
+        0
+      ],
+      "tip_rotation_deg": [
+        0,
+        0,
+        0
+      ],
+      "tip_contact_cm": [
+        7,
+        0,
+        0
+      ],
+      "tip_contact_local_cm": [
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "frame": 4,
+      "tip": [
+        6,
+        0,
+        0
+      ],
+      "tip_rotation_deg": [
+        -15,
+        30,
+        0
+      ],
+      "tip_contact_cm": [
+        7,
+        0,
+        0
+      ],
+      "tip_contact_local_cm": [
+        1,
+        0,
+        0
+      ]
+    }
+  ],
+  "output": "automate/workspace/pose_targets_planted_demo/create.json",
+  "request": {}
+}

@@ -1,0 +1,29 @@
+{
+  "asset_id": "unreal_parts_demo",
+  "map": "/Game/PrerenderDemo2/MAP_Demo",
+  "sequence": "/Game/PrerenderDemo2/LS_Demo",
+  "size": [
+    128,
+    128
+  ],
+  "pivot": [
+    64,
+    20
+  ],
+  "frame_count": 2,
+  "clip": "equipped_idle/s",
+  "layers": {
+    "body": {
+      "anchor": "root"
+    },
+    "weapon": {
+      "anchor": "root"
+    }
+  },
+  "order": [
+    "body",
+    "weapon"
+  ],
+  "output": "output/unreal_prerender_demo/validated",
+  "quit_when_finished": true
+}

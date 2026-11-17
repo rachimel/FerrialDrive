@@ -1,0 +1,35 @@
+{
+  "scene_template": {
+    "size": [
+      96,
+      96
+    ]
+  },
+  "cameras": {
+    "s": {
+      "position": [
+        100,
+        0,
+        30
+      ],
+      "target": [
+        0,
+        0,
+        10
+      ],
+      "width_cm": 100
+    }
+  },
+  "clips": [
+    {
+      "name": "move",
+      "frames": 2,
+      "loop": true
+    },
+    {
+      "name": "strike",
+      "frames": 2,
+      "loop": false
+    }
+  ]
+}

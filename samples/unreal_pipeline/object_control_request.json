@@ -1,0 +1,5 @@
+{
+  "operation": "create_sample",
+  "include_prop": true,
+  "output": "output/unreal_object_control_sample"
+}

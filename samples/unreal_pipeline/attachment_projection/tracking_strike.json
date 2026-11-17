@@ -1,0 +1,141 @@
+{
+  "space": "skeletal_component_cm",
+  "source_fps": 12,
+  "sample_hz": 12,
+  "duration_seconds": 0.16666666666666666,
+  "samples": [
+    {
+      "time_seconds": 0.0,
+      "extra_bones": {
+        "foot": {
+          "position_cm": [
+            0,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        "gun": {
+          "position_cm": [
+            0,
+            5,
+            20
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        "sword": {
+          "position_cm": [
+            0,
+            -5,
+            20
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ]
+        }
+      }
+    },
+    {
+      "time_seconds": 0.08333333333333333,
+      "extra_bones": {
+        "foot": {
+          "position_cm": [
+            0,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        "gun": {
+          "position_cm": [
+            0,
+            5,
+            20
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        "sword": {
+          "position_cm": [
+            0,
+            -5,
+            20
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ]
+        }
+      }
+    },
+    {
+      "time_seconds": 0.16666666666666666,
+      "extra_bones": {
+        "foot": {
+          "position_cm": [
+            0,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        "gun": {
+          "position_cm": [
+            0,
+            5,
+            20
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        "sword": {
+          "position_cm": [
+            0,
+            -5,
+            20
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ]
+        }
+      }
+    }
+  ],
+  "provenance": "manual_public_numeric_sample_not_native_capture"
+}

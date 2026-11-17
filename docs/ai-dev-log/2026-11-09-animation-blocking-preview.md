@@ -1,5 +1,7 @@
 # 기본 무기 동작 초안과 HTML 미리보기
 
+> **과거 작업 기록.** 아래는 당시 도구 선택·작업·검사 결과를 보존한 기록이다. 현행 기준은 [Blender 모델링 → 리그 없는 형상 → Unreal 새 리그·애니메이션·프리렌더 → PNG 파츠+JSON → 툴 2D 조립·패킹](../ai-asset-pipeline/unreal_pipeline.md)과 [전체 동작 재생 검수](../ai-asset-pipeline/animation_workflow.md)다. Pose Tool·Blender 동작 제작·별도 KeyPose 사전 승인은 현행에서 제외한다. 과거 AI 통과 판정은 재확인 없이 정상 자세·현재 품질 승인의 근거로 사용하지 않는다.
+
 기록일: 2026-11-09. 개별 발언 시각은 [[FDLOG_MISSING_TIME:animation-blocking-preview:scope]]. 근거는 현재 대화의 “preview html”, “다른 각도에서도”, “손가락이 앞쪽”, “살짝만 숙여”다.
 
 ## 1. 사용자가 제안한 것

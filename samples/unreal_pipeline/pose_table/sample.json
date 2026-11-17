@@ -1,0 +1,20 @@
+{
+    "plan": {
+        "bones": [
+            {"name": "waist", "parent": "Root", "position_cm": [1, 0, 5]},
+            {"name": "hand_r", "parent": "waist", "position_cm": [3, 0, 5]},
+            {"name": "weapon_sword", "parent": "Root", "position_cm": [4, 0, 5]},
+            {"name": "foot_l", "parent": "Root", "position_cm": [1, 0, 0]}
+        ]
+    },
+    "bones": {
+        "Root": {"position_cm": [0, 0, 0], "rotation_xyzw": [0, 0, 0, 1]},
+        "waist": {"position_cm": [1, 0, 5], "rotation_xyzw": [0, 0, 0, 1]},
+        "hand_r": {"position_cm": [3, 0, 5], "rotation_xyzw": [0, 0, 0, 1]},
+        "weapon_sword": {"position_cm": [4, 0, 5], "rotation_xyzw": [0, 0, 0, 1]},
+        "foot_l": {"position_cm": [1, 0, 0], "rotation_xyzw": [0, 0, 0, 1]}
+    },
+    "attachments": [{"bone": "weapon_sword", "driver": "hand_r"}],
+    "upper_yaw_degrees": 90,
+    "lower_yaw_degrees": -90
+}

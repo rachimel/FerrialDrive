@@ -1,0 +1,25 @@
+{
+  "rig_plan": "samples/unreal_pipeline/pose_targets/rig.json",
+  "idle_request": "samples/unreal_pipeline/pose_targets/idle.json",
+  "idle_evaluation": "samples/unreal_pipeline/pose_targets/evaluation.json",
+  "blade_axis_local": [1, 0, 0],
+  "blade_normal_local": [0, 0, 1],
+  "chains": [{"bones": ["arm_upper_r", "arm_lower_r", "hand_r"]}],
+  "frame_count": 4,
+  "targets": [
+    {"frame": 0, "hand_r": [6, 0, 0], "weapon_direction": [1, 0, 0], "weapon_normal": [0, 0, 1]},
+    {"frame": 2, "hand_r": [0, 6, 0], "hand_r_pole": [-10, 0, 0], "weapon_direction": [0, 1, 0], "weapon_normal": [0, 0, 1]},
+    {"frame": 4, "hand_r": [6, 0, 0], "weapon_direction": [1, 0, 0], "weapon_normal": [0, 0, 1]}
+  ],
+  "output": "automate/workspace/pose_targets_demo/create.json",
+  "request": {
+    "operation": "animation_clip",
+    "source_mesh": "/Game/FDriveDemo/SK_Demo",
+    "animation_asset": "/Game/MechLab/PoseTargetsDemo/A_Demo",
+    "frame_count": 4,
+    "fps": 12,
+    "loop": true,
+    "report": "automate/workspace/pose_targets_demo/native_report.json",
+    "attachments": [{"bone": "weapon_sword", "driver": "hand_r", "offset_cm": [0, 0, 0], "local_rotation_quat": [0, 0, 0, 1]}]
+  }
+}

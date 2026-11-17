@@ -1,0 +1,14 @@
+{
+  "asset_id": "unreal_shadow_demo",
+  "map": "/Game/PrerenderShadowDemo/MAP_Demo",
+  "sequence": "/Game/PrerenderShadowDemo/LS_Demo",
+  "size": [128, 128],
+  "pivot": [64, 44],
+  "frame_count": 2,
+  "clip": "equipped_idle/s",
+  "layers": {"body": {"anchor": "root"}, "weapon": {"anchor": "root"}},
+  "order": ["body", "weapon"],
+  "shadow": {"receiver_layer": "shadow_receiver", "part_id": "shadow"},
+  "output": "output/unreal_shadow_demo",
+  "quit_when_finished": true
+}

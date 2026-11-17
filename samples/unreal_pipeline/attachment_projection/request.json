@@ -1,0 +1,53 @@
+{
+  "output": "output/unreal_pipeline/attachment_demo",
+  "sources": [],
+  "profiles": [
+    {
+      "profile": "samples/unreal_pipeline/attachment_projection/profile.json",
+      "tracking_directory": "samples/unreal_pipeline/attachment_projection"
+    }
+  ],
+  "aliases": {
+    "move": "run_loop",
+    "strike": "combo_01"
+  },
+  "ground_anchors": {
+    "sole_l": {
+      "bone": "foot",
+      "local_cm": [
+        0,
+        0,
+        0
+      ]
+    }
+  },
+  "muzzle": {
+    "bone": "gun",
+    "local_cm": [
+      10,
+      0,
+      0
+    ]
+  },
+  "blade_clips": [
+    "strike"
+  ],
+  "blade": {
+    "root": {
+      "bone": "sword",
+      "local_cm": [
+        0,
+        0,
+        0
+      ]
+    },
+    "tip": {
+      "bone": "sword",
+      "local_cm": [
+        20,
+        0,
+        0
+      ]
+    }
+  }
+}

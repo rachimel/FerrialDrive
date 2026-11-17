@@ -1,5 +1,7 @@
 # 키포즈 검수 후 사이 동작 연결
 
+> **과거 작업 기록.** 아래는 당시 도구 선택·작업·검사 결과를 보존한 기록이다. 현행 기준은 [Blender 모델링 → 리그 없는 형상 → Unreal 새 리그·애니메이션·프리렌더 → PNG 파츠+JSON → 툴 2D 조립·패킹](../ai-asset-pipeline/unreal_pipeline.md)과 [전체 동작 재생 검수](../ai-asset-pipeline/animation_workflow.md)다. Pose Tool·Blender 동작 제작·별도 KeyPose 사전 승인은 현행에서 제외한다. 과거 AI 통과 판정은 재확인 없이 정상 자세·현재 품질 승인의 근거로 사용하지 않는다.
+
 - **기록 ID:** `animation-keypose-review-workflow`
 - 대화 범위: 2026-11-09 현재 대화. 개별 발언의 정확한 시각은 확인하지 못했다. [[FDLOG_MISSING_TIME:animation-keypose-review-workflow:scope]] 현재 대화에서 아래 짧은 발췌의 발언 시각을 확인한다.
 - 기록 작성 시각: 2026-11-09 23:03:49 KST.
