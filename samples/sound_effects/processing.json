@@ -1,0 +1,127 @@
+{
+  "step_soil_1": {"source":"steps/mud02.ogg", "duration_seconds":0.24, "lowpass_hz":4200},
+  "step_soil_2": {"source":"steps/gravel.ogg", "window_seconds":0.23, "duration_seconds":0.25, "lowpass_hz":4200},
+  "step_weight": {"source":"mechanical/lightclunk2.wav", "duration_seconds":0.4, "highpass_hz":30, "lowpass_hz":650, "drive":1.7},
+  "ski_slide": {
+    "processor":"continuous_friction",
+    "sources":["snow/SnowWalk/SnowWalk.ogg","snow/SnowWalk/SnowWalk2.ogg"],
+    "duration_seconds":6,"grain_seconds":0.028,"hop_seconds":0.0035,
+    "highpass_hz":750,"lowpass_hz":5200,"seed":91,"loop":true
+  },
+  "steam_hiss": {
+    "processor":"continuous_friction",
+    "sources":["whoosh/whoosh2_0.wav"],
+    "duration_seconds":6,"grain_seconds":0.018,"hop_seconds":0.0025,
+    "highpass_hz":5200,"lowpass_hz":12500,"seed":97,"loop":true
+  },
+  "pebble_1": {"source":"steps/gravel.ogg", "window_seconds":0.09, "duration_seconds":0.12, "highpass_hz":1600},
+  "pebble_2": {"source":"steps/stone01.ogg", "window_seconds":0.1, "duration_seconds":0.11, "highpass_hz":1800},
+  "swing_air": {"source":"whoosh/whoosh2_0.wav", "window_seconds":0.4, "duration_seconds":0.26, "highpass_hz":180, "lowpass_hz":7600},
+  "swing_thrust": {"source":"whoosh/whoosh2_0.wav", "window_seconds":0.25, "duration_seconds":0.19, "highpass_hz":450, "lowpass_hz":7000},
+  "metal_hit_1": {"source":"mechanical/clank1.wav", "duration_seconds":0.44, "highpass_hz":90, "lowpass_hz":6600},
+  "metal_hit_2": {"source":"mechanical/lightclunk1.wav", "duration_seconds":0.3, "highpass_hz":110, "lowpass_hz":6000},
+  "boost_air": {"source":"whoosh/whoosh2_0.wav", "window_seconds":0.22, "duration_seconds":0.16, "highpass_hz":850, "lowpass_hz":9000},
+  "boost_jet": {
+    "processor":"layered_burst", "sources":["jet_turbine/205581_71257-hq.mp3","mechanical/lightclunk2.wav","whoosh/whoosh2_0.wav"],
+    "duration_seconds":0.62,"peak":0.82,
+    "layers":[
+      {"source_index":1,"source_start_seconds":0.055,"source_end_seconds":0.23,
+       "duration_seconds":0.18,"offset_seconds":0,"gain":0.85,
+       "highpass_hz":55,"lowpass_hz":1050,
+       "attack_seconds":0.003,"hold_seconds":0.012,"decay_seconds":0.045,"fade_out_seconds":0.028},
+      {"source_index":2,"source_start_seconds":4.25,"source_end_seconds":4.6,
+       "duration_seconds":0.12,"offset_seconds":0,"gain":0.48,
+       "highpass_hz":600,"lowpass_hz":6500,
+       "attack_seconds":0.003,"hold_seconds":0.012,"decay_seconds":0.025,"fade_out_seconds":0.025},
+      {"source_index":0,"source_start_seconds":4.8,"source_end_seconds":5.48,
+       "duration_seconds":0.58,"offset_seconds":0.015,"gain":0.95,
+       "rate_start":0.82,"rate_end":1.28,
+       "highpass_hz":110,"lowpass_hz":6800,
+       "attack_seconds":0.012,"hold_seconds":0.10,"decay_seconds":0.14,"fade_out_seconds":0.16}
+    ],
+    "reverb":{"duration_seconds":0.18,"pre_delay_seconds":0.018,"taps":24,"wet":0.12,
+              "damping_hz":4800,"decay_exponent":4.5,"seed":211}
+  },
+  "dash_jet": {"source":"jet/534856_7108357-hq.mp3", "window_seconds":4,
+    "duration_seconds":4,"highpass_hz":650,"lowpass_hz":7800,"loop":true},
+  "dash_ignite": {
+    "processor":"layered_burst", "sources":["jet/534856_7108357-hq.mp3"],
+    "duration_seconds":0.34,"peak":0.6,
+    "layers":[
+      {"source_index":0,"source_start_seconds":2.0,"source_end_seconds":2.45,
+       "duration_seconds":0.32,"gain":1,"rate_start":0.65,"rate_end":1.2,
+       "highpass_hz":650,"lowpass_hz":6500,
+       "attack_seconds":0.015,"hold_seconds":0.17,"decay_seconds":0.25,"fade_out_seconds":0.06}
+    ]
+  },
+  "thrust_wind": {
+    "processor":"layered_burst", "sources":["whoosh/whoosh2_0.wav"],
+    "duration_seconds":0.42,"peak":0.58,
+    "layers":[
+      {"source_index":0,"source_start_seconds":4.25,"source_end_seconds":5.03,
+       "duration_seconds":0.42,"gain":1,"highpass_hz":160,"lowpass_hz":3400,
+       "attack_seconds":0.045,"hold_seconds":0.10,"decay_seconds":0.12,"fade_out_seconds":0.10}
+    ]
+  },
+  "blade_stop": {
+    "processor":"layered_burst", "sources":["mechanical/lightclunk1.wav","whoosh/whoosh2_0.wav"],
+    "duration_seconds":0.16,"peak":0.63,
+    "layers":[
+      {"source_index":0,"source_start_seconds":0,"source_end_seconds":0.16,
+       "duration_seconds":0.13,"gain":1,"highpass_hz":120,"lowpass_hz":2800,
+       "attack_seconds":0.002,"hold_seconds":0.006,"decay_seconds":0.028,"fade_out_seconds":0.02},
+      {"source_index":1,"source_start_seconds":4.25,"source_end_seconds":4.6,
+       "duration_seconds":0.10,"gain":0.45,"highpass_hz":1300,"lowpass_hz":6500,
+       "attack_seconds":0.002,"hold_seconds":0.008,"decay_seconds":0.024,"fade_out_seconds":0.02}
+    ]
+  },
+  "blade_metal_scrape": {"source":"metal_scrape/743259_71257-hq.mp3",
+    "duration_seconds":0.19,"highpass_hz":650,"lowpass_hz":6500},
+  "blade_pipe": {
+    "processor":"layered_burst", "sources":["metal_pipe/406556_5923045-hq.mp3"],
+    "duration_seconds":0.5,"peak":0.65,
+    "layers":[
+      {"source_index":0,"source_start_seconds":0,"source_end_seconds":0.62,
+       "duration_seconds":0.5,"gain":1,"highpass_hz":350,"lowpass_hz":11000,
+       "attack_seconds":0.002,"hold_seconds":0.10,"decay_seconds":0.24,"fade_out_seconds":0.08}
+    ],
+    "reverb":{"duration_seconds":0.55,"pre_delay_seconds":0.012,"taps":40,"wet":0.45,
+              "damping_hz":8500,"decay_exponent":3.6,"seed":239}
+  },
+  "cut_puff": {
+    "processor":"layered_burst", "sources":["whoosh/whoosh2_0.wav"],
+    "duration_seconds":0.14,"peak":0.65,
+    "layers":[
+      {"source_index":0,"source_start_seconds":4.25,"source_end_seconds":4.6,
+       "duration_seconds":0.14,"gain":1,"highpass_hz":500,"lowpass_hz":6500,
+       "attack_seconds":0.002,"hold_seconds":0.014,"decay_seconds":0.04,"fade_out_seconds":0.025}
+    ]
+  },
+  "boost_impulse": {
+    "processor":"layered_burst",
+    "sources":["whoosh/whoosh2_0.wav","mechanical/lightclunk2.wav","mechanical/typewriter.wav"],
+    "duration_seconds":0.38,"peak":0.74,
+    "layers":[
+      {"source_index":2,"source_start_seconds":0,"source_end_seconds":0.055,
+       "duration_seconds":0.038,"offset_seconds":0,"gain":0.2,
+       "highpass_hz":850,"lowpass_hz":4700,
+       "attack_seconds":0.002,"hold_seconds":0.004,"decay_seconds":0.015,"fade_out_seconds":0.012},
+      {"source_index":1,"source_start_seconds":0.055,"source_end_seconds":0.23,
+       "duration_seconds":0.15,"offset_seconds":0.006,"gain":0.5,
+       "highpass_hz":90,"lowpass_hz":1250,
+       "attack_seconds":0.004,"hold_seconds":0.015,"decay_seconds":0.038,"fade_out_seconds":0.03},
+      {"source_index":0,"source_start_seconds":4.25,"source_end_seconds":4.92,
+       "duration_seconds":0.3,"offset_seconds":0,"gain":1.0,
+       "highpass_hz":280,"lowpass_hz":6200,"focus_start_hz":2800,"focus_end_hz":900,"focus_mix":0.6,
+       "attack_seconds":0.008,"hold_seconds":0.05,"decay_seconds":0.095,"fade_out_seconds":0.06},
+      {"source_index":0,"source_start_seconds":4.42,"source_end_seconds":5.03,
+       "duration_seconds":0.22,"offset_seconds":0.145,"gain":0.2,
+       "highpass_hz":1100,"lowpass_hz":5100,"focus_start_hz":1800,"focus_end_hz":650,"focus_mix":0.4,
+       "attack_seconds":0.018,"hold_seconds":0.025,"decay_seconds":0.055,"fade_out_seconds":0.07}
+    ],
+    "reverb":{"duration_seconds":0.5,"pre_delay_seconds":0.018,"taps":56,"wet":0.48,
+              "damping_hz":3600,"decay_exponent":4.2,"seed":193}
+  },
+  "energy_swing": {"source":"whoosh/whoosh2_0.wav", "window_seconds":0.23, "duration_seconds":0.22, "highpass_hz":1500, "lowpass_hz":9000, "envelope":true},
+  "energy_hit": {"source":"whoosh/whoosh2_0.wav", "window_seconds":0.16, "duration_seconds":0.12, "highpass_hz":2500, "lowpass_hz":9500, "envelope":true}
+}

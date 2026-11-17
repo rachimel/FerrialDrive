@@ -1,0 +1,44 @@
+{
+  "heavy_whoosh_01": {
+    "processor":"layered_burst", "sources":["heavy_whoosh/730774_10996917-hq.mp3"],
+    "duration_seconds":0.29,"peak":0.64,
+    "layers":[{"source_index":0,"source_start_seconds":0,"source_end_seconds":0.30,
+      "duration_seconds":0.29,"gain":1,"highpass_hz":65,"lowpass_hz":7600,
+      "attack_seconds":0.004,"hold_seconds":0.16,"decay_seconds":0.18,"fade_out_seconds":0.045}]
+  },
+  "heavy_whoosh_02": {
+    "processor":"layered_burst", "sources":["heavy_whoosh/730774_10996917-hq.mp3"],
+    "duration_seconds":0.265,"peak":0.64,
+    "layers":[{"source_index":0,"source_start_seconds":0.01,"source_end_seconds":0.29,
+      "duration_seconds":0.265,"gain":1,"highpass_hz":80,"lowpass_hz":9000,
+      "attack_seconds":0.003,"hold_seconds":0.14,"decay_seconds":0.15,"fade_out_seconds":0.04}]
+  },
+  "heavy_whoosh_03": {
+    "processor":"layered_burst", "sources":["heavy_whoosh/730774_10996917-hq.mp3"],
+    "duration_seconds":0.245,"peak":0.64,
+    "layers":[{"source_index":0,"source_start_seconds":0,"source_end_seconds":0.27,
+      "duration_seconds":0.245,"gain":1,"highpass_hz":95,"lowpass_hz":8500,
+      "attack_seconds":0.003,"hold_seconds":0.12,"decay_seconds":0.14,"fade_out_seconds":0.035}]
+  },
+  "heavy_whoosh_04": {
+    "processor":"layered_burst", "sources":["heavy_whoosh/730774_10996917-hq.mp3"],
+    "duration_seconds":0.28,"peak":0.64,
+    "layers":[{"source_index":0,"source_start_seconds":0,"source_end_seconds":0.30,
+      "duration_seconds":0.28,"gain":1,"highpass_hz":70,"lowpass_hz":7800,
+      "attack_seconds":0.004,"hold_seconds":0.15,"decay_seconds":0.17,"fade_out_seconds":0.045}]
+  },
+  "heavy_whoosh_05": {
+    "processor":"layered_burst", "sources":["heavy_whoosh/730774_10996917-hq.mp3"],
+    "duration_seconds":0.23,"peak":0.60,
+    "layers":[{"source_index":0,"source_start_seconds":0,"source_end_seconds":0.26,
+      "duration_seconds":0.23,"gain":1,"highpass_hz":130,"lowpass_hz":7000,
+      "attack_seconds":0.003,"hold_seconds":0.10,"decay_seconds":0.14,"fade_out_seconds":0.035}]
+  },
+  "heavy_whoosh_06": {
+    "processor":"layered_burst", "sources":["heavy_whoosh/730774_10996917-hq.mp3"],
+    "duration_seconds":0.33,"peak":0.67,
+    "layers":[{"source_index":0,"source_start_seconds":0,"source_end_seconds":0.32,
+      "duration_seconds":0.33,"gain":1,"highpass_hz":55,"lowpass_hz":6200,
+      "attack_seconds":0.005,"hold_seconds":0.17,"decay_seconds":0.21,"fade_out_seconds":0.055}]
+  }
+}

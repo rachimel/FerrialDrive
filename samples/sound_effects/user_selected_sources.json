@@ -1,0 +1,63 @@
+{
+  "status": "카운터·필살기·타수별 OGG·가공 부스트 연결. 부스트 출처와 음색·동기화의 최종 사용자 승인 전.",
+  "license": "Pixabay Content License. CC0 기본 음원과 별도로 관리한다.",
+  "license_url": "https://pixabay.com/service/license-summary/",
+  "sounds": {
+    "hit_metal": {
+      "file": "floraphonic-metal-hit-10-193281.mp3",
+      "license": "미확인 — 사용자 지정 원본",
+      "license_url": null,
+      "source_status": "사용자가 추가한 metal-hit MP3로 기존 금속 피격음 교체를 요청. 파일명만 확인했으며 개별 출처·이용 조건은 확인하지 않았다.",
+      "selection_status": "원본 직접 연결 시험. 실제 청취·최종 음색 확인 전."
+    },
+    "gun_explosion": {
+      "file": "energy_explosion(GEN_3).mp3",
+      "license": "미확인 — 사용자 지정 원본",
+      "license_url": null,
+      "source_status": "사용자가 SMG 폴더의 energy_explosion을 지정하고 어택을 앞당겨 Overdrive 폭발 시 재생하도록 요청. 원본 생성기·개별 이용 조건은 확인하지 않았다.",
+      "selection_status": "앞 0.05초 제외·게임 폭발 시점 연결. 실제 청취와 사용자 음색 확인 전."
+    },
+    "gun_fire": {
+      "file": "futuristic_gun(GEN_3).mp3",
+      "generator": "VARCO AI",
+      "selection_status": "버스트에서 짧은 단발 구간 4개로 분리한 시험. 사용자 음색 확인 전.",
+      "license": "미확인 — 사용자 지정 원본",
+      "license_url": null,
+      "source_status": "사용자가 GEN_3를 버스트로 정정하고 짧은 샘플 분리·무작위 재생을 요청."
+    },
+    "gun_empty": {
+      "file": "moniker_subriquet-gunshot_smg_loop_end-203470.mp3",
+      "license": "미확인 — 사용자 지정 원본",
+      "license_url": null,
+      "source_status": "사용자가 빈 탄창 틱 소리로 사용함을 확인. 원본 파일명만 확인."
+    },
+    "boost": {
+      "file": "jet_boost.ogg",
+      "license": "미확인 — 사용자 제공 편집 원본",
+      "license_url": null,
+      "source_status": "사용자 제작 jet_boost.ogg의 원본을 보존하고 어택 지연 개선을 위해 앞 0.29초만 제외. 개별 원본 출처 확인 대기."
+    },
+    "counter": {
+      "content_id": "241729",
+      "author": "u_fe12rqkbth",
+      "author_url": "https://pixabay.com/ko/users/u_fe12rqkbth-46044709/",
+      "user_attribution": "Sound Effect by u_fe12rqkbth from Pixabay",
+      "provided_link": "https://pixabay.com/sound-effects//?utm_source=link-attribution&utm_medium=referral&utm_campaign=music&utm_content=241729"
+    },
+    "ultimate": {
+      "content_id": "40520",
+      "author": "freesound_community",
+      "author_url": "https://pixabay.com/ko/users/freesound_community-46691455/",
+      "user_attribution": "Sound Effect by freesound_community from Pixabay",
+      "provided_link": "https://pixabay.com//?utm_source=link-attribution&utm_medium=referral&utm_campaign=music&utm_content=40520"
+    },
+    "swing": {
+      "attack_files": ["sword_combo_1.ogg", "sword_combo_2.ogg", "sword_combo_3.ogg", "sword_combo_4.ogg"],
+      "content_id": "7174",
+      "author": "freesound_community",
+      "author_url": "https://pixabay.com/ko/users/freesound_community-46691455/",
+      "user_attribution": "Sound Effect by freesound_community from Pixabay",
+      "provided_link": "https://pixabay.com//?utm_source=link-attribution&utm_medium=referral&utm_campaign=music&utm_content=7174"
+    }
+  }
+}

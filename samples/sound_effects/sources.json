@@ -1,0 +1,18 @@
+[
+  {"id":"metal_pipe", "author":"Anthousai", "page":"https://freesound.org/people/Anthousai/sounds/406556/", "license":"CC0-1.0",
+   "file_suffix":".mp3", "representation":"public_hq_preview"},
+  {"id":"metal_scrape", "author":"qubodup", "page":"https://freesound.org/people/qubodup/sounds/743259/", "license":"CC0-1.0",
+   "file_suffix":".mp3", "representation":"public_hq_preview",
+   "download_urls":["https://cdn.freesound.org/previews/743/743259_71257-hq.mp3"]},
+  {"id":"snow", "author":"IgnasD", "page":"https://opengameart.org/content/walking-on-snow-sound", "license":"CC0-1.0", "file_suffix":".zip"},
+  {"id":"steps", "author":"TinyWorlds / pdsounds.org", "page":"https://opengameart.org/content/different-steps-on-wood-stone-leaves-gravel-and-mud", "license":"CC0-1.0", "file_suffix":"DifferentSteps_0.zip"},
+  {"id":"scrapes", "author":"AntumDeluge", "page":"https://opengameart.org/content/scrapes", "license":"CC0-1.0", "file_suffix":"scrapes.zip"},
+  {"id":"whoosh", "author":"pyranostudios", "page":"https://opengameart.org/content/air-whoosh", "license":"CC0-1.0", "file_suffix":".wav"},
+  {"id":"mechanical", "author":"BMacZero (Brian MacIntosh)", "page":"https://opengameart.org/content/mechanical-sounds", "license":"CC0-1.0", "file_suffix":".wav"},
+  {"id":"jet", "author":"m_cel", "page":"https://freesound.org/people/m_cel/sounds/534856/", "license":"CC0-1.0",
+   "file_suffix":".mp3", "representation":"public_hq_preview",
+   "download_urls":["https://cdn.freesound.org/previews/534/534856_7108357-hq.mp3"]},
+  {"id":"jet_turbine", "author":"qubodup", "page":"https://freesound.org/people/qubodup/sounds/205581/", "license":"CC0-1.0",
+   "file_suffix":".mp3", "representation":"public_hq_preview",
+   "download_urls":["https://cdn.freesound.org/previews/205/205581_71257-hq.mp3"]}
+]

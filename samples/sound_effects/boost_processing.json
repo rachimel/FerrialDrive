@@ -1,0 +1,19 @@
+{
+  "processor": "focused_whoosh",
+  "start_seconds": 0.025,
+  "end_seconds": 0.325,
+  "focus_start_hz": 3200,
+  "focus_end_hz": 4300,
+  "focus_q": 2.7,
+  "body_lowpass_hz": 1700,
+  "body_highpass_hz": 400,
+  "body_gain": 0.22,
+  "broadband_gain": 0.006,
+  "hiss_lowpass_hz": 6500,
+  "attack_seconds": 0.003,
+  "hold_seconds": 0.022,
+  "decay_seconds": 0.11,
+  "fade_out_seconds": 0.055,
+  "reverb": {"duration_seconds":0.5,"pre_delay_seconds":0.024,"wet":0.55,"decay_exponent":2.2,"damping_hz":5200,"taps":48,"seed":83},
+  "peak": 0.58
+}

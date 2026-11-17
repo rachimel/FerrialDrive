@@ -1,0 +1,82 @@
+{
+  "varco_swing_01": {
+    "processor":"layered_burst", "sources":["sword_swing/sword_swing(GEN_1).mp3","sword_swing/sword_swing(GEN_3).mp3"],
+    "duration_seconds":0.32,"peak":0.65,
+    "layers":[
+      {"source_index":0,"source_start_seconds":0.11,"source_end_seconds":0.51,"duration_seconds":0.28,
+       "gain":1,"highpass_hz":65,"lowpass_hz":7800,"attack_seconds":0.004,"hold_seconds":0.12,"decay_seconds":0.15,"fade_out_seconds":0.045},
+      {"source_index":1,"source_start_seconds":0.06,"source_end_seconds":0.19,"duration_seconds":0.09,
+       "gain":0.16,"highpass_hz":1200,"lowpass_hz":8500,"attack_seconds":0.002,"hold_seconds":0.02,"decay_seconds":0.035,"fade_out_seconds":0.015}
+    ]
+  },
+  "varco_swing_02": {
+    "processor":"layered_burst", "sources":["sword_swing/sword_swing(GEN_2).mp3","sword_swing/sword_swing(GEN_3).mp3"],
+    "duration_seconds":0.29,"peak":0.65,
+    "layers":[
+      {"source_index":0,"source_start_seconds":0.12,"source_end_seconds":0.47,"duration_seconds":0.255,
+       "gain":1,"highpass_hz":85,"lowpass_hz":8200,"attack_seconds":0.003,"hold_seconds":0.11,"decay_seconds":0.14,"fade_out_seconds":0.04},
+      {"source_index":1,"source_start_seconds":0.81,"source_end_seconds":0.98,"duration_seconds":0.10,
+       "gain":0.13,"highpass_hz":1500,"lowpass_hz":8200,"attack_seconds":0.002,"hold_seconds":0.018,"decay_seconds":0.035,"fade_out_seconds":0.018}
+    ]
+  },
+  "varco_swing_03": {
+    "processor":"layered_burst", "sources":["sword_swing/sword_swing(GEN_1).mp3","sword_swing/sword_swing(GEN_3).mp3"],
+    "duration_seconds":0.29,"peak":0.65,
+    "layers":[
+      {"source_index":0,"source_start_seconds":2.97,"source_end_seconds":3.35,"duration_seconds":0.255,
+       "gain":1,"highpass_hz":90,"lowpass_hz":8500,"attack_seconds":0.003,"hold_seconds":0.11,"decay_seconds":0.14,"fade_out_seconds":0.04},
+      {"source_index":1,"source_start_seconds":1.74,"source_end_seconds":1.89,"duration_seconds":0.08,
+       "gain":0.14,"highpass_hz":1400,"lowpass_hz":9000,"attack_seconds":0.002,"hold_seconds":0.015,"decay_seconds":0.03,"fade_out_seconds":0.018}
+    ]
+  },
+  "varco_swing_04": {
+    "processor":"layered_burst", "sources":["sword_swing/sword_swing(GEN_2).mp3","sword_swing/sword_swing(GEN_3).mp3"],
+    "duration_seconds":0.28,"peak":0.65,
+    "layers":[
+      {"source_index":0,"source_start_seconds":2.04,"source_end_seconds":2.38,"duration_seconds":0.24,
+       "gain":1,"highpass_hz":100,"lowpass_hz":8000,"attack_seconds":0.003,"hold_seconds":0.10,"decay_seconds":0.14,"fade_out_seconds":0.04},
+      {"source_index":1,"source_start_seconds":2.63,"source_end_seconds":2.78,"duration_seconds":0.09,
+       "gain":0.13,"highpass_hz":1300,"lowpass_hz":8500,"attack_seconds":0.002,"hold_seconds":0.018,"decay_seconds":0.03,"fade_out_seconds":0.018}
+    ]
+  },
+  "varco_swing_05": {
+    "processor":"layered_burst", "sources":["sword_swing/sword_swing(GEN_2).mp3","sword_swing/sword_swing(GEN_3).mp3"],
+    "duration_seconds":0.29,"peak":0.63,
+    "layers":[
+      {"source_index":0,"source_start_seconds":3.72,"source_end_seconds":4.14,"duration_seconds":0.24,
+       "gain":1,"highpass_hz":140,"lowpass_hz":7200,"attack_seconds":0.004,"hold_seconds":0.09,"decay_seconds":0.13,"fade_out_seconds":0.045},
+      {"source_index":1,"source_start_seconds":4.36,"source_end_seconds":4.51,"duration_seconds":0.08,
+       "gain":0.12,"highpass_hz":1300,"lowpass_hz":7200,"attack_seconds":0.002,"hold_seconds":0.015,"decay_seconds":0.03,"fade_out_seconds":0.015}
+    ]
+  },
+  "varco_swing_06": {
+    "processor":"layered_burst", "sources":["sword_swing/sword_swing(GEN_1).mp3","sword_swing/sword_swing(GEN_3).mp3"],
+    "duration_seconds":0.28,"peak":0.63,
+    "layers":[
+      {"source_index":0,"source_start_seconds":0.13,"source_end_seconds":0.46,"duration_seconds":0.23,
+       "gain":0.95,"highpass_hz":160,"lowpass_hz":7000,"attack_seconds":0.003,"hold_seconds":0.09,"decay_seconds":0.13,"fade_out_seconds":0.04},
+      {"source_index":1,"source_start_seconds":4.80,"source_end_seconds":5.02,"duration_seconds":0.11,
+       "gain":0.13,"highpass_hz":1200,"lowpass_hz":7600,"attack_seconds":0.002,"hold_seconds":0.02,"decay_seconds":0.04,"fade_out_seconds":0.02}
+    ]
+  },
+  "varco_swing_07": {
+    "processor":"layered_burst", "sources":["sword_swing/sword_swing(GEN_1).mp3","sword_swing/sword_swing(GEN_3).mp3"],
+    "duration_seconds":0.41,"peak":0.68,
+    "layers":[
+      {"source_index":0,"source_start_seconds":6.0,"source_end_seconds":6.56,"duration_seconds":0.36,
+       "gain":1,"highpass_hz":45,"lowpass_hz":6800,"attack_seconds":0.005,"hold_seconds":0.16,"decay_seconds":0.20,"fade_out_seconds":0.07},
+      {"source_index":1,"source_start_seconds":0.08,"source_end_seconds":0.22,"duration_seconds":0.12,
+       "gain":0.20,"highpass_hz":1100,"lowpass_hz":8000,"attack_seconds":0.003,"hold_seconds":0.025,"decay_seconds":0.04,"fade_out_seconds":0.025}
+    ]
+  },
+  "varco_swing_08": {
+    "processor":"layered_burst", "sources":["sword_swing/sword_swing(GEN_2).mp3","sword_swing/sword_swing(GEN_1).mp3"],
+    "duration_seconds":0.40,"peak":0.68,
+    "layers":[
+      {"source_index":0,"source_start_seconds":3.73,"source_end_seconds":4.20,"duration_seconds":0.32,
+       "gain":1,"highpass_hz":65,"lowpass_hz":7000,"attack_seconds":0.004,"hold_seconds":0.14,"decay_seconds":0.18,"fade_out_seconds":0.06},
+      {"source_index":1,"source_start_seconds":6.28,"source_end_seconds":6.56,"duration_seconds":0.17,"offset_seconds":0.20,
+       "gain":0.16,"highpass_hz":120,"lowpass_hz":3200,"attack_seconds":0.02,"hold_seconds":0.025,"decay_seconds":0.055,"fade_out_seconds":0.05}
+    ]
+  }
+}
