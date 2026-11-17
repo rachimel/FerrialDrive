@@ -57,8 +57,8 @@ timings.write_json("output/performance/operation.json")
 기존 Runner 드롭·직접 실행은 계측 비활성이다. 직접 실행 시에만 다음 옵션을 추가한다.
 
 ```text
-python tests/ui_test.py --profile
-python tests/ui_test.py --profile output/performance/ui-comparison.json --frames 300
+python tests/sword_movement_test.py --profile
+python tests/sword_movement_test.py --profile output/performance/ui-comparison.json --frames 300
 ```
 
 첫 명령은 UTC 시각이 붙은 `output/performance/ui-...Z.json`을 사용한다. 두 번째처럼 경로를 지정하면 비교할 파일을 정할 수 있다. 상대 경로는 실행한 작업 폴더 기준이다. 기본 실행과 승인된 설정·배치·효과 값은 유지하며 프레임별 계측 호출은 활성 실행에서만 추가한다.
@@ -69,6 +69,8 @@ python tests/ui_test.py --profile output/performance/ui-comparison.json --frames
 - UI 창 종료·테스트 종료·정상 프레임 제한 종료 시 `exit()`에서 저장한다. Runner 재드롭·강제 종료·프로세스 종료에서는 저장을 보장하지 않는다. 수집을 마친 뒤 정상 종료하거나 프레임 제한을 사용한다.
 
 ## 로그와 해석
+
+CPU·메모리 제한과 GPU 기능 가드를 함께 사용하는 독립 테스트는 [하한 사양 벤치마크](hardware_profile_benchmark.md)를 따른다. 공통 `TimingRecorder`와 실제 OpenGL 시간 질의를 연결하며 일반 실행의 기본 프레임 제한은 유지한다.
 
 JSON의 `schema_version`은 1이다. `session`·UTC 시작/저장 시각·Python 버전·시계 구현/해상도·`measurements`·`benchmarks`를 포함한다. 구간 행은 누적 시간이 큰 순으로 정렬한다. 값은 ns 단위이며, 나노초 단위 기록이 실제 1ns 정확도를 뜻하지 않는다. 시계 해상도도 함께 확인한다.
 

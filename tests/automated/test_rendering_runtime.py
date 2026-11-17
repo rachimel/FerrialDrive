@@ -152,5 +152,43 @@ class RenderingRuntimeTests(unittest.TestCase):
             self.assertEqual(canvas.info.name, 'software')
 
 
+class WindowsDpiTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == 'nt' and os.environ.get('FDRIVE_GPU_TESTS') == '1',
+                         'Windows 실제 창의 물리 픽셀 검사는 선택 실행한다.')
+    def test_fresh_process_window_uses_physical_pixels(self):
+        script = '''
+import ctypes as ct
+from unittest.mock import patch
+import pico2d.pico2d as p
+from ferrial_drive.rendering import PicoCanvas
+create = p.SDL_CreateWindow
+with patch.object(p, 'SDL_CreateWindow', side_effect=lambda t,x,y,w,h,f:
+                  create(t,x,y,w,h,(f & ~p.SDL_WINDOW_SHOWN)|p.SDL_WINDOW_HIDDEN)):
+    canvas = PicoCanvas(1920,1080,'physical pixel check').open()
+try:
+    info = p.SDL_SysWMinfo()
+    p.SDL_VERSION(info.version)
+    assert p.SDL_GetWindowWMInfo(p.window,ct.byref(info))
+    hwnd = info.info.win.window
+    user = ct.windll.user32
+    user.GetWindowDpiAwarenessContext.argtypes = [ct.c_void_p]
+    user.GetWindowDpiAwarenessContext.restype = ct.c_void_p
+    user.GetAwarenessFromDpiAwarenessContext.argtypes = [ct.c_void_p]
+    assert user.GetAwarenessFromDpiAwarenessContext(user.GetWindowDpiAwarenessContext(hwnd)) == 2
+    class Point(ct.Structure):
+        _fields_ = [('x',ct.c_long),('y',ct.c_long)]
+    a,b = Point(0,0),Point(1920,1080)
+    user.ClientToScreen(hwnd,ct.byref(a))
+    user.ClientToScreen(hwnd,ct.byref(b))
+    user.LogicalToPhysicalPointForPerMonitorDPI(hwnd,ct.byref(a))
+    user.LogicalToPhysicalPointForPerMonitorDPI(hwnd,ct.byref(b))
+    assert (b.x-a.x,b.y-a.y) == (1920,1080)
+finally:
+    canvas.close()
+'''
+        subprocess.run([sys.executable, '-c', script], cwd=ROOT,
+                       env={**os.environ, 'SDL_VIDEODRIVER': 'windows'}, check=True, capture_output=True)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -25,7 +25,7 @@ python Tools/profiler/run.py record --pid 12345 --duration 30
 
 ```text
 python Tools/profiler/run.py record --target tests/combat_test.py --duration 30
-python Tools/profiler/run.py record --python path/to/python.exe --target tests/ui_test.py --duration 30 -- --frames 600
+python Tools/profiler/run.py record --python path/to/python.exe --target tests/sword_movement_test.py --duration 30 -- --frames 600
 ```
 
 `--` 뒤는 대상 프로그램의 인자다. `--python`을 생략하면 프로파일러를 실행한 Python을 사용한다. 파일·출력·작업 폴더의 상대 경로는 프로젝트 루트 기준이며 대상 인자 안의 상대 경로는 `--cwd` 기준이다.
