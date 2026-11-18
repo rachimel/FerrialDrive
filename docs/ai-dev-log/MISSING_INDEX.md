@@ -749,3 +749,7 @@
 ## FDLOG-20261117-muzzle-flash-texture
 
 - [총구 화염 로딩 생성·에너지색·발사별 크기 변주](2026-11-17-muzzle-flash-texture.md): `[[FDLOG_MISSING_TIME:FDLOG-20261117-muzzle-flash-texture:scope]]` — 사용자 개별 요청 시각. 검색 단서: `총구 화염 텍스쳐 로딩때`, `랜덤하게 총구 화염 크기`, `너무 세로로만 커졌는데`. 구현·검증 확인 시각과 구분한다.
+
+## FDLOG-20261118-counter-expiry-reset
+
+- [카운터 자연 퇴장 후 합계 초기화](2026-11-18-counter-expiry-reset.md): `[[FDLOG_MISSING_TIME:FDLOG-20261118-counter-expiry-reset:U1]]` — 사용자 요청의 정확한 발언 시각. 검색 단서: `카운터 사라질 때 hit랑 데미지 초기화`. 구현·검사 시각과 구분한다.

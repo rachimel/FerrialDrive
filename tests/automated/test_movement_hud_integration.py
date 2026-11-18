@@ -20,6 +20,49 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class MovementHudIntegrationTests(unittest.TestCase):
+    def test_counter_totals_reset_only_after_exit_and_next_hit_starts_fresh(self):
+        from ferrial_drive.ui_v2.preview import HudPreview
+        hud = self.hud
+        hud.transition.update(1)
+        hud.damage_target("A", 25)
+        HudPreview.update(hud, 0)
+        motion = hud.counter_motion
+        end_seconds = motion.enter_seconds + motion.hold_seconds + motion.exit_seconds
+        HudPreview.update(hud, end_seconds - .001)
+        self.assertGreater(motion.visual.fraction, 0)
+        self.assertEqual((hud.state.hud.combo_count, hud.state.hud.total_damage_dealt), (1, 25))
+        health = hud.enemies["A"]["health"]
+        HudPreview.update(hud, .002)
+        self.assertEqual(motion.visual.fraction, 0)
+        self.assertEqual((hud.state.hud.combo_count, hud.state.hud.total_damage_dealt), (0, 0))
+        for counter in (hud.hit_counter, hud.damage_counter):
+            self.assertEqual((counter.previous_value, counter.value, counter.latest_value), (0, 0, 0))
+            self.assertFalse(counter.visual.moving)
+        self.assertEqual(hud.enemies["A"]["health"], health)
+        hud.damage_target("A", 13)
+        HudPreview.update(hud, .01)
+        self.assertEqual((hud.state.hud.combo_count, hud.state.hud.total_damage_dealt), (1, 13))
+        self.assertTrue(motion.visual.entering)
+
+    def test_hit_during_counter_exit_continues_totals_and_pause_freezes_expiry(self):
+        from ferrial_drive.ui_v2.preview import HudPreview
+        hud = self.hud
+        hud.transition.update(1)
+        hud.damage_target("A", 25)
+        HudPreview.update(hud, 0)
+        motion = hud.counter_motion
+        HudPreview.update(hud, motion.enter_seconds + motion.hold_seconds + motion.exit_seconds / 2)
+        self.assertTrue(motion.visual.exiting)
+        hud.damage_target("A", 13)
+        HudPreview.update(hud, .01)
+        self.assertEqual((hud.state.hud.combo_count, hud.state.hud.total_damage_dealt), (2, 38))
+        self.assertTrue(motion.visual.entering)
+        hud.pause.request(True)
+        age = motion.age
+        HudPreview.update(hud, 10)
+        self.assertEqual(motion.age, age)
+        self.assertEqual((hud.state.hud.combo_count, hud.state.hud.total_damage_dealt), (2, 38))
+
     def test_overdrive_does_not_shorten_accumulation_window_but_keeps_existing_popup_speed(self):
         from ferrial_drive.ui_v2.preview import HudPreview
         hud = self.hud

@@ -712,7 +712,11 @@ class HudPreview:
                     self.player_idle.face(self.mouse[0] - x, self.mouse[1] - y)
         self.hit_counter.update(delta_seconds)
         if self.transition.target == "combat":
-            self.counter_motion.update(self.state.hud.combo_count, delta_seconds)
+            if self.counter_motion.update(self.state.hud.combo_count, delta_seconds):
+                self.set_hud(combo_count=0, total_damage_dealt=0)
+                self.hit_counter.reset()
+                self.damage_counter.reset()
+                self.counter_motion.reset()
         self.damage_counter.update(delta_seconds)
         self.level_counter.update(delta_seconds)
         self.player_health.update(delta_seconds)

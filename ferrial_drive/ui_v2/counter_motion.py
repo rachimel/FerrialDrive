@@ -30,6 +30,7 @@ class CounterMotion:
         self.age = self.enter_seconds if value else self.enter_seconds + self.hold_seconds + self.exit_seconds
 
     def update(self, value, delta_seconds):
+        """자연 퇴장이 완료된 프레임에만 True를 반환한다."""
         if not isfinite(delta_seconds) or delta_seconds < 0:
             raise ValueError("카운터 갱신 시간 오류")
         if value > self.value:
@@ -40,7 +41,10 @@ class CounterMotion:
         elif value < self.value:
             self.reset(value)
         self.value = value
-        self.age += delta_seconds
+        end_seconds = self.enter_seconds + self.hold_seconds + self.exit_seconds
+        was_visible = self.age < end_seconds
+        self.age = min(end_seconds, self.age + delta_seconds)
+        return was_visible and self.age >= end_seconds
 
     @property
     def visual(self):
