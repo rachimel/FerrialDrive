@@ -2,11 +2,11 @@
 
 ## 검 금속 피격음
 
-로컬 `hit_metal`은 사용자 지정 `data/source/audio/sources/hit/metal/floraphonic-metal-hit-10-193281.mp3`를 직접 재생한다. 사건 음량 0.8·최소 간격 0.06초·`replaces_hit: true`를 사용한다. 원본의 구간·피치·음량을 가공하지 않으며 일반 명중 `hit`와 중첩하지 않는다. 별도의 총 피탄·도탄 사건은 기존 연결을 사용한다. 실행 시 bank를 읽으므로 실행 중인 프로그램에는 다시 시작한 뒤 적용한다.
+로컬 `hit_metal`은 사용자가 조합한 `data/runtime/audio/hit-metal.ogg`의 원본 복사본을 한 레이어로 재생한다. 사건 음량은 0.8, 최소 재생 간격은 0.06초다. `replaces_hit: true`로 금속 명중 시 일반 명중 `hit`를 대신한다. 실행 중인 전투 테스트는 다시 시작하면 새 bank를 읽는다.
 
-준비: `python automate/run.py sound-import --source data/source/audio/sources/hit/metal/floraphonic-metal-hit-10-193281.mp3 --kind hit_metal --preserve-source --event-volume 0.8`. 출처·해시는 로컬 `data/runtime/audio/user_audio/hit_metal_source.json`에 보존한다. 개별 출처·라이선스는 파일명만으로 확정하지 않는다. 이전 bank는 `data/source/audio/revisions/20261117_194755_metal_hit/bank_before.json`에 보존했다.
+준비 명령은 `python automate/run.py sound-import --source data/runtime/audio/hit-metal.ogg --kind hit_metal --preserve-source --event-volume 0.8`이다. 원본 복사본은 `data/runtime/audio/user_audio/originals/`, 출처와 해시는 `data/runtime/audio/user_audio/hit_metal_source.json`에 저장한다.
 
-`python automate/run.py sound-preview --only contact --channels 48 --output output/audio/metal_hit_mp3_20261117`로 단발·반복 금속 명중의 실제 믹서를 확인했다. 클리핑·레이어 누락은 없었으며 실제 장치 청취·사용자 음색 승인은 별도다.
+단발·반복 명중의 믹서 출력은 `python automate/run.py sound-preview --only contact --channels 48 --output output/audio/metal_hit_ogg_20261118`로 기록한다.
 
 ## Overdrive 국소 폭발음
 

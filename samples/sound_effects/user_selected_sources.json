@@ -4,10 +4,10 @@
   "license_url": "https://pixabay.com/service/license-summary/",
   "sounds": {
     "hit_metal": {
-      "file": "floraphonic-metal-hit-10-193281.mp3",
-      "license": "미확인 — 사용자 지정 원본",
+      "file": "hit-metal.ogg",
+      "license": "미확인 — 사용자 조합본",
       "license_url": null,
-      "source_status": "사용자가 추가한 metal-hit MP3로 기존 금속 피격음 교체를 요청. 파일명만 확인했으며 개별 출처·이용 조건은 확인하지 않았다.",
+      "source_status": "사용자가 직접 조합한 OGG를 검 금속 피격음으로 지정했다.",
       "selection_status": "원본 직접 연결 시험. 실제 청취·최종 음색 확인 전."
     },
     "gun_explosion": {
