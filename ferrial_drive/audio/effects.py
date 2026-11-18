@@ -115,6 +115,10 @@ class PicoSoundEffects:
             return False
         played = False
         for index, layer in enumerate(self.bank[name]["layers"]):
+            key = (name, index)
+            layer_cooldown = layer.get("cooldown_seconds", 0)
+            if layer_cooldown and self.time_seconds - self.last_played.get(key, -float("inf")) < layer_cooldown:
+                continue
             layer_gain = layer.get("volume", 1) * layer.get("volume_by_level", [1, 1, 1])[energy_level-1]
             if layer_gain <= 0:
                 continue
@@ -122,7 +126,6 @@ class PicoSoundEffects:
             if channel is None:
                 self.dropped_layers += 1
                 continue
-            key = (name, index)
             choices = [item for item in layer["files"] if item != self.previous_choices.get(key)] or layer["files"]
             selected = self.random.choice(choices)
             self.previous_choices[key] = selected
@@ -154,6 +157,8 @@ class PicoSoundEffects:
                 continue
             self.voices[channel] = {"event": name, "loop": loop, "gain": layer_gain,
                                     "chunk": chunk, "memory": memory}
+            if layer_cooldown:
+                self.last_played[key] = self.time_seconds
             self.layer_counts[selected] = self.layer_counts.get(selected, 0) + 1
             played = True
         if played:

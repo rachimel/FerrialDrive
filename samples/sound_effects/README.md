@@ -20,15 +20,15 @@
 
 `sound-effects`의 `processor: "extract_region"`은 `source`·`start_seconds`·`end_seconds`로 원본 구간을 추출한다. 피치·길이를 보간하지 않으며 `peak`(기본 0.58)·`fade_in_seconds`(기본 0.0005)·`fade_out_seconds`(기본 0.008)만 적용한다. 구간·피크·페이드는 유한값이어야 하며 페이드 합계가 구간 길이를 넘으면 거절한다. 원본 폴더의 `source.json` 출처 검사는 기존 제작과 같다.
 
-현재 로컬 SMG 음원은 `data/runtime/audio/user_audio/smg_impacts_v1/`의 금속 피탄 6개·도탄 4개다. 실제 총탄 명중마다 `gun_hit`에서 피탄 6종 중 하나를 선택하고, `metal`·`steel` 표적에는 `gun_hit_metal`에서 도탄 4종 중 하나를 추가한다. 각 레이어의 직전 후보를 제외하며 새 음원의 재생률 변주는 사용하지 않는다. 로컬 bank의 기본 피탄 음량은 1.4, 도탄은 0.16이며 도탄에는 0.06초 cooldown을 적용한다. 금속 깡소리는 검 금속 레이어 0.8의 20% 배율로 작게 깔며 실제 체감 비율과 구분한다. 기존 검 명중음과 총 발사음은 보존한다.
+일반 탄환의 직격마다 `gun_hit`에서 피탄 6종 중 하나를 음량 1.05로 재생한다. `metal`·`steel` 표적의 직격에는 `gun_hit_metal`을 추가한다. 이 사건은 최소 간격 0.06초로 도탄 4종 중 하나를 음량 0.16으로 재생하고, 원본 `hit-metal.ogg`를 음량 0.8의 바탕 레이어로 깐다. OGG 레이어의 `cooldown_seconds`는 0.55이며 해당 레이어의 실제 재생 시점부터 계산한다. 피탄·도탄은 직전 후보를 제외하고 재생률 변주를 사용하지 않는다.
 
 구간·원본 해시·연결 전 bank는 `data/source/audio/revisions/20261117_smg_impacts_v1/`에 보존한다. GEN_3 도탄 두 구간은 원본부터 잔향이 겹치며 완전한 소스 분리 결과가 아니다. 실제 장치 청취·사용자 음색 승인은 아직 수행하지 않았다.
 
-`python automate/run.py sound-preview --only gun-contact --channels 48 --output output/audio/smg_impacts_game_link`는 게임 재생기로 일반/금속 명중과 900 RPM·Overdrive 1,800 RPM 혼합 WAV를 기록한다. 0.03초의 발사→명중 간격은 비교 파일용 고정값이며 게임에서는 실제 충돌 시점에 재생한다. 창 없는 실제 믹서 검증과 전투 전체의 실제 장치 청취는 구분한다.
+`python automate/run.py sound-preview --only gun-contact --channels 48 --output output/audio/smg_impacts_game_link`는 게임 재생기로 일반·금속 명중과 900·1,800 RPM의 직격 혼합 WAV를 기록한다. 1,800 RPM은 직격 레이어의 연사 비교다. 실제 Overdrive 폭발음 비교는 `--only gun-explosion`을 사용한다. 게임의 명중 시점은 탄환 충돌로 결정한다.
 
 재생성: `python automate/run.py sound-effects --recipe data/source/audio/revisions/20261117_smg_impacts_v1/processing.json --output data/runtime/audio/user_audio/smg_impacts_v1 --preview output/audio/smg_impacts_v1/all_variations.wav`. 공개 시연에서 이 사용자 제공 원본을 필수 입력으로 사용하지 않는다.
 
-현재 발사음은 `data/source/audio/sources/smg/futuristic_gun(GEN_3).mp3` 버스트의 짧은 구간 네 개다. `python automate/run.py sound-import --source "data/source/audio/sources/smg/futuristic_gun(GEN_3).mp3" --kind gun_fire --regions data/source/audio/revisions/20261117_varco_smg_split_v2/regions.json --event-volume 0.85`로 샘플을 준비한다. 이후 로컬 `bank.json`의 `events.gun_fire.layers[0].volume`을 현재 믹싱 배율 **2.5**로 설정한다. import의 음량 입력 범위는 0~1이며, 런타임 레이어 배율과 전체 음량 0.4의 곱으로 실제 채널 음량 1.0을 사용한다. SDL 채널 음량의 상한은 1.0이다. 재준비하면 이 로컬 조정을 다시 적용해야 한다. 구간은 `[0.022, 0.066]`·`[0.102, 0.138]`·`[0.175, 0.207]`·`[0.249, 0.280]`초다. 기존 샘플 준비의 peak 0.58 정규화와 앞 3ms·끝 15ms 페이드를 적용한다. 실제 발사마다 후보 하나를 선택하고 직전 후보는 제외한다. 원본 버스트와 빈 탄창 소리는 보존한다.
+현재 발사음은 `data/source/audio/sources/smg/futuristic_gun(GEN_3).mp3` 버스트의 짧은 구간 네 개다. `python automate/run.py sound-import --source "data/source/audio/sources/smg/futuristic_gun(GEN_3).mp3" --kind gun_fire --regions data/source/audio/revisions/20261117_varco_smg_split_v2/regions.json --event-volume 0.85`로 샘플을 준비한다. 로컬 `bank.json`의 `events.gun_fire.layers[0].volume`은 1.5다. 전체 음량 0.4를 적용하면 채널 음량은 약 0.6이다. 재준비 후 이 로컬 설정을 다시 적용한다. 구간은 `[0.022, 0.066]`·`[0.102, 0.138]`·`[0.175, 0.207]`·`[0.249, 0.280]`초다. 샘플 준비에는 peak 0.58 정규화와 앞 3ms·끝 15ms 페이드를 사용한다. 실제 발사마다 후보 하나를 선택하고 직전 후보는 제외한다.
 
 `--regions`에는 원본 범위 안의 겹치지 않는 오름차순 `[시작, 끝]` 목록 JSON을 전달한다. `--event-volume`은 단일 사건의 재생 음량이며 휘두르기 교체에는 사용하지 않는다. 원본 직접 연결과 구간 목록을 함께 사용할 수 없다.
 

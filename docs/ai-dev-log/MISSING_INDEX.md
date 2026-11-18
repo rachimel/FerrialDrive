@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [SMG 금속 명중에 사용자 OGG 바탕 레이어 추가](2026-11-18-smg-metal-ogg-base.md): `[[FDLOG_MISSING_TIME:FDLOG-20261118-smg-metal-ogg-base:scope]]` — 개별 요청 시각. 검색 단서: `bullet 효과음들 동시에`, `80퍼 정도 베이스`.
+
 - [사용자 조합 OGG로 검 금속 명중음 교체](2026-11-18-metal-hit-ogg.md): `[[FDLOG_MISSING_TIME:FDLOG-20261118-metal-hit-ogg:scope]]` — 개별 요청 시각. 검색 단서: `점진적 커밋 적용`, `내가 직접 조합한 사운드`.
 
 - [전체 변경의 기능별 커밋 정리](2026-11-17-feature-commit-checkpoint.md): TIME(scope). 커밋 요청과 전체 변경의 기능별 분리 선택의 개별 시각 미확인. 검색 단서: `지금 커밋 ㄱㄴ?`, `현재 프로젝트 변경 전체를 기능별로 나눠서`.

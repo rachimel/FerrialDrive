@@ -223,6 +223,26 @@ class SoundPlayerTests(unittest.TestCase):
         self.assertFalse(player.play("hit"))
         self.assertFalse(player.sounds)
 
+    def test_layer_cooldown_preserves_other_layers_and_resets_with_the_player(self):
+        player = self.player
+        base, ricochet = sorted(player.sounds)[:2]
+        player.bank["metal_test"] = {"cooldown_seconds": 0.06, "layers": [
+            {"files": [base], "cooldown_seconds": 0.25},
+            {"files": [ricochet]},
+        ]}
+        self.assertTrue(player.play("metal_test"))
+        player.update(0.03)
+        self.assertFalse(player.play("metal_test"))
+        player.update(0.05)
+        self.assertTrue(player.play("metal_test"))
+        self.assertEqual(player.layer_counts, {base: 1, ricochet: 2})
+        player.update(0.18)
+        self.assertTrue(player.play("metal_test"))
+        self.assertEqual(player.layer_counts, {base: 2, ricochet: 3})
+        player.reset()
+        self.assertTrue(player.play("metal_test"))
+        self.assertEqual(player.layer_counts, {base: 3, ricochet: 4})
+
     def test_device_and_missing_asset_failures_leave_game_running(self):
         pico = self.pico
         pico.audio_on = False
