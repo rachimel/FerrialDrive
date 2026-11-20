@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT))
 LOCAL_RUNTIME = ROOT / "automate/runtime/texture_compare/python"
 if (LOCAL_RUNTIME.is_dir() and
         any(importlib.util.find_spec(name) is None for name in ("numpy", "PIL"))):
-    sys.path.insert(0, str(LOCAL_RUNTIME))
+    sys.path.append(str(LOCAL_RUNTIME))
 
 
 def prepare(args):
@@ -63,15 +63,15 @@ def prepare(args):
         comparison.write_text(json.dumps(document, ensure_ascii=False, indent=2), encoding="utf-8")
         print(json.dumps({"prepared": "oodle_full", "summary": document["payload_estimates"]["oodle_full"]}, ensure_ascii=True), flush=True)
         return
+    destination = args.output.resolve()
     if args.demo:
         from samples.texture_comparison.fixture import write_fixture
-        catalogs = [write_fixture(ROOT / "output/texture_comparison/demo_source")]
+        catalogs = [write_fixture(destination / "demo_source")]
     else:
         catalogs = args.catalog or [ROOT / "data/runtime/frame_interpolation/player_sword_locomotion/catalog.json",
                                     ROOT / "data/runtime/frame_interpolation/sword_movement_combo/catalog.json"]
     patterns = None if args.all or args.demo else args.clip
     selected = select_catalogs(catalogs, patterns)
-    destination = args.output.resolve()
     destination.mkdir(parents=True, exist_ok=True)
     # 원본 클립을 참조하는 독립 입력이며 게임 쪽 카탈로그 선택은 바꾸지 않는다.
     rows = []
@@ -109,30 +109,32 @@ def prepare(args):
                        "kind": "atlas", "path": f"{name}/atlas.json"}
         print(json.dumps({"prepared": name, "clips": len(selected)}, ensure_ascii=True), flush=True)
     dependencies = {}
-    for name, key in (("ktx", "ktx_executable"), ("oodle", "oodle_library")):
-        value = getattr(args, key) or config.get(key)
-        if not value or not Path(value).is_file():
-            raise FileNotFoundError(f"{key} 경로가 필요하다. --config 또는 해당 인자를 지정한다.")
-        dependencies[key] = str(Path(value).resolve())
-        encode_variant(destination / "atlas_half", destination / name, codec=name,
-                       ktx_executable=value if name == "ktx" else None,
-                       oodle_library=value if name == "oodle" else None, rdo_lambda=args.rdo_lambda)
-        cases[name] = {"label": "반해상도 KTX2 / BC7" if name == "ktx" else f"반해상도 Oodle BC7 / RDO {args.rdo_lambda}",
-                       "kind": "atlas", "path": f"{name}/atlas.json"}
-        print(json.dumps({"prepared": name}, ensure_ascii=True), flush=True)
-    dependencies["ktx_library"] = str(Path(dependencies["ktx_executable"]).with_name("ktx.dll"))
-    encode_variant(destination / "atlas_full", destination / "oodle_full", codec="oodle",
-                   oodle_library=dependencies["oodle_library"], rdo_lambda=args.rdo_lambda)
-    cases["oodle_full"] = {"label": f"원해상도 Oodle BC7 / RDO {args.rdo_lambda}", "kind": "atlas", "path": "oodle_full/atlas.json"}
-    build_variant(selected, destination / "atlas_75", 4/3, max_side=args.page_size)
-    encode_variant(destination / "atlas_75", destination / "oodle_75", codec="oodle",
-                   oodle_library=dependencies["oodle_library"], rdo_lambda=args.rdo_lambda)
-    cases["oodle_75"] = {"label": f"75% Oodle BC7 / RDO {args.rdo_lambda}", "kind": "atlas", "path": "oodle_75/atlas.json"}
+    if not args.rgba_only:
+        for name, key in (("ktx", "ktx_executable"), ("oodle", "oodle_library")):
+            value = getattr(args, key) or config.get(key)
+            if not value or not Path(value).is_file():
+                raise FileNotFoundError(f"{key} 경로가 필요하다. --config 또는 해당 인자를 지정한다.")
+            dependencies[key] = str(Path(value).resolve())
+            encode_variant(destination / "atlas_half", destination / name, codec=name,
+                           ktx_executable=value if name == "ktx" else None,
+                           oodle_library=value if name == "oodle" else None, rdo_lambda=args.rdo_lambda)
+            cases[name] = {"label": "반해상도 KTX2 / BC7" if name == "ktx" else f"반해상도 Oodle BC7 / RDO {args.rdo_lambda}",
+                           "kind": "atlas", "path": f"{name}/atlas.json"}
+            print(json.dumps({"prepared": name}, ensure_ascii=True), flush=True)
+        dependencies["ktx_library"] = str(Path(dependencies["ktx_executable"]).with_name("ktx.dll"))
+        encode_variant(destination / "atlas_full", destination / "oodle_full", codec="oodle",
+                       oodle_library=dependencies["oodle_library"], rdo_lambda=args.rdo_lambda)
+        cases["oodle_full"] = {"label": f"원해상도 Oodle BC7 / RDO {args.rdo_lambda}", "kind": "atlas", "path": "oodle_full/atlas.json"}
+        build_variant(selected, destination / "atlas_75", 4/3, max_side=args.page_size)
+        encode_variant(destination / "atlas_75", destination / "oodle_75", codec="oodle",
+                       oodle_library=dependencies["oodle_library"], rdo_lambda=args.rdo_lambda)
+        cases["oodle_75"] = {"label": f"75% Oodle BC7 / RDO {args.rdo_lambda}", "kind": "atlas", "path": "oodle_75/atlas.json"}
     report = {name: payload_summary(destination / case["path"]) for name, case in cases.items() if name != "legacy"}
     document = {"version": 1, "cases": cases, "dependencies": dependencies,
                 "clips": [row["name"] for _, row in selected], "prepare_seconds": perf_counter()-started,
                 "coverage": "all selected catalogs" if not patterns else "selected clips; not all 160",
-                "scope": "보간 계층. 일반 본체/그림자 시트·HUD·바닥 제외", "payload_estimates": report}
+                "scope": "기본 도형 보간 시연" if args.demo else "보간 계층. 일반 본체/그림자 시트·HUD·바닥 제외",
+                "payload_estimates": report}
     path = destination / "comparison.json"
     path.write_text(json.dumps(document, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps({"comparison": str(path), "cases": report}, ensure_ascii=True), flush=True)
@@ -145,6 +147,7 @@ def main():
     parser.add_argument("--clip", action="append")
     parser.add_argument("--all", action="store_true")
     parser.add_argument("--demo", action="store_true")
+    parser.add_argument("--rgba-only", action="store_true", help="기존·공유 RGBA 비교만 제작")
     parser.add_argument("--output", type=Path, default=ROOT / "data/runtime/textures/sword_all_half_20261113")
     parser.add_argument("--ktx-executable", type=Path)
     parser.add_argument("--oodle-library", type=Path)

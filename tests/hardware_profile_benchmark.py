@@ -144,14 +144,33 @@ def run_worker(args, applied, profile):
                         # 초기화·조준은 events_ms에 포함하고 update 구간 계측에서는 제외한다.
                         probe.step(index >= args.warmup)
 
-                    def status(values):
-                        title = (f"Ferrial Drive | 직접 조작 | {values['fps']:.1f}/{args.target_fps:g} FPS"
-                                 f" | HUD {probe.latest_ms.get('hud.total', 0):.2f}ms"
-                                 f" | World {probe.latest_ms.get('world.total', 0):.2f}ms")
-                        if values["warming_up"]:
-                            title += " | 준비 중"
-                        canvas.pico.SDL_SetWindowTitle(canvas.pico.window, title.encode("utf-8"))
+                    def status(values=None):
+                        mode = "자동 측정" if args.auto else "직접 조작"
+                        title = ["Ferrial Drive", mode]
+                        if values is not None:
+                            title.append(f"{values['fps']:.1f}/{args.target_fps:g} FPS")
+                        resource_samples = result.get("resource_samples")
+                        sample = (resource_samples[-1] if resource_samples else
+                                  {"ram": process_memory(), "vram": gpu_memory.sample(), "dxgi": {}})
+                        ram = sample["ram"].get("working_set_bytes")
+                        title.append(f"RAM {ram / 2**20:.0f} MiB" if ram is not None else "RAM 미측정")
+                        dedicated = sample["vram"].get("dedicated_bytes")
+                        shared = sample["vram"].get("shared_bytes")
+                        local = sample["dxgi"].get("local_bytes")
+                        if dedicated is not None:
+                            title.append(f"GPU 전용 {dedicated / 2**20:.0f} MiB")
+                        if shared is not None:
+                            title.append(f"GPU 공유 {shared / 2**20:.0f} MiB")
+                        if dedicated is None and shared is None:
+                            title.append(f"GPU 로컬 {local / 2**20:.0f} MiB" if local is not None else "GPU 메모리 미측정")
+                        if values is not None:
+                            title.extend((f"HUD {probe.latest_ms.get('hud.total', 0):.2f}ms",
+                                          f"World {probe.latest_ms.get('world.total', 0):.2f}ms"))
+                        if values is None or values["warming_up"]:
+                            title.append("준비 중")
+                        canvas.pico.SDL_SetWindowTitle(canvas.pico.window, " | ".join(title).encode("utf-8"))
 
+                    status()
                     comparisons = []
                     ground_random = getattr(app.ground_effects, "random", None)
                     ground_random_state = ground_random.getstate() if ground_random is not None else None
@@ -169,7 +188,7 @@ def run_worker(args, applied, profile):
                                         ground_random.setstate(ground_random_state)
                                 result["benchmark"] = benchmark_program(app, canvas, target_fps=args.target_fps,
                                     frames=args.frames, warmup=args.warmup, paced=not args.unpaced, before_step=step,
-                                    interactive=not args.auto, on_status=None if args.auto else status)
+                                    interactive=not args.auto, on_status=status)
                                 if app.sword_renderer:
                                     result["trail_backend_requested"] = app.sword_renderer.trail_backend
                                     result["trail_backend"] = app.sword_renderer.last_trail_backend

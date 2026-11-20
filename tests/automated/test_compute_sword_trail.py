@@ -168,7 +168,7 @@ class ComputeTrailGpuTests(unittest.TestCase):
             painter.prepare(effect.settings)
             self.assertTrue(painter.prepared)
             self.assertIsNotNone(painter.compute_trail)
-            with patch.object(ComputeSwordTrail,'_compile_compute',side_effect=AssertionError('첫 공격 컴파일')), \
+            with patch('ferrial_drive.rendering.compute_sword_trail.ShaderProgram',side_effect=AssertionError('첫 공격 컴파일')), \
                  patch.object(painter.compute_trail,'glBufferData',side_effect=AssertionError('첫 공격 할당')):
                 painter.draw_trail(effect,self.camera,'#FFFFFF')
                 painter.prepare(effect.settings)

@@ -15,7 +15,7 @@ python tests/texture_compression_test.py --bundle output/texture_comparison/demo
 python tests/texture_compression_test.py --bundle output/texture_comparison/demo_bundle/comparison.json
 ```
 
-독립 진입점은 `tests/texture_compression_test.py`, `UNIT_TEST_ENTRYPOINT="standalone"`이다. Runner에서 선택하거나 드롭해 실행할 수 있다. 기본 진입은 로컬 기체 후보를 사용하며 기본 도형은 위 `--bundle` 인자로 직접 실행한다. import만으로 창을 열지 않는다.
+독립 진입점은 `tests/texture_compression_test.py`, `UNIT_TEST_ENTRYPOINT="standalone"`이다. Runner에서 선택하거나 드롭해 실행할 수 있다. 기본 로컬 기체 후보가 없거나 `--demo`를 지정하면 기본 도형의 기존·공유 RGBA를 비교한다. NumPy와 Pillow가 필요하며 시연 데이터는 `output/texture_comparison/demo_runs/`에 생성한다. 압축 후보까지 비교하려면 위에서 준비한 `--bundle`을 지정한다. import만으로 창을 열지 않는다.
 
 ## 확인할 결과
 

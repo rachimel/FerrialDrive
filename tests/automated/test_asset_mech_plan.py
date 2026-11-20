@@ -9,8 +9,6 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
-
 from Tools.asset_loader.mech_plan import default_plan, load_plan, plan_path, save_plan, validate_plan
 
 
@@ -126,6 +124,7 @@ class MechPlanTests(unittest.TestCase):
 class MechPanelTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        cls.enterClassContext(patch.dict(os.environ, SDL_VIDEODRIVER="dummy"))
         import pico2d.pico2d as pico
         cls.pico = pico
         pico.open_canvas(1280, 800)

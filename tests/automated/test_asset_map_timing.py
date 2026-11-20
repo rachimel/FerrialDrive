@@ -8,8 +8,6 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-os.environ.setdefault('SDL_VIDEODRIVER', 'dummy')
-
 from ferrial_drive.assets import AssetDefinition, MapBundle, SpriteBundle, SpritePlayback, detect_kind
 from ferrial_drive.assets.sprites import SpriteSheet
 from samples.asset_loader.make_sample import write_samples
@@ -21,6 +19,7 @@ from Tools.asset_loader.map_export import export_map, composite_rgba
 
 class MapTimingTests(unittest.TestCase):
     def setUp(self):
+        self.enterContext(patch.dict(os.environ, SDL_VIDEODRIVER='dummy'))
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         self.source = write_sample(self.root / 'input')

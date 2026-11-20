@@ -10,8 +10,6 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
-
 from samples.asset_loader.make_sample import write_samples
 from ferrial_drive.assets import SpriteBundle
 from ferrial_drive.ui.standalone import _events, run_preview
@@ -117,6 +115,7 @@ class AssetPanelTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        cls.enterClassContext(patch.dict(os.environ, SDL_VIDEODRIVER="dummy"))
         import pico2d.pico2d as pico
         cls.pico = pico
         pico.open_canvas(1280, 800)
@@ -315,6 +314,7 @@ class AssetPanelTests(unittest.TestCase):
 
 class AssetPanelLoopTests(unittest.TestCase):
     def test_quit_event_still_reaches_main_loop_while_file_browser_is_open(self):
+        self.enterContext(patch.dict(os.environ, SDL_VIDEODRIVER="dummy"))
         import pico2d.pico2d as pico
         app = AssetLoaderApp()
         original_enter = app.enter

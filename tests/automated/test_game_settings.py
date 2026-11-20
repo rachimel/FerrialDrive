@@ -283,7 +283,7 @@ class GameSettingsIntegrationTests(unittest.TestCase):
     @unittest.skipUnless(os.environ.get("FDRIVE_GPU_TESTS") == "1", "실제 게임 OpenGL 검사는 선택 실행한다.")
     def test_pause_menu_save_and_fresh_process_quality_selection(self):
         config = ROOT / "samples/sword_movement/movement_config.json"
-        profiles = json.loads(config.read_text(encoding="utf-8"))["upper_lower"]["part_catalog_profiles"]
+        profiles = json.loads(config.read_text(encoding="utf-8"))["upper_lower"]["pbr_catalog_profiles"]
         for quality in ("high", "medium"):
             candidates = profiles[quality]
             paths = (candidates,) if isinstance(candidates, str) else candidates
@@ -357,7 +357,7 @@ run_application(app,width=app.window_size[0],height=app.window_size[1],title='Ga
             self.assertEqual(high["shadow_scale"],.25)
             self.assertEqual(medium["shadow_scale"],.25)
             self.assertEqual(medium["part_renderer"]["upscale_aa"], "off")
-            self.assertEqual(medium["part_renderer"]["shadow_map"]["ground_map_size"], 256)
+            self.assertEqual(medium["part_renderer"]["shadow_map"]["ground_map_size"], 128)
 
     def test_invalid_settings_are_not_silently_replaced(self):
         with tempfile.TemporaryDirectory() as folder:

@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 LOCAL_RUNTIME = ROOT / "automate/runtime/texture_compare/python"
 if LOCAL_RUNTIME.is_dir():
-    sys.path.insert(0, str(LOCAL_RUNTIME))
+    sys.path.append(str(LOCAL_RUNTIME))
 
 from ferrial_drive.assets.alpha_data import prepare_alpha_data
 from ferrial_drive.rendering import PicoCanvas

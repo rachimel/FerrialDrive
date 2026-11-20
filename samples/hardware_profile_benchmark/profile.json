@@ -4,6 +4,6 @@
   "target_fps": 60,
   "resolution": [1920, 1080],
   "resource_limits": {"logical_cpus": 8, "cpu_percent": 50, "memory_mib": 2048},
-  "gpu_profile": "uhd630_gl45_conservative",
+  "gpu_profile": "none",
   "calibration": "실기 성능에 보정하지 않은 부하 제한. 하드웨어 성능 에뮬레이션이 아니다."
 }

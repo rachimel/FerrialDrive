@@ -5,8 +5,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
-
-os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+from unittest.mock import patch
 
 from ferrial_drive.assets import AssetCatalog, AssetManager
 from ferrial_drive.assets.pico_assets import PicoAssetBackend
@@ -16,6 +15,7 @@ from samples.asset_loader.make_sample import write_png, write_samples
 class PicoAssetLoaderTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        cls.enterClassContext(patch.dict(os.environ, SDL_VIDEODRIVER="dummy"))
         import pico2d.pico2d as pico
         cls.pico = pico
         pico.open_canvas(1280, 800)

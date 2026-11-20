@@ -8,8 +8,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
-
+from unittest.mock import patch
 from ferrial_drive.assets import AssetCatalog, AssetDefinition, AssetManager, MechBundle, detect_kind
 from ferrial_drive.assets.pico_assets import PicoAssetBackend
 from Tools.asset_loader.mech_export import build_mech, copy_mech, import_mech
@@ -22,6 +21,7 @@ from Tools.asset_loader.part_model import add_part, add_state, all_orders, remov
 class MechBundleTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        cls.enterClassContext(patch.dict(os.environ, SDL_VIDEODRIVER="dummy"))
         import pico2d.pico2d as pico
         cls.pico = pico
         cls.temporary = tempfile.TemporaryDirectory(prefix="split-mech-")

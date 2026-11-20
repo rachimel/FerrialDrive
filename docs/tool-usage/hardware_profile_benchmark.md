@@ -65,6 +65,8 @@ python tests/hardware_profile_benchmark.py --mute --scenario combat --enemy-coun
 
 ## UHD 630 검토 프로필의 검사 범위
 
+기본 Combat·Movement는 현행 PBR을 실제 GPU 기능으로 실행하며 CPU·커밋 제한을 적용한다. UHD 630 기능 가드는 `--gpu-profile uhd630_gl45_conservative`로 선택한다. 프래그먼트 텍스처 16단위에서 동작하는 베이크 경로를 검토하려면 `--player-pipeline baked`를 함께 지정한다.
+
 [Intel 명세](https://www.intel.com/content/www/us/en/products/sku/199283/intel-core-i310100-processor-6m-cache-up-to-4-30-ghz/specifications.html)의 OpenGL 4.5를 기준으로, 현재 프로젝트가 쓰는 기능만 허용한다. `uhd630_gl45_conservative`라는 이름은 **UHD 630 실기의 전체 cap 덤프나 드라이버 에뮬레이터**를 뜻하지 않는다. 수치들은 실기 확인 전의 보수적인 검사 상한이다. Compute·SSBO·Instancing·BC7을 사용할 수 있다.
 
 | 검사 항목 | 상한·정책 |
@@ -84,7 +86,7 @@ python tests/hardware_profile_benchmark.py --mute --scenario combat --enemy-coun
 ## 계측과 결과
 
 - 직접 조작은 WASD·마우스 조준·좌클릭 공격·Shift 대시·Space 부스트 등 기존 입력을 그대로 받는다. Esc는 일시정지이며 **창 닫기로 종료·결과 저장**한다. F3/F4 에너지 조절·E/F 무장/로드아웃 등 기존 HUD 입력도 전달한다. 자동 공격·자동 초기화는 하지 않는다.
-- 직접 조작은 `--frames`를 생략하면 시간 제한 없이 실행한다. 제목에 최근 약 1초 FPS와 직전 프레임의 HUD·월드 ms를 표시한다. 현재 저장 설정을 결과 폴더로 복사해 사용하며 사용자 설정 파일은 건드리지 않는다. 품질을 고정하려면 `--quality`로 등급을 지정한다. 이름별 해상도는 현행 설정을 따르고 실제 아틀라스 `divisor`를 함께 기록한다.
+- 직접 조작은 `--frames`를 생략하면 시간 제한 없이 실행한다. 직접 조작과 자동 측정 모두 창 제목에 최근 약 1초 FPS, 직전 프레임의 HUD·월드 ms, 최신 프로세스 RAM Working Set과 GPU 메모리를 표시한다. GPU는 WDDM 전용·공유 값 또는 DXGI 로컬 값을 보여 준다. 현재 저장 설정을 결과 폴더로 복사해 사용하며 사용자 설정 파일은 건드리지 않는다. 품질을 고정하려면 `--quality`로 등급을 지정한다. 이름별 해상도는 현행 설정을 따르고 실제 아틀라스 `divisor`를 함께 기록한다.
 - 장시간 조작 시 프레임·GPU 표본은 최근 최대 3,600개만 보관한다. `observed_fps`·분포·목표 판정은 그 표본 구간, `session_observed_fps`와 `total_measured_frames`는 전체 측정 세션이다. HUD/월드 구간 집계는 측정 시작부터 전체 세션을 포함한다.
 
 - 기본은 FHD 1920×1080, 최소 목표 60FPS 제한, VSync 꺼짐이다. 권장 목표의 시간 예산은 `--target-fps 165`로 선택한다. `--unpaced`면 프레임 대기를 없앤다. `--target-fps`는 자동 갱신 시간과 프레임 예산을 같이 바꾼다. 일반 게임 실행의 60FPS 기본값은 유지한다.

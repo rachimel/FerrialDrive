@@ -20,7 +20,7 @@ UNIT_TEST_ENTRYPOINT = "standalone"
 sys.path.insert(0, str(ROOT))
 LOCAL_RUNTIME = ROOT / "automate/runtime/texture_compare/python"
 if LOCAL_RUNTIME.is_dir():
-    sys.path.insert(0, str(LOCAL_RUNTIME))
+    sys.path.append(str(LOCAL_RUNTIME))
 
 
 def benchmark(args):
@@ -81,7 +81,9 @@ def benchmark(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--bundle", type=Path, default=ROOT / "data/runtime/textures/sword_all_half_20261113/comparison.json")
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument("--bundle", type=Path, help="준비한 비교 입력")
+    source.add_argument("--demo", action="store_true", help="기본 도형의 기존·공유 RGBA 비교")
     parser.add_argument("--benchmark", action="store_true")
     parser.add_argument("--case", choices=("legacy", "atlas_full", "atlas_half", "ktx", "oodle", "oodle_full", "oodle_75"))
     parser.add_argument("--frames", type=int)
@@ -96,6 +98,18 @@ def main():
     args = parser.parse_args()
     if args.phase is not None and not 0 <= args.phase <= 1:
         parser.error("위상은 0~1이다.")
+    default_bundle = ROOT / "data/runtime/textures/sword_all_half_20261113/comparison.json"
+    demo = args.demo or (args.bundle is None and not default_bundle.is_file())
+    if demo:
+        available = {None, "legacy", "atlas_full", "atlas_half"}
+        if args.case not in available or args.candidate not in available:
+            parser.error("압축 후보를 비교하려면 해당 후보가 포함된 --bundle을 지정한다.")
+        output = ROOT / "output/texture_comparison/demo_runs" / uuid4().hex
+        subprocess.run([sys.executable, str(ROOT / "automate/run.py"), "texture-compare", "--demo", "--rgba-only",
+                        "--output", str(output)], cwd=ROOT, check=True)
+        args.bundle = output / "comparison.json"
+    elif args.bundle is None:
+        args.bundle = default_bundle
     if not args.bundle.is_file():
         parser.error("비교 입력이 없다. python automate/run.py texture-compare 로 먼저 준비한다.")
     if args.benchmark:
@@ -107,8 +121,10 @@ def main():
                                 phase=args.phase, clip=args.clip, measure=args.measure,
                                 quality_directory=args.quality_directory, started=STARTED, candidate=args.candidate)
     program.show_metrics = args.metrics or (args.case is None and args.capture is None and bool(program.benchmark_summary))
-    run_application(program, width=WINDOW_SIZE[0], height=WINDOW_SIZE[1],
-                    title="Ferrial Drive | Texture Compression", frame_limit=args.frames)
+    title = "Ferrial Drive | Texture Compression"
+    if demo:
+        title += " | 기본 도형"
+    run_application(program, width=WINDOW_SIZE[0], height=WINDOW_SIZE[1], title=title, frame_limit=args.frames)
 
 
 if __name__ == "__main__":

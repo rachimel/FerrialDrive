@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 LOCAL_RUNTIME = ROOT / "automate/runtime/texture_compare/python"
 if LOCAL_RUNTIME.is_dir() and any(importlib.util.find_spec(name) is None for name in ("numpy", "PIL")):
-    sys.path.insert(0, str(LOCAL_RUNTIME))
+    sys.path.append(str(LOCAL_RUNTIME))
 
 from ferrial_drive.assets.alpha_data import prepare_alpha_data
 from ferrial_drive.assets.catalog import AssetCatalog, read_document
