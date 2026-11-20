@@ -266,6 +266,7 @@ def load_enemy_part_sprites(path, pico, lighting, settings, timings, stream_budg
             keys = tuple((motion, direction) for direction in PRELOAD_DIRECTION_ORDER[:2] for motion in motions)
             keys += tuple((motion, direction) for motion in motions for direction in PRELOAD_DIRECTION_ORDER[2:])
             resource.residency.require(keys, preload_limit_bytes=resource.cache_budget_bytes * 3 // 4)
+            sprite.shared_frames()
     except BaseException:
         for sprite in sprites.values():
             sprite.resource.close()

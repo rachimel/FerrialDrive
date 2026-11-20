@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from .part_motion_atlas import frame_state
 from .part_upscale import render_target
+from .pose_copy_batch import MIN_POSE_COPIES, create_pose_copy_batch
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +24,7 @@ class EnemyPoseCache:
         self.budget_bytes = budget_bytes
         self.bytes = 0
         self.hits = self.misses = 0
+        self.copy_batch = create_pose_copy_batch(resource.pico)
 
     def _lookup(self, key):
         entry = self.entries.get(key)
@@ -67,7 +69,12 @@ class EnemyPoseCache:
         pivot_x, pivot_y = self.resource.data["pivot_top_left"]
         factor = scale * self.resource.data["pixel_scale"]
         dx, dy = (entry.left - pivot_x) * factor, (entry.top - pivot_y) * factor
-        destination = p.SDL_Rect(0, 0, max(1, round(entry.width * factor)), max(1, round(entry.height * factor)))
+        width, height = max(1, round(entry.width * factor)), max(1, round(entry.height * factor))
+        if self.copy_batch is not None and len(placements) >= MIN_POSE_COPIES:
+            if self.copy_batch.draw(entry.texture, placements, dx, dy, width, height):
+                return round(placements[-1][1] + dy)
+            self.copy_batch = None
+        destination = p.SDL_Rect(0, 0, width, height)
         for x, foot in placements:
             destination.x, destination.y = round(x + dx), round(foot + dy)
             if p.SDL_RenderCopy(p.renderer, entry.texture, None, destination):

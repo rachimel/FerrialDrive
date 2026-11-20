@@ -11,6 +11,7 @@ from ferrial_drive.diagnostics.timing import TimingRecorder
 from ferrial_drive.rendering.canvas import PicoCanvas
 from ferrial_drive.rendering.part_atlas_residency import AtlasFrameBudget
 from ferrial_drive.rendering.part_shadow_map import GROUND_GEOMETRY_BUDGET_BYTES, MAX_GROUND_GEOMETRY_POSES
+from ferrial_drive.rendering.pose_copy_batch import MIN_POSE_COPIES
 from ferrial_drive.settings import GameSettings
 
 
@@ -119,6 +120,36 @@ class EnemyBatchGpuTests(unittest.TestCase):
                 entries = shadow.ground_geometry.values()
                 self.assertLessEqual(len(entries), MAX_GROUND_GEOMETRY_POSES)
                 self.assertLessEqual(sum(len(vertices) for vertices, _ in entries), GROUND_GEOMETRY_BUDGET_BYTES)
+
+    def test_shared_pose_copies_preserve_pixels_overlap_and_rounding(self):
+        sprite = self.sprites["small"]
+        cache = sprite.shared_frames()
+        if cache.copy_batch is None:
+            self.skipTest("Numba가 필요하다.")
+        points = [(-4.5, 100.5), (100.5, 112.5), (104.5, 116.5), (250.25, 185.75),
+                  (503.5, 490.5)] * 3
+        pose = sprite.part_clip("move", "s"), 3 / 24
+        def render(placements):
+            return cache.draw_shadows(pose, placements, .85, .5, 3)
+
+        def individual():
+            for point in points:
+                render([point])
+
+        p = self.pico
+        sx, sy = ct.c_float(), ct.c_float()
+        p.SDL_RenderGetScale(p.renderer, ct.byref(sx), ct.byref(sy))
+        self.addCleanup(p.SDL_RenderSetScale, p.renderer, sx.value, sy.value)
+        for scale in (1, .75):
+            p.SDL_RenderSetScale(p.renderer, scale, scale)
+            baseline = self.capture(individual)
+            before = cache.copy_batch.submits
+            result = self.capture(lambda: render(points))
+            self.assertEqual(cache.copy_batch.submits, before + 1)
+            self.assertTrue((baseline != [140, 170, 200]).any())
+            self.assertTrue((baseline == result).all())
+            self.capture(lambda: render(points[:MIN_POSE_COPIES - 1]))
+            self.assertEqual(cache.copy_batch.submits, before + 1)
 
     def test_shadows_across_tile_eviction_and_instance_limit(self):
         for kind, sprite in self.sprites.items():
