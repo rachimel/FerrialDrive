@@ -773,3 +773,7 @@
 ## FDLOG-20261120-enemy-preload-hud
 
 - [적 모션 선적재와 록온 HUD](2026-11-20-enemy-preload-lock-hud.md)의 사용자 발언 시각은 [[FDLOG_MISSING_TIME:FDLOG-20261120-enemy-preload-hud:U1-U2]]이다. 검색 단서는 `로딩 시간에서 미리 캐싱`과 `록온 했을 때만`이다.
+
+## FDLOG-20261121-crowd-numba-gpu
+
+- [적 1,000기 교전의 Numba 배치와 GPU 그림자](2026-11-21-crowd-numba-gpu.md)의 두 사용자 발언 시각은 [[FDLOG_MISSING_TIME:FDLOG-20261121-crowd-numba-gpu:U1-U2]]이다. 검색 단서는 `특히 3번`과 `GPU로 던질 수 있는`이다.
