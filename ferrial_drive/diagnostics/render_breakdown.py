@@ -11,7 +11,7 @@ from .timing import TimingRecorder
 VARIANTS = ("baseline", "no_hud", "no_world", "no_ui_blur", "no_camera_blur", "no_actor_blur",
             "no_auxiliary", "no_body_wind", "no_trail", "no_echoes", "no_ground_effects", "no_shadow",
             "no_radar", "no_dialogue", "no_resources", "no_rings", "cpu_trail", "compute_trail", "no_hud_batch",
-            "collision_polygon", "collision_capsule", "ground_individual", "ground_batched", "individual_enemy_parts", "individual_enemy_shadows", "no_enemy_labels")
+            "collision_polygon", "collision_capsule", "ground_individual", "ground_batched", "individual_enemy_parts", "individual_enemy_shadows", "no_enemy_labels", "debug_enemy_labels")
 
 
 class RenderBreakdown:
@@ -91,11 +91,11 @@ class RenderBreakdown:
 
     def install(self):
         app = self.app
-        if self.variant == "no_enemy_labels":
+        if self.variant in ("no_enemy_labels", "debug_enemy_labels"):
             view = getattr(app, "encounter_view", None)
             if view is None:
                 raise ValueError("적 이름표·체력 막대 대조에는 교전 장면이 필요하다.")
-            self.replace(view, "show_enemy_labels", lambda old: False)
+            self.replace(view, "show_enemy_labels", lambda old: self.variant == "debug_enemy_labels")
         if self.variant in ("individual_enemy_parts", "individual_enemy_shadows"):
             view = getattr(app, "encounter_view", None)
             if view is None:

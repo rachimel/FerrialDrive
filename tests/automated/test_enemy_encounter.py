@@ -389,7 +389,19 @@ class EncounterIntegrationTests(unittest.TestCase):
                 self.assertEqual(program.hud.enemies["S1"]["health"].maximum, 180)
                 program.hud.scene = "combat"
                 program.hud.transition.update(1)
-                program.hud.apply_target("S1")
+                program.hud.apply_target(None)
+                view = program.hud.view
+                with patch.object(view.renderer, "text") as target_text:
+                    view.target(program.hud.state, 1, 0, draw_marker=False)
+                    target_text.assert_not_called()
+                    program.hud.apply_target("S1")
+                    view.target(program.hud.state, 1, 0, draw_marker=False)
+                    self.assertEqual([call.args[0] for call in target_text.call_args_list],
+                                     [program.hud.enemies["S1"]["name"]])
+                program.draw_targets()
+                stats = program.encounter_view.primitives.stats
+                self.assertGreater(stats["placed_enemies"], 1)
+                self.assertEqual(stats["text_submits"], 1)
                 program.hud.damage_target("S1", 60)
                 self.assertEqual(program.encounter.enemies["S1"].health, 120)
                 program.hud.damage_target("S2", 1)

@@ -41,7 +41,7 @@ python tests/hardware_profile_benchmark.py --mute --scenario combat --enemy-coun
 
 같은 조건에서 24m 간격을 주면 더 넓게 분산된다. `--auto`의 시뮬레이션 시간은 고정 스텝이며 실제 표시 FPS와 프레임 시간은 `report.json`에 별도로 기록한다.
 
-적 표시와 플레이어 HUD의 비용은 무음 자동 교전에 `--compare baseline no_enemy_labels no_hud --rounds 2`를 추가해 비교한다. `no_enemy_labels`는 전장에 붙는 개별 적 이름·HP·Break 글자를 생략한다. `no_hud`는 플레이어 HUD 그리기를 생략한다. 각 회차의 `cpu_ms.draw_submit_ms`와 `work_ms.p95`를 확인한다.
+일반 교전에서는 록온 HUD로 선택한 적의 이름과 체력을 표시한다. 무음 자동 교전에 `--compare baseline debug_enemy_labels no_hud --rounds 2`를 추가해 비용을 비교한다. `debug_enemy_labels`는 화면 내 각 적에 이름·상태·체력 막대와 Break 글자를 추가한다. 기존 `no_enemy_labels` 인자도 기본 표시로 실행된다. `no_hud`는 플레이어 HUD 그리기를 생략한다. 각 회차의 `cpu_ms.draw_submit_ms`와 `work_ms.p95`를 확인한다.
 
 기체 묶음의 비용은 위 명령에 `--compare individual_enemy_parts individual_enemy_shadows baseline --rounds 2`를 추가해 같은 프로세스에서 실행 순서를 뒤집어 비교한다. 첫 조건은 근거리 본체·그림자를 개별 제출하고 둘째는 그림자만 개별 제출한다. 기본 경로는 둘 다 묶는다. 세 조건 모두 근거리 보간율과 원거리 공유 정책이 같다. `enemy_rendering_last`의 `batched_bodies`는 묶어 그린 기체 수, `body_batch_submits`와 `near_shadow_batch_submits`는 각각 본체 PBR과 지면 그림자 표시의 인스턴스 드로우 횟수다. 깊이 타일 갱신과 최종 화면 합성은 이 두 횟수에 포함하지 않는다.
 

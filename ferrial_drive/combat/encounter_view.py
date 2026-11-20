@@ -25,7 +25,7 @@ class EncounterView:
         self.sprites = {}
         self.batch_enemy_parts = True
         self.batch_enemy_shadows = True
-        self.show_enemy_labels = True
+        self.show_enemy_labels = False
 
     def point(self, position_m, height_pixels=0):
         x, y = self.projection.project((position_m.x, position_m.y))
