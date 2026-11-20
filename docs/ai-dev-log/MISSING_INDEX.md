@@ -761,3 +761,7 @@
 ## FDLOG-20261120-crowd-combat
 
 - [900~1,000기 교전](2026-11-20-crowd-combat-scaling.md)의 사용자 발언 시각이 미확인이다. `[[FDLOG_MISSING_TIME:FDLOG-20261120-crowd-combat:scope]]` 검색 단서는 `900~ 1000기`, `사운드는 꺼줘요`와 `먼 적은 같은 에셋의 공유 프레임 허용`이다.
+
+## FDLOG-20261120-crowd-entrypoints
+
+- [기존 교전 테스트 연결](2026-11-20-crowd-test-integration.md)의 사용자 발언 시각은 [[FDLOG_MISSING_TIME:FDLOG-20261120-crowd-entrypoints:U1]]이다. 검색 단서는 `기존 테스트들에 현재 최적화 사항 연결하고`다.
