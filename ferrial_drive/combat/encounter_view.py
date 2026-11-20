@@ -9,6 +9,7 @@ from .geometry import Vec2
 
 
 ENEMY_VIEW_MARGIN_PIXELS = 200
+BODY_RUN_WINDOW = 16
 
 
 def use_shared_frame(enemy, player_position_m, locked_id, distance_m):
@@ -170,23 +171,55 @@ class EncounterView:
 
     def _draw_bodies(self, placed, encounter, flashes, zoom, prepared, labels, break_labels):
         r = self.primitives
-        for pose, rows in groupby(placed, self._shared_body_key):
+        for pose, items, _ in self._body_runs(placed, zoom):
             if pose is None:
-                for row in rows:
+                for row in items:
                     self._draw_enemy(row, encounter, flashes, zoom, prepared, labels, break_labels)
                 continue
             sprite, kind, motion, direction, index = pose
-            points = [(row[1], row[0]) for row in rows]
             if r.count:
                 r.flush()
-            sprite.shared_frames().draw_bodies(sprite.part_clip(motion, direction), index, points, sprite.scale * zoom)
-            count = len(points)
+            sprite.shared_frames().draw_bodies(sprite.part_clip(motion, direction), index, items, sprite.scale * zoom)
+            count = len(items)
             r.stats["shared_frame_draws"] += count
             r.stats["sprite_draws"] += count
             r.stats["part_draws"] += count
             motions = r.stats["enemy_motions"]
             key = f"{kind}/{motion}"
             motions[key] = motions.get(key, 0) + count
+
+    def _body_runs(self, placed, zoom):
+        pending = []
+        for pose, rows in groupby(placed, self._shared_body_key):
+            if pose is None:
+                yield from pending
+                pending.clear()
+                yield None, rows, None
+                continue
+            sprite, _, motion, direction, index = pose
+            points = [(row[1], row[0]) for row in rows]
+            clip = sprite.part_clip(motion, direction)
+            span = sprite.shared_frames().body_horizontal_span(clip, index, points, sprite.scale * zoom)
+            if span is None or len(pending) == BODY_RUN_WINDOW:
+                yield from pending
+                pending.clear()
+            if span is None:
+                yield pose, points, None
+                continue
+            left, right = span
+            # 그 사이의 다른 텍스처가 덮는 픽셀을 건너뛸 수 있을 때만 앞으로 당긴다.
+            for i in range(len(pending) - 1, -1, -1):
+                previous, positions, (xmin, xmax) = pending[i]
+                if previous == pose:
+                    positions.extend(points)
+                    pending[i] = previous, positions, (min(xmin, left), max(xmax, right))
+                    break
+                if left < xmax and xmin < right:
+                    pending.append((pose, points, span))
+                    break
+            else:
+                pending.append((pose, points, span))
+        yield from pending
 
     def _shared_body_key(self, row):
         _, _, enemy, sprite, playback, shared = row

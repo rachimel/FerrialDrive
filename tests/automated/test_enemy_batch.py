@@ -4,6 +4,7 @@ import ctypes as ct
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -227,3 +228,32 @@ class EnemyBatchGpuTests(unittest.TestCase):
             self.assertEqual(sprite.draw_near_shadows(groups, scale, .55, 3), (74, 2))
 
         self.compare(individual, batched, 8)
+
+    def test_shared_texture_can_cross_only_disjoint_bodies(self):
+        sprite = self.sprites["small"]
+        cache = sprite.shared_frames()
+        zoom = 1 / (sprite.scale * sprite.resource.data["pixel_scale"])
+        renderer = PicoRenderer({}, {})
+        self.addCleanup(renderer.close)
+        view = EncounterView(renderer, None, None, backend="immediate")
+        self.addCleanup(view.primitives.close)
+        enemy = SimpleNamespace(profile=SimpleNamespace(kind="small"), phase="move")
+        rows = []
+        placements = [("s", 90), ("e", 430)] * 4 + [("e", 97), ("s", 99)]
+        for i, (direction, x) in enumerate(placements):
+            rows.append((210 + i, x, enemy, sprite, ("move", direction, 0.), True))
+
+        def paint():
+            for foot, x, _, _, (motion, direction, _), _ in rows:
+                cache.draw(sprite.part_clip(motion, direction), 0, x, foot, sprite.scale * zoom)
+
+        baseline = self.capture(paint)
+        runs = list(view._body_runs(rows, zoom))
+        self.assertEqual([(key[3], len(points)) for key, points, _ in runs], [("s", 4), ("e", 5), ("s", 1)])
+
+        def batched():
+            for (_, _, motion, direction, index), points, _ in runs:
+                cache.draw_bodies(sprite.part_clip(motion, direction), index, points, sprite.scale * zoom)
+
+        self.assertTrue((baseline != [140, 170, 200]).any())
+        self.assertTrue((baseline == self.capture(batched)).all())

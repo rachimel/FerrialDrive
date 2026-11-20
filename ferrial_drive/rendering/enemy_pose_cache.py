@@ -84,6 +84,18 @@ class EnemyPoseCache:
     def draw(self, clip_name, index, x, foot, scale):
         return self.draw_bodies(clip_name, index, ((x, foot),), scale)
 
+    def body_horizontal_span(self, clip_name, index, placements, scale):
+        """이미 합성된 본체가 덮는 화면 x 구간을 실제 복사와 같은 정수 좌표로 구한다."""
+        entry = self.entries.get(("body", clip_name, index))
+        if entry is None:
+            return None
+        factor = scale * self.resource.data["pixel_scale"]
+        dx = (entry.left - self.resource.data["pivot_top_left"][0]) * factor
+        xmin = xmax = placements[0][0]
+        if len(placements) > 1:
+            xmin, xmax = min(placements)[0], max(placements)[0]
+        return round(xmin + dx), round(xmax + dx) + max(1, round(entry.width * factor))
+
     def draw_bodies(self, clip_name, index, placements, scale):
         if not placements:
             return None
