@@ -6,8 +6,12 @@ from math import hypot
 NO_ATTACK, MELEE_ATTACK, RANGED_ATTACK = range(3)
 
 
+def movement_length(x, y):
+    return hypot(x, y)
+
+
 def pursuit(dx, dy, facing_x, facing_y, max_step, radius, player_radius, melee_distance, fire_distance):
-    distance = hypot(dx, dy)
+    distance = movement_length(dx, dy)
     if distance > 1e-9:
         inverse = 1 / distance
         facing_x, facing_y = dx * inverse, dy * inverse
@@ -20,7 +24,7 @@ def pursuit(dx, dy, facing_x, facing_y, max_step, radius, player_radius, melee_d
 
 
 def ranged_recovery(dx, dy, max_step, preferred_distance):
-    distance = hypot(dx, dy)
+    distance = movement_length(dx, dy)
     if distance <= 1e-9:
         return 0., 0.
     inverse = 1 / distance

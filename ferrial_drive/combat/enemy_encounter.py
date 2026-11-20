@@ -9,6 +9,22 @@ from .enemy_steering import MELEE_ATTACK, pursuit, ranged_recovery
 
 
 ENEMY_KINDS = ("small", "medium", "humanoid")
+MIN_BATCH_ENEMIES = 32
+
+
+def _movement_batch(count):
+    if count < MIN_BATCH_ENEMIES:
+        return None
+    try:
+        from numba import config
+    except ModuleNotFoundError as error:
+        if error.name not in {"numba", "numpy"}:
+            raise
+        return None
+    if config.DISABLE_JIT:
+        return None
+    from .enemy_movement_batch import EnemyMovementBatch
+    return EnemyMovementBatch(count)
 
 
 def crowd_spawns(source, count, spacing_m, center_m, map_size_m):
@@ -152,13 +168,28 @@ class EnemyEncounter:
             self.enemies[row["id"]] = EncounterEnemy(row["id"], profile, position, profile.health)
         if not self.enemies:
             raise ValueError("교전에는 적이 한 기 이상 필요하다.")
-        self.spacing = EnemySpacing(self.enemies.values(), 2 * max(enemy.profile.radius_m for enemy in self.enemies.values()))
+        self.movement_batch = _movement_batch(len(self.enemies))
+        self._spacing = None
+        if self.movement_batch is None:
+            self._sync_spacing()
         self.changed_health_ids = set()
         self.projectiles = []
         self.hit_events = []
         self.elapsed_seconds = 0
         self.result = "running"
         self.shots_fired = 0
+
+    def _sync_spacing(self):
+        enemies = self.enemies.values()
+        if self._spacing is None:
+            self._spacing = EnemySpacing(enemies, 2 * max(enemy.profile.radius_m for enemy in enemies))
+        else:
+            self._spacing = self._spacing.sync(enemies)
+        return self._spacing
+
+    @property
+    def spacing(self):
+        return self._sync_spacing()
 
     @property
     def hits(self):
@@ -249,9 +280,12 @@ class EnemyEncounter:
         """교전 종료 뒤에도 잔여 밀림·사망 표시만 진행한다. 공격·게임 시간은 멈춘다."""
         if not isfinite(seconds) or seconds < 0:
             raise ValueError("피격 표현 갱신은 0 이상의 유한한 초다.")
-        self.spacing = self.spacing.sync(self.enemies.values())
-        for enemy in self.enemies.values():
-            self._advance_reaction(enemy, seconds)
+        if self.movement_batch is not None:
+            self.movement_batch.advance(self, seconds, Vec2(), Vec2(), reactions_only=True)
+        else:
+            self._sync_spacing()
+            for enemy in self.enemies.values():
+                self._advance_reaction(enemy, seconds)
 
     def _move(self, enemy, movement, *, locomotion=False):
         radius = enemy.profile.radius_m
@@ -260,10 +294,10 @@ class EnemyEncounter:
         candidate = Vec2(max(radius, min(maximum, origin.x + movement.x)),
                          max(radius, min(maximum, origin.y + movement.y)))
         if enemy.alive:
-            resolved = self.spacing.separate(enemy, candidate)
+            resolved = self._spacing.separate(enemy, candidate)
             if resolved is not candidate:
                 candidate = Vec2(max(radius, min(maximum, resolved.x)), max(radius, min(maximum, resolved.y)))
-            self.spacing.moved(enemy, candidate)
+            self._spacing.moved(enemy, candidate)
         dx, dy = candidate.x - origin.x, candidate.y - origin.y
         distance = hypot(dx, dy)
         enemy.travel_m += distance
@@ -348,7 +382,8 @@ class EnemyEncounter:
             raise ValueError("플레이어 위치는 유한한 미터 좌표다.")
         count = max(1, ceil(seconds * 120))
         step = seconds / count
-        self.spacing = self.spacing.sync(self.enemies.values())
+        if self.movement_batch is None:
+            self._sync_spacing()
         for index in range(count):
             first = start + (end - start) * (index / count)
             last = start + (end - start) * ((index + 1) / count)
@@ -369,7 +404,10 @@ class EnemyEncounter:
                         and 0 <= destination.y <= self.map_size_m):
                     survivors.append(bullet)
             self.projectiles = survivors
-            for enemy in self.enemies.values():
-                self._advance_enemy(enemy, step, first, last)
+            if self.movement_batch is not None:
+                self.movement_batch.advance(self, step, first, last)
+            else:
+                for enemy in self.enemies.values():
+                    self._advance_enemy(enemy, step, first, last)
             self.elapsed_seconds += step
         return tuple(self.hits)
