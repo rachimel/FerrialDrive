@@ -765,3 +765,7 @@
 ## FDLOG-20261120-crowd-entrypoints
 
 - [기존 교전 테스트 연결](2026-11-20-crowd-test-integration.md)의 사용자 발언 시각은 [[FDLOG_MISSING_TIME:FDLOG-20261120-crowd-entrypoints:U1]]이다. 검색 단서는 `기존 테스트들에 현재 최적화 사항 연결하고`다.
+
+## FDLOG-20261120-crowd-followup
+
+- [세 병목 최적화](2026-11-20-crowd-loading-culling-shadows.md)의 사용자 발언 시각은 [[FDLOG_MISSING_TIME:FDLOG-20261120-crowd-followup:U1]]이다. 검색 단서는 `3 -> 1 -> 2 순서대로`와 `BSON으로 갈아타야할지도`다.
