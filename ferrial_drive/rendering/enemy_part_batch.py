@@ -28,7 +28,7 @@ class EnemyPartBatch:
         painter = self.painter
         sampler = painter.sampler
         width = len(painter.arrays) * len(clip["parts"])
-        height = len(clip["anchors"]) - 1
+        height = len(clip.get("keyframe_seconds", clip["anchors"])) - 1
         cost = width * height * 16
         if cost > TABLE_BUDGET_BYTES or max(width, height) > sampler.max_texture_size:
             return None

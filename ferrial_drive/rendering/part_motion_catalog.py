@@ -1,6 +1,7 @@
 """PBR 파츠 카탈로그와 방향별 프레임·코팅 메타데이터."""
 
 from collections import OrderedDict
+from math import isfinite
 from pathlib import Path
 
 from .atlas_json import read_atlas_json
@@ -67,6 +68,13 @@ class PartMotionCatalog:
 
     def _read_direction(self, relative, path):
         data = read_atlas_json(path)
+        clip = data.get("clip", {})
+        if (keys := clip.get("keyframe_seconds")) is not None:
+            if (len(keys) < 2 or keys[0] != 0 or keys[-1] != clip["duration_seconds"]
+                    or not all(isfinite(value) for value in keys)
+                    or any(a >= b for a, b in zip(keys, keys[1:]))
+                    or any(len(spec["frames"]) != len(keys) for spec in clip["parts"].values())):
+                raise ValueError(f"파츠 키 포즈 시각 또는 프레임이 올바르지 않다: {path}")
         if self.coat_members:
             coat_path = (self.coat_folder / self.coat_members[relative]).resolve()
             if not coat_path.is_relative_to(self.coat_folder):

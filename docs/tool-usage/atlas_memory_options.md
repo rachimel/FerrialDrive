@@ -57,3 +57,15 @@ python automate/run.py part-surface-downsample --profiles data/runtime/part_moti
 ```
 
 Python에 NumPy와 Pillow가 필요하다. 출력에는 품질별 카탈로그와 재질·코팅 페이지, 변환한 채널의 GPU 논리 크기와 디스크 크기를 담은 `statistics.json`이 포함된다.
+
+## PBR 키포즈 아틀라스
+
+각 모션에서 본의 위치·회전과 화면상 파츠 이동을 검사해 저장할 포즈를 고른다. 시작·끝 포즈를 보존하며 방향마다 같은 키 시각을 쓴다. 키 사이 양방향 벡터를 패킹하고 표시는 프레임마다 GPU에서 합성한다. 원래 표본 속도는 허리 정렬·포구 좌표와 전투 시간에 사용한다.
+
+```text
+python automate/run.py part-sparse-atlas --catalog 원본_품질폴더/catalog.json --output 새_품질폴더
+```
+
+제작 환경에 NumPy가 필요하다. `--motion 이름`은 비교용 모션만 변환하고 여러 번 지정할 수 있다. `--error-pixels` 기본값은 1.5다. 중간 프레임의 근사 오차가 생기므로 키의 개수와 시각, 원본·후보 텍스처 바이트를 `statistics.json`에 기록한다.
+
+이동 훈련장은 `player_pbr_24/profiles/sparse_keys_r01/{high,medium,low}/catalog.json`을 우선 읽는다. 교전 테스트는 `data/runtime/part_motion/enemy_sparse_r01/{mech,spider}/{high,medium,low}/catalog.json`과 원본의 상대 경로 규약을 유지한 `enemy_parts.json`을 읽는다. 해당 후보가 없으면 기존 카탈로그를 읽는다. 원거리 적은 기종·모션·방향과 초당 60단계로 맞춘 재생 위상이 같을 때 합성 결과를 공유한다.

@@ -2,6 +2,8 @@
 
 import ctypes as ct
 
+from .instanced_quads import InstancedQuads
+
 try:
     import numpy as np
     from numba import config, njit
@@ -12,6 +14,29 @@ except ModuleNotFoundError as error:
 
 
 MIN_POSE_COPIES = 4
+POSE_COPY_FRAGMENT = b"""#version 140
+uniform sampler2D artwork;
+in vec2 texel;
+out vec4 color;
+void main() { color=texture(artwork,texel); }
+"""
+
+
+class InstancedPoseCopyBatch(InstancedQuads):
+    def __init__(self, pico):
+        super().__init__(pico, fragment_shader=POSE_COPY_FRAGMENT, extra_uniforms=("artwork",))
+
+    def draw(self, texture, placements, dx, dy, width, height):
+        instances = [((round(x + dx), round(y + dy), width, height), 0, 0) for x, y in placements]
+        p = self.pico
+        texw, texh = ct.c_float(), ct.c_float()
+        with self.batch():
+            if p.SDL_GL_BindTexture(texture, ct.byref(texw), ct.byref(texh)):
+                return False
+            self.glUniform1i(self.uniforms["artwork"], 0)
+            self.glBlendFuncSeparate(1, 0x0303, 1, 0x0303)
+            self.draw_instances((0, 0, texw.value, texh.value), instances)
+        return True
 
 
 def _fill_positions(points, dx, dy, width, height, positions):
@@ -64,7 +89,16 @@ class PoseCopyBatch:
         self.submits += 1
         return True
 
+    def close(self):
+        self.vertices = self.indices = self.positions = None
+        self.capacity = 0
 
-def create_pose_copy_batch(pico):
+
+def create_pose_copy_batch(pico, *, instanced=False):
+    if instanced:
+        try:
+            return InstancedPoseCopyBatch(pico)
+        except RuntimeError:
+            pass
     if _compiled_positions is not None:
         return PoseCopyBatch(pico)

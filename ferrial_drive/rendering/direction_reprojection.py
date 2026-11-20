@@ -35,6 +35,7 @@ def direction_banks(spans):
 def direction_frame(correspondence, clips, spans, interval):
     """상하체의 방향별 깊이로 목표 각도의 픽셀 변위를 재구성한다."""
     index, alpha = interval["first"], interval["alpha"]
+    anchor_index, anchor_alpha = interval.get("anchor_phase", (index, alpha))
     origin = correspondence["origin"]
     scale = correspondence["pixels_per_cm"]
     transforms = []
@@ -45,7 +46,8 @@ def direction_frame(correspondence, clips, spans, interval):
     # 새 상체와 하체의 회전점이 같은 허리 위치를 유지하도록 이동한다.
     def projected_waist(group):
         waists = clips[spans[group][0]]["anchors"]
-        waist = [a + (b - a) * alpha for a, b in zip(waists[index]["waist"], waists[index + 1]["waist"])]
+        waist = [a + (b - a) * anchor_alpha for a, b in
+                 zip(waists[anchor_index]["waist"], waists[anchor_index + 1]["waist"])]
         relative = (waist[0] - origin[0], waist[1] - origin[1],
                     (waist[2] + correspondence["calibrated_depth_offset_cm"] - origin[2]) * scale)
         matrix = transforms[group * 2]

@@ -24,7 +24,7 @@ class EnemyPoseCache:
         self.budget_bytes = budget_bytes
         self.bytes = 0
         self.hits = self.misses = 0
-        self.copy_batch = create_pose_copy_batch(resource.pico)
+        self.copy_batch = create_pose_copy_batch(resource.pico, instanced="shared_pose_fps" in resource.data)
 
     def _lookup(self, key):
         entry = self.entries.get(key)
@@ -73,6 +73,7 @@ class EnemyPoseCache:
         if self.copy_batch is not None and len(placements) >= MIN_POSE_COPIES:
             if self.copy_batch.draw(entry.texture, placements, dx, dy, width, height):
                 return round(placements[-1][1] + dy)
+            self.copy_batch.close()
             self.copy_batch = None
         destination = p.SDL_Rect(0, 0, width, height)
         for x, foot in placements:
@@ -105,7 +106,7 @@ class EnemyPoseCache:
             resource = self.resource
             motion, pair = clip_name.rsplit("/", 1)
             clip = resource.get(motion, pair[1])["data"]["clip"]
-            seconds = index / resource.data["sample_fps"]
+            seconds = index / resource.data.get("shared_pose_fps", resource.data["sample_fps"])
             bounds = frame_state(clip, clip, seconds)["bounds"]
             entry = self._capture(key, bounds, lambda px, py: resource.draw(clip_name, seconds, px, py,
                                   scale=1 / resource.data["pixel_scale"], sample_shadow=False))
@@ -136,6 +137,9 @@ class EnemyPoseCache:
         return len(placements)
 
     def close(self):
+        if self.copy_batch is not None:
+            self.copy_batch.close()
+            self.copy_batch = None
         for entry in self.entries.values():
             self.resource.pico.SDL_DestroyTexture(entry.texture)
         self.entries.clear()

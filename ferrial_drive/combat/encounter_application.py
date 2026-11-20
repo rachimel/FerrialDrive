@@ -55,11 +55,16 @@ class EncounterApplication(MovementApplication):
         self._install_enemy_sprites(sprites)
 
     def _enemy_parts(self, settings):
-        path = self.encounter.settings.get("rendering", {}).get("enemy_part_sprites")
-        if not path or not self.pbr_enabled:
+        if not self.pbr_enabled:
+            return {}
+        rendering = self.encounter.settings.get("rendering", {})
+        folder = self.encounter_path.parent
+        path = next((folder / rendering[key] for key in ("enemy_sparse_sprites", "enemy_part_sprites")
+                    if rendering.get(key) and (folder / rendering[key]).is_file()), None)
+        if path is None:
             return {}
         lighting = self.relative_path(self.config["upper_lower"]["pbr_lighting"])
-        return load_enemy_part_sprites(self.encounter_path.parent / path, self.pico, lighting, settings, self.timings,
+        return load_enemy_part_sprites(path, self.pico, lighting, settings, self.timings,
                                        self.part_stream_budget)
 
     def _install_enemy_sprites(self, sprites):

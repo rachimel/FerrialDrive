@@ -48,6 +48,10 @@ class EnemySprite:
     def sample_fps(self):
         return self.resource.data["sample_fps"] if self.part_counts else 12
 
+    @property
+    def shared_pose_fps(self):
+        return self.resource.data.get("shared_pose_fps") if self.part_counts else None
+
     def frame_count(self, motion, direction="s"):
         if self.part_counts:
             return self.part_counts[motion] * self.sample_fps // 12 + 1
@@ -145,6 +149,13 @@ class EnemySprite:
     def frame_index(self, motion, direction, seconds):
         return min(self.frame_count(motion, direction) - 1, int(seconds * self.sample_fps + 1e-7))
 
+    def shared_frame_index(self, motion, direction, seconds):
+        fps = self.shared_pose_fps
+        if fps is None:
+            return self.frame_index(motion, direction, seconds)
+        index = int(seconds * fps + 1e-7)
+        return min(round(self.duration(motion) * fps), index)
+
     @staticmethod
     def part_clip(motion, direction):
         index = PART_DIRECTIONS.index(direction)
@@ -219,7 +230,7 @@ class EnemySprite:
             if prepared is not None:
                 top = self.body_batch.copy(prepared)
             elif shared_frame:
-                top = self.shared_frames().draw(clip, index, x, foot, scale)
+                top = self.shared_frames().draw(clip, self.shared_frame_index(motion, direction, seconds), x, foot, scale)
             else:
                 top = self.resource.draw(clip, seconds, x, foot, scale=scale, sample_shadow=False).y
             scale *= self.resource.data["pixel_scale"]
@@ -271,7 +282,7 @@ def load_enemy_part_sprites(path, pico, lighting, settings, timings, stream_budg
             sprite.shared_frames()
     except BaseException:
         for sprite in sprites.values():
-            sprite.resource.close()
+            sprite.close()
         raise
     return sprites
 

@@ -791,3 +791,7 @@
 ## FDLOG-20261121-enemy-numba-movement
 
 - [적 군집 Numba 이동](2026-11-21-enemy-numba-movement.md)의 사용자 발언 시각은 [[FDLOG_MISSING_TIME:FDLOG-20261121-enemy-numba-movement:U1]]이다. 검색 단서는 `적 이동은 Numba로 합쳐`다.
+
+## FDLOG-20261121-sparse-part-keyframes
+
+- [PBR 파츠 키포즈와 실시간 합성](2026-11-21-sparse-part-keyframes.md)의 사용자 발언 시각은 [[FDLOG_MISSING_TIME:FDLOG-20261121-sparse-part-keyframes:U1]]이다. 검색 단서는 `일단 아틀라스에는 주요 KeyFrame들만 보존해`와 `적 같은 경우에는`다.

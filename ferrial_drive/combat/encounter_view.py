@@ -1,5 +1,6 @@
 """교전용 스프라이트·기본 도형·공격 표현. 판정은 EnemyEncounter가 소유한다."""
 
+from collections import Counter
 from itertools import groupby
 from math import sin
 
@@ -132,6 +133,7 @@ class EncounterView:
                 r.stats["shadow_draws"] += count
                 r.stats["near_shadow_batch_submits"] += submits
             r.stats["shadow_groups"] = len(shadow_groups)
+        self._select_shared_bodies(placed)
         body_requests = {}
         for foot, x, enemy, sprite, playback, shared in placed:
             if self.batch_enemy_parts and sprite is not None and sprite.part_counts and not shared:
@@ -227,7 +229,19 @@ class EncounterView:
         if self.show_enemy_labels or not shared or sprite is None or enemy.phase == "active":
             return None
         motion, direction, seconds = playback
-        return sprite, enemy.profile.kind, motion, direction, sprite.frame_index(motion, direction, seconds)
+        return sprite, enemy.profile.kind, motion, direction, sprite.shared_frame_index(motion, direction, seconds)
+
+    def _select_shared_bodies(self, placed):
+        """실제 중복이 있는 중간 자세만 개별 포즈 텍스처에 저장한다."""
+        candidates = {}
+        for index, row in enumerate(placed):
+            if row[-1] and row[3] is not None and row[3].shared_pose_fps is not None:
+                pose = self._shared_body_key(row)
+                candidates[index] = None if pose is None else pose[1:]
+        counts = Counter(candidates.values())
+        for index, pose in candidates.items():
+            if pose is None or counts[pose] == 1:
+                placed[index] = (*placed[index][:-1], False)
 
     def _draw_enemy(self, row, encounter, flashes, zoom, prepared, labels, break_labels):
         foot, x, enemy, sprite, playback, shared = row

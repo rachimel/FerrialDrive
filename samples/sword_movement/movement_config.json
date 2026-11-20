@@ -12,14 +12,17 @@
     "pbr_lighting": "../../data/runtime/part_motion/player_pbr_24/lighting.json",
     "pbr_catalog_profiles": {
       "high": [
+        "../../data/runtime/part_motion/player_pbr_24/profiles/sparse_keys_r01/high/catalog.json",
         "../../data/runtime/part_motion/player_pbr_24/profiles/material_coat_half_r01/high/catalog.json",
         "../../data/runtime/part_motion/player_pbr_24/profiles/high/catalog.json"
       ],
       "medium": [
+        "../../data/runtime/part_motion/player_pbr_24/profiles/sparse_keys_r01/medium/catalog.json",
         "../../data/runtime/part_motion/player_pbr_24/profiles/material_coat_half_r01/medium/catalog.json",
         "../../data/runtime/part_motion/player_pbr_24/profiles/medium/catalog.json"
       ],
       "low": [
+        "../../data/runtime/part_motion/player_pbr_24/profiles/sparse_keys_r01/low/catalog.json",
         "../../data/runtime/part_motion/player_pbr_24/profiles/material_coat_half_r01/low/catalog.json",
         "../../data/runtime/part_motion/player_pbr_24/profiles/low/catalog.json"
       ]
