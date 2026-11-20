@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [Hardware Benchmark 커밋 상한 종료](2026-11-21-benchmark-commit-stop.md) `[[FDLOG_MISSING_TIME:FDLOG-20261121-benchmark-commit-stop:U1-U2]]`은 오류 및 키프레임 발언의 정확한 시각이다. 검색 단서는 `Hardware Benchmark에서 걸림`, `주요 KeyFrame들만 추출`이다.
+
 - [독립 테스트 실행 복구와 벤치마크 메모리 표시](2026-11-21-test-launch-benchmark-memory.md) `[[FDLOG_MISSING_TIME:FDLOG-20261121-test-launch-benchmark-memory:U1-U2]]`은 테스트 오류와 제목 요청의 정확한 시각이다. 검색 단서는 `오류나는 테스트들`, `메모리 사용량도 제목에서`다.
 
 - [PBR 재질·코팅과 지면 그림자 반해상도](2026-11-21-pbr-material-coat-shadow-half.md) `[[FDLOG_MISSING_TIME:FDLOG-20261121-pbr-material-coat-shadow-half:U1-U3]]`은 재질·코팅과 그림자 요청의 정확한 시각이다. 검색 단서는 `Material이랑 Coat 50%`, `Shadow도 50%`, `적의 Shadow도`다.

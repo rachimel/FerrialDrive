@@ -42,6 +42,11 @@ def render_report(result, limits=None):
     if result.get("error"):
         lines += ["", "실행 오류: " + cell(result["error"])]
 
+    if stop := result.get("memory_stop"):
+        lines += ["", f"커밋 메모리 상한에 가까워 {stop['frame']}번째 프레임을 시작하기 전에 종료했다. "
+                  f"사용량 {mib(stop['commit_bytes'])} MiB / 상한 {mib(stop['limit_bytes'])} MiB. "
+                  f"종료 여유 {mib(stop['reserve_bytes'])} MiB."]
+
     benchmark = result.get("benchmark")
     if benchmark is not None:
         lines += ["", "## 프레임 측정", "",

@@ -30,8 +30,9 @@ python Tools/unit_test_runner/run.py
 
 | 선택 | 실행 장면 | 입력·저장 |
 | --- | --- | --- |
-| Combat | `EncounterApplication`의 현재 다수 적 교전 | 직접 조작, 상세 계측, 창 종료 시 보고서 저장 |
+| Combat · 2 GiB 제한 | `EncounterApplication`의 현재 다수 적 교전 | 직접 조작, 상세 계측, 창 종료 시 보고서 저장 |
 | Movement | 이동·검 훈련장(`--scenario sword`) | 직접 조작, 상세 계측, 창 종료 시 보고서 저장 |
+| Combat · 실기 제한 없음 | 현재 다수 적 30기 교전 | 직접 조작, 상세 계측, CPU·커밋 제한 없이 실행 |
 
 두 선택 모두 자동 공격과 프레임 제한을 넣지 않는다. 현재 저장 품질을 격리 복사하고 CPU·커밋 제한을 적용하며, PBR은 실제 GPU 기능으로 실행한다. 창 제목에 RAM과 GPU 메모리가 표시된다. 테스트 창을 정상 종료하면 `output/performance/hardware_profile/<실행시각>/report.json`·`report.md`를 저장한다. Runner 종료·다른 테스트로 강제 교체하면 저장을 보장하지 않는다. [측정·보고서 안내](../../docs/tool-usage/hardware_profile_benchmark.md)를 따른다. Runner 코드 변경은 실행기를 완전히 닫고 다시 열어 반영한다.
 

@@ -1,5 +1,7 @@
 # AI 개발 로그
 
+- [2026-11-21 Hardware Benchmark 커밋 상한 종료](2026-11-21-benchmark-commit-stop.md) — 실제 Runner 재현, 제한 시험 중단 보고서와 Combat 실기 프리셋.
+
 - [2026-11-21 독립 테스트 실행 복구와 벤치마크 메모리 표시](2026-11-21-test-launch-benchmark-memory.md) — 테스트 실행 경로, 기본 도형 비교, RAM·GPU 창 제목.
 
 - [2026-11-21 PBR 재질·코팅과 지면 그림자 반해상도](2026-11-21-pbr-material-coat-shadow-half.md) — 플레이어 재질·코팅, 플레이어와 적의 지면 그림자, GPU 저장량·화면 대조.

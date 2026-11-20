@@ -60,6 +60,7 @@ python tests/hardware_profile_benchmark.py --mute --scenario combat --enemy-coun
 - `--logical-cpus 8`, `--cpu-percent 50`, `--memory-mib 2048`로 덮어쓴다. 이전 1GiB 상한을 별도 확인하려면 `--memory-mib 1024`를 사용한다. 현재 허용된 CPU 중 낮은 번호부터 선택한다. CPU 번호와 실제 상한은 보고서에 남긴다. 다중 processor group의 전체 코어 선택은 구현하지 않았다.
 - CPU 상한은 스케줄링 구간의 실행 시간 할당량이다. 소진하면 다음 구간까지 멈출 수 있다. 느린 CPU의 명령 처리 속도와 같지 않다. 50%가 메인 스레드를 절반 속도로 만든다는 뜻도 아니다.
 - 메모리 상한은 물리 RAM이나 VRAM이 아닌 **committed virtual memory**다. 프로세스/Job 전체에 적용한다. 기존 1GiB 게임 전체 예산의 모든 CPU/GPU 자원을 통합 제한하지 않는다. GPU 전용/공유 메모리는 WDDM 카운터를 별도 기록하며 private bytes와 단순 합산하지 않는다.
+- 커밋 상한의 1/16과 128MiB 중 작은 값을 종료 여유로 둔다. 프레임 시작 전 Private Bytes가 이 구간에 들어오면 측정을 중단하고 그때까지의 결과와 `memory_stop`을 저장한다. Runner의 `Combat · 실기 제한 없음`은 동일한 30기 교전을 CPU·커밋 제한 없이 실행한다.
 - Job 핸들을 닫으면 그 Job의 자식만 정리한다. Codex·Runner 부모나 컴퓨터 전체의 CPU·전원·RAM 설정은 바꾸지 않는다.
 - Windows API 의미는 [CPU rate control](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_cpu_rate_control_information), [extended limits](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_extended_limit_information)를 따른다. 별도 psutil/pywin32 설치는 필요 없다.
 

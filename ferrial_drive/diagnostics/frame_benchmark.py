@@ -36,7 +36,7 @@ def summarize_frames(rows, *, target_fps, expected_frames, elapsed_seconds):
 
 
 def benchmark_program(program, canvas, *, target_fps=165, frames=600, warmup=120, paced=True,
-                      before_step=None, interactive=False, sample_capacity=3600, on_status=None):
+                      before_step=None, interactive=False, sample_capacity=3600, on_status=None, should_continue=None):
     """직접 조작은 실제 경과 시간·전체 입력을 사용한다. 창·enter/exit는 호출자가 소유한다."""
     from ferrial_drive.runtime import poll_events
 
@@ -58,6 +58,8 @@ def benchmark_program(program, canvas, *, target_fps=165, frames=600, warmup=120
     try:
         for index in count():
             if frames is not None and index >= warmup + frames:
+                break
+            if should_continue is not None and not should_continue(index):
                 break
             if index == warmup:
                 finish()

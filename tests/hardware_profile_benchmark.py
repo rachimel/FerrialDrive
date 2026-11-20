@@ -16,8 +16,10 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 UNIT_TEST_ENTRYPOINT = "standalone"
 UNIT_TEST_PRESETS = (
-    {"id": "combat", "label": "Combat · 다수 적 교전", "args": ["--scenario", "combat", "--detail"]},
+    {"id": "combat", "label": "Combat · 2 GiB 제한", "args": ["--scenario", "combat", "--detail"]},
     {"id": "movement", "label": "Movement · 이동·검 훈련장", "args": ["--scenario", "sword", "--detail"]},
+    {"id": "combat_native", "label": "Combat · 실기 제한 없음",
+     "args": ["--scenario", "combat", "--detail", "--gpu-profile", "none", "--no-resource-limits"]},
     {"id": "crowd_1000", "label": "Combat · 1,000기 · 실기 무음",
      "args": ["--scenario", "combat", "--enemy-count", "1000", "--enemy-spacing-m", "24", "--mute",
               "--gpu-profile", "none", "--no-resource-limits"]},
@@ -105,6 +107,17 @@ def run_worker(args, applied, profile):
                 result["actual_gl"] = {name: query(enum).decode(errors="replace") for name, enum in
                                        (("vendor", 0x1F00), ("renderer", 0x1F01), ("version", 0x1F02))}
                 result["renderer"] = asdict(canvas.info)
+                commit_limit = applied.get("process_memory_limit_bytes", 0)
+                reserve = min(128 * 1024**2, commit_limit // 16)
+
+                def within_commit_budget(frame):
+                    committed = process_memory().get("private_bytes")
+                    if committed is None or committed < commit_limit - reserve:
+                        return True
+                    result["memory_stop"] = {"frame": frame, "commit_bytes": committed,
+                                             "limit_bytes": commit_limit, "reserve_bytes": reserve}
+                    return False
+
                 started = perf_counter()
                 probe = call_profile = None
                 try:
@@ -188,7 +201,10 @@ def run_worker(args, applied, profile):
                                         ground_random.setstate(ground_random_state)
                                 result["benchmark"] = benchmark_program(app, canvas, target_fps=args.target_fps,
                                     frames=args.frames, warmup=args.warmup, paced=not args.unpaced, before_step=step,
-                                    interactive=not args.auto, on_status=status)
+                                    interactive=not args.auto, on_status=status,
+                                    should_continue=within_commit_budget if commit_limit else None)
+                                if "memory_stop" in result:
+                                    result["benchmark"].update(completed=False, target_met=False, all_work_within_budget=False)
                                 if app.sword_renderer:
                                     result["trail_backend_requested"] = app.sword_renderer.trail_backend
                                     result["trail_backend"] = app.sword_renderer.last_trail_backend
@@ -227,6 +243,8 @@ def run_worker(args, applied, profile):
                     result["resolution"] = [width.value, height.value]
                     result["resolution_changed"] = result["resolution"] != result["resolution_initial"]
                     result["status"] = "completed" if result["benchmark"]["completed"] else "interrupted"
+                    if "memory_stop" in result:
+                        result["status"] = "memory_limit"
                 finally:
                     if call_profile:
                         call_profile.disable()
@@ -252,6 +270,10 @@ def run_worker(args, applied, profile):
                **{key: result["benchmark"][key] for key in
                   ("observed_fps", "work_ms", "deadline_miss_percent", "target_met")}}
     print(json.dumps(compact, ensure_ascii=False), flush=True)
+    if result["status"] == "memory_limit":
+        stop = result["memory_stop"]
+        print(f"커밋 메모리 상한에 가까워 측정을 중단했다. "
+              f"{stop['commit_bytes'] / 2**20:.0f}/{stop['limit_bytes'] / 2**20:.0f} MiB · 보고서 저장 완료", flush=True)
     return 0 if result["status"] == "completed" else 2
 
 

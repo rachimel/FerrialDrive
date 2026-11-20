@@ -6,17 +6,18 @@ import os
 from .gpu_profile import bind_gl
 
 
+class _ProcessMemoryCounters(ct.Structure):
+    _fields_ = [("cb", ct.c_ulong), ("faults", ct.c_ulong)] + [
+        (name, ct.c_size_t) for name in ("peak_working_set", "working_set", "peak_paged_pool",
+                                         "paged_pool", "peak_nonpaged_pool", "nonpaged_pool",
+                                         "pagefile", "peak_pagefile", "private_bytes")]
+
+
 def process_memory():
     if os.name != "nt":
         return {"available": False, "reason": "Windows 프로세스 메모리 API가 아니다."}
 
-    class MemoryCounters(ct.Structure):
-        _fields_ = [("cb", ct.c_ulong), ("faults", ct.c_ulong)] + [
-            (name, ct.c_size_t) for name in ("peak_working_set", "working_set", "peak_paged_pool",
-                                             "paged_pool", "peak_nonpaged_pool", "nonpaged_pool",
-                                             "pagefile", "peak_pagefile", "private_bytes")]
-
-    counters = MemoryCounters()
+    counters = _ProcessMemoryCounters()
     counters.cb = ct.sizeof(counters)
     handle = ct.windll.kernel32.GetCurrentProcess
     handle.restype = ct.c_void_p
