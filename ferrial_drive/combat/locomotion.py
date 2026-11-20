@@ -21,7 +21,7 @@ def direction_name(vector):
 class LocomotionSettings:
     map_size_m: float = 1000
     radius_m: float = 2.5
-    run_speed_mps: float = 30
+    run_speed_mps: float = 50
     dash_speed_mps: float = 100
     movement_acceleration_seconds: float = 0.2
     boost_start_speed_mps: float = 250
@@ -55,6 +55,7 @@ class LocomotionController:
         self.position_m = (self.settings.map_size_m / 2,) * 2
         self.facing = (1.0, 1.0)
         self.state = "idle"
+        self.strong_dash = False
         self.speed_mps = 0.0
         self.movement_speed_mps = 0.0
         self._speed_target_mps = 0.0
@@ -75,6 +76,15 @@ class LocomotionController:
     @property
     def boost_preparing(self):
         return self.boost_prepare_remaining_seconds > 0
+
+    @property
+    def presentation_state(self):
+        # 약출력은 기존 카메라·레이더 설정의 기본 이동 값을 사용한다.
+        return "run" if self.state == "dash" and not self.strong_dash else self.state
+
+    @property
+    def dash_output(self):
+        return min(1.0, self.movement_speed_mps / self.settings.dash_speed_mps)
 
     def request_boost(self, movement, aim):
         if self.boost_remaining_seconds > 0 or self.boost_preparing:
@@ -143,9 +153,10 @@ class LocomotionController:
         coasting = (movement_speed_mps is None and not any(movement)
                     and any(self._last_movement) and self.movement_speed_mps > 0)
         direction = self._last_movement if coasting else movement
-        self.state = (("dash" if dash else "run") if any(movement)
-                      else self.state if coasting else "idle")
-        if self.state == "run" and face_movement:
+        self.state = "dash" if any(direction) else "idle"
+        if not coasting:
+            self.strong_dash = bool(dash and any(movement))
+        if self.state == "dash" and face_movement:
             self.facing = direction
         elif any(aim):
             self.facing = aim
@@ -162,6 +173,7 @@ class LocomotionController:
             speed = self._advance_movement_speed(speed, seconds)
             if coasting and self.movement_speed_mps <= 0:
                 self.state = "idle"
+                self.strong_dash = False
                 self._last_movement = (0.0, 0.0)
         else:
             speed = 0.0
@@ -222,7 +234,7 @@ class LocomotionPlayback:
             raise ValueError("전환 시간은 양수 초 단위여야 한다.")
         self.clips = clips
         self.transition_seconds = transition_seconds
-        for motion in ("idle_loop", "run_loop", "dash_loop", "boost_loop"):
+        for motion in ("idle_loop", "dash_loop", "boost_loop"):
             if any(f"{motion}/{direction}" not in clips for direction in SCREEN_DIRECTIONS):
                 raise ValueError(f"8방향 반복 클립 누락: {motion}")
         self.reset()
@@ -246,7 +258,7 @@ class LocomotionPlayback:
         return min(len(clip.frames) - 1, int(phase * len(clip.frames)))
 
     def update(self, state, direction, delta_seconds, *, loop_speed=1.0):
-        if state not in ("idle", "run", "dash", "boost") or direction not in SCREEN_DIRECTIONS:
+        if state not in ("idle", "dash", "boost") or direction not in SCREEN_DIRECTIONS:
             raise ValueError("지원하지 않는 이동 상태·방향이다.")
         if not isfinite(delta_seconds) or delta_seconds < 0:
             raise ValueError("재생 시간은 0 이상의 유한한 초 단위다.")

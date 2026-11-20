@@ -5,8 +5,10 @@ import ctypes as ct
 from math import cos, hypot, sin, tau
 
 from ferrial_drive.diagnostics.gpu_profile import bind_gl
-from .bicubic import BicubicSampler, renderer_name
+from .canvas import renderer_name
+from .gl_pass import SdlOpenGLPass
 from .hud_batch import HudBatchQueue
+from .hud_text_atlas import HudTextAtlas
 
 
 VERTEX_SHADER = b'''#version 330
@@ -56,15 +58,16 @@ def primitive_points(row):
                  for along, edge in ((0, 0), (0, 1), (1, 1), (1, 0)))
 
 
-class PrimitiveInstances(BicubicSampler):
+class PrimitiveInstances(SdlOpenGLPass):
     def __init__(self, pico):
         self.texture = 0
         self.capacity = 0
-        super().__init__(pico, None, vertex_shader=VERTEX_SHADER, fragment_shader=FRAGMENT_SHADER,
+        super().__init__(pico, vertex_shader=VERTEX_SHADER, fragment_shader=FRAGMENT_SHADER,
                          extra_uniforms=("instances", "transform"))
 
     def _bind_functions(self):
         super()._bind_functions()
+        self.max_rows = self.integer(0x0D33)  # GL_MAX_TEXTURE_SIZE
         uint, integer, pointer = ct.c_uint, ct.c_int, ct.c_void_p
         signatures = {
             'glGenTextures': (None, [integer, pointer]), 'glDeleteTextures': (None, [integer, pointer]),
@@ -77,9 +80,10 @@ class PrimitiveInstances(BicubicSampler):
         for name, (result, arguments) in signatures.items():
             setattr(self, name, bind_gl(self.pico, name, result, arguments))
 
-    def render(self, data, count, capacity):
+    def render(self, data, count, capacity, *, vertices=4, primitive=0x0005, instances_per_row=1):
         if not count:
-            return
+            return 0
+        capacity = min(capacity, self.max_rows)
         with self.batch():
             keys = (0x0CF5, 0x0CF2, 0x0CF3, 0x0CF4)
             unpack, buffer = tuple(self.integer(key) for key in keys), self.integer(0x88EF)
@@ -97,25 +101,26 @@ class PrimitiveInstances(BicubicSampler):
                     self.glTexParameteri(0x0DE1, 0x2800, 0x2600)
                     self.glTexImage2D(0x0DE1, 0, 0x8814, 3, capacity, 0, 0x1908, 0x1406, None)
                     self.capacity = capacity
-                self.glTexSubImage2D(0x0DE1, 0, 0, 0, 3, count, 0x1908, 0x1406, data)
                 sx, sy = ct.c_float(), ct.c_float()
                 self.pico.SDL_RenderGetScale(self.pico.renderer, ct.byref(sx), ct.byref(sy))
                 self.glUniform1i(self.uniforms['instances'], 0)
                 self.glUniform4f(self.uniforms['transform'], *self.viewport[:2], sx.value, sy.value)
-                self.glDrawArraysInstanced(0x0005, 0, 4, count)
+                for start in range(0, count, capacity):
+                    rows = min(count - start, capacity)
+                    self.glTexSubImage2D(0x0DE1, 0, 0, 0, 3, rows, 0x1908, 0x1406, ct.byref(data, start * 48))
+                    self.glDrawArraysInstanced(primitive, 0, vertices, rows * instances_per_row)
             finally:
                 for key, value in zip(keys, unpack):
                     self.glPixelStorei(key, value)
                 self.glBindBuffer(0x88EC, buffer)
+        return (count + capacity - 1) // capacity
 
     def close(self):
         if self.texture:
             texture = ct.c_uint(self.texture)
             self.glDeleteTextures(1, ct.byref(texture))
             self.texture = 0
-        if self.program:
-            self.glDeleteProgram(self.program)
-            self.program = 0
+        super().close()
         self.capacity = 0
 
 
@@ -134,6 +139,7 @@ class PrimitiveBatch:
         self.capacity = self.count = 0
         self.data = None
         self.texts = []
+        self.label_atlas = None
         self.stats = {}
 
     @contextmanager
@@ -201,8 +207,7 @@ class PrimitiveBatch:
     def flush(self):
         self.renderer.flush_batch()
         if self.count and self.native:
-            self.native.render(self.data, self.count, self.capacity)
-            self.stats['geometry_submits'] += 1
+            self.stats['geometry_submits'] += self.native.render(self.data, self.count, self.capacity)
             self.stats['instance_upload_bytes'] += self.count * 48
         elif self.count and self.queue:
             with self.queue.frame():
@@ -211,12 +216,19 @@ class PrimitiveBatch:
                     rgba = tuple(round(value * 255) for value in row[4:8])
                     self.queue.polygon(primitive_points(row), rgba, separate_triangles=True)
             self.stats['geometry_submits'] += self.queue.stats['geometry_submits']
-        for args, kwargs in self.texts:
-            self.renderer.text(*args, **kwargs)
+        if self.texts:
+            if self.label_atlas is None and self.renderer.text_atlas is not None:
+                self.label_atlas = HudTextAtlas(self.pico, self.renderer.flush_batch, size=2048)
+            with self.renderer.hud_batch(text_atlas=self.label_atlas):
+                for args, kwargs in self.texts:
+                    self.renderer.text(*args, **kwargs)
         self.count = 0
         self.texts.clear()
 
     def close(self):
+        if self.label_atlas is not None:
+            self.label_atlas.close()
+            self.label_atlas = None
         if self.native:
             self.native.close()
         if self.queue:

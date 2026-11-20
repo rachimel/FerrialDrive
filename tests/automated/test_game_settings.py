@@ -14,12 +14,55 @@ from unittest.mock import Mock, patch
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from ferrial_drive.settings import GameSettings, GameSettingsStore, SCREEN_RESOLUTIONS, resolve_texture_profile
+from ferrial_drive.settings import GameSettings, GameSettingsStore, SCREEN_RESOLUTIONS
 from ferrial_drive.ui.settings import GraphicsSettingsMenu
 from ferrial_drive.ui.config import UiConfig
 
 
+def movement_application():
+    from ferrial_drive.combat.movement_application import MovementApplication
+
+    app = MovementApplication(ROOT / "samples/sword_movement/movement_config.json")
+    app.game_settings = GameSettings("low")
+    app.pico = None
+    return app
+
+
 class GameSettingsTests(unittest.TestCase):
+    def test_upscale_aa_save_and_rollback_keep_the_active_part_renderer(self):
+        app = movement_application()
+        app.part_sprite = Mock(data={"upscale_filter": "bounded_bicubic"})
+        apply = Mock()
+
+        @contextmanager
+        def prepare_aa(mode):
+            self.assertEqual(mode, "off")
+            yield apply
+
+        app.part_sprite.upscaler.prepare_aa = prepare_aa
+        sprite = app.part_sprite
+        with tempfile.TemporaryDirectory() as folder:
+            store = GameSettingsStore(Path(folder) / "preferences.json")
+            store.path.write_text('{"version": 1, "graphics": {"texture_quality": "low"}}', encoding="utf-8")
+            menu = GraphicsSettingsMenu(store)
+            menu.enable_buttons(UiConfig(ROOT / "samples/ui_unit_test_v2/ui_config.json"))
+            menu.prepare_apply = app.prepare_settings
+            self.assertEqual(menu.saved.upscale_aa, "smaa")
+            menu.open()
+            menu.perform("upscale_aa_off")
+            self.assertFalse(menu.requires_restart)
+            with patch.object(store, "save", side_effect=OSError("저장 실패")):
+                self.assertIsNone(menu.perform("settings_save"))
+            apply.assert_not_called()
+            self.assertEqual(app.game_settings.upscale_aa, "smaa")
+            self.assertEqual(menu.perform("settings_save"), "settings_saved")
+            self.assertIs(app.part_sprite, sprite)
+            apply.assert_called_once_with()
+            self.assertEqual(store.load().upscale_aa, "off")
+            self.assertEqual(app.game_settings.upscale_aa, "off")
+        with self.assertRaises(ValueError):
+            GameSettings(upscale_aa="taa")
+
     def test_resolution_round_trip_cancel_and_other_settings(self):
         with tempfile.TemporaryDirectory() as folder:
             store = GameSettingsStore(Path(folder)/"preferences.json")
@@ -108,91 +151,60 @@ class GameSettingsTests(unittest.TestCase):
         for quality,scale in (("high",.5),("medium",.25),("low",.125)):
             self.assertEqual(GameSettings(quality).shadow_scale,scale)
 
-    def test_failed_save_keeps_staged_shadows_and_atlas_unchanged(self):
-        from ferrial_drive.combat.movement_application import MovementApplication
-        app = MovementApplication(ROOT/"samples/sword_movement/movement_config.json")
-        app.game_settings = GameSettings("low")
-        app.quality_atlas,app.pico = True,None
-        app.motion_sprite = app.attack_sprite = previous = Mock()
+    def test_failed_save_closes_staged_part_quality_and_shadow_without_installing(self):
+        app = movement_application()
+        app.parts_only = True
+        app.part_sprite = live_parts = Mock(direction_enabled=True)
+        app.pose_sprite = live_pose = Mock()
+        next_parts, next_pose = Mock(), Mock()
         events = []
+
         @contextmanager
         def staged(scale):
-            events.append(("prepare",scale))
+            events.append(("prepare", scale))
             try:
-                yield lambda: events.append(("apply",scale))
+                yield lambda: events.append(("apply", scale))
             finally:
-                events.append(("close",scale))
+                events.append(("close", scale))
+
         shadow = Mock(alpha_layers=("shadow",))
         shadow.prepare_alpha_scale.side_effect = staged
         app.sprites = [shadow]
-        candidate = Mock()
-        with patch("ferrial_drive.rendering.pico_motion_atlas.PicoAtlasSprite",return_value=candidate):
+        with patch.object(app, "load_part_profile", return_value=next_parts), \
+                patch("ferrial_drive.rendering.pico_pose_table.PicoPoseTable", return_value=next_pose), \
+                self.assertRaises(OSError):
+            with app.prepare_settings(GameSettings("high")):
+                raise OSError("저장 실패")
+        self.assertEqual(events, [("prepare", .5), ("close", .5)])
+        self.assertIs(app.part_sprite, live_parts)
+        self.assertIs(app.pose_sprite, live_pose)
+        next_parts.close.assert_called_once()
+        next_pose.close.assert_called_once()
+
+    def test_parts_quality_save_failure_leaves_current_renderer_and_direction_mode(self):
+        from ferrial_drive.combat.movement_application import MovementApplication
+
+        app = MovementApplication(ROOT / "samples/sword_movement/movement_config.json")
+        app.game_settings = GameSettings("low")
+        app.parts_only = True
+        app.pico = None
+        app.part_sprite = live_parts = Mock(direction_enabled=False)
+        app.pose_sprite = live_pose = Mock()
+        next_parts, next_pose = Mock(), Mock()
+        with patch.object(app, "load_part_profile", return_value=next_parts), \
+                patch("ferrial_drive.rendering.pico_pose_table.PicoPoseTable", return_value=next_pose):
             with self.assertRaises(OSError):
                 with app.prepare_settings(GameSettings("high")):
+                    self.assertIs(app.part_sprite, live_parts)
                     raise OSError("저장 실패")
-        self.assertEqual(events,[("prepare",.5),("close",.5)])
-        self.assertIs(app.motion_sprite,previous)
-        previous.close.assert_not_called()
-        candidate.close.assert_called_once()
-
-    def test_shadow_prepare_failure_discards_new_atlas(self):
-        from ferrial_drive.combat.movement_application import MovementApplication
-        app = MovementApplication(ROOT/"samples/sword_movement/movement_config.json")
-        app.game_settings = GameSettings("low")
-        app.quality_atlas,app.pico = True,None
-        app.motion_sprite = app.attack_sprite = previous = Mock()
-        shadow = Mock(alpha_layers=("shadow",))
-        shadow.prepare_alpha_scale.side_effect = FileNotFoundError("그림자 데이터 없음")
-        app.sprites = [shadow]
-        candidate = Mock()
-        with patch("ferrial_drive.rendering.pico_motion_atlas.PicoAtlasSprite",return_value=candidate):
-            with self.assertRaises(FileNotFoundError):
-                with app.prepare_settings(GameSettings("high")):
-                    self.fail("준비 실패인데 설정 적용에 진입했다.")
-        self.assertIs(app.motion_sprite,previous)
-        candidate.close.assert_called_once()
-
-    def test_live_quality_is_staged_then_installed_without_resetting_game(self):
-        from ferrial_drive.combat.movement_application import MovementApplication
-        app = MovementApplication(ROOT/"samples/sword_movement/movement_config.json")
-        app.game_settings = GameSettings("low")
-        app.quality_atlas, app.pico = True, None
-        previous, candidate = Mock(), Mock()
-        app.motion_sprite = app.attack_sprite = previous
-        app.combat = Mock()
-        state = app.controller.position_m, app.combat
-        with patch("ferrial_drive.rendering.pico_motion_atlas.PicoAtlasSprite", return_value=candidate):
-            with app.prepare_settings(GameSettings("high")) as apply:
-                self.assertIs(app.motion_sprite, previous)
-                apply()
-        self.assertIs(app.motion_sprite, candidate)
-        self.assertIs(app.attack_sprite, candidate)
-        self.assertEqual((app.controller.position_m, app.combat), state)
-        previous.close.assert_called_once()
-        candidate.close.assert_not_called()
-
-    def test_failed_settings_save_discards_staged_quality_and_keeps_previous(self):
-        from ferrial_drive.combat.movement_application import MovementApplication
-        app = MovementApplication(ROOT/"samples/sword_movement/movement_config.json")
-        app.game_settings = GameSettings("low")
-        app.quality_atlas, app.pico = True, None
-        app.motion_sprite = app.attack_sprite = previous = Mock()
-        candidate = Mock()
-        store = Mock()
-        store.load.return_value = app.game_settings
-        store.save.side_effect = OSError("저장 실패")
-        menu = GraphicsSettingsMenu(store)
-        menu.prepare_apply = app.prepare_settings
-        menu.open()
-        menu.perform("texture_high")
-        with patch("ferrial_drive.rendering.pico_motion_atlas.PicoAtlasSprite", return_value=candidate):
-            self.assertIsNone(menu.perform("settings_save"))
-        self.assertIs(app.motion_sprite, previous)
+        self.assertIs(app.part_sprite, live_parts)
+        self.assertIs(app.pose_sprite, live_pose)
         self.assertEqual(app.game_settings.texture_quality, "low")
-        self.assertTrue(menu.opened)
-        self.assertEqual(menu.error, "저장 실패")
-        previous.close.assert_not_called()
-        candidate.close.assert_called_once()
+        self.assertFalse(next_parts.direction_enabled)
+        next_parts.close.assert_called_once()
+        next_pose.close.assert_called_once()
+        live_parts.close.assert_not_called()
+        live_pose.close.assert_not_called()
 
     def test_old_settings_default_to_visible_hints_and_toggle_survives_reload(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -231,18 +243,18 @@ class GameSettingsTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 GameSettings(show_key_hints=value)
 
-    def test_first_run_is_quarter_resolution_without_creating_file(self):
+    def test_first_run_is_half_resolution_without_creating_file(self):
         with tempfile.TemporaryDirectory() as folder:
             store = GameSettingsStore(Path(folder)/"preferences.json")
             self.assertEqual(store.load().texture_quality, "low")
-            self.assertEqual(store.load().texture_scale, 0.25)
+            self.assertEqual(store.load().texture_scale, 0.5)
             self.assertFalse(store.path.exists())
 
     def test_each_quality_round_trips_and_preserves_other_preferences(self):
         with tempfile.TemporaryDirectory() as folder:
             store = GameSettingsStore(Path(folder)/"preferences.json")
             store.path.write_text(json.dumps({"version": 1, "graphics": {"vsync": True}, "audio": {"volume": 0.5}}), encoding="utf-8")
-            for quality, scale in (("high", 0.75), ("medium", 0.5), ("low", 0.25)):
+            for quality, scale in (("high", 1.0), ("medium", 0.75), ("low", 0.5)):
                 store.save(GameSettings(quality))
                 self.assertEqual(store.load().texture_scale, scale)
                 data = json.loads(store.path.read_text(encoding="utf-8"))
@@ -270,8 +282,13 @@ class GameSettingsTests(unittest.TestCase):
 class GameSettingsIntegrationTests(unittest.TestCase):
     @unittest.skipUnless(os.environ.get("FDRIVE_GPU_TESTS") == "1", "실제 게임 OpenGL 검사는 선택 실행한다.")
     def test_pause_menu_save_and_fresh_process_quality_selection(self):
-        if not (ROOT/"data/runtime/textures/sword_all_half_20261113/oodle_75/atlas.json").is_file():
-            self.skipTest("기체 품질 후보를 먼저 준비한다.")
+        config = ROOT / "samples/sword_movement/movement_config.json"
+        profiles = json.loads(config.read_text(encoding="utf-8"))["upper_lower"]["part_catalog_profiles"]
+        for quality in ("high", "medium"):
+            candidates = profiles[quality]
+            paths = (candidates,) if isinstance(candidates, str) else candidates
+            if not any((config.parent / path).is_file() for path in paths):
+                self.skipTest(f"기체 {quality} 품질 카탈로그가 필요하다.")
         with tempfile.TemporaryDirectory() as folder:
             directory = Path(folder)
             code = r'''
@@ -303,30 +320,44 @@ class MenuApplication(MovementApplication):
   elif self.frame==2:
    assert self.controller.position_m==self.before_position
    menu=self.hud.graphics_settings
+   menu.update(1)
    self.click(next(b for b in menu.buttons(self.hud.config) if b.action=='texture_medium'))
    self.click(next(b for b in menu.buttons(self.hud.config) if b.action=='settings_save'))
-   assert not menu.opened and self.paused
+   assert not menu.opened and self.paused, menu.error
    assert self.settings_store.load().texture_quality=='medium'
    assert self.game_settings.texture_quality=='medium'
    assert all(resource.alpha_scale==0.25 for resource in self.sprites if resource.alpha_layers)
-app=MenuApplication('samples/sword_movement/movement_config.json',settings_file=settings,report=report)
+   self.previous_parts=self.part_sprite
+   menu.open()
+   menu.update(1)
+   self.click(next(b for b in menu.buttons(self.hud.config) if b.action=='upscale_aa_off'))
+   assert menu.draft.upscale_aa=='off'
+   self.click(next(b for b in menu.buttons(self.hud.config) if b.action=='settings_save'))
+   assert not menu.opened and self.part_sprite is self.previous_parts, menu.error
+   assert self.game_settings.upscale_aa=='off' and self.part_sprite.upscaler.aa_mode=='off'
+app=MenuApplication('samples/sword_movement/movement_config.json',settings_file=settings,report=report,mute=True)
 run_application(app,width=app.window_size[0],height=app.window_size[1],title='Game Settings Save Contract',frame_limit=3)
 '''
             settings = directory/"settings.json"
             first, second = directory/"high.json", directory/"medium.json"
-            subprocess.run([sys.executable, "-c", code, str(settings), str(first)], cwd=ROOT, check=True,
-                           capture_output=True, text=True, timeout=120)
-            subprocess.run([sys.executable, str(ROOT/"tests/sword_movement_test.py"), "--settings-file", str(settings),
-                            "--frames", "3", "--report", str(second)], cwd=ROOT, check=True,
-                           capture_output=True, text=True, timeout=120)
+            changed = subprocess.run([sys.executable, "-c", code, str(settings), str(first)], cwd=ROOT,
+                                     capture_output=True, text=True, timeout=120)
+            self.assertEqual(changed.returncode, 0, changed.stderr)
+            fresh = subprocess.run([sys.executable, str(ROOT/"tests/sword_movement_test.py"), "--settings-file", str(settings),
+                                    "--frames", "3", "--report", str(second), "--mute"], cwd=ROOT,
+                                   capture_output=True, text=True, timeout=120)
+            self.assertEqual(fresh.returncode, 0, fresh.stderr)
             high = json.loads(first.read_text(encoding="utf-8"))
             medium = json.loads(second.read_text(encoding="utf-8"))
             self.assertEqual(high["texture_quality"], "medium")
             self.assertEqual(medium["texture_quality"], "medium")
-            self.assertTrue(high["quality_atlas"] and medium["quality_atlas"])
+            self.assertEqual(high["part_renderer"]["texture_scale"], 0.75)
+            self.assertEqual(medium["part_renderer"]["texture_scale"], 0.75)
+            self.assertEqual(high["part_renderer"]["source"], medium["part_renderer"]["source"])
             self.assertEqual(high["shadow_scale"],.25)
             self.assertEqual(medium["shadow_scale"],.25)
-            self.assertEqual(medium["interpolation_bytes"], high["interpolation_bytes"])
+            self.assertEqual(medium["part_renderer"]["upscale_aa"], "off")
+            self.assertEqual(medium["part_renderer"]["shadow_map"]["ground_map_size"], 256)
 
     def test_invalid_settings_are_not_silently_replaced(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -337,15 +368,6 @@ run_application(app,width=app.window_size[0],height=app.window_size[1],title='Ga
             self.assertEqual(path.read_text(encoding="utf-8"), '{broken')
         with self.assertRaises(ValueError):
             GameSettings("unsupported")
-
-    def test_missing_profile_does_not_fall_back_to_other_quality(self):
-        with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
-            (root/"high.json").write_text('{}', encoding="utf-8")
-            profiles = {"high": "high.json", "medium": "missing.json"}
-            self.assertEqual(resolve_texture_profile(profiles, GameSettings("high"), root), root/"high.json")
-            with self.assertRaises(FileNotFoundError):
-                resolve_texture_profile(profiles, GameSettings("medium"), root)
 
     def test_game_menu_buttons_and_hit_regions_use_same_layout(self):
         with tempfile.TemporaryDirectory() as folder:

@@ -166,7 +166,7 @@ class TexturePageWorkTests(unittest.TestCase):
             entries = {}
             timings = TimingRecorder(enabled=False)
             ktx_library = None
-            sampler = SimpleNamespace(integer=lambda key: 2048)
+            binding = SimpleNamespace(integer=lambda key: 2048)
 
             @staticmethod
             def page_key(page, directory):

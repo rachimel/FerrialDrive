@@ -139,7 +139,7 @@ class UiV2FilteringTests(unittest.TestCase):
             self.assertEqual(self.render_state(), before)
             with patch.object(self.renderer, "filled_triangle", side_effect=RuntimeError("의도한 검사 실패")):
                 with self.assertRaises(RuntimeError):
-                    self.renderer.filtered_polygons(self.shape, "#FF0000")
+                    self.renderer.filtered_polygons(self.shape, "#FF0000", samples=3)
             self.assertEqual(self.render_state(), before)
             self.assertEqual(len(self.renderer.filtered_textures), 1)
 
@@ -156,7 +156,7 @@ class UiV2FilteringTests(unittest.TestCase):
                                  self.pico.SDL_PIXELFORMAT_RGBA32, pixels, 96 * 4), 0)
                 images.append(bytes(pixels))
         self.assertNotEqual(*images)
-        self.assertEqual(len(self.renderer.scanline_textures), 2)
+        self.assertEqual(len(self.renderer.scanline_textures), 1)
         self.assertFalse(self.renderer.filtered_textures)
         for height in (8, 19, 24, 26, 70, 130, 160, 414):
             shape = ((10, 10), (50, 10), (50, 10 + height), (10, 10 + height))
@@ -216,8 +216,7 @@ class UiV2FilteringTests(unittest.TestCase):
             original_height = p.TTF_FontHeight(renderer.fonts["text"].font)
             original_size = renderer.text_size("OVERDRIVE", "text")
             renderer.neon_text("OVERDRIVE", 4.25, 20.5, "text", "#FFFFFF", glow_color="#9DDFEA")
-            key = ("OVERDRIVE", "text", "#FFFFFF", False, "neon_core", 1, 3)
-            texture, width, height = renderer.textures[key]
+            (texture, width, height), = renderer.textures.values()
             texture_width, texture_height, mode = c_int(), c_int(), c_int()
             self.assertEqual(p.SDL_QueryTexture(texture, None, None, byref(texture_width), byref(texture_height)), 0)
             self.assertGreater(texture_width.value, width * 2)

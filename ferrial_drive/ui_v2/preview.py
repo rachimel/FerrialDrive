@@ -229,11 +229,12 @@ class HudPreview:
         self.lock_motion.select(self.selected_target_id, self.state.target_body)
 
     def update_world_view(self, delta_seconds, *, update_camera=True, range_distances=None, excluded_target_ids=(),
-                          acquisition_ids=None, preferred_id=None, switch_delay_seconds=None):
+                          acquisition_ids=None, preferred_id=None, switch_delay_seconds=None, update_markers=True):
         if update_camera:
             self.camera.update(self.player_world, self.mouse, delta_seconds)
         candidates = tuple(TargetCandidate(key, entry["position"]) for key, entry in self.enemies.items()
-                           if self.targets_enabled and entry["health"].current > 0 and key not in excluded_target_ids)
+                           if self.targets_enabled and entry["health"].current > 0 and key not in excluded_target_ids
+                           and (acquisition_ids is None or key in acquisition_ids or key == self.auto_target.selected_id))
         current = self.enemies.get(self.selected_target_id)
         mouse_world = (self.camera.screen_to_world(self.mouse, include_feedback=False) if self.mouse is not None else
                        current["position"] if current is not None else self.player_world)
@@ -243,10 +244,15 @@ class HudPreview:
                                            switch_delay_seconds=switch_delay_seconds)
         self.apply_target(target_id)
         self.set_target_size(self.target_scale)
+        if not update_markers:
+            return
         limit = self.config.data["v2"]["targeting_sample"]["aim_range_pixels"]
         px, py = self.player_world
-        contacts = tuple(RadarContact((entry["position"][0] - px) / limit, (py - entry["position"][1]) / limit,
-                                      *self.camera.world_to_screen(entry["position"])) for entry in self.enemies.values())
+        # 미니맵은 정규화 좌표 ±1, 레이더는 설정 반경까지 표시한다.
+        extent = limit * max(1, self.config.data["radar"]["range_units"])
+        contacts = tuple(RadarContact((x - px) / limit, (py - y) / limit, *self.camera.world_to_screen((x, y)))
+                         for entry in self.enemies.values() for x, y in (entry["position"],)
+                         if abs(x - px) <= extent and abs(y - py) <= extent)
         self.set_hud(radar_contacts=contacts)
         for track in self.lock_motion.tracks:
             if track.target_id in self.enemies:

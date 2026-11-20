@@ -4,16 +4,17 @@ from ctypes import byref, memmove
 from contextlib import ExitStack, contextmanager, nullcontext
 from dataclasses import asdict, replace
 import json
-from math import atan2, cos, degrees, isfinite, radians, sin, tau
+from math import atan2, cos, degrees, floor, isfinite, radians, sin, tau
 from pathlib import Path
 from time import perf_counter
 
 from ferrial_drive.assets.catalog import AssetCatalog, read_document
+from ferrial_drive.assets.directional import SCREEN_DIRECTIONS
 from ferrial_drive.assets.pico_assets import PicoAssetBackend
 from ferrial_drive.assets.sprites import SpriteClip, SpriteFrame
 from ferrial_drive.combat.camera import LookAheadCamera
 from ferrial_drive.combat.camera_impact import CameraImpact
-from ferrial_drive.combat.aim_follow import AimFollow, AimFollowSettings
+from ferrial_drive.combat.aim_follow import AimFollow, AimFollowSettings, interpolate_angles
 from ferrial_drive.combat.locomotion import LocomotionController, LocomotionPlayback, LocomotionSettings, unit_vector
 from ferrial_drive.combat.movement_combat import MovementCombat
 from ferrial_drive.combat.overdrive import OverdriveSettings
@@ -21,7 +22,7 @@ from ferrial_drive.combat.energy import EnergySettings
 from ferrial_drive.combat.config import CombatConfig
 from ferrial_drive.combat.ranged_combat import RangedCombat, explosion_targets
 from ferrial_drive.combat.gun_contact import GunContactEffects
-from ferrial_drive.combat.weapon_animation import WeaponAnimation
+from ferrial_drive.combat.weapon_animation import HELD_GUN_MOTIONS, WeaponAnimation
 from ferrial_drive.combat.muzzle_tracks import MuzzleTracks
 from ferrial_drive.combat.training_ground import GroundProjection, TrainingGroundView
 from ferrial_drive.combat.ground_effects import ground_effect_mode, trail_in_front
@@ -33,18 +34,26 @@ from ferrial_drive.rendering.rim_light import standby_rim
 from ferrial_drive.rendering.overdrive_palette import rainbow_color
 from ferrial_drive.diagnostics import TimingRecorder
 from ferrial_drive.rendering.motion_vectors import target_phase
-from ferrial_drive.settings import GameSettingsStore, resolve_texture_profile
+from ferrial_drive.rendering.part_atlas_residency import AtlasFrameBudget
+from ferrial_drive.settings import GameSettingsStore
 from ferrial_drive.ui.components import Rect
 from ferrial_drive.ui.pico_renderer import PicoRenderer
 from ferrial_drive.ui_v2.movement_hud import MovementHud
 
 
 class MovementApplication:
+    parts_only = False
+    pbr_enabled = False
+    retired_player_motions = frozenset()
+
     def __init__(self, config_path, *, demo=False, capture=None, capture_frame=1, report=None, script=None, profile=None,
                  record_directory=None, record_step=2, settings_file=None, movement_speed_multiplier=1, mute=False, theme_file=None,
-                 preview_frame=None, preview_control=None, preview_hidden=False, overdrive_rainbow=False):
+                 preview_frame=None, preview_control=None, preview_hidden=False, overdrive_rainbow=False,
+                 part_catalog=None, part_mixed=False, part_step_directions=False, part_color_codec=None,
+                 player_pipeline=None):
         self.config_path = Path(config_path).resolve()
         self.config = json.loads(self.config_path.read_text(encoding="utf-8-sig"))
+        self.part_stream_budget = AtlasFrameBudget()
         self.overdrive_settings = OverdriveSettings(**self.config.get("overdrive", {}))
         self.energy_settings = EnergySettings(**self.config.get("energy", {}))
         self.standby_trail_tint_ratio = self.config.get("sword_effects", {}).get("standby_tint_ratio", .65)
@@ -90,11 +99,8 @@ class MovementApplication:
         self.weapon_animation = WeaponAnimation(swap_speed=self.config.get("weapons", {}).get("swap_speed", 1),
                                                aim_speed=self.config.get("weapons", {}).get("aim_speed", 1))
         self.weapon_durations = {}
-        self.weapon_movement = (1, 0)
         self.muzzle_tracks = None
         self.single_shot_requested = False
-        # 이동 배율로 달리기 모션의 재생 시간까지 바뀌지 않도록 기준 속도도 맞춘다.
-        self.style["run_reference_speed_mps"] = self.style.get("run_reference_speed_mps", 12.22) * movement_speed_multiplier
         self.settings_store = GameSettingsStore(settings_file)
         self.game_settings = self.settings_store.load()
         self.theme_file = theme_file
@@ -103,13 +109,33 @@ class MovementApplication:
         self.preview_hidden = preview_hidden
         self.preview_control_signature = None
         self.next_preview_frame = 0
-        self.quality_atlas = False
         self.window_size = (self.config["window"]["width"], self.config["window"]["height"])
         self.controller = LocomotionController(LocomotionSettings(**self.config["movement"]))
         split = self.config.get("upper_lower", {})
         self.aim_follow = (AimFollow(AimFollowSettings(**split["follow"]), yaw_degrees=45)
                            if split.get("enabled", False) else None)
         self.pose_catalog = self.pose_tracks = self.pose_sprite = None
+        self.player_pipeline = player_pipeline or ("baked" if part_catalog or part_color_codec else split.get("player_pipeline", "mixed"))
+        if self.player_pipeline not in ("baked", "mixed", "pbr"):
+            raise ValueError("플레이어 렌더 경로는 baked·mixed·pbr 중 하나여야 한다.")
+        self.pbr_enabled = self.player_pipeline == "pbr" and not demo
+        self.retired_player_motions = frozenset(split.get("retired_motions", ())) if self.pbr_enabled else frozenset()
+        configured_parts = self.relative_path(split["part_catalog"]) if split.get("part_catalog") else None
+        self.part_catalog_path = (Path(part_catalog).resolve() if part_catalog else
+                                  configured_parts if configured_parts and configured_parts.is_file() else None)
+        profile_key = "part_ktx_catalog_profiles" if part_color_codec == "ktx" else "part_catalog_profiles"
+        if self.pbr_enabled:
+            profile_key = "pbr_catalog_profiles"
+        self.part_catalog_profiles = split.get(profile_key, {})
+        surface_key = "surface_ktx_catalog_profiles" if part_color_codec == "ktx" else "surface_catalog_profiles"
+        self.surface_catalog_profiles = split.get(surface_key, {}) if self.player_pipeline == "mixed" else {}
+        if part_color_codec == "ktx" and not self.part_catalog_profiles:
+            raise ValueError("KTX2 파츠 품질 프로필 설정이 필요하다.")
+        self.part_profile_override = Path(part_catalog).resolve() if part_catalog else None
+        self.parts_only = False
+        self.part_mixed, self.part_sprite = part_mixed, None
+        self.part_step_directions = part_step_directions
+        self.part_angle_remainder_seconds, self.part_angles, self.previous_part_angles = 0, None, None
         self.projection = GroundProjection(self.style["pixels_per_meter"], self.style["projection_y_scale"])
         self.guns = [RangedCombat(gun_settings, seed=index, range_m=weapon_settings.get("range_m", 75),
                                  projection=self.projection, penetration_count=weapon_settings.get("penetration_count", 1))
@@ -165,16 +191,20 @@ class MovementApplication:
         definitions = list(AssetCatalog.load(source).definitions.values())
         for index, definition in enumerate(definitions):
             document = read_document(definition)
-            if not document.mech or "shadow" not in document.mech.sheets:
+            if not document.mech or (not self.pbr_enabled and "shadow" not in document.mech.sheets):
                 raise ValueError("검 이동 에셋에 그림자 시트가 없다. 그림자 포함 카탈로그를 지정한다.")
-            sprite = PicoAssetBackend(filtering="bicubic", layers=layers,
-                                       alpha_layers=("shadow",) if self.quality_atlas else (),
-                                       alpha_scale=self.game_settings.shadow_scale if self.quality_atlas else None).load(document)
+            alpha_shadow = not self.pbr_enabled and self.parts_only
+            shadow_scale = self.game_settings.shadow_scale
+            sprite = PicoAssetBackend(filtering="linear" if self.pbr_enabled else "bicubic", layers=layers,
+                                       alpha_layers=("shadow",) if alpha_shadow else (),
+                                       alpha_scale=shadow_scale if alpha_shadow else None).load(document)
             self.sprites.append(sprite)
-            if clips.keys() & sprite.clips.keys():
+            selected = {name: clip for name, clip in sprite.clips.items()
+                        if name.split("/")[0] not in self.retired_player_motions}
+            if clips.keys() & selected.keys():
                 raise ValueError("분리 시트의 클립 이름이 중복됐다.")
-            clips.update(sprite.clips)
-            resources.update({name: sprite for name in sprite.clips})
+            clips.update(selected)
+            resources.update({name: sprite for name in selected})
             if progress is not None:
                 progress((index + 1) / len(definitions))
         return clips, resources
@@ -243,7 +273,7 @@ class MovementApplication:
         if self.demo:
             frames = tuple(SpriteFrame((0, 0, 1, 1), (0, 0)) for _ in range(8))
             clips = {f"{state}_loop/{direction}": SpriteClip(12, frames)
-                     for state in ("idle", "run", "dash", "boost")
+                     for state in ("idle", "dash", "boost")
                      for direction in ("s", "sw", "w", "nw", "n", "ne", "e", "se")}
             attack_clips = {f"combo_{index:02}/{direction}": SpriteClip(12, frames[:count])
                             for index, count in enumerate((6, 6, 6, 8), 1)
@@ -259,12 +289,12 @@ class MovementApplication:
             source = self.path("asset")
             if not source.is_file():
                 raise FileNotFoundError(f"검 이동 8방향 에셋이 없다: {source}. 기본 도형은 --demo로 실행한다.")
-            from ferrial_drive.rendering.bicubic import renderer_name
-            profiles = self.config.get("texture_quality_profiles")
-            quality_source = (resolve_texture_profile(profiles, self.game_settings, self.config_path.parent)
-                              if profiles and renderer_name(pico) == "opengl" else None)
-            self.quality_atlas = quality_source is not None
-            layers = ("shadow",) if self.quality_atlas else None
+            from ferrial_drive.rendering.canvas import renderer_name
+            opengl = renderer_name(pico) == "opengl"
+            if self.pbr_enabled and (not opengl or not self.part_catalog_profiles):
+                raise RuntimeError("PBR 플레이어 실행에는 OpenGL과 품질별 전체 PBR 카탈로그가 필요하다.")
+            self.parts_only = bool(self.part_catalog_profiles and opengl)
+            layers = () if self.pbr_enabled else ("shadow",) if self.parts_only else None
             clips, self.clip_resources = self.load_sprites(source, layers=layers,
                 progress=lambda value: self.loading_progress(0.12 + 0.24 * value, "기체 준비"))
             settings = self.config.get("combat")
@@ -277,15 +307,10 @@ class MovementApplication:
                 from ferrial_drive.rendering.pico_motion_sprite import PicoMotionSprite
                 from ferrial_drive.rendering.pico_shadow_blend import PicoShadowBlend
                 interpolation = self.config.get("interpolation", {})
-                if quality_source is not None:
-                    from ferrial_drive.rendering.pico_motion_atlas import PicoAtlasSprite
-                    self.motion_sprite = PicoAtlasSprite(pico, quality_source, timings=self.timings,
-                                                          shutter_seconds=interpolation.get("shutter_seconds", 0.008),
-                                                          blur_strength=interpolation.get("blur_strength", 0.2),
-                                                          progress=lambda value: self.loading_progress(0.45 + 0.4 * value, "이동 준비"))
-                    self.attack_sprite = self.motion_sprite if settings else None
-                    self.shadow_blend = PicoShadowBlend(pico, softness_pixels=self.style.get("shadow_softness_pixels", 5),
-                                                       contact_radius_pixels=self.style.get("shadow_contact_radius_pixels", 56))
+                if self.parts_only:
+                    if not self.pbr_enabled:
+                        self.shadow_blend = PicoShadowBlend(pico, softness_pixels=self.style.get("shadow_softness_pixels", 5),
+                                                           contact_radius_pixels=self.style.get("shadow_contact_radius_pixels", 56))
                 elif interpolation.get("enabled"):
                     options = {key: interpolation[key] for key in ("easing", "shutter_seconds", "blur_direction", "blur_strength", "cache_capacity") if key in interpolation}
                     self.motion_sprite = PicoMotionSprite(pico, self.relative_path(interpolation["source"]), **options)
@@ -327,16 +352,31 @@ class MovementApplication:
         self.weapon_durations = {name.rsplit("/", 1)[0]: clip.duration_ms / 1000 for name, clip in clips.items()}
         if self.weapons_enabled and not self.demo:
             self.muzzle_tracks = MuzzleTracks.load(self.relative_path(self.config["weapons"]["muzzle_tracks"]))
-        if self.aim_follow and not self.demo:
+        if not self.demo and (self.aim_follow or self.parts_only):
             from ferrial_drive.combat.upper_lower import UpperLowerCatalog, PoseAttachments, PoseBladeTrajectory
             from ferrial_drive.rendering.pico_pose_table import PicoPoseTable
             self.pose_catalog = UpperLowerCatalog.load(self.relative_path(self.config["upper_lower"]["catalog"]))
-            self.pose_tracks = PoseAttachments(self.pose_catalog)
+            self.pose_tracks = PoseAttachments(self.pose_catalog, smooth=self.parts_only)
             self.pose_tracks.easing = self.config.get("combat", {}).get("easing", "linear")
             if self.sword_effects:
                 self.sword_effects.trajectory = PoseBladeTrajectory(self.pose_tracks, self.sword_effects.trajectory)
-            self.pose_sprite = PicoPoseTable(pico, self.pose_catalog, self.game_settings.texture_quality,
-                progress=lambda value: self.loading_progress(.905+.02*value, "상·하체 준비"), timings=self.timings)
+            with ExitStack() as pending:
+                surface = None
+                if self.parts_only:
+                    surface = self.load_surface_profile(self.game_settings)
+                    if surface is not None:
+                        pending.callback(surface.close)
+                    self.part_sprite = self.load_part_profile(self.game_settings, surface=surface)
+                elif self.part_catalog_path and opengl:
+                    from ferrial_drive.rendering.pico_part_motion import PicoPartMotion
+                    self.part_sprite = PicoPartMotion(pico, self.part_catalog_path, timings=self.timings,
+                                                      mixed_directions=self.part_mixed, direction_warp=not self.part_step_directions,
+                                                      upscale_aa=self.game_settings.upscale_aa)
+                if opengl:
+                    self.pose_sprite = PicoPoseTable(pico, self.pose_catalog, self.game_settings.texture_quality,
+                        parts=self.part_sprite, surface_parts=surface, parts_only=self.parts_only,
+                        progress=lambda value: self.loading_progress(.905+.02*value, "상·하체 준비"), timings=self.timings)
+                    pending.pop_all()
         self.loading_progress(0.93, "훈련장 준비")
         self.ground = TrainingGroundView(self.renderer, self.projection, self.style,
                                         None if self.demo else self.path("ground"),
@@ -357,54 +397,135 @@ class MovementApplication:
         self.update = self.timings.wrap(self.update, name="movement.update")
         self.draw = self.timings.wrap(self.draw, name="movement.draw")
 
+    def required_part_motions(self):
+        return {name.split("/")[0] for name in (*self.clip_resources, *self.attack_resources)}
+
+    def load_surface_profile(self, settings):
+        profiles = self.surface_catalog_profiles
+        if self.part_profile_override or self.pico is None or settings.texture_quality not in profiles:
+            return None
+        source = self.relative_path(profiles[settings.texture_quality])
+        if not source.is_file():
+            return None
+        import ctypes as ct
+        from ferrial_drive.diagnostics.gpu_profile import bind_gl
+        from ferrial_drive.rendering.pico_part_motion import PicoPartMotion
+
+        units = ct.c_int()
+        bind_gl(self.pico, "glGetIntegerv", None, [ct.c_uint, ct.c_void_p])(0x8872, ct.byref(units))
+        if units.value < 17:
+            return None
+        sprite = PicoPartMotion(self.pico, source, timings=self.timings, mixed_directions=True,
+                                max_directions=16, cache_budget_bytes=64 * 1024**2,
+                                direction_warp=not self.part_step_directions, upscale_aa=settings.upscale_aa)
+        if sprite.shadow_map is None or sprite.data["quality"] != settings.texture_quality:
+            sprite.close()
+            raise ValueError("선택 품질에 맞는 실시간 조명 카탈로그가 필요하다.")
+        return sprite
+
+    def load_part_profile(self, settings, *, surface=None):
+        from ferrial_drive.assets.alpha_data import alpha_dimensions
+        from ferrial_drive.rendering.pico_part_motion import PicoPartMotion
+
+        if settings.texture_quality == "high" and self.part_profile_override:
+            source = self.part_profile_override
+        else:
+            profile = self.part_catalog_profiles[settings.texture_quality]
+            candidates = (profile,) if isinstance(profile, str) else profile
+            paths = [self.relative_path(candidate) for candidate in candidates]
+            source = next((path for path in paths if path.is_file()), paths[-1])
+        shadow_bytes = 0
+        for resource in self.sprites:
+            if "shadow" not in resource.alpha_layers:
+                continue
+            width, height = alpha_dimensions(resource.sizes["shadow"], settings.shadow_scale)
+            shadow_bytes += width * height
+        surface_bytes = surface.cache_budget_bytes + surface.shadow_map.storage_bytes if surface else 0
+        part_budget_bytes = max(0, 256 * 1024**2 - shadow_bytes - surface_bytes)
+        split = self.config["upper_lower"]
+        lighting = self.relative_path(split["pbr_lighting"]) if self.pbr_enabled else None
+        part_spaces = None
+        if self.pbr_enabled:
+            part_spaces = {name: {"gun": "upper"} for name in HELD_GUN_MOTIONS}
+        sprite = PicoPartMotion(self.pico, source, timings=self.timings, mixed_directions=True, max_directions=32,
+                                cache_budget_bytes=part_budget_bytes, direction_warp=not self.part_step_directions,
+                                pbr_lighting=lighting, part_spaces=part_spaces, upscale_aa=settings.upscale_aa)
+        try:
+            required = self.required_part_motions()
+            if missing := required - sprite.data["motions"].keys():
+                raise ValueError("파츠 아틀라스 누락: " + ", ".join(sorted(missing)))
+            if self.pbr_enabled:
+                if (not sprite.pbr_lighting or sprite.data.get("sample_fps") != 24
+                        or any(set(sprite.data["motions"][name]) != set("01234567") for name in required)
+                        or not required <= sprite.shadow_map.tracks.keys()
+                        or (not self.part_step_directions and not required <= sprite.correspondence.keys())):
+                    raise ValueError("모든 플레이어 모션에 24fps·8방향 PBR 데이터와 그림자 포즈가 필요하다.")
+                sprite.cache_budget_bytes = max(0, part_budget_bytes - sprite.shadow_map.storage_bytes)
+                sprite.enable_streaming(self.part_stream_budget, "idle_loop", "gun_ready")
+            if sprite.direction_sample_fps is not None:
+                sprite.direction_sample_fps = split.get("direction_sample_fps", sprite.direction_sample_fps)
+        except BaseException:
+            sprite.close()
+            raise
+        return sprite
+
     @contextmanager
     def prepare_settings(self, settings):
         """기체·그림자를 준비하고 저장 성공 때 함께 교체한다. 게임 진행 상태는 보존한다."""
-        candidate, installed, previous = None, False, ()
+        installed = False
         candidate_pose, previous_pose = None, None
-        with ExitStack() as shadows:
+        candidate_parts, previous_parts = None, None
+        candidate_surface = None
+        with ExitStack() as pending_changes:
             changes = []
             try:
-                if settings.texture_quality != self.game_settings.texture_quality and self.quality_atlas:
-                    from ferrial_drive.rendering.pico_motion_atlas import PicoAtlasSprite
-                    source = resolve_texture_profile(self.config["texture_quality_profiles"], settings, self.config_path.parent)
-                    interpolation = self.config.get("interpolation", {})
-                    candidate = PicoAtlasSprite(self.pico, source, timings=self.timings,
-                        shutter_seconds=interpolation.get("shutter_seconds", 0.008),
-                        blur_strength=interpolation.get("blur_strength", 0.2),
-                        progress=lambda value: self.draw_settings_progress())
+                if settings.shadow_scale != self.game_settings.shadow_scale and self.parts_only:
                     for resource in self.sprites:
                         if resource.alpha_layers:
-                            changes.append(shadows.enter_context(resource.prepare_alpha_scale(settings.shadow_scale)))
+                            changes.append(pending_changes.enter_context(resource.prepare_alpha_scale(settings.shadow_scale)))
                 if settings.texture_quality != self.game_settings.texture_quality and self.pose_sprite:
                     from ferrial_drive.rendering.pico_pose_table import PicoPoseTable
+                    if self.parts_only:
+                        candidate_surface = self.load_surface_profile(settings)
+                        candidate_parts = self.load_part_profile(settings, surface=candidate_surface)
+                        candidate_parts.direction_enabled = self.part_sprite.direction_enabled
                     candidate_pose = PicoPoseTable(self.pico,self.pose_catalog,settings.texture_quality,
-                        progress=lambda value:self.draw_settings_progress(),timings=self.timings)
+                        progress=lambda value:self.draw_settings_progress(),timings=self.timings,
+                        parts=candidate_parts or self.part_sprite, surface_parts=candidate_surface, parts_only=self.parts_only)
+                    candidate_surface = None
+                if settings.upscale_aa != self.game_settings.upscale_aa:
+                    current_surface = self.pose_sprite.surface_parts if self.pose_sprite and candidate_pose is None else None
+                    current_parts = self.part_sprite if candidate_parts is None else None
+                    for sprite in (current_parts, current_surface):
+                        if sprite and sprite.upscaler and sprite.data.get("upscale_filter") == "bounded_bicubic":
+                            change = pending_changes.enter_context(sprite.upscaler.prepare_aa(settings.upscale_aa))
+                            if change is not None:
+                                changes.append(change)
 
                 def apply():
-                    nonlocal installed, previous, previous_pose
+                    nonlocal installed, previous_pose, previous_parts
                     for change in changes:
                         change()
-                    if candidate is not None:
-                        previous = tuple(dict.fromkeys(sprite for sprite in (self.motion_sprite, self.attack_sprite) if sprite))
-                        self.motion_sprite = candidate
-                        self.attack_sprite = candidate if self.combat else None
                     if candidate_pose is not None:
                         previous_pose,self.pose_sprite = self.pose_sprite,candidate_pose
+                    if candidate_parts is not None:
+                        previous_parts,self.part_sprite = self.part_sprite,candidate_parts
                     self.game_settings = settings
                     installed = True
 
                 yield apply
             finally:
                 if installed:
-                    for sprite in previous:
-                        sprite.close()
                     if previous_pose is not None:
                         previous_pose.close()
-                elif candidate is not None:
-                    candidate.close()
+                    if previous_parts is not None:
+                        previous_parts.close()
                 if not installed and candidate_pose is not None:
                     candidate_pose.close()
+                if not installed and candidate_parts is not None:
+                    candidate_parts.close()
+                if candidate_surface is not None:
+                    candidate_surface.close()
 
     def draw_settings_progress(self):
         self.draw()
@@ -423,6 +544,7 @@ class MovementApplication:
         self.controller.reset()
         if self.aim_follow:
             self.aim_follow.reset(45)
+        self.part_angle_remainder_seconds, self.part_angles, self.previous_part_angles = 0, None, None
         self.playback.reset()
         if self.combat:
             self.combat.combo.reset()
@@ -484,9 +606,12 @@ class MovementApplication:
         delta = target - root
         return self.projection.unproject((delta.x, delta.y))
 
+    def find_sword_target(self, target_id):
+        return next((target for target in self.sword_targets if target.target_id == target_id), None)
+
     def trigger_camera_hit(self, strike_id, target_id):
         """표적 가까이의 실제 검끝 이동 방향을 화면 충격으로 전달한다."""
-        target = next((target for target in self.sword_targets if target.target_id == target_id), None)
+        target = self.find_sword_target(target_id)
         if target is None:
             return
         if self.hud and self.hud.enemies[target_id]["health"].current <= 0:
@@ -542,7 +667,7 @@ class MovementApplication:
         if not self.weapons_enabled:
             return None
         state = "boost" if self.controller.boost_preparing else self.controller.state
-        selection = self.weapon_animation.select(state, self.weapon_movement, self.controller.facing,
+        selection = self.weapon_animation.select(state,
             shot_age_seconds=0 if predict_fire else self.gun.shot_age_seconds,
             shot_interval_seconds=self.gun.interval_seconds, durations=self.weapon_durations)
         return replace(selection, direction=self.controller.direction) if selection else None
@@ -581,7 +706,7 @@ class MovementApplication:
                     continue
                 self.target_hits[target_id] += 1
                 self.target_flash[target_id] = 0.18
-                target = next(target for target in targets if target.target_id == target_id)
+                target = self.find_sword_target(target_id)
                 self.gun_contact.emit(impact.position, impact.direction, target.material, seed=shot_id)
                 if self.sound_player and not impact.explosion_damage:
                     self.sound_player.play("gun_hit")
@@ -617,7 +742,7 @@ class MovementApplication:
         if selection is None or self.muzzle_tracks is None:
             raise ValueError("실제 총구 추적과 선택한 총 모션이 필요하다.")
         time = selection.elapsed_seconds if source_seconds is None else source_seconds
-        if self.pose_tracks and selection.name in self.pose_catalog.motions:
+        if self.pose_tracks and selection.name in self.pose_tracks.tracks:
             return root + self.pose_tracks.projected(selection.name, time, "muzzle") * self.style["sprite_scale"]
         return root + self.muzzle_tracks.sample(selection.clip_name, time, loop=selection.loop) * self.style["sprite_scale"]
 
@@ -627,9 +752,34 @@ class MovementApplication:
         yaw = degrees(atan2(self.controller.facing[1], self.controller.facing[0]))
         return yaw, yaw
 
-    def current_pose(self):
+    def update_part_angles(self, previous_angles, delta_seconds):
+        fps = self.part_sprite.direction_sample_fps if self.part_sprite else None
+        if not fps or delta_seconds <= 0:
+            return
+        total = self.part_angle_remainder_seconds + delta_seconds
+        ticks = floor(total * fps + 1e-9)
+        self.part_angle_remainder_seconds = max(0, total - ticks / fps)
+        if self.part_angles is None:
+            self.previous_part_angles = self.part_angles = previous_angles
+        if ticks:
+            angles = self.upper_lower_angles()
+            weight = 1 - self.part_angle_remainder_seconds / delta_seconds
+            self.previous_part_angles = (self.part_angles if ticks == 1 else
+                                         interpolate_angles(previous_angles, angles, weight - 1 / (fps * delta_seconds)))
+            self.part_angles = interpolate_angles(previous_angles, angles, weight)
+
+    def part_render_angles(self, motion=None):
+        parts = self.part_sprite
+        if (self.part_angles is not None and parts is not None and parts.enabled and self.interpolation_enabled
+                and parts.direction_enabled and self.pose_sprite.quality == parts.data["quality"]
+                and (motion is None or motion in parts.data["motions"])):
+            phase = self.part_angle_remainder_seconds * parts.direction_sample_fps
+            return interpolate_angles(self.previous_part_angles, self.part_angles, phase)
+        return self.upper_lower_angles()
+
+    def current_pose(self, *, rendering=False):
         """게임의 동작 위상과 두 방향을 함께 평가한 출력만 선택한다."""
-        if self.pose_catalog is None:
+        if self.pose_catalog is None or self.parts_only:
             return None
         custom = self.current_weapon_motion()
         attacking = self.combat and self.combat.active and custom is None
@@ -643,7 +793,28 @@ class MovementApplication:
             duration = self.pose_catalog.motions[motion]["source_frame_count"] / 12
             elapsed = (0 if playback.waiting_for_input else
                        target_phase(min(1, elapsed/duration), easing=self.config["combat"].get("easing", "linear"))*duration)
-        return self.pose_catalog.select(motion, elapsed, *self.upper_lower_angles(), loop=loop)
+        self.pose_source_seconds = elapsed
+        angles = self.part_render_angles(motion) if rendering else self.upper_lower_angles()
+        return self.pose_catalog.select(motion, elapsed, *angles, loop=loop)
+
+    def independent_part_pose(self, motion):
+        if self.pose_sprite is None or self.part_sprite is None or (not self.parts_only and not self.interpolation_enabled):
+            return None
+        from ferrial_drive.combat.upper_lower import direction_index
+        angles = self.part_render_angles(motion)
+        upper, lower = (direction_index(angle) for angle in angles)
+        name = f"{motion}/u{upper}l{lower}"
+        quality = self.pose_sprite.quality
+        if self.parts_only and not self.interpolation_enabled:
+            return name, None
+        if self.part_sprite.angular_span(name, angles, quality) is not None:
+            return name, angles
+        if self.part_sprite.supports(name, quality):
+            return name, angles
+        name = f"{motion}/u{upper}l{upper}"
+        if self.part_sprite.supports(name, quality):
+            return name, angles
+        return None
 
     def perform_hud_action(self, action):
         """시연 동작이 실제로 발동한 경우에만 카운터·필살기 소리를 낸다."""
@@ -752,6 +923,14 @@ class MovementApplication:
             if down:
                 if event.key == p.SDLK_F10:
                     self.running = False
+                elif event.key == p.SDLK_F12 and self.part_sprite is not None:
+                    if self.parts_only:
+                        self.part_sprite.direction_enabled = not self.part_sprite.direction_enabled
+                        label = "방향 보간 ON" if self.part_sprite.direction_enabled else "8방향"
+                    else:
+                        self.part_sprite.enabled = not self.part_sprite.enabled
+                        label = "파츠 ON" if self.part_sprite.enabled else "기존 경로"
+                    p.SDL_SetWindowTitle(p.window, ("Ferrial Drive | 독립 파츠 비교 | " + label + " | F12 전환").encode("utf-8"))
                 elif event.key == p.SDLK_ESCAPE:
                     self.paused = not self.paused
                     self.keys.clear()
@@ -796,6 +975,11 @@ class MovementApplication:
                     self.release_attack()
                 if "interpolation" in entry:
                     self.interpolation_enabled = entry["interpolation"]
+                if "part_renderer" in entry and self.part_sprite is not None:
+                    if self.parts_only:
+                        self.part_sprite.direction_enabled = bool(entry["part_renderer"])
+                    else:
+                        self.part_sprite.enabled = bool(entry["part_renderer"])
                 if self.hud and "ui_action" in entry:
                     self.perform_hud_action(entry["ui_action"])
                 if self.hud and "scene" in entry:
@@ -828,10 +1012,11 @@ class MovementApplication:
             return
         previous_position_m = self.controller.position_m
         previous_angles = self.upper_lower_angles()
+        previous_draw_angles = self.part_render_angles() if self.parts_only else previous_angles
         if self.hud:
             # 첫 획득·유효성은 사격 전에 확인하고 교체 대기 시간은 HUD 갱신에서 한 번만 더한다.
-            self.bind_hud_world()
-            self.hud.update_world_view(0)
+            self.bind_hud_player()
+            self.hud.update_world_view(0, update_markers=False)
         previous_position = self.projection.project(previous_position_m)
         overdrive = bool(self.hud and self.hud.state.overdrive)
         animation_speed = self.sync_overdrive_modifiers()
@@ -851,20 +1036,17 @@ class MovementApplication:
             self.aim_follow.update(dt,yaw)
             upper = radians(self.aim_follow.upper_yaw_degrees)
             self.controller.facing = (cos(upper), sin(upper))
+        self.update_part_angles(previous_angles, dt)
         if self.pose_tracks:
-            self.pose_tracks.begin_frame(previous_angles, self.upper_lower_angles(),
+            self.pose_tracks.smooth = self.parts_only and self.interpolation_enabled and self.part_sprite.direction_enabled
+            self.pose_tracks.begin_frame(previous_draw_angles, self.part_render_angles() if self.parts_only else self.upper_lower_angles(),
                                          self.combat.attack_steps if self.combat else [], dt)
         self.advance_encounter(dt, previous_position_m)
         if self.weapons_enabled:
-            movement_delta = tuple(b-a for a, b in zip(previous_position_m, self.controller.position_m))
-            if any(movement_delta):
-                self.weapon_movement = unit_vector(movement_delta)
-            loop_speed = (max(1e-6, self.controller.speed_mps / self.style.get("run_reference_speed_mps", 12.22))
-                          / self.controller.speed_multiplier if self.controller.state == "run" else 1)
             self.weapon_animation.update(dt, self.weapon_durations, aiming=bool(self.hud and self.hud.aiming),
-                                         state=self.controller.state, loop_speed=loop_speed, animation_speed=animation_speed)
+                                         state=self.controller.state, animation_speed=animation_speed)
             self.update_guns(dt, previous_position)
-        zoom = self.config.get("camera_zoom", {}).get("scale_by_state", {}).get(self.controller.state, 1)
+        zoom = self.config.get("camera_zoom", {}).get("scale_by_state", {}).get(self.controller.presentation_state, 1)
         focus = self.locked_target_position()
         self.camera.update(self.projection.project(self.controller.position_m), self.mouse, dt, target_zoom=zoom,
                            focus_world=(focus.x, focus.y) if focus is not None else None)
@@ -872,7 +1054,6 @@ class MovementApplication:
         self.gun_recoil.update(dt)
         self.camera.feedback_offset_pixels = tuple(a + b for a, b in
             zip(self.camera_impact.offset_pixels, self.gun_recoil.offset_pixels))
-        self.bind_hud_world()
         if self.sword_effects:
             steps = self.combat.attack_steps if self.combat else []
             # 공격 위상은 가속된 steps를 따르고, 효과의 생성 시각·수명은 실제 초를 쓴다.
@@ -889,31 +1070,21 @@ class MovementApplication:
                     damage = self.overdrive_settings.sword_damage if overdrive else self.sword_damage_by_energy_level[self.energy_level - 1]
                     self.hud.damage_target(target_id, damage)
         if not self.combat or not self.combat.active:
-            loop_speed = (max(1e-6, self.controller.speed_mps / self.style.get("run_reference_speed_mps", 12.22))
-                          if self.controller.state == "run" else 1)
             self.playback.update("boost" if self.controller.boost_preparing else self.controller.state,
-                                 self.controller.direction, dt * animation_speed,
-                                 loop_speed=loop_speed / self.controller.speed_multiplier if self.controller.state == "run" else loop_speed)
+                                 self.controller.direction, dt * animation_speed)
         if self.sound_cues:
             attacking = bool(self.combat and self.combat.active)
-            weapon_motion = self.current_weapon_motion()
             mode = ground_effect_mode(self.controller.state,
                 attack_index=self.combat.combo.attack_index if attacking else None,
                 waiting=self.combat.combo.waiting_for_input if attacking else False, dash=options["dash"])
-            running = (not attacking and self.controller.state == "run" and
-                       self.controller.speed_mps > 0.05 and
-                       ("_run_" in weapon_motion.name if weapon_motion else self.playback.motion == "run_loop"))
-            run_phase = ((weapon_motion.elapsed_seconds / self.weapon_durations[weapon_motion.name]
-                          if weapon_motion else self.playback.elapsed_seconds /
-                          (self.playback.clips[self.playback.clip_name].duration_ms / 1000)) if running else None)
             self.sound_cues.update(dt, self.controller,
                 self.combat.attack_steps if self.combat else [],
                 self.sword_effects.hits if self.sword_effects else [],
                 prepare_before_seconds=prepare_before_seconds, energy_level=self.energy_level,
-                run_phase=run_phase, scraping=mode is not None and self.controller.speed_mps > 0.05,
+                scraping=mode is not None and self.controller.speed_mps > 0.05,
                 dashing=mode in ("dash", "dash_attack") and self.controller.speed_mps > 0.05,
                 hit_materials={target.target_id: target.material for target in self.sword_targets})
-        self.update_hud(dt)
+        self.update_hud(dt, targets_current=True)
         if self.ground_effects:
             self.update_ground_effects(dt, previous_position)
         if self.report_path:
@@ -1027,7 +1198,7 @@ class MovementApplication:
             clip = self.clip_resources[playback.clip_name].clips[playback.clip_name]
             elapsed = min(1, elapsed / playback.transition_seconds) * clip.duration_ms / 1000
         motion = clip_name.split("/")[0]
-        if self.pose_tracks and motion in self.pose_catalog.motions:
+        if self.pose_tracks and motion in self.pose_tracks.tracks:
             offsets = self.pose_tracks.ground_offsets(motion, elapsed, self.style["sprite_scale"])
         else:
             offsets = self.ground_effects.attachment_offsets(clip_name, elapsed, loop=loop,
@@ -1041,13 +1212,19 @@ class MovementApplication:
             dash=bool({"left_shift", "right_shift"} & self.keys))
         self.effect_mode = mode
         lower = radians(self.upper_lower_angles()[1])
-        foot_facing = (cos(lower),sin(lower)) if self.current_pose() else self.controller.facing
+        foot_facing = (cos(lower),sin(lower)) if self.parts_only or self.current_pose() else self.controller.facing
+        strength = self.config["ground_effects"]["strength_by_mode"].get(mode, 1)
+        effect_opacity = None
+        if mode == "dash":
+            strength *= self.controller.dash_output
+            effect_opacity = strength * self.controller.dash_output
         self.ground_effects.update(delta_seconds, center=center, velocity=velocity, offsets=offsets,
-            active=mode is not None, strength=self.config["ground_effects"]["strength_by_mode"].get(mode, 1),
+            active=mode is not None, strength=strength,
             material=self.config["ground_effects"]["material"], energy_color=color,
             foot_contact=mode in ("dash", "boost", "dash_attack"),
             foot_facing_x=foot_facing[0],
             boost_active=self.controller.boost_remaining_seconds > 0,
+            effect_opacity=effect_opacity,
             reverse_motion=sum(v * f for v, f in zip(self.projection.unproject(velocity), foot_facing)) < 0,
             ground_color=lambda point: self.ground.color_at(point, blend=self.config["ground_effects"]["ground_color_blend"]))
 
@@ -1055,6 +1232,10 @@ class MovementApplication:
         if self.hud:
             self.hud.bind_world(self.camera, self.projection, self.controller, self.sword_targets, self.mouse,
                                 player_bounds=self.player_world_bounds())
+
+    def bind_hud_player(self):
+        self.hud.bind_player(self.camera, self.projection, self.controller, self.mouse,
+                             player_bounds=self.player_world_bounds())
 
     def player_world_bounds(self):
         """그림자·잔상을 제외한 플레이어 표시 영역. 가시성 검사로 GPU 적재를 유발하지 않는다."""
@@ -1070,7 +1251,7 @@ class MovementApplication:
             playback = custom or (self.combat.combo if attacking else self.playback)
             resource = (self.attack_resources if attacking else self.clip_resources)[playback.clip_name]
             frames = resource.clips[playback.clip_name].frames
-            scale = self.style["sprite_scale"]
+            scale = self.style["sprite_scale"] * self.style.get("atlas_pixel_scale", 1)
             left = min(-frame.pivot[0] for frame in frames)
             top = min(frame.pivot[1] - frame.rect[3] for frame in frames)
             right = max(frame.rect[2] - frame.pivot[0] for frame in frames)
@@ -1089,9 +1270,12 @@ class MovementApplication:
             self.sound_player.set_rate_multiplier(self.overdrive_settings.pitch_scale if active else 1)
         return animation_speed
 
-    def update_hud(self, delta_seconds):
+    def update_hud(self, delta_seconds, *, targets_current=False):
         if self.hud:
-            self.bind_hud_world()
+            if targets_current:
+                self.bind_hud_player()
+            else:
+                self.bind_hud_world()
             self.hud.update(self.controller, delta_seconds, paused=self.paused,
                             interpolation=bool(self.interpolation_enabled and self.motion_sprite and self.current_pose() is None),
                             attack=self.combat.combo if self.combat and self.combat.active else None,
@@ -1147,6 +1331,7 @@ class MovementApplication:
                    "small", color, align="center")
 
     def draw_world(self):
+        self.part_stream_budget.reset()
         self.sync_energy_mask()
         animation_speed = self.overdrive_settings.animation_speed if self.hud and self.hud.state.overdrive else 1
         r, c = self.renderer, self.controller
@@ -1155,17 +1340,27 @@ class MovementApplication:
         width, height = self.window_size
         self.ground.draw(self.camera, self.window_size, c.settings.map_size_m, grid=self.grid)
         x, y = self.camera.world_to_screen(self.projection.project(c.position_m))
-        self.draw_targets()
-        pose = self.current_pose()
+        pose = self.current_pose(rendering=True) if self.pose_sprite else None
+        weapon_motion = self.current_weapon_motion() if self.sprites and pose is None else None
+        playback = weapon_motion or (self.combat.combo if self.combat and self.combat.active else self.playback)
+        part_only_pose = self.independent_part_pose(playback.clip_name.split("/")[0]) if self.sprites and pose is None else None
         if self.pose_sprite:
             pose_clips = [pose.clip_name] if pose else []
             if self.sword_effects:
                 pose_clips.extend(echo.pose_clip_name for echo in self.sword_effects.echoes if echo.pose_clip_name)
-            self.pose_sprite.prepare_frame(pose_clips)
+            if pose and self.part_sprite and self.interpolation_enabled:
+                self.pose_sprite.prepare_frame(pose_clips, angular_pose=(pose.clip_name,
+                                                                         self.part_render_angles(pose.clip_name.split("/")[0])))
+            elif part_only_pose:
+                self.pose_sprite.prepare_frame(pose_clips, part_only_pose=part_only_pose)
+            else:
+                self.pose_sprite.prepare_frame(pose_clips)
+        self.draw_targets()
         if self.sword_effects:
             if self.sprites:
                 self.sword_renderer.draw_echoes(self.sword_effects, self.camera, self.projection,
-                    self.attack_sprite, self.attack_resources, scale=sprite_scale,
+                    self.attack_sprite, self.attack_resources,
+                    scale=sprite_scale if self.pose_sprite else sprite_scale * self.style.get("atlas_pixel_scale", 1),
                     interpolate=self.interpolation_enabled, easing=self.config["combat"].get("easing", "accelerate"),
                     pose_sprite=self.pose_sprite)
             self.sword_renderer.draw_trail(self.sword_effects, self.camera, "#9DDFEA")
@@ -1175,7 +1370,6 @@ class MovementApplication:
             self.draw_pose(pose,x,y,sprite_scale)
         elif self.sprites:
             attacking = self.combat and self.combat.active
-            weapon_motion = self.current_weapon_motion()
             playback = weapon_motion or (self.combat.combo if attacking else self.playback)
             resource = (self.attack_resources if attacking else self.clip_resources)[playback.clip_name]
             clip = resource.clips[playback.clip_name]
@@ -1202,29 +1396,61 @@ class MovementApplication:
             frame_index = ((int(frame_position) % len(clip.frames) if weapon_motion.loop else min(int(frame_position), len(clip.frames)-1))
                            if weapon_motion else min(int(frame_position), len(clip.frames)-1) if attacking else playback.frame_index)
             interpolator = self.attack_sprite if attacking else self.motion_sprite
-            interpolate = self.interpolation_enabled and interpolator is not None
+            interpolate = self.interpolation_enabled and (interpolator is not None or part_only_pose is not None)
             if interpolator is not None:
                 interpolator.rim_light = self.current_rim_light()
-            if self.show_shadow and "shadow" in resource.mech.layer_rows:
+            sheet_scale = sprite_scale * self.style.get("atlas_pixel_scale", 1)
+            direction = SCREEN_DIRECTIONS[int(part_only_pose[0][-1])] if self.parts_only else playback.direction
+            part_seconds = frame_position / clip.fps
+            if part_only_pose and self.parts_only and not self.interpolation_enabled:
+                fps = self.part_sprite.data.get("sample_fps") or clip.fps
+                part_seconds = floor(part_seconds * fps + 1e-8) / fps
+            active_parts, active_span = self.pose_sprite.select_parts(*part_only_pose) if part_only_pose else (None, None)
+            part_shadow = getattr(active_parts, "shadow_map", None)
+            before_body = None
+            if self.show_shadow and part_shadow and active_parts.prepare_shadow(part_only_pose[0], part_seconds, active_span):
+                if self.pbr_enabled:
+                    def before_body():
+                        with self.timings.scope("parts.shadow_ground"):
+                            part_shadow.draw_ground(x, y, sprite_scale, self.style["shadow_opacity"],
+                                                    softness_pixels=self.style.get("shadow_softness_pixels", 5))
+                        if self.ground_effect_renderer:
+                            self.ground_effect_renderer.draw(self.ground_effects, self.camera,
+                                                            trail_in_front=trail_in_front(direction))
+                else:
+                    with self.timings.scope("parts.shadow_ground"):
+                        part_shadow.draw_ground(x, y, sprite_scale, self.style["shadow_opacity"])
+            elif self.show_shadow and not self.pbr_enabled and "shadow" in resource.mech.layer_rows:
+                resources = self.attack_resources if attacking else self.clip_resources
+                shadow_name = playback.clip_name.rsplit("/", 1)[0] + "/" + direction
+                shadow_resource = resources[shadow_name]
+                if endpoint is not None and self.parts_only:
+                    endpoint = endpoint.rsplit("/", 1)[0] + "/" + direction
                 if self.shadow_blend:
-                    self.shadow_blend.draw(resource, playback.clip_name, frame_position if interpolate else frame_index, x, height - y,
-                                           scale=sprite_scale, opacity=self.style["shadow_opacity"], endpoint=endpoint,
-                                           endpoint_resource=(self.attack_resources if attacking else self.clip_resources).get(endpoint),
+                    self.shadow_blend.draw(shadow_resource, shadow_name, frame_position if interpolate else frame_index, x, height - y,
+                                           scale=sheet_scale, opacity=self.style["shadow_opacity"], endpoint=endpoint,
+                                           endpoint_resource=resources.get(endpoint),
                                            loop=weapon_motion.loop if weapon_motion else not attacking and playback.motion.endswith("_loop"))
                 else:
                     with resource.opacity(self.style["shadow_opacity"]):
                         resource.draw(playback.clip_name, frame_index, x, height - y,
-                                      scale=sprite_scale, part_visibility={"body": False})
-            if self.ground_effect_renderer:
+                                      scale=sheet_scale, part_visibility={"body": False})
+            if self.ground_effect_renderer and before_body is None:
                 self.ground_effect_renderer.draw(self.ground_effects, self.camera,
-                                                trail_in_front=trail_in_front(playback.direction))
-            if interpolate:
+                                                trail_in_front=trail_in_front(direction))
+            if part_only_pose:
+                name, angles = part_only_pose
+                self.pose_sprite.rim_light = self.current_rim_light()
+                self.pose_sprite.draw_motion(name, part_seconds, x, y, scale=sprite_scale, yaw_degrees=angles,
+                                             sample_shadow=self.show_shadow, before_body=before_body)
+                if self.trace and self.trace[-1]["frame"] == self.frame:
+                    self.trace[-1].update(part_clip=name, part_angles_degrees=angles, part_seconds=part_seconds,
+                                          part_lighting="pbr" if self.pbr_enabled else "surface" if part_shadow else "baked")
+            elif interpolate:
                 if weapon_motion:
                     source_speed = weapon_motion.playback_speed
                 elif attacking:
                     source_speed = self.combat.speed
-                elif playback.motion == "run_loop":
-                    source_speed = self.controller.movement_speed_mps / self.style.get("run_reference_speed_mps", 12.22)
                 elif not playback.motion.endswith("_loop"):
                     source_speed = clip.duration_ms / 1000 / playback.transition_seconds
                 else:
@@ -1233,14 +1459,11 @@ class MovementApplication:
                                   easing=attack_easing if attacking else "linear",
                                   playback_speed=source_speed * (animation_speed if not attacking and not weapon_motion else 1))
             else:
-                if self.quality_atlas:
-                    interpolator.draw_frame(playback.clip_name, frame_index, x, y, scale=sprite_scale)
-                else:
-                    resource.draw(playback.clip_name, frame_index, x, height - y,
-                                  scale=sprite_scale, part_visibility={"shadow": False})
+                resource.draw(playback.clip_name, frame_index, x, height - y,
+                              scale=sheet_scale, part_visibility={"shadow": False})
             if self.ground_effect_renderer:
                 self.ground_effect_renderer.draw(self.ground_effects, self.camera, foreground=True,
-                                                trail_in_front=trail_in_front(playback.direction))
+                                                trail_in_front=trail_in_front(direction))
         else:
             self.draw_demo(x, y)
         if self.weapons_enabled and self.gun_renderer is not None:
@@ -1255,7 +1478,6 @@ class MovementApplication:
         return x, y
 
     def draw_pose(self,pose,x,y,scale):
-        from ferrial_drive.assets.directional import SCREEN_DIRECTIONS
         sprite = self.pose_sprite
         sprite.rim_light = self.current_rim_light()
         if self.show_shadow:
@@ -1264,7 +1486,11 @@ class MovementApplication:
         direction = SCREEN_DIRECTIONS[pose.lower]
         if self.ground_effect_renderer:
             self.ground_effect_renderer.draw(self.ground_effects,self.camera,trail_in_front=trail_in_front(direction))
-        sprite.draw_frame(pose.clip_name,pose.frame_index,x,y,scale=scale)
+        seconds = getattr(self, "pose_source_seconds", pose.frame_index / 12)
+        if (not self.interpolation_enabled or getattr(self, "part_sprite", None) is None
+                or not sprite.draw_motion(pose.clip_name, seconds, x, y, scale=scale,
+                                          yaw_degrees=self.part_render_angles(pose.clip_name.split("/")[0]))):
+            sprite.draw_frame(pose.clip_name,pose.frame_index,x,y,scale=scale)
         if self.ground_effect_renderer:
             self.ground_effect_renderer.draw(self.ground_effects,self.camera,foreground=True,trail_in_front=trail_in_front(direction))
     def draw(self):
@@ -1395,10 +1621,14 @@ class MovementApplication:
                 "asset_bytes": sum(sprite.estimated_bytes for sprite in self.sprites),
                 "interpolation_bytes": sum(sprite.estimated_bytes for sprite in dict.fromkeys((self.motion_sprite, self.attack_sprite)) if sprite),
                 "upper_lower_bytes": self.pose_sprite.estimated_bytes if self.pose_sprite else 0,
+                "part_renderer": self.part_sprite.report() if self.part_sprite else None,
+                "player_pipeline": self.player_pipeline,
+                "surface_renderer": self.pose_sprite.surface_parts.report()
+                                    if self.pose_sprite and self.pose_sprite.surface_parts else None,
                 "upper_lower": self.config.get("upper_lower"),
                 "texture_quality": self.game_settings.texture_quality,
                 "shadow_scale": self.game_settings.shadow_scale,
-                "quality_atlas": self.quality_atlas,
+                "upscale_aa": self.game_settings.upscale_aa,
                 "sword_effects": self.config.get("sword_effects"), "target_hits": self.target_hits,
                 "camera_impact": self.config.get("camera_impact", {}),
                 "overdrive_rainbow": self.overdrive_rainbow,
@@ -1412,7 +1642,7 @@ class MovementApplication:
                 "gpu_cached_clips": [(sprite.cached_clip_count if hasattr(sprite, "cached_clip_count") else len(sprite.interpolator.clip_cache))
                                      for sprite in dict.fromkeys((self.motion_sprite, self.attack_sprite)) if sprite],
                 "trace": self.trace}, ensure_ascii=False, indent=2), encoding="utf-8")
-        for resource in (self.sound_player, self.gun_renderer, self.sword_renderer, self.ground_effect_renderer, self.motion_sprite, self.attack_sprite, self.pose_sprite, self.shadow_blend, self.ground, *self.sprites, self.hud or self.renderer):
+        for resource in (self.sound_player, self.gun_renderer, self.sword_renderer, self.ground_effect_renderer, self.motion_sprite, self.attack_sprite, self.pose_sprite, self.part_sprite, self.shadow_blend, self.ground, *self.sprites, self.hud or self.renderer):
             if resource is not None:
                 resource.close()
         if self.profile_path:

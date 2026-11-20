@@ -60,9 +60,10 @@ class UpperLowerCatalog:
 
 
 class PoseAttachments:
-    def __init__(self, catalog):
+    def __init__(self, catalog, *, smooth=False):
         self.catalog = catalog
         self.tracks = catalog.data["attachments"]
+        self.smooth = smooth
         self.previous = self.current = (45.0,45.0)
         camera = catalog.data["camera"]
         forward = [b-a for a,b in zip(camera["position"],camera["target"])]
@@ -79,8 +80,8 @@ class PoseAttachments:
         self.easing = "linear"
 
     def begin_frame(self, previous, current, steps, seconds):
-        self.previous = tuple(direction_index(v)*45 for v in previous)
-        self.current = tuple(direction_index(v)*45 for v in current)
+        self.previous = tuple(previous) if self.smooth else tuple(direction_index(v)*45 for v in previous)
+        self.current = tuple(current) if self.smooth else tuple(direction_index(v)*45 for v in current)
         self.steps,self.seconds = steps,seconds
 
     def angles_at(self, fraction=1):

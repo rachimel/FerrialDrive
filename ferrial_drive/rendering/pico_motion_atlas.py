@@ -1,18 +1,22 @@
 """Pico2D 공유 아틀라스 보간·BC7 직접 적재. 기존 모션 재생기와 독립이다."""
 
-from contextlib import closing, contextmanager
+from contextlib import closing
 import ctypes as ct
-import json
 from math import isfinite
 from pathlib import Path
-from threading import get_ident
 
-from ferrial_drive.diagnostics import TimingRecorder
 from ferrial_drive.diagnostics.texture_metrics import bind_gl
-from .bicubic import BicubicSampler
+from .atlas_texture_cache import AtlasTextureCache, bind_atlas_textures
+from .gl_pass import TexturedQuadPass
 from .motion_vectors import EASING_CODES
-from .texture_codecs import bc7_size, texture_payload_size
-from .texture_page_work import DEFAULT_DECODE_WORKERS, TexturePageWork, decoded_pages
+from .texture_page_work import DEFAULT_DECODE_WORKERS, decoded_pages
+
+try:
+    from orjson import loads as _decode_atlas_manifest
+except ModuleNotFoundError as error:
+    if error.name != "orjson":
+        raise
+    from json import loads as _decode_atlas_manifest
 
 
 ATLAS_SHADER = b'''#version 120
@@ -103,160 +107,13 @@ void main() {
 '''
 
 
-class AtlasTextureCache:
-    """명시적인 렌더러 수명의 캐시. 같은 파일은 후보·클립·인스턴스가 함께 사용한다."""
-
-    def __init__(self, pico, sampler, *, timings=None, ktx_library=None):
-        self.pico, self.sampler = pico, sampler
-        self.timings = timings or TimingRecorder(enabled=False)
-        self.ktx_library = ktx_library
-        self.owner_thread_id = get_ident()
-        self.entries, self.hits = {}, 0
-        self.finish = bind_gl(pico, "glFinish", None, [])
-        self.compressed_upload = bind_gl(pico, "glCompressedTexImage2D", None,
-                                         [ct.c_uint, ct.c_int, ct.c_uint, ct.c_int, ct.c_int,
-                                          ct.c_int, ct.c_int, ct.c_void_p])
-        self.query_level = bind_gl(pico, "glGetTexLevelParameteriv", None,
-                                   [ct.c_uint, ct.c_int, ct.c_uint, ct.c_void_p])
-        self.get_error = bind_gl(pico, "glGetError", ct.c_uint, [])
-        self.upload_raw = bind_gl(pico, "glTexImage2D", None,
-            [ct.c_uint,ct.c_int,ct.c_int,ct.c_int,ct.c_int,ct.c_int,ct.c_uint,ct.c_uint,ct.c_void_p])
-        self.parameter = bind_gl(pico, "glTexParameteri", None, [ct.c_uint,ct.c_uint,ct.c_int])
-        self.pixel_store = bind_gl(pico, "glPixelStorei", None, [ct.c_uint,ct.c_int])
-        self.bind_buffer = bind_gl(pico, "glBindBuffer", None, [ct.c_uint,ct.c_uint])
-
-    def _upload_compact(self, texture, page, buffer):
-        """RGB8와 알파 전용 R8을 적재하고 픽셀 전송 상태를 복원한다."""
-        s = self.sampler
-        with s.batch():
-            self._bind(texture)
-            keys = (0x0CF5,0x0CF2,0x0CF3,0x0CF4)
-            old_unpack = tuple(s.integer(key) for key in keys)
-            old_buffer = s.integer(0x88EF)
-            try:
-                self.bind_buffer(0x88EC,0)
-                for key,value in zip(keys,(1,0,0,0)):
-                    self.pixel_store(key,value)
-                alpha = page["codec"] == "a8_zlib"
-                self.upload_raw(0x0DE1,0,0x8229 if alpha else 0x8051,page["width"],page["height"],0,
-                                0x1903 if alpha else 0x1907,0x1401,buffer)
-                if alpha:
-                    for channel in (0x8E42,0x8E43,0x8E44):
-                        self.parameter(0x0DE1,channel,0)
-                    self.parameter(0x0DE1,0x8E45,0x1903)
-                error = self.get_error()
-                if error:
-                    raise RuntimeError(f"단축 채널 아틀라스 업로드 실패: GL {error:#x}")
-            finally:
-                for key,value in zip(keys,old_unpack):
-                    self.pixel_store(key,value)
-                self.bind_buffer(0x88EC,old_buffer)
-
-    @staticmethod
-    def page_key(page, directory):
-        return ((Path(directory) / page["file"]).resolve(), page["sha256"])
-
-    def _assert_owner(self):
-        if get_ident() != self.owner_thread_id:
-            raise RuntimeError("GPU 텍스처는 렌더러를 생성한 스레드에서만 적재·해제한다.")
-
-    def acquire(self, page, directory, *, prepared=None):
-        self._assert_owner()
-        path = (Path(directory) / page["file"]).resolve()
-        key = (path, page["sha256"])
-        if key in self.entries:
-            self.hits += 1
-            self.entries[key]["references"] += 1
-            return key, self.entries[key]
-        width, height = page["width"], page["height"]
-        if min(width, height) < 1 or max(width, height) > self.sampler.integer(0x0D33):
-            raise ValueError("GPU 페이지 크기 제한을 초과했다.")
-        if prepared is None:
-            work = TexturePageWork(page, directory, timings=self.timings, ktx_library=self.ktx_library)
-            work.run()
-            prepared = work.take_result()
-        if prepared.key != key or prepared.size != (width, height) or prepared.codec != page["codec"]:
-            raise ValueError("준비된 페이지와 GPU 적재 요청이 다르다.")
-        payload, compressed = prepared.pixels, prepared.compressed
-        p, s = self.pico, self.sampler
-        texture = None
-        try:
-            # 완료 대기를 포함한 CPU 경과 시간이다. GPU 프레임 질의와 구분한다.
-            self.finish()
-            with self.timings.scope("load.upload_complete"):
-                texture = p.SDL_CreateTexture(p.renderer, p.SDL_PIXELFORMAT_RGBA32,
-                                             p.SDL_TEXTUREACCESS_STATIC, width, height)
-                if not texture:
-                    raise RuntimeError("아틀라스 텍스처 생성 실패")
-                buffer = ct.create_string_buffer(payload)
-                if compressed:
-                    with s.batch():
-                        self._bind(texture)
-                        self.compressed_upload(0x0DE1, 0, 0x8E8C, width, height, 0, len(payload), buffer)
-                        error = self.get_error()
-                        if error:
-                            raise RuntimeError(f"BC7 업로드 실패: GL {error:#x}")
-                elif page["codec"] in ("a8_zlib","rgb8_zlib"):
-                    self._upload_compact(texture,page,buffer)
-                elif p.SDL_UpdateTexture(texture, None, buffer, width * 4):
-                    raise RuntimeError("RGBA 아틀라스 전송 실패")
-                p.SDL_SetTextureScaleMode(texture, p.SDL_ScaleModeLinear)
-                p.SDL_SetTextureBlendMode(texture, p.SDL_BLENDMODE_NONE)
-                self.finish()
-            with s.batch():
-                self._bind(texture)
-                values = {}
-                for name, enum in (("internal_format", 0x1003), ("compressed", 0x86A1),
-                                    ("width", 0x1000), ("height", 0x1001)):
-                    value = ct.c_int()
-                    self.query_level(0x0DE1, 0, enum, ct.byref(value))
-                    values[name] = value.value
-                if compressed:
-                    storage = ct.c_int()
-                    self.query_level(0x0DE1, 0, 0x86A0, ct.byref(storage))
-                    if not values["compressed"] or values["internal_format"] != 0x8E8C or storage.value != bc7_size(width, height):
-                        raise RuntimeError("실제 GPU 저장 형식이 예상 BC7과 다르다.")
-                    values["storage_bytes"] = storage.value
-                else:
-                    expected_format = {"a8_zlib":0x8229,"rgb8_zlib":0x8051}.get(page["codec"])
-                    if expected_format is not None and values["internal_format"] != expected_format:
-                        raise RuntimeError("단축 채널 텍스처의 실제 GL 저장 형식이 다르다.")
-                    values["storage_bytes"] = texture_payload_size(page["codec"],width,height)
-                    values["storage_semantics"] = "GL 저장 형식의 논리 페이로드. 드라이버 정렬·물리 할당량과 다르다."
-            entry = {"texture": texture, "size": (width, height), "references": 1,
-                     "disk_bytes": prepared.disk_bytes, "gpu": values, "codec": page["codec"]}
-            self.entries[key] = entry
-            return key, entry
-        except BaseException:
-            if texture:
-                p.SDL_DestroyTexture(texture)
-            raise
-
-    def _bind(self, texture):
-        w, h = ct.c_float(), ct.c_float()
-        if self.pico.SDL_GL_BindTexture(texture, ct.byref(w), ct.byref(h)):
-            raise RuntimeError("SDL/OpenGL 아틀라스 연결 실패")
-
-    def release(self, key):
-        self._assert_owner()
-        entry = self.entries[key]
-        entry["references"] -= 1
-        if not entry["references"]:
-            self.pico.SDL_DestroyTexture(entry["texture"])
-            del self.entries[key]
-
-    def report(self):
-        return {"unique_textures": len(self.entries), "cache_hits": self.hits,
-                "gpu_storage_bytes": sum(row["gpu"]["storage_bytes"] for row in self.entries.values()),
-                "textures": [dict(path=str(key[0]), codec=row["codec"], **row["gpu"]) for key, row in self.entries.items()]}
-
-
 class PicoMotionAtlas:
     def __init__(self, pico, source, cache, *, progress=None, decode_workers=DEFAULT_DECODE_WORKERS):
         if type(decode_workers) is not int or decode_workers < 1:
             raise ValueError("페이지 작업자 수는 양수 정수여야 한다.")
         self.pico, self.source, self.cache = pico, Path(source).resolve(), cache
-        self.data = json.loads(self.source.read_text(encoding="utf-8"))
+        with cache.timings.scope("load.atlas_manifest"):
+            self.data = _decode_atlas_manifest(self.source.read_bytes())
         if self.data.get("version") != 1:
             raise ValueError("지원하지 않는 모션 아틀라스 규격이다.")
         if self.data.get("color_alpha_mode", "premultiplied") != "premultiplied":
@@ -271,7 +128,7 @@ class PicoMotionAtlas:
         try:
             cache._assert_owner()
             missing, scheduled = [], set()
-            max_side = cache.sampler.integer(0x0D33)
+            max_side = cache.binding.integer(0x0D33)
             for _, page in requests:
                 if min(page["width"], page["height"]) < 1 or max(page["width"], page["height"]) > max_side:
                     raise ValueError("GPU 페이지 크기 제한을 초과했다.")
@@ -305,7 +162,7 @@ class PicoMotionAtlas:
 class AtlasPainter:
     def __init__(self, pico):
         self.pico = pico
-        self.sampler = BicubicSampler(pico, None, fragment_shader=ATLAS_SHADER,
+        self.sampler = TexturedQuadPass(pico, fragment_shader=ATLAS_SHADER,
                                       extra_uniforms=("colorSecond", "vectorFirst", "vectorSecond", "colorSize0",
                                       "colorSize1", "vectorSize0", "vectorSize1", "frameSize", "aRects[0]",
                                       "bRects[0]", "fRects[0]", "rRects[0]", "pageIds[0]", "phase", "pairCount",
@@ -313,22 +170,6 @@ class AtlasPainter:
                                       "energyFirst", "energySecond", "energySize0", "energySize1", "energyTint",
                                       "energyARects[0]", "energyBRects[0]", "energyPageIds[0]"))
         self.uniform_array = bind_gl(pico, "glUniform4fv", None, [ct.c_int, ct.c_int, ct.c_void_p])
-
-    @contextmanager
-    def _textures(self, cache, entries):
-        s, previous = self.sampler, []
-        try:
-            for unit, entry in enumerate(entries):
-                s.glActiveTexture(0x84C0 + unit)
-                previous.append(s.integer(0x8069))
-                cache._bind(entry["texture"])
-            s.glActiveTexture(0x84C0)
-            yield
-        finally:
-            for unit, texture in enumerate(previous):
-                s.glActiveTexture(0x84C0 + unit)
-                s.glBindTexture(0x0DE1, texture)
-            s.glActiveTexture(0x84C0)
 
     def draw(self, resource, clip_name, phase, destination, *, blur=False, smoothstep=False,
              shutter_seconds=0.008, blur_strength=0.2, easing=None, opacity=1, tint=(1, 1, 1), tint_mix=0, rim_light=(0, 0, 0, 0), brightness=1,
@@ -383,7 +224,7 @@ class AtlasPainter:
                 mask_ids.append(banks["energy"].index(frame["page"]) if has_energy else 0)
             energy_arrays[2].extend(mask_ids + [0, 0])
         s = self.sampler
-        with s.batch(), self._textures(resource.cache, entries):
+        with s.batch(), bind_atlas_textures(s, resource.cache, entries):
             for name, unit in (("colorSecond", 1), ("vectorFirst", 2), ("vectorSecond", 3)):
                 s.glUniform1i(s.uniforms[name], unit)
             s.glUniform1i(s.uniforms["energyFirst"], 4)
@@ -411,7 +252,7 @@ class AtlasPainter:
 
     def close(self):
         if self.sampler:
-            self.sampler.glDeleteProgram(self.sampler.program)
+            self.sampler.close()
             self.sampler = None
 
 
@@ -425,7 +266,7 @@ class PicoAtlasSprite:
         self.energy_color = None
         self.energy_mask_gain = 1
         self.painter = AtlasPainter(pico)
-        self.cache = AtlasTextureCache(pico, self.painter.sampler, timings=timings)
+        self.cache = AtlasTextureCache(pico, timings=timings)
         self.resource = None
         self.shutter_seconds, self.blur_strength = shutter_seconds, blur_strength
         try:

@@ -1,8 +1,50 @@
 {
   "upper_lower": {
-    "pbr_lighting": "../../data/runtime/part_motion/player_pbr_24/lighting.json",
     "enabled": true,
-    "catalog": "../../data/runtime/upper_lower/player_20261117_compact_r01/catalog.json",
+    "player_pipeline": "pbr",
+    "direction_sample_fps": 24,
+    "retired_motions": [
+      "run_loop", "sword_run", "idle_to_run", "run_to_idle", "boost_to_run",
+      "dash_to_run", "run_to_dash", "run_to_boost",
+      "gun_hip_run_forward", "gun_hip_run_backward", "gun_hip_run_left", "gun_hip_run_right",
+      "gun_aim_run_forward", "gun_aim_run_backward", "gun_aim_run_left", "gun_aim_run_right"
+    ],
+    "pbr_lighting": "../../data/runtime/part_motion/player_pbr_24/lighting.json",
+    "pbr_catalog_profiles": {
+      "high": "../../data/runtime/part_motion/player_pbr_24/profiles/high/catalog.json",
+      "medium": "../../data/runtime/part_motion/player_pbr_24/profiles/medium/catalog.json",
+      "low": "../../data/runtime/part_motion/player_pbr_24/profiles/low/catalog.json"
+    },
+    "surface_catalog_profiles": {
+      "high": "../../data/runtime/part_motion/player_surface_game24_bc7_r01/high/catalog.json",
+      "medium": "../../data/runtime/part_motion/player_surface_game24_bc7_r01/medium/catalog.json",
+      "low": "../../data/runtime/part_motion/player_surface_game24_bc7_r01/low/catalog.json"
+    },
+    "catalog": "../../data/runtime/part_motion/player_full_30_r01/attachments.json",
+    "part_catalog_profiles": {
+      "low": [
+        "../../data/runtime/part_motion/player_50pct_oodle_r01/low/catalog.json",
+        "../../data/runtime/part_motion/player_50pct_packed_r01/low/catalog.json",
+        "../../data/runtime/part_motion/player_50pct_rg8_r01/low/catalog.json",
+        "../../data/runtime/part_motion/player_50pct_r01/low/catalog.json"
+      ],
+      "medium": [
+        "../../data/runtime/part_motion/player_75pct_oodle_r02/medium/catalog.json",
+        "../../data/runtime/part_motion/player_75pct_raw_r02/medium/catalog.json",
+        "../../data/runtime/part_motion/player_75pct_r01/medium/catalog.json"
+      ],
+      "high": [
+        "../../data/runtime/part_motion/player_full_30_rg8_oodle_r01/high/catalog.json",
+        "../../data/runtime/part_motion/player_full_30_rg8_packed_r01/high/catalog.json",
+        "../../data/runtime/part_motion/player_full_30_rg8_r01/high/catalog.json",
+        "../../data/runtime/part_motion/player_full_30_r01/high/catalog.json"
+      ]
+    },
+    "part_ktx_catalog_profiles": {
+      "low": "../../data/runtime/part_motion/player_50pct_ktx_r01/low/catalog.json",
+      "medium": "../../data/runtime/part_motion/player_75pct_ktx_r02/medium/catalog.json",
+      "high": "../../data/runtime/part_motion/player_full_30_rg8_ktx_r01/high/catalog.json"
+    },
     "follow": {
       "upper_response_seconds": 0.12,
       "lower_response_seconds": 0.24,
@@ -227,8 +269,7 @@
     "cycle_seconds": 3.0
   },
   "combat": {
-    "asset": "../../data/runtime/catalog/prerender/player_contact_runtime_aligned_20261117/combat/catalog.json",
-    "interpolation": "../../data/runtime/frame_interpolation/player_contact_runtime_aligned_20261117/catalog.json",
+    "asset": "../../data/runtime/part_motion/player_full_30_r01/sdl/combat/catalog.json",
     "playback_speed": 1.5,
     "damage_by_energy_level": [
       60,
@@ -375,7 +416,6 @@
   },
   "interpolation": {
     "enabled": true,
-    "source": "../../data/runtime/frame_interpolation/player_contact_runtime_aligned_20261117/catalog.json",
     "easing": "linear",
     "shutter_seconds": 0.008,
     "blur_direction": "trailing",
@@ -385,7 +425,7 @@
   "movement": {
     "map_size_m": 1000,
     "radius_m": 2.5,
-    "run_speed_mps": 30,
+    "run_speed_mps": 50,
     "dash_speed_mps": 100,
     "movement_acceleration_seconds": 0.2,
     "attack_run_speed_mps": 50,
@@ -402,16 +442,16 @@
     "pixels_per_meter": 25.6,
     "projection_y_scale": 0.3209,
     "sprite_scale": 0.6336633663366337,
+    "atlas_pixel_scale": 3,
     "shadow_opacity": 0.5,
     "shadow_softness_pixels": 5,
     "shadow_contact_radius_pixels": 56,
     "transition_seconds": 0.12,
-    "run_reference_speed_mps": 12.22,
     "tile_m": 10,
     "grid_m": 10,
     "major_grid_m": 100,
     "font": "../../data/fonts/SUITE-otf/SUITE-Bold.otf",
-    "asset": "../../data/runtime/catalog/prerender/player_contact_runtime_aligned_20261117/movement/catalog.json",
+    "asset": "../../data/runtime/part_motion/player_full_30_r01/sdl/movement/catalog.json",
     "ground": "../../data/runtime/images/textures/polyhaven/dirt/dirt_diff_1k.png",
     "energy_mask_enabled": true,
     "energy_mask_gain": 4

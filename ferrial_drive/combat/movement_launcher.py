@@ -4,8 +4,9 @@ import argparse
 from pathlib import Path
 
 
-def launch_movement_test(*, description, movement_speed_multiplier=1, overdrive_rainbow=False,
-                         application_type=None, encounter_path=None, window_title=None):
+def launch_movement_test(*, description, movement_speed_multiplier=1,
+                         application_type=None, encounter_path=None, window_title=None, part_catalog=None,
+                         settings_file=None):
     from ferrial_drive.combat.movement_application import MovementApplication
     from ferrial_drive.runtime import run_application
 
@@ -15,7 +16,9 @@ def launch_movement_test(*, description, movement_speed_multiplier=1, overdrive_
     parser.add_argument("--demo", action="store_true", help="게임 에셋 없는 기본 도형 시연")
     if encounter_path is not None:
         parser.add_argument("--encounter", type=Path, default=encounter_path, help="적 종류·출현·전투 수치 JSON")
-    parser.add_argument("--overdrive-rainbow", action=argparse.BooleanOptionalAction, default=overdrive_rainbow,
+        parser.add_argument("--enemy-count", type=int, help="기본 출현 배치를 대체할 적 수")
+        parser.add_argument("--enemy-spacing-m", type=float, default=12, help="부하 시험 대형의 기체 중심 간격(m)")
+    parser.add_argument("--overdrive-rainbow", action="store_true",
                         help="오버드라이브 기체 림·검 Trail·HUD의 무지개 팔레트 시험")
     parser.add_argument("--mute", action="store_true", help="효과음 없이 실행")
     parser.add_argument("--frames", type=int)
@@ -24,23 +27,32 @@ def launch_movement_test(*, description, movement_speed_multiplier=1, overdrive_
     parser.add_argument("--report", type=Path)
     parser.add_argument("--script", type=Path, help="60Hz 사전 지정 입력 JSON")
     parser.add_argument("--profile", type=Path)
-    parser.add_argument("--settings-file", type=Path, help="게임 사용자 설정 저장 경로")
+    parser.add_argument("--settings-file", type=Path, default=settings_file, help="게임 사용자 설정 저장 경로")
     parser.add_argument("--theme-file", type=Path, help="외부 편집기와 공유할 HUD 테마 파일")
     parser.add_argument("--preview-frame", type=Path, help="외부 도구의 축소 미리보기 출력")
     parser.add_argument("--preview-control", type=Path, help="외부 도구의 시연 상태 요청")
     parser.add_argument("--preview-hidden", action="store_true", help="별도 창 대신 외부 도구에 화면 전달")
     parser.add_argument("--record-directory", type=Path, help="기체 주변의 연속 검토 이미지")
     parser.add_argument("--record-step", type=int, default=2)
+    parser.add_argument("--part-catalog", type=Path, default=part_catalog, help="시험할 독립 파츠 GPU 카탈로그")
+    parser.add_argument("--player-pipeline", choices=("baked", "pbr"), help="플레이어 전체의 단일 렌더 경로")
+    parser.add_argument("--part-color-codec", choices=("ktx",), help="KTX2 파츠 색상 프로필 사용")
+    parser.add_argument("--part-mixed", action="store_true", help="미검증 혼합 방향의 독립 파츠 합성도 비교")
+    parser.add_argument("--part-step-directions", action="store_true", help="같은 파츠 아틀라스에서 방향 재투영만 끈다.")
     args = parser.parse_args()
     program_type = application_type or MovementApplication
-    encounter_options = {"encounter_path": args.encounter} if encounter_path is not None else {}
+    encounter_options = (dict(encounter_path=args.encounter, enemy_count=args.enemy_count,
+                              enemy_spacing_m=args.enemy_spacing_m) if encounter_path is not None else {})
+    part_options = {"part_catalog": args.part_catalog, "part_mixed": args.part_mixed,
+                    "part_step_directions": args.part_step_directions, "part_color_codec": args.part_color_codec,
+                    "player_pipeline": args.player_pipeline}
     program = program_type(args.config, demo=args.demo, capture=args.capture, capture_frame=args.capture_frame,
                                   report=args.report, script=args.script, profile=args.profile,
                                   record_directory=args.record_directory, record_step=args.record_step,
                                   settings_file=args.settings_file, movement_speed_multiplier=movement_speed_multiplier,
                                   mute=args.mute, theme_file=args.theme_file, preview_frame=args.preview_frame,
                                   preview_control=args.preview_control, preview_hidden=args.preview_hidden,
-                                  overdrive_rainbow=args.overdrive_rainbow, **encounter_options)
+                                  overdrive_rainbow=args.overdrive_rainbow, **part_options, **encounter_options)
     title = window_title or "Ferrial Drive | 이동·전투·UI V2"
     if args.overdrive_rainbow:
         title += " | Rainbow Overdrive"

@@ -1,10 +1,13 @@
 """기존 이동 훈련장에 다수 적 교전과 실제 HP를 연결한다."""
 
+from contextlib import contextmanager
 from dataclasses import replace
 import json
+from math import isfinite
 from pathlib import Path
 
-from .enemy_encounter import EnemyEncounter
+from .enemy_encounter import EnemyEncounter, crowd_spawns
+from .enemy_sprites import load_enemy_part_sprites, load_enemy_sprites
 from .encounter_view import EncounterView
 from .geometry import Vec2
 from .movement_application import MovementApplication
@@ -12,15 +15,31 @@ from .sword_effects import SwordTarget
 from ferrial_drive.ui.state import Health
 
 
+ENEMY_BODY_EXTENTS = {"small": (27, 27), "medium": (30, 19), "humanoid": (38, 47)}
+
+
 class EncounterApplication(MovementApplication):
-    def __init__(self, config_path, *, encounter_path, **options):
+    def __init__(self, config_path, *, encounter_path, enemy_count=None, enemy_spacing_m=12, **options):
         super().__init__(config_path, **options)
         self.config.get("sword_effects", {})["targets"] = []
-        settings = json.loads(Path(encounter_path).read_text(encoding="utf-8-sig"))
+        self.encounter_path = Path(encounter_path).resolve()
+        settings = json.loads(self.encounter_path.read_text(encoding="utf-8-sig"))
+        if enemy_count is not None:
+            settings["spawns"] = crowd_spawns(settings["spawns"], enemy_count, enemy_spacing_m,
+                                               self.controller.position_m, self.controller.settings.map_size_m)
+        shared_radius = settings.get("rendering", {}).get("shared_frame_distance_m")
+        if shared_radius is not None and (type(shared_radius) not in (int, float)
+                                          or not isfinite(shared_radius) or shared_radius <= 0):
+            raise ValueError("적 공유 프레임 거리는 양수 유한 미터 값이어야 한다.")
+        self.enemy_sprite_scale = settings.get("rendering", {}).get("sprite_scale", 1)
+        if (type(self.enemy_sprite_scale) not in (int, float) or not isfinite(self.enemy_sprite_scale)
+                or self.enemy_sprite_scale <= 0):
+            raise ValueError("적 표시 배율은 양수여야 한다.")
         self.encounter = EnemyEncounter(settings, map_size_m=self.controller.settings.map_size_m,
                                         player_radius_m=self.controller.settings.radius_m)
         self.encounter_view = None
         self.encounter_trace = []
+        self.targets_by_id = {}
 
     def _enter_resources(self):
         super()._enter_resources()
@@ -29,6 +48,48 @@ class EncounterApplication(MovementApplication):
         self.hud.resolve_enemy_damage = self.encounter.damage_enemy
         self.encounter_view = EncounterView(self.renderer, self.camera, self.projection,
             backend=self.encounter.settings.get("rendering", {}).get("backend", "auto"))
+        sprite_path = self.encounter.settings.get("rendering", {}).get("enemy_sprites")
+        sprites = self._enemy_parts(self.game_settings)
+        if not sprites and sprite_path and not self.demo:
+            sprites = load_enemy_sprites(self.encounter_path.parent / sprite_path)
+        self._install_enemy_sprites(sprites)
+
+    def _enemy_parts(self, settings):
+        path = self.encounter.settings.get("rendering", {}).get("enemy_part_sprites")
+        if not path or not self.pbr_enabled:
+            return {}
+        lighting = self.relative_path(self.config["upper_lower"]["pbr_lighting"])
+        return load_enemy_part_sprites(self.encounter_path.parent / path, self.pico, lighting, settings, self.timings,
+                                       self.part_stream_budget)
+
+    def _install_enemy_sprites(self, sprites):
+        for sprite in sprites.values():
+            sprite.scale *= self.enemy_sprite_scale
+        self.encounter_view.sprites = sprites
+        self.encounter.sprite_death_seconds = {kind: sprite.death_seconds for kind, sprite in sprites.items()}
+
+    @contextmanager
+    def prepare_settings(self, settings):
+        with super().prepare_settings(settings) as commit_player:
+            current = self.encounter_view.sprites if self.encounter_view else {}
+            reload_parts = (any(sprite.part_counts for sprite in current.values())
+                            and (settings.texture_quality, settings.upscale_aa)
+                            != (self.game_settings.texture_quality, self.game_settings.upscale_aa))
+            candidate = self._enemy_parts(settings) if reload_parts else {}
+            installed = False
+
+            def commit():
+                nonlocal installed
+                commit_player()
+                if candidate:
+                    self._install_enemy_sprites(candidate)
+                    installed = True
+
+            try:
+                yield commit
+            finally:
+                for sprite in (current if installed else candidate).values():
+                    sprite.close()
 
     def reset(self):
         self.encounter.reset()
@@ -38,27 +99,38 @@ class EncounterApplication(MovementApplication):
         return self.encounter.result != "running"
 
     def bind_hud_world(self):
-        self.sword_targets = [SwordTarget(enemy.enemy_id,
-            Vec2(*self.projection.project((enemy.position_m.x, enemy.position_m.y))) - Vec2(0, enemy.profile.height_pixels),
-            enemy.profile.hit_radius_pixels, "metal", (enemy.position_m.x, enemy.position_m.y))
-            for enemy in self.encounter.enemies.values() if enemy.alive]
-        for enemy_id in self.encounter.enemies:
-            self.target_hits.setdefault(enemy_id, 0)
-        created = set(self.encounter.enemies) - set(self.hud.enemies) if self.hud else set()
-        super().bind_hud_world()
         if self.hud:
-            for target in self.sword_targets:
-                enemy = self.encounter.enemies[target.target_id]
-                # 살아 있는 적 본체·다리의 보수적 영역. 이름·HP·무기/VFX는 제외한다.
-                half_width, head = {"small": (27, 27), "medium": (30, 19), "humanoid": (38, 47)}[enemy.profile.kind]
-                self.hud.enemies[target.target_id]["world_bounds"] = (
-                    target.center.x - half_width, target.center.y - head,
-                    half_width * 2, enemy.profile.height_pixels + head + 8)
-            for enemy_id in created:
-                enemy = self.encounter.enemies[enemy_id]
+            self.bind_hud_player()
+        sprites = self.encounter_view.sprites if self.encounter_view else {}
+        targets = {}
+        for enemy_id, enemy in self.encounter.enemies.items():
+            self.target_hits.setdefault(enemy_id, 0)
+            if not enemy.alive:
+                continue
+            profile = enemy.profile
+            position = enemy.position_m.x, enemy.position_m.y
+            x, foot = self.projection.project(position)
+            center_y = foot - profile.height_pixels
+            target = self.targets_by_id.get(enemy_id)
+            if target is None or target.position_m != position or target.radius_pixels != profile.hit_radius_pixels:
+                target = SwordTarget(enemy_id, Vec2(x, center_y), profile.hit_radius_pixels, "metal", position)
+            targets[enemy_id] = target
+            if self.hud:
+                if enemy_id not in self.hud.enemies:
+                    self.hud.enemies[enemy_id] = {"name": f"{profile.name} {enemy_id}",
+                                                   "health": Health(enemy.health, profile.health)}
                 entry = self.hud.enemies[enemy_id]
-                entry["name"] = f"{enemy.profile.name} {enemy_id}"
-                entry["health"] = Health(enemy.health, enemy.profile.health)
+                entry["position"], entry["position_m"] = (x, center_y), position
+                half_width, head = ENEMY_BODY_EXTENTS[profile.kind]
+                scale = self.enemy_sprite_scale if profile.kind in sprites else 1
+                height = profile.height_pixels + head
+                entry["world_bounds"] = (x - half_width * scale, foot - height * scale,
+                                         half_width * 2 * scale, (height + 8) * scale)
+        self.targets_by_id = targets
+        self.sword_targets = list(targets.values())
+
+    def find_sword_target(self, target_id):
+        return self.targets_by_id.get(target_id)
 
     def sync_encounter_health(self):
         if self.hud:
@@ -75,17 +147,20 @@ class EncounterApplication(MovementApplication):
 
     def advance_encounter(self, seconds, previous_position_m):
         self.sync_encounter_health()
-        hits = self.encounter.advance(seconds, previous_position_m, self.controller.position_m)
-        for _, amount in hits:
-            self.hud.perform("damage_player", damage_amount=amount)
+        self.encounter.advance(seconds, previous_position_m, self.controller.position_m)
+        for hit in self.encounter.hit_events:
+            self.on_enemy_hit(hit)
         self.bind_hud_world()
+
+    def on_enemy_hit(self, hit):
+        self.hud.perform("damage_player", damage_amount=hit.damage)
 
     def on_sword_hit(self, strike_id, target_id):
         super().on_sword_hit(strike_id, target_id)
         if self.hud.enemies[target_id]["health"].current <= 0:
             return
         enemy = self.encounter.enemies[target_id]
-        target = next(target for target in self.sword_targets if target.target_id == target_id)
+        target = self.targets_by_id[target_id]
         sections = [section for section in self.sword_effects.sections if section.strike_id == strike_id]
         direction = Vec2(*self.combat.strike_direction)
         if sections:
@@ -138,7 +213,11 @@ class EncounterApplication(MovementApplication):
     def draw_targets(self):
         if self.encounter_view:
             with self.timings.scope("combat.enemies.draw"):
-                self.encounter_view.draw(self.encounter, self.target_flash, self.window_size)
+                self.encounter_view.draw(
+                    self.encounter, self.target_flash, self.window_size,
+                    player_position_m=self.controller.position_m, locked_id=self.hud.selected_target_id,
+                    shadow_opacity=self.style["shadow_opacity"] if self.show_shadow else 0,
+                    shadow_softness_pixels=self.style.get("shadow_softness_pixels", 5))
 
     def exit(self):
         try:

@@ -23,9 +23,9 @@ CONFIG = ROOT / "samples/sword_movement/movement_config.json"
 
 def sample_clips():
     frames = tuple(SpriteFrame((0, 0, 1, 1), (0, 0)) for _ in range(8))
-    motions = [f"{state}_loop" for state in ("idle", "run", "dash", "boost")]
-    motions += [f"{a}_to_{b}" for a in ("idle", "run", "dash", "boost")
-                for b in ("idle", "run", "dash", "boost") if a != b]
+    states = ("idle", "dash", "boost")
+    motions = [f"{state}_loop" for state in states]
+    motions += [f"{a}_to_{b}" for a in states for b in states if a != b]
     return {f"{motion}/{direction}": SpriteClip(12, frames) for motion in motions for direction in SCREEN_DIRECTIONS}
 
 
@@ -33,9 +33,9 @@ class LocomotionTests(unittest.TestCase):
     def test_requested_training_speeds(self):
         controller = LocomotionController(LocomotionSettings(boost_prepare_seconds=0))
         controller.update(0.2, (1, 0), (1, 0))
-        self.assertAlmostEqual(controller.movement_speed_mps, 30)
+        self.assertAlmostEqual(controller.movement_speed_mps, 50)
         controller.update(0.1, (1, 0), (1, 0))
-        self.assertAlmostEqual(controller.speed_mps, 30)
+        self.assertAlmostEqual(controller.speed_mps, 50)
         controller.update(0.2, (1, 0), (1, 0), dash=True)
         self.assertAlmostEqual(controller.movement_speed_mps, 100)
         controller.update(0.1, (1, 0), (1, 0), dash=True)
@@ -49,33 +49,35 @@ class LocomotionTests(unittest.TestCase):
                 controller = LocomotionController()
                 for _ in range(fps):
                     controller.update(1 / fps, vector, (0, -1))
-                self.assertAlmostEqual(hypot(*(v - 500 for v in controller.position_m)), 27)
-                self.assertAlmostEqual(controller.distance_m, 27)
+                self.assertAlmostEqual(hypot(*(v - 500 for v in controller.position_m)), 45)
+                self.assertAlmostEqual(controller.distance_m, 45)
 
-    def test_running_faces_movement_and_dash_faces_aim(self):
+    def test_both_dash_outputs_face_movement_unless_aim_is_required(self):
         controller = LocomotionController()
         controller.update(0.1, (-1, 0), (0, -1))
-        self.assertEqual((controller.state, controller.direction), ("run", "w"))
+        self.assertEqual((controller.state, controller.direction, controller.strong_dash), ("dash", "w", False))
         controller.update(0.1, (-1, 0), (0, -1), dash=True)
-        self.assertEqual((controller.state, controller.direction), ("dash", "n"))
+        self.assertEqual((controller.state, controller.direction, controller.strong_dash), ("dash", "w", True))
+        controller.update(0.1, (-1, 0), (0, -1), dash=True, face_movement=False)
+        self.assertEqual(controller.direction, "n")
 
     def test_releasing_keys_coasts_then_stops_in_0_2_seconds(self):
         controller = LocomotionController()
         controller.update(1, (1, 0), (1, 0))
         stopped = controller.position_m
         controller.update(0.1, (0, 0), (0, 1))
-        self.assertAlmostEqual(controller.movement_speed_mps, 15)
-        self.assertAlmostEqual(controller.position_m[0], stopped[0]+2.4375)
-        self.assertEqual(controller.state, "run")
+        self.assertAlmostEqual(controller.movement_speed_mps, 25)
+        self.assertAlmostEqual(controller.position_m[0], stopped[0]+4.0625)
+        self.assertEqual(controller.state, "dash")
         controller.update(0.1, (0, 0), (0, 1))
-        self.assertAlmostEqual(controller.position_m[0], stopped[0]+3)
+        self.assertAlmostEqual(controller.position_m[0], stopped[0]+5)
         self.assertEqual(controller.movement_speed_mps, 0)
         stopped = controller.position_m
         controller.update(0.1, (0, 0), (0, 1))
         self.assertEqual(controller.position_m, stopped)
         self.assertEqual((controller.state, controller.speed_mps), ("idle", 0))
 
-    def test_dash_from_idle_and_run_to_dash_to_run_use_smoothstep(self):
+    def test_high_and_low_dash_use_smoothstep(self):
         controller = LocomotionController()
         controller.update(0.1, (1, 0), (1, 0), dash=True)
         self.assertAlmostEqual(controller.position_m[0], 501.875)
@@ -83,16 +85,16 @@ class LocomotionTests(unittest.TestCase):
         controller.update(0.1, (1, 0), (1, 0), dash=True)
         self.assertAlmostEqual(controller.position_m[0], 510)
         controller.update(0.1, (1, 0), (1, 0))
-        self.assertAlmostEqual(controller.movement_speed_mps, 65)
+        self.assertAlmostEqual(controller.movement_speed_mps, 75)
         controller.update(0.1, (1, 0), (1, 0))
-        self.assertAlmostEqual(controller.position_m[0], 523)
-        self.assertAlmostEqual(controller.movement_speed_mps, 30)
+        self.assertAlmostEqual(controller.position_m[0], 525)
+        self.assertAlmostEqual(controller.movement_speed_mps, 50)
         controller.update(0.1, (1, 0), (1, 0), dash=True)
-        self.assertAlmostEqual(controller.movement_speed_mps, 65)
+        self.assertAlmostEqual(controller.movement_speed_mps, 75)
 
     def test_acceleration_and_release_distance_match_across_fps(self):
         for fps in (30, 60, 144):
-            for dash, distance in ((False, 30), (True, 100)):
+            for dash, distance in ((False, 50), (True, 100)):
                 controller = LocomotionController()
                 for _ in range(fps):
                     controller.update(1/fps, (1, 1), (1, 0), dash=dash)
@@ -109,15 +111,15 @@ class LocomotionTests(unittest.TestCase):
         controller.update(0.1, (0, -1), (1, 0))
         self.assertAlmostEqual(controller.position_m[0], start[0])
         self.assertLess(controller.position_m[1], start[1])
-        self.assertAlmostEqual(controller.movement_speed_mps, 22.5)
+        self.assertAlmostEqual(controller.movement_speed_mps, 37.5)
 
-    def test_run_dash_run_and_coast_chain_matches_at_different_frame_rates(self):
+    def test_dash_output_switches_and_coasting_match_at_different_frame_rates(self):
         for fps in (1, 30, 60, 144):
             controller = LocomotionController()
             for movement, dash in (((1, 0), False), ((1, 0), True), ((1, 0), False), ((0, 0), False)):
                 for _ in range(fps):
                     controller.update(1/fps, movement, (1, 0), dash=dash)
-            self.assertAlmostEqual(controller.position_m[0], 660)
+            self.assertAlmostEqual(controller.position_m[0], 700)
             self.assertEqual(controller.movement_speed_mps, 0)
             self.assertEqual(controller.state, "idle")
 
@@ -139,13 +141,13 @@ class LocomotionTests(unittest.TestCase):
         self.assertAlmostEqual(controller.position_m[1], 475)
         self.assertTrue(controller.request_boost((1, 0), (1, 0)))
 
-    def test_boost_end_consumes_remaining_frame_as_run(self):
+    def test_boost_end_consumes_remaining_frame_as_low_dash(self):
         controller = LocomotionController(LocomotionSettings(boost_prepare_seconds=0))
         controller.request_boost((1, 0), (1, 0))
         controller.update(0.25, (0, 1), (1, 0))
-        self.assertAlmostEqual(controller.position_m[0], 528)
-        self.assertAlmostEqual(controller.position_m[1], 500 + 30 * 0.05)
-        self.assertEqual((controller.state, controller.direction), ("run", "s"))
+        self.assertAlmostEqual(controller.position_m[0], 530)
+        self.assertAlmostEqual(controller.position_m[1], 500 + 50 * 0.05)
+        self.assertEqual((controller.state, controller.direction), ("dash", "s"))
 
     def test_boost_windup_preserves_dash_then_launches_and_eases_to_target(self):
         controller = LocomotionController()
@@ -165,7 +167,7 @@ class LocomotionTests(unittest.TestCase):
 
     def test_boost_curve_distance_is_frame_rate_independent(self):
         for steps in (1, 6, 12, 29):
-            for movement, dash, expected in (((1, 0), False, 28), ((1, 0), True, 35), ((0, 0), False, 25)):
+            for movement, dash, expected in (((1, 0), False, 30), ((1, 0), True, 35), ((0, 0), False, 25)):
                 controller = LocomotionController(LocomotionSettings(boost_prepare_seconds=0))
                 controller.request_boost((1, 0), (1, 0))
                 for _ in range(steps):
@@ -180,9 +182,9 @@ class LocomotionTests(unittest.TestCase):
         controller.update(0, (1, 0), (1, 0), dash=False)
         self.assertAlmostEqual(controller.movement_speed_mps, speed)
         controller.update(0.1, (1, 0), (1, 0), dash=False)
-        self.assertAlmostEqual(controller.movement_speed_mps, 30)
+        self.assertAlmostEqual(controller.movement_speed_mps, 50)
 
-    def test_boundary_respects_radius_for_run_and_boost(self):
+    def test_boundary_respects_radius_for_dash_and_boost(self):
         controller = LocomotionController()
         controller.position_m = (997, 3)
         controller.request_boost((1, -1), (0, 1))
@@ -211,12 +213,12 @@ class LocomotionTests(unittest.TestCase):
 
 
 class PlaybackTests(unittest.TestCase):
-    def test_faster_run_preserves_transition_time(self):
+    def test_loop_speed_preserves_transition_time(self):
         playback = LocomotionPlayback(sample_clips())
-        playback.update("run", "e", 0.1, loop_speed=2)
-        self.assertEqual(playback.motion, "idle_to_run")
-        playback.update("run", "e", 0.1, loop_speed=2)
-        self.assertEqual(playback.motion, "run_loop")
+        playback.update("dash", "e", 0.1, loop_speed=2)
+        self.assertEqual(playback.motion, "idle_to_dash")
+        playback.update("dash", "e", 0.1, loop_speed=2)
+        self.assertEqual(playback.motion, "dash_loop")
         self.assertAlmostEqual(playback.elapsed_seconds, 0.16)
     def test_transition_does_not_delay_movement_and_carries_leftover(self):
         controller = LocomotionController()
@@ -224,24 +226,34 @@ class PlaybackTests(unittest.TestCase):
         controller.update(0.05, (1, 0), (1, 0))
         playback.update(controller.state, controller.direction, 0.05)
         self.assertGreater(controller.position_m[0], 500)
-        self.assertEqual(playback.motion, "idle_to_run")
-        playback.update("run", "e", 0.1)
-        self.assertEqual(playback.motion, "run_loop")
+        self.assertEqual(playback.motion, "idle_to_dash")
+        playback.update("dash", "e", 0.1)
+        self.assertEqual(playback.motion, "dash_loop")
         self.assertAlmostEqual(playback.elapsed_seconds, 0.03)
+
+    def test_shift_changes_output_without_restarting_dash_loop(self):
+        controller = LocomotionController()
+        playback = LocomotionPlayback(sample_clips())
+        for strong in (False, True, False):
+            controller.update(.2, (1, 0), (1, 0), dash=strong)
+            playback.update(controller.state, controller.direction, .2)
+            self.assertEqual(playback.motion, "dash_loop")
+            self.assertAlmostEqual(controller.dash_output, 1 if strong else .5)
+        self.assertAlmostEqual(playback.elapsed_seconds, .48)
 
     def test_rapid_reverse_and_release_interrupt_transition(self):
         playback = LocomotionPlayback(sample_clips())
-        playback.update("run", "e", 0.02)
-        playback.update("run", "w", 0.03)
+        playback.update("dash", "e", 0.02)
+        playback.update("dash", "w", 0.03)
         self.assertAlmostEqual(playback.elapsed_seconds, 0.05)
         self.assertEqual(playback.direction, "w")
         playback.update("idle", "n", 0.02)
-        self.assertEqual(playback.motion, "run_to_idle")
+        self.assertEqual(playback.motion, "dash_to_idle")
         self.assertAlmostEqual(playback.elapsed_seconds, 0.02)
 
     def test_missing_direction_fails_instead_of_substituting(self):
         clips = sample_clips()
-        del clips["run_loop/nw"]
+        del clips["dash_loop/nw"]
         with self.assertRaises(ValueError):
             LocomotionPlayback(clips)
 
@@ -272,7 +284,7 @@ class MovementIntegrationTests(unittest.TestCase):
             distances.append(hypot(*(b - a for a, b in zip(start, end))))
             screen_start, screen_end = program.projection.project(start), program.projection.project(end)
             screen_distances.append(hypot(*(b - a for a, b in zip(screen_start, screen_end))))
-        self.assertEqual(distances, [27, 27])
+        self.assertEqual(distances, [45, 45])
         self.assertAlmostEqual(screen_distances[1] / screen_distances[0], program.projection.y_scale)
     def test_projection_inverse_for_map_and_camera_coordinates(self):
         projection = GroundProjection(25.6, 0.3209)
@@ -328,7 +340,7 @@ class MovementIntegrationTests(unittest.TestCase):
             self.assertEqual(program.renderer.fonts, {})
 
     def test_body_only_catalog_is_rejected_and_closes_fonts(self):
-        program = MovementApplication(CONFIG)
+        program = MovementApplication(CONFIG, player_pipeline="baked")
         program.style["asset"] = "movement_config.json"
         catalog = SimpleNamespace(definitions={"body_only": object()})
         document = SimpleNamespace(mech=SimpleNamespace(sheets={"body": object()}))

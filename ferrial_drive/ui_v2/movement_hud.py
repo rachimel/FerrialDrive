@@ -156,25 +156,30 @@ class MovementHud(HudPreview):
             super().perform(action, damage_amount=damage_amount)
 
     def bind_world(self, camera, projection, controller, targets, mouse, *, player_bounds=None):
+        self.bind_player(camera, projection, controller, mouse, player_bounds=player_bounds)
+        for target in targets:
+            self.bind_target(target, projection)
+
+    def bind_player(self, camera, projection, controller, mouse, *, player_bounds=None):
         self.world_camera = self.camera = camera
         self.world_projection = projection
         self.player_position_m = controller.position_m
         self.player_world = projection.project(controller.position_m)
         self.player_world_bounds = player_bounds
         self.mouse = mouse
-        for target in targets:
-            position = (target.center.x, target.center.y)
-            if target.target_id not in self.enemies:
-                maximum = self.preset["enemies"][0]["health"]["maximum"]
-                self.enemies[target.target_id] = {"name": f"훈련 표적 {target.target_id}",
-                    "position": position, "health": Health(maximum, maximum)}
-            self.enemies[target.target_id]["position"] = position
-            radius = target.radius_pixels
-            self.enemies[target.target_id]["world_bounds"] = (position[0] - radius, position[1] - radius,
-                                                             radius * 2, radius * 2)
-            # 지면 위치가 없는 기존 공개 도형은 중심을 지면 위 좌표로 취급한다.
-            self.enemies[target.target_id]["position_m"] = (target.position_m if target.position_m is not None
-                                                          else projection.unproject(position))
+
+    def bind_target(self, target, projection):
+        position = (target.center.x, target.center.y)
+        if target.target_id not in self.enemies:
+            maximum = self.preset["enemies"][0]["health"]["maximum"]
+            self.enemies[target.target_id] = {"name": f"훈련 표적 {target.target_id}",
+                "position": position, "health": Health(maximum, maximum)}
+        entry = self.enemies[target.target_id]
+        entry["position"] = position
+        radius = target.radius_pixels
+        entry["world_bounds"] = (position[0] - radius, position[1] - radius, radius * 2, radius * 2)
+        # 지면 위치가 없는 기존 공개 도형은 중심을 지면 위 좌표로 취급한다.
+        entry["position_m"] = target.position_m if target.position_m is not None else projection.unproject(position)
 
     def bounds_intersect_view(self, bounds, camera_position=None):
         """표시 사각형과 화면의 교차. 피격 흔들림은 제외한다."""
@@ -247,7 +252,7 @@ class MovementHud(HudPreview):
         local = {key for key in visible if self.screen_distance_ratio(key) < settings["far_ratio"]}
         return None, local, None
 
-    def update_world_view(self, delta_seconds):
+    def update_world_view(self, delta_seconds, *, update_markers=True):
         # 카메라는 훈련장에서 한 번만 갱신한다. HUD는 같은 투영을 읽는다.
         if self.world_camera is None:
             return
@@ -266,7 +271,10 @@ class MovementHud(HudPreview):
             excluded = self.visibility_released_ids
         preferred, visible, delay = self.distance_switch_preference(visible - excluded, delta_seconds)
         super().update_world_view(delta_seconds, update_camera=False, acquisition_ids=visible,
-                                  excluded_target_ids=excluded, preferred_id=preferred, switch_delay_seconds=delay)
+                                  excluded_target_ids=excluded, preferred_id=preferred, switch_delay_seconds=delay,
+                                  update_markers=update_markers)
+        if not update_markers:
+            return
         for track in self.lock_motion.tracks:
             x, y = self.camera.world_to_screen(self.enemies[track.target_id]["position"])
             track.body = Rect(x - track.body.width / 2, y - track.body.height / 2,

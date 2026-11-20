@@ -3,7 +3,7 @@
 from math import ceil, floor, isfinite
 import ctypes as ct
 
-from .bicubic import BicubicSampler
+from .gl_pass import TexturedQuadPass
 from ferrial_drive.assets.pico_opacity import shadow_opacity
 
 
@@ -70,7 +70,7 @@ class PicoShadowBlend:
             raise ValueError("그림자 번짐 반경은 0 이상, 접지 반경은 양수여야 한다.")
         self.pico = pico
         self.softness_pixels, self.contact_radius_pixels = softness_pixels, contact_radius_pixels
-        self.sampler = BicubicSampler(pico, None, fragment_shader=SHADOW_BLEND_SHADER,
+        self.sampler = TexturedQuadPass(pico, fragment_shader=SHADOW_BLEND_SHADER,
                                       extra_uniforms=("currentBounds", "nextBounds", "currentTarget", "nextTarget",
                                                       "phase", "nextArtwork", "nextAtlasSize", "softnessPixels",
                                                       "contactRadius", "contactPoint", "currentTexelMargin", "nextTexelMargin"))
@@ -140,5 +140,5 @@ class PicoShadowBlend:
 
     def close(self):
         if self.sampler is not None:
-            self.sampler.glDeleteProgram(self.sampler.program)
+            self.sampler.close()
             self.sampler = None

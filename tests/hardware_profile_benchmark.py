@@ -5,7 +5,6 @@ Runner에서 Combat·Movement를 선택하고 창을 닫으면 성능 보고서�
 """
 
 from datetime import datetime
-from math import ceil, sqrt
 import argparse
 import json
 import os
@@ -19,6 +18,9 @@ UNIT_TEST_ENTRYPOINT = "standalone"
 UNIT_TEST_PRESETS = (
     {"id": "combat", "label": "Combat · 다수 적 교전", "args": ["--scenario", "combat", "--detail"]},
     {"id": "movement", "label": "Movement · 이동·검 훈련장", "args": ["--scenario", "sword", "--detail"]},
+    {"id": "crowd_1000", "label": "Combat · 1,000기 · 실기 무음",
+     "args": ["--scenario", "combat", "--enemy-count", "1000", "--enemy-spacing-m", "24", "--mute",
+              "--gpu-profile", "none", "--no-resource-limits"]},
 )
 
 
@@ -49,21 +51,6 @@ def aim_at_enemy(program):
         program.mouse = program.camera.world_to_screen((x, y - enemy.profile.height_pixels))
 
 
-def populate_crowd(program, count, spacing_m):
-    """현재 출현 종 비율을 반복해 플레이어 중심의 고정 격자에 배치한다."""
-    encounter = program.encounter
-    source = encounter.settings["spawns"]
-    columns = ceil(sqrt(count))
-    rows = ceil(count / columns)
-    px, py = program.controller.position_m
-    encounter.settings["spawns"] = [
-        {"id": f"crowd{i:04}", "profile": source[i % len(source)]["profile"],
-         "position_m": [px + (i % columns - (columns - 1) / 2) * spacing_m,
-                        py + (i // columns - (rows - 1) / 2) * spacing_m]}
-        for i in range(count)]
-    encounter.reset()
-
-
 def run_worker(args, applied, profile):
     # 부모가 제한 적용을 확인한 뒤에만 게임·Pico2D 모듈을 가져온다.
     from contextlib import nullcontext
@@ -87,19 +74,18 @@ def run_worker(args, applied, profile):
         initial_settings = replace(initial_settings, texture_quality=args.quality)
     GameSettingsStore(settings_path).save(initial_settings)
     application_type = EncounterApplication if args.scenario == "combat" else MovementApplication
-    encounter_options = {"encounter_path": args.encounter} if args.scenario == "combat" else {}
+    encounter_options = (dict(encounter_path=args.encounter, enemy_count=args.enemy_count,
+                              enemy_spacing_m=args.enemy_spacing_m) if args.scenario == "combat" else {})
     app = application_type(args.config, demo=args.demo or args.scenario == "demo", settings_file=settings_path,
                            profile=args.output / "timings.json", movement_speed_multiplier=args.movement_speed_multiplier,
-                           **encounter_options)
-    if args.enemy_count is not None:
-        populate_crowd(app, args.enemy_count, args.enemy_spacing_m)
+                           mute=args.mute, player_pipeline=args.player_pipeline, **encounter_options)
     if list(app.window_size) != profile["resolution"]:
         raise ValueError("프로필과 훈련장 설정의 출력 해상도가 다르다.")
     gpu_memory = ProcessGpuMemory()
     result = {"status": "error", "scenario": args.scenario, "profile": profile, "resources_applied": applied,
               "python": sys.version, "resolution": app.window_size, "input_mode": "auto" if args.auto else "interactive",
               "measured_at": datetime.now().astimezone().isoformat(),
-              "command": sys.argv[1:], "movement_speed_multiplier": args.movement_speed_multiplier,
+              "audio_muted": args.mute, "player_pipeline": app.player_pipeline, "command": sys.argv[1:], "movement_speed_multiplier": args.movement_speed_multiplier,
               "demo": app.demo,
               "instrumentation": {"detailed": args.detail, "call_profile": args.call_profile},
               "auto_input": {"weapon": args.auto_weapon, "overdrive": args.auto_overdrive, "dash": args.auto_dash,
@@ -140,7 +126,7 @@ def run_worker(args, applied, profile):
                         result["config_snapshot"]["encounter"] = app.encounter.settings
                     result["atlas_divisor_after_load"] = (app.motion_sprite.resource.data.get("divisor")
                         if app.motion_sprite is not None and hasattr(app.motion_sprite, "resource") else None)
-                    if not app.demo and (not app.quality_atlas or app.attack_sprite is None):
+                    if not app.demo and app.part_sprite is None:
                         raise RuntimeError("실제 검 이동 아틀라스가 연결되지 않았다.")
                     if args.call_profile:
                         import cProfile
@@ -259,6 +245,8 @@ def main():
     parser.add_argument("--profile", type=Path, default=ROOT / "samples/hardware_profile_benchmark/profile.json")
     parser.add_argument("--config", type=Path, default=ROOT / "samples/sword_movement/movement_config.json")
     parser.add_argument("--scenario", choices=("demo", "sword", "combat"), default="sword")
+    parser.add_argument("--mute", action="store_true", help="효과음 없이 실행")
+    parser.add_argument("--player-pipeline", choices=("baked", "pbr"))
     parser.add_argument("--enemy-count", type=int, help="플레이어 주위에 배치할 교전 부하 시험 적 수")
     parser.add_argument("--enemy-spacing-m", type=float, default=12, help="부하 시험 격자의 중심 간격(m)")
     parser.add_argument("--player-hp", type=int, help="부하 시험 중 조기 패배를 방지할 시작 HP")

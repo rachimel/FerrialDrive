@@ -81,8 +81,7 @@ class EnergyHudTests(unittest.TestCase):
         for compute in (False, True):
             recovered = []
             for multiplier in (1, .5):
-                hud = MovementHud(ROOT / "samples/ui_unit_test_v2/ui_config.json",
-                    ROOT / "samples/ui_unit_test_v2/hud_sample.json",
+                hud = HudPreview(initial_scene="combat", preset_path=ROOT / "samples/ui_unit_test_v2/hud_sample.json",
                     energy_settings=EnergySettings(absorption_gain_multiplier=multiplier))
                 if not compute:
                     hud.particle_system = None
@@ -119,7 +118,7 @@ class EnergyHudTests(unittest.TestCase):
     def test_actual_cpu_and_compute_recovery_restart_grace_not_emission(self):
         for compute in (False, True):
             with self.subTest(compute=compute):
-                hud = self.make_hud()
+                hud = HudPreview(initial_scene="combat", preset_path=ROOT / "samples/ui_unit_test_v2/hud_sample.json")
                 if not compute:
                     hud.particle_system = None
                 hud.set_energy_amount(EnergyAmount(200))

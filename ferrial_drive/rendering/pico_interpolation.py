@@ -8,7 +8,8 @@ from math import isfinite
 from ferrial_drive.diagnostics import TimingRecorder
 from ferrial_drive.diagnostics.texture_metrics import bind_gl
 
-from .bicubic import BicubicSampler, renderer_name
+from .canvas import renderer_name
+from .gl_pass import TexturedQuadPass
 from .motion_vectors import EASING_CODES, MotionClip, MotionPair, premultiply_rgba, validate_phase
 
 
@@ -102,7 +103,7 @@ class PicoFrameInterpolator:
         self.clip = None
         self.clip_cache = OrderedDict()
         self.cache_capacity = cache_capacity
-        self.sampler = BicubicSampler(pico, None, fragment_shader=MOTION_SHADER,
+        self.sampler = TexturedQuadPass(pico, fragment_shader=MOTION_SHADER,
                                      extra_uniforms=("nextImage", "forwardMap", "backwardMap", "phase", "mode",
                                                      "pairCount", "blurSpan", "easing", "blurBias", "playbackDirection", "blurStrength", "colorMix", "rimLight", "brightness"))
 
@@ -234,7 +235,7 @@ class PicoFrameInterpolator:
         self.clip_cache.clear()
         self.textures = []
         if self.sampler is not None:
-            self.sampler.glDeleteProgram(self.sampler.program)
+            self.sampler.close()
             self.sampler = None
         self.pair = None
         self.clip = None

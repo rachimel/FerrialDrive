@@ -6,7 +6,7 @@ from contextlib import nullcontext
 from math import cos, sin
 from pathlib import Path
 
-from .bicubic import BicubicSampler
+from .gl_pass import TexturedQuadPass
 from .ground_effect_batch import GroundEffectBatch
 
 
@@ -29,7 +29,7 @@ class PicoGroundEffects:
         self.atlas_directory = path.parent
         self.atlas = json.loads(path.read_text(encoding="utf-8"))["assets"]
         try:
-            self.sampler = BicubicSampler(pico, None, vertex_shader=VERTEX_SHADER, fragment_shader=FRAGMENT_SHADER,
+            self.sampler = TexturedQuadPass(pico, vertex_shader=VERTEX_SHADER, fragment_shader=FRAGMENT_SHADER,
                 extra_uniforms=("quadCenter", "rotation", "mirrorX", "ink", "fade", "cutoff", "detail", "roundness", "mode",
                                 "depthMode", "emitterOrigin", "nearRadius", "headFeather"))
             self.batch_sampler = GroundEffectBatch(pico)
@@ -195,5 +195,5 @@ class PicoGroundEffects:
             self.pico.SDL_DestroyTexture(texture)
         self.textures.clear()
         if self.sampler is not None:
-            self.sampler.glDeleteProgram(self.sampler.program)
+            self.sampler.close()
             self.sampler = None

@@ -123,6 +123,17 @@ class PrimitiveSoftwareTests(PrimitiveBatchChecks, unittest.TestCase):
 class PrimitiveGpuTests(PrimitiveBatchChecks, unittest.TestCase):
     driver = "windows"
 
+    def test_texture_height_limit_preserves_all_chunks_in_order(self):
+        batch = self.batch("instanced")
+        images = []
+        for rows in (128, 2):
+            batch.native.max_rows = rows
+            self.renderer.clear("#102030")
+            self.shapes(batch)
+            images.append(self.pixels())
+        self.assertEqual(images[0], images[1])
+        self.assertEqual(batch.stats["geometry_submits"], 3)
+
     def test_instancing_matches_geometry_with_clip_scale_and_render_target(self):
         p = self.pico
         batches = [self.batch(mode) for mode in ('batched', 'instanced')]

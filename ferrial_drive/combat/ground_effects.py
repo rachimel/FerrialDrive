@@ -133,7 +133,8 @@ class GroundEffects:
             self.particles.append(replace(particle, kind="trail_echo", emitter=key))
 
     def update(self, delta_seconds, *, center, velocity, offsets, active, material, energy_color, strength=1,
-               boost_active=False, ground_color=None, reverse_motion=False, foot_contact=False, foot_facing_x=None):
+               boost_active=False, ground_color=None, reverse_motion=False, foot_contact=False, foot_facing_x=None,
+               effect_opacity=None):
         if material not in MATERIAL_EFFECTS:
             raise ValueError("지원하지 않는 지면 재질: " + material)
         self.reverse_motion = reverse_motion
@@ -156,11 +157,13 @@ class GroundEffects:
         if self.was_boosting and not boost_active:
             self._retain_boost_trails()
         self.was_boosting = boost_active
-        if not active or not offsets or hypot(*velocity) < 1:
+        if not active or strength <= 0 or not offsets or hypot(*velocity) < 1:
             self._fade_trails(delta_seconds)
             self.emission_elapsed = 0
             return
         self.emission_elapsed += delta_seconds
+        trail_opacity = strength if effect_opacity is None else effect_opacity
+        opacity_scale = min(1, trail_opacity)
         interval = self.emission_seconds / strength
         speed = hypot(*velocity)
         direction = tuple(v / speed for v in velocity)
@@ -183,7 +186,7 @@ class GroundEffects:
             if boost_active and emitter.startswith("calf"):
                 length *= style["boost_length_scale"]
             length = self._advance_trail_length(emitter, length, delta_seconds)
-            intensity = self._advance_trail_strength(emitter, strength, delta_seconds)
+            intensity = self._advance_trail_strength(emitter, trail_opacity, delta_seconds)
             position = tuple(c + d * length / 2 for c, d in zip(nozzle, exhaust))
             self.particles.append(GroundParticle("trail", position, (0, 0), (length, style["width_pixels"] * strength * multiplier),
                 atan2(-exhaust[1], -exhaust[0]), style["afterimage_hold_seconds"] + style["fade_out_seconds"], 0, energy_color,
@@ -200,7 +203,7 @@ class GroundEffects:
                         self.particles.append(GroundParticle("energy_orb", nozzle,
                             (exhaust[0] * drift - exhaust[1] * spread, exhaust[1] * drift + exhaust[0] * spread),
                             tuple(v * strength * multiplier for v in orb["size_pixels"]),
-                            0, orb["lifetime_seconds"], 0, energy_color, opacity=orb["opacity"],
+                            0, orb["lifetime_seconds"], 0, energy_color, opacity=orb["opacity"] * opacity_scale,
                             growth=orb["growth"], emitter=emitter))
                 style = self.appearance["thruster_smoke"]
                 spread = self.random.uniform(-1, 1) * style["spread_pixels_per_second"] * multiplier
@@ -209,7 +212,7 @@ class GroundEffects:
                     (exhaust[0] * drift - exhaust[1] * spread, exhaust[1] * drift + exhaust[0] * spread),
                     tuple(v * strength * multiplier for v in style["size_pixels"]),
                     self.random.uniform(-3.14, 3.14), style["lifetime_seconds"], self.random.randrange(4), style["color"],
-                    opacity=style["opacity"], detail=style["detail"], roundness=style["roundness"],
+                    opacity=style["opacity"] * opacity_scale, detail=style["detail"], roundness=style["roundness"],
                     growth=style["growth"], emitter=emitter))
                 for _ in range(style.get("count", 1) - 1):
                     self.particles.append(replace(self.particles[-1], variant=self.random.randrange(4),
@@ -234,7 +237,7 @@ class GroundEffects:
                         style["lifetime_seconds"], self.random.randrange(4),
                         "#FFCF80" if kind == "spark" else surface_color,
                         brightness=style.get("brightness", 1), alpha_cutoff=style.get("alpha_cutoff", 0.5),
-                        opacity=style.get("opacity", 1), gravity=style.get("gravity_pixels_per_second_squared", 0),
+                        opacity=style.get("opacity", 1) * opacity_scale, gravity=style.get("gravity_pixels_per_second_squared", 0),
                         detail=style.get("detail", 1), roundness=style.get("roundness", 0), growth=style.get("growth", 0.1),
                         emitter=f"sole_{side}"))
                     for _ in range(style.get("count", 1) - 1):
@@ -249,7 +252,7 @@ class GroundEffects:
                 self.particles.append(GroundParticle("foot_friction", foot, (0, 0),
                     tuple(value * strength for value in style["size_pixels"]), 0, 1,
                     int(self.contact_elapsed_seconds * style["variant_hz"]) % 4, color,
-                    opacity=style["opacity"], detail=style["detail"], growth=0, emitter=f"sole_{side}",
+                    opacity=style["opacity"] * opacity_scale, detail=style["detail"], growth=0, emitter=f"sole_{side}",
                     mirror_x=(velocity[0] if foot_facing_x is None else foot_facing_x) < 0))
         anchored = [p for p in self.particles if p.kind in ("trail", "trail_echo")]
         anchored += [p for p in self.particles if p.kind == "foot_friction"]

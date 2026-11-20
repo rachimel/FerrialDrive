@@ -44,7 +44,7 @@ class PicoAssetResource:
             layers = ({"body": document.definition.source} if not document.sheets
                       else {layer: sheet.image_path for layer, sheet in document.sheets.items()})
             if selected_layers is not None:
-                if not selected_layers or any(layer not in layers for layer in selected_layers):
+                if (not selected_layers and not document.sheets) or any(layer not in layers for layer in selected_layers):
                     raise ValueError("선택한 에셋 레이어가 없다.")
                 layers = {layer: layers[layer] for layer in selected_layers}
             self.layer_paths = dict(layers)

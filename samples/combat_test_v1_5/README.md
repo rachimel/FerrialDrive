@@ -14,11 +14,15 @@ Pico2D가 설치된 Python으로 프로젝트 루트에서 실행하거나 Runne
 python tests/combat_test_v1_5.py
 python tests/combat_test_v1_5.py --demo --mute
 python tests/combat_test_v1_5_speed_test.py
+python tests/combat_test_v1_5.py --enemy-count 900 --enemy-spacing-m 24 --mute
+python tests/combat_test_v1_5_speed_test.py --enemy-count 1000 --enemy-spacing-m 24 --mute
 ```
 
-3배속 진입점은 플레이어 일반 이동 90m/s·대시 300m/s·부스트 시작 750m/s와 공격 전진 3배를 적용한다. 모션·공격 시간·적 이동·적 공격·탄환·넉백·효과 시간은 기본 교전과 같다. 카메라 이동 응답은 0.05초이며 Overdrive의 기존 이동 배율과 곱한다. 동일한 `--demo`·`--mute`·`--script`·`--report` 옵션을 지원한다.
+3배속 진입점은 플레이어 약출력 대시 150m/s·강출력 대시 300m/s·부스트 시작 750m/s와 공격 전진 3배를 적용한다. 모션·공격 시간·적 이동·적 공격·탄환·넉백·효과 시간은 기본 교전과 같다. 카메라 이동 응답은 0.05초이며 Overdrive의 기존 이동 배율과 곱한다. 동일한 `--demo`·`--mute`·`--script`·`--report` 옵션을 지원한다.
 
-WASD 이동·Shift 대시·Space 부스트·좌클릭 공격·우클릭 조준·Q 커서 최근접 록온·E 검/총 전환·F5 전체 재시작·Esc 일시정지·F10 종료. 화면 거리 교체 실험은 공통 이동 설정을 따른다. 적 전멸 또는 플레이어 HP 소진 시 교전을 종료한다. 자동 충원은 없으며 F5로 30기를 다시 생성한다.
+WASD 이동·Shift 대시·Space 부스트·좌클릭 공격·우클릭 조준·Q 커서 최근접 록온·E 검/총 전환·F5 전체 재시작·Esc 일시정지·F10 종료. 화면 거리 교체 실험은 공통 이동 설정을 따른다. 적 전멸 또는 플레이어 HP 소진 시 교전을 종료한다. F5는 시작할 때 선택한 수와 위치로 재배치한다.
+
+Runner에서 두 Combat 테스트의 기본 30기 또는 무음 900·1,000기를 선택한다. 부하 시험은 기존 출현 순서대로 기종을 반복해 플레이어를 중심으로 배치한다. 하드웨어 벤치마크의 1,000기 프리셋도 같은 24m 대형을 사용하며 현재 GPU에서 자원 제한 없이 측정한다. 밀집 비교는 `--enemy-spacing-m 12`를 사용한다.
 
 `encounter.json`의 `spawns`에서 출현 수·위치를, `profiles`에서 체력·속도·공격 수치를 조정한다. 거리 단위는 m, 시간 단위는 초다. 초기 배치에서는 적끼리 겹치지 않는다. 기존 프로필의 HP·피해량·공격 간격을 사용하며 동시 공격 수를 제한하지 않는다.
 
@@ -45,3 +49,5 @@ SMG 피해는 레벨 1/2/3·Overdrive에서 15/20/25/35이며 발사 시 탄환�
 Bullet Trail은 현재 에너지색을 정점 색상으로 공급한다. 텍스처를 매 프레임 재생성하지 않는다. 실제 총탄 충돌점에는 재질과 관계없이 현재 에너지색의 작은 광륜·십자형 섬광을 0.16초 동안 표시한다. 기본 반경은 36px, 상한은 64개이며 `contact_effects.energy_impact`에서 조정한다. 강철·금속 명중은 한 발에 4개의 불꽃을 폭 3.2px·최대 0.24초 동안 함께 표시하며, 주황색 외곽과 흰 중심을 가산 합성한다. 검의 22개·0.55초와 구분한다. 총탄 명중 카메라 피드백은 일반 10px·Overdrive 16px, 타격별 재시작 방식이며 누적 진폭을 더하지 않는다. `movement_config.json`의 `weapons.damage_by_energy_level`·`overdrive_damage`·`contact_effects`·`effects.*hit_camera_pixels`에서 조정한다.
 
 넉백 재현은 `--script samples/combat_test_v1_5/knockback_input.json --frames 120 --report output/combat_test_v1_5/knockback/report.json`을 추가한다. 검 반복·일시정지·재개·초기화를 포함하며 실제 HP에 따라 사망 여부는 달라진다. 현재 확인 범위와 잠정 수치는 [개발 기록](../../docs/ai-dev-log/2026-11-17-combat-v1-5-crowd-knockback.md)을 따른다.
+
+PBR 적은 `rendering.shared_frame_distance_m` 안쪽과 현재 록온 대상에서 기존 보간 품질을 사용한다. 바깥에서는 동일한 기종·방향·모션의 24fps 표본과 지면 그림자를 공유한다. 기본 반경은 16m이며 설정을 생략하면 모든 PBR 적에 기존 보간을 사용한다. 이 거리는 AI·공격·접촉 판정에 영향을 주지 않는다.

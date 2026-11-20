@@ -6,7 +6,8 @@ import ctypes as ct
 from math import ceil
 
 from ferrial_drive.diagnostics.gpu_profile import bind_gl
-from .bicubic import BicubicSampler
+from .gl_pass import SdlOpenGLPass
+from .gl_program import COMPUTE_STAGE, ShaderProgram
 from .sword_trail_geometry import sweep_runs
 
 
@@ -176,12 +177,12 @@ def trail_inputs(effects, color):
     return controls, array("f",jobs+cores)
 
 
-class ComputeSwordTrail(BicubicSampler):
+class ComputeSwordTrail(SdlOpenGLPass):
     def __init__(self,pico):
         self.buffers, self.capacities = [], [0,0,0]
-        self.compute_program = 0
+        self.compute_shader = None
         self.last_job_count = self.upload_bytes = 0
-        super().__init__(pico,None,vertex_shader=VERTEX_SHADER,fragment_shader=FRAGMENT_SHADER,
+        super().__init__(pico,vertex_shader=VERTEX_SHADER,fragment_shader=FRAGMENT_SHADER,
                          extra_uniforms=("transform","camera_offset","camera_zoom"))
         try:
             signatures = {
@@ -194,47 +195,18 @@ class ComputeSwordTrail(BicubicSampler):
                 "glGetIntegeri_v": (None,[ct.c_uint,ct.c_uint,ct.c_void_p]),
                 "glDispatchCompute": (None,[ct.c_uint,ct.c_uint,ct.c_uint]),
                 "glMemoryBarrier": (None,[ct.c_uint]), "glUniform1ui": (None,[ct.c_int,ct.c_uint]),
-                "glDrawArraysInstanced": (None,[ct.c_uint,ct.c_int,ct.c_int,ct.c_int]),
-                "glGetProgramInfoLog": (None,[ct.c_uint,ct.c_int,ct.c_void_p,ct.c_void_p])}
+                "glDrawArraysInstanced": (None,[ct.c_uint,ct.c_int,ct.c_int,ct.c_int])}
             for name,(result,args) in signatures.items():
                 setattr(self,name,bind_gl(pico,name,result,args))
-            self.compute_program = self._compile_compute()
-            self.compute_uniforms = {name:self.glGetUniformLocation(self.compute_program,name.encode()) for name in
-                                     ("job_count","sample_seconds","inner_ratio")}
+            self.compute_shader = ShaderProgram(pico, ((COMPUTE_STAGE, COMPUTE_SHADER),),
+                                                ("job_count", "sample_seconds", "inner_ratio"))
+            self.compute_uniforms = self.compute_shader.uniforms
             names = (ct.c_uint*3)()
             self.glGenBuffers(3,names)
             self.buffers = list(names)
         except BaseException:
             self.close()
             raise
-
-    def _compile_compute(self):
-        shader,program = self.glCreateShader(0x91B9),0
-        try:
-            source = ct.c_char_p(COMPUTE_SHADER)
-            self.glShaderSource(shader,1,ct.byref(source),None)
-            self.glCompileShader(shader)
-            status = ct.c_int()
-            self.glGetShaderiv(shader,0x8B81,ct.byref(status))
-            if not status.value:
-                message = ct.create_string_buffer(4096)
-                self.glGetShaderInfoLog(shader,4096,None,message)
-                raise RuntimeError("Trail Compute 컴파일 실패: "+message.value.decode(errors="replace"))
-            program = self.glCreateProgram()
-            self.glAttachShader(program,shader)
-            self.glLinkProgram(program)
-            self.glGetProgramiv(program,0x8B82,ct.byref(status))
-            if not status.value:
-                message = ct.create_string_buffer(4096)
-                self.glGetProgramInfoLog(program,4096,None,message)
-                raise RuntimeError("Trail Compute 연결 실패: "+message.value.decode(errors="replace"))
-            return program
-        except BaseException:
-            if program:
-                self.glDeleteProgram(program)
-            raise
-        finally:
-            self.glDeleteShader(shader)
 
     @contextmanager
     def state(self):
@@ -271,7 +243,7 @@ class ComputeSwordTrail(BicubicSampler):
             self._reserve(index,len(values)*4)
             self.glBufferSubData(SSBO,0,len(values)*4,ct.c_void_p(values.buffer_info()[0]))
         self._reserve(2,self.last_job_count*128)
-        self.glUseProgram(self.compute_program)
+        self.glUseProgram(self.compute_shader.handle)
         self.glUniform1ui(self.compute_uniforms["job_count"],self.last_job_count)
         self.glUniform1f(self.compute_uniforms["sample_seconds"],settings.get("sample_seconds",1/240))
         self.glUniform1f(self.compute_uniforms["inner_ratio"],settings.get("trail_inner_ratio",.62))
@@ -345,9 +317,7 @@ class ComputeSwordTrail(BicubicSampler):
             value = ct.c_uint(name)
             self.glDeleteBuffers(1,ct.byref(value))
         self.buffers.clear()
-        if self.compute_program:
-            self.glDeleteProgram(self.compute_program)
-            self.compute_program = 0
-        if self.program:
-            self.glDeleteProgram(self.program)
-            self.program = 0
+        if self.compute_shader is not None:
+            self.compute_shader.close()
+            self.compute_shader = None
+        super().close()

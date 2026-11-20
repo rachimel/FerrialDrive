@@ -3,7 +3,7 @@
 import ctypes as ct
 
 from ferrial_drive.diagnostics.gpu_profile import bind_gl
-from .bicubic import BicubicSampler
+from .gl_pass import SdlOpenGLPass
 from .ground_effect_shaders import INSTANCED_FRAGMENT_SHADER
 
 
@@ -53,14 +53,14 @@ void main() {
 '''
 
 
-class GroundEffectBatch(BicubicSampler):
+class GroundEffectBatch(SdlOpenGLPass):
     def __init__(self, pico):
         self.texture = self.capacity = self.gpu_capacity = self.count = 0
         self.data = None
         self.runs = []
         self.stats = {}
-        super().__init__(pico, None, vertex_shader=VERTEX_SHADER, fragment_shader=INSTANCED_FRAGMENT_SHADER,
-                         extra_uniforms=("instances", "instanceOffset", "screenTransform"))
+        super().__init__(pico, vertex_shader=VERTEX_SHADER, fragment_shader=INSTANCED_FRAGMENT_SHADER,
+                         extra_uniforms=("artwork", "atlasSize", "instances", "instanceOffset", "screenTransform"))
         self.max_rows = self.integer(0x0D33)
 
     def _bind_functions(self):
@@ -126,6 +126,7 @@ class GroundEffectBatch(BicubicSampler):
                     self.gpu_capacity = self.capacity
                 self.glTexSubImage2D(0x0DE1, 0, 0, 0, 7, self.count, 0x1908, 0x1406, self.data)
                 self.stats["upload_bytes"] = self.count * INSTANCE_FLOATS * 4
+                self.glUniform1i(self.uniforms["artwork"], 0)
                 self.glUniform1i(self.uniforms["instances"], 1)
                 sx, sy = ct.c_float(), ct.c_float()
                 p.SDL_RenderGetScale(p.renderer, ct.byref(sx), ct.byref(sy))
@@ -163,9 +164,7 @@ class GroundEffectBatch(BicubicSampler):
             texture = ct.c_uint(self.texture)
             self.glDeleteTextures(1, ct.byref(texture))
             self.texture = 0
-        if self.program:
-            self.glDeleteProgram(self.program)
-            self.program = 0
+        super().close()
         self.data = None
         self.capacity = self.gpu_capacity = self.count = 0
         self.runs.clear()

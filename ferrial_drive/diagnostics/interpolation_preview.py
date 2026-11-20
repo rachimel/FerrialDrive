@@ -17,6 +17,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from ferrial_drive.diagnostics import TimingRecorder
 from ferrial_drive.rendering.bicubic import BicubicSampler
+from ferrial_drive.rendering.gl_pass import TexturedQuadPass
 from ferrial_drive.rendering.motion_vectors import EASING_CODES, advance_combo_phase, frame_interval, load_clip, target_phase
 from ferrial_drive.rendering.pico_interpolation import PicoFrameInterpolator, read_rgba_image
 from ferrial_drive.ui.components import Rect
@@ -135,10 +136,10 @@ class FrameInterpolationTest:
             self.description = scene["description"]
         self.interpolator.set_clip(self.clip)
         if self.reference:
-            self.reference.glDeleteProgram(self.reference.program)
+            self.reference.close()
             self.reference = None
         if not self.dataset:
-            self.reference = BicubicSampler(self.pico, None, fragment_shader=reference_shader(scene),
+            self.reference = TexturedQuadPass(self.pico, fragment_shader=reference_shader(scene),
                                            extra_uniforms=("phase", "blurSpan", "easing", "blurBias", "playbackDirection", "blurStrength"))
         elif self.reference_frames:
             self.reference = BicubicSampler(self.pico, None)
@@ -398,7 +399,7 @@ class FrameInterpolationTest:
                 self.pico.SDL_DestroyTexture(texture)
             self.reference_textures.clear()
             if self.reference:
-                self.reference.glDeleteProgram(self.reference.program)
+                self.reference.close()
                 self.reference = None
             if self.interpolator:
                 self.interpolator.close()

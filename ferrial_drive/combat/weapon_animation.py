@@ -4,10 +4,10 @@ from dataclasses import dataclass
 from math import isfinite
 
 
-def relative_movement(movement, facing):
-    forward = movement[0] * facing[0] + movement[1] * facing[1]
-    right = movement[1] * facing[0] - movement[0] * facing[1]
-    return ("forward" if forward >= 0 else "backward") if abs(forward) >= abs(right) else ("right" if right > 0 else "left")
+HELD_GUN_MOTIONS = frozenset((
+    "gun_ready", "gun_hip_fire", "gun_hip_dash", "gun_aim_enter",
+    "gun_aim_hold", "gun_aim_fire", "gun_aim_exit", "gun_aim_dash",
+))
 
 
 @dataclass(frozen=True)
@@ -44,7 +44,7 @@ class WeaponAnimation:
         self.aim_elapsed_seconds = 0.0
         self.movement_state = "idle"
         self.movement_elapsed_seconds = 0.0
-        self.animation_speed = self.loop_speed = 1
+        self.animation_speed = 1
 
     @property
     def switching(self):
@@ -62,10 +62,10 @@ class WeaponAnimation:
         self.aim_transition = None
         return True
 
-    def update(self, seconds, durations, *, aiming=False, state="idle", loop_speed=1, animation_speed=1):
-        if not isfinite(seconds) or seconds < 0 or any(not isfinite(v) or v <= 0 for v in (loop_speed, animation_speed)):
+    def update(self, seconds, durations, *, aiming=False, state="idle", animation_speed=1):
+        if not isfinite(seconds) or seconds < 0 or not isfinite(animation_speed) or animation_speed <= 0:
             raise ValueError("갱신 시간은 0 이상 초, 재생 배율은 양수다.")
-        self.animation_speed, self.loop_speed = animation_speed, loop_speed
+        self.animation_speed = animation_speed
         seconds *= animation_speed
         self.elapsed_seconds += seconds * (self.swap_speed if self.switching else 1)
         while self.queue and self.elapsed_seconds + 1e-10 >= durations.get(self.queue[0], 0.5):
@@ -80,24 +80,21 @@ class WeaponAnimation:
             self.aiming = aiming
             self.aim_transition = "gun_aim_enter" if aiming else "gun_aim_exit"
             self.aim_elapsed_seconds = 0
-        if state == "run" or self.kind != "ranged" or self.switching:
+        if self.kind != "ranged" or self.switching:
             self.aim_transition = None
         if self.aim_transition and self.aim_elapsed_seconds >= durations.get(self.aim_transition, 2/3):
             self.aim_transition = None
         if state != self.movement_state:
             self.movement_elapsed_seconds = 0
             self.movement_state = state
-        self.movement_elapsed_seconds += seconds * loop_speed
+        self.movement_elapsed_seconds += seconds
 
-    def select(self, state, movement, facing, *, shot_age_seconds, shot_interval_seconds, durations):
+    def select(self, state, *, shot_age_seconds, shot_interval_seconds, durations):
         if self.queue:
             return WeaponMotion(self.queue[0], self.elapsed_seconds, self.animation_speed * self.swap_speed)
         if self.kind == "melee":
             return None
         prefix = "gun_aim" if self.aiming else "gun_hip"
-        if state == "run":
-            return WeaponMotion(prefix + "_run_" + relative_movement(movement, facing), self.movement_elapsed_seconds,
-                                self.animation_speed * self.loop_speed, True)
         if self.aim_transition:
             return WeaponMotion(self.aim_transition, self.aim_elapsed_seconds, self.animation_speed * self.aim_speed)
         if state in ("dash", "boost"):

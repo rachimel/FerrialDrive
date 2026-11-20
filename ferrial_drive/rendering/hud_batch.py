@@ -3,6 +3,10 @@
 from contextlib import contextmanager
 from ctypes import byref, c_float, c_int
 from functools import wraps
+from struct import Struct
+
+
+VERTEX = Struct("=ff4Bff")
 
 
 def batch_barrier(function):
@@ -26,6 +30,7 @@ class HudBatchQueue:
         self.kind = None
         self.texture = None
         self.rgba = None
+        self.contains_text = False
         self.vertex_count = self.index_count = self.rect_count = 0
         self.vertices = self.indices = self.rects = None
         self.vertex_views, self.rect_views = [], []
@@ -38,7 +43,8 @@ class HudBatchQueue:
 
     def reset_stats(self):
         self.stats = dict(geometry_requests=0, rectangle_requests=0, geometry_submits=0,
-                          rectangle_submits=0, vertices=0, rectangles=0, buffer_allocations=0)
+                          rectangle_submits=0, vertices=0, rectangles=0, buffer_allocations=0,
+                          text_requests=0, text_submits=0)
 
     @property
     def active(self):
@@ -67,6 +73,7 @@ class HudBatchQueue:
     def discard(self):
         self.kind = self.texture = self.rgba = None
         self.vertex_count = self.index_count = self.rect_count = 0
+        self.contains_text = False
 
     def unit_scale(self):
         self.pico.SDL_RenderGetScale(self.pico.renderer, byref(self.scale_x), byref(self.scale_y))
@@ -83,6 +90,30 @@ class HudBatchQueue:
         self.vertex_views = [(v.position, v.color, v.tex_coord) for v in self.vertices]
         self.stats['buffer_allocations'] += 1
 
+    def _begin_geometry(self, count, indices, texture):
+        if self.kind != 'geometry' or self.texture is not texture:
+            self.flush()
+        self._geometry_buffer(count, indices)
+        if self.vertex_count + count > self.vertex_capacity or self.index_count + indices > self.index_capacity:
+            self.flush()
+        self.kind, self.texture = 'geometry', texture
+        return self.vertex_count
+
+    def text_quad(self, points, rgba, texture, uv):
+        start = self._begin_geometry(4, 6, texture)
+        for index, ((x, y), (u, v)) in enumerate(zip(points, uv)):
+            VERTEX.pack_into(self.vertices, (start + index) * VERTEX.size, x, y, *rgba, u, v)
+        self.indices[self.index_count:self.index_count + 6] = (start, start + 1, start + 2,
+                                                              start, start + 2, start + 3)
+        self.vertex_count += 4
+        self.index_count += 6
+        self.stats['geometry_requests'] += 1
+        self.stats['vertices'] += 4
+        self.stats['text_requests'] += 1
+        self.contains_text = True
+        if not self.active:
+            self.flush()
+
     def polygon(self, points, rgba, *, texture=None, uv=None, colors=None, separate_triangles=False):
         """볼록 다각형을 입력 순서의 triangle fan으로 쌓는다."""
         point_count = len(points)
@@ -92,13 +123,7 @@ class HudBatchQueue:
         order = (tuple(value for index in range(1, point_count - 1) for value in (0, index, index + 1))
                  if separate_triangles else range(point_count))
         count = len(order)
-        if self.kind != 'geometry' or self.texture is not texture:
-            self.flush()
-        self._geometry_buffer(count, indices)
-        if self.vertex_count + count > self.vertex_capacity or self.index_count + indices > self.index_capacity:
-            self.flush()
-        self.kind, self.texture = 'geometry', texture
-        start = self.vertex_count
+        start = self._begin_geometry(count, indices, texture)
         for offset, source in enumerate(order):
             x, y = points[source]
             position, color, tex_coord = self.vertex_views[start + offset]
@@ -148,6 +173,7 @@ class HudBatchQueue:
                 result = p.SDL_RenderGeometry(p.renderer, self.texture, self.vertices, self.vertex_count,
                                               self.indices, self.index_count)
                 self.stats['geometry_submits'] += 1
+                self.stats['text_submits'] += int(self.contains_text)
             else:
                 result = p.SDL_SetRenderDrawColor(p.renderer, *self.rgba)
                 if not result:

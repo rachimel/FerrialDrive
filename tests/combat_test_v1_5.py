@@ -9,6 +9,11 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 UNIT_TEST_ENTRYPOINT = "standalone"
+UNIT_TEST_PRESETS = (
+    {"id": "standard", "label": "기본 교전 · 30기", "args": []},
+    {"id": "crowd_900", "label": "900기 · 24m · 무음", "args": ["--enemy-count", "900", "--enemy-spacing-m", "24", "--mute"]},
+    {"id": "crowd_1000", "label": "1,000기 · 24m · 무음", "args": ["--enemy-count", "1000", "--enemy-spacing-m", "24", "--mute"]},
+)
 
 
 def main():

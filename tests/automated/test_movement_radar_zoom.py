@@ -107,6 +107,7 @@ class RadarZoomTests(unittest.TestCase):
         app.playback = Mock()
         app.controller.update = Mock()
         app.controller.state = "dash"
+        app.controller.strong_dash = True
         app.keys = {"d", "left_shift"}
         for _ in range(3):
             app.update(.1)

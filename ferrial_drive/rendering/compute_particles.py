@@ -7,7 +7,8 @@ from ferrial_drive.diagnostics.gpu_profile import bind_gl
 
 from ferrial_drive.particles import SpawnParticles, StepParticles
 from ferrial_drive.ui_v2.particle_texture import ATLAS_SIZE, build_particle_atlas
-from .bicubic import BicubicSampler
+from .gl_pass import SdlOpenGLPass
+from .gl_program import COMPUTE_STAGE, ShaderProgram
 from .instanced_particles import InstancedParticles, FRAGMENT_SHADER
 from .particle_compute_shaders import MAX_SEGMENTS, PARTICLE_BYTES, PATH_POINTS, SPAWN_SHADER, UPDATE_SHADER, VERTEX_SHADER
 
@@ -34,14 +35,14 @@ class ComputeParticles(InstancedParticles):
         self.frame_particle_upload_bytes = 0
         self.receipt_buffers, self.receipt_pending = [], []
         self.dispatch_counts = {'spawn': 0, 'update': 0}
-        BicubicSampler.__init__(self, pico, None, vertex_shader=VERTEX_SHADER, fragment_shader=FRAGMENT_SHADER,
-                                extra_uniforms=('transform', 'base_color', 'core_color', 'head_width',
+        SdlOpenGLPass.__init__(self, pico, vertex_shader=VERTEX_SHADER, fragment_shader=FRAGMENT_SHADER,
+                                extra_uniforms=('artwork', 'transform', 'base_color', 'core_color', 'head_width',
                                                 'orb_radius', 'segments', 'mode'))
         try:
-            self.compute_programs['spawn'] = self._compile_compute(SPAWN_SHADER, (
+            self.compute_programs['spawn'] = ShaderProgram(pico, ((COMPUTE_STAGE, SPAWN_SHADER),), (
                 'capacity', 'request_count', 'request_seed', 'effect_type', 'anchors', 'destination', 'spawn_settings',
                 'gain_units', 'arrival_spacing', 'effect_intensity', 'duration_settings'))
-            self.compute_programs['update'] = self._compile_compute(UPDATE_SHADER, ('capacity', 'delta_seconds', 'segments',
+            self.compute_programs['update'] = ShaderProgram(pico, ((COMPUTE_STAGE, UPDATE_SHADER),), ('capacity', 'delta_seconds', 'segments',
                 'energy_enabled', 'energy_geometry', 'energy_ratio', 'energy_acknowledged',
                 'energy_charge_mode', 'energy_charge_total'))
             with self.batch(), self._state():
@@ -67,7 +68,7 @@ class ComputeParticles(InstancedParticles):
             'glDispatchCompute': (None, [uint, uint, uint]),
             'glMemoryBarrier': (None, [uint]), 'glUniform1ui': (None, [integer, uint]),
             'glDrawArraysIndirect': (None, [uint, pointer]),
-            'glGetError': (uint, []), 'glGetProgramInfoLog': (None, [uint, integer, pointer, pointer]),
+            'glGetError': (uint, []),
             'glGetString': (ct.c_char_p, [uint]),
             'glCopyBufferSubData': (None, [uint, uint, ct.c_ssize_t, ct.c_ssize_t, ct.c_ssize_t]),
             'glFenceSync': (pointer, [uint, uint]), 'glDeleteSync': (None, [pointer]),
@@ -81,34 +82,6 @@ class ComputeParticles(InstancedParticles):
         }
         for name, (result, arguments) in signatures.items():
             setattr(self, name, bind_gl(self.pico, name, result, arguments))
-
-    def _compile_compute(self, source, names):
-        shader, program = self.glCreateShader(0x91B9), 0
-        try:
-            pointer = ct.c_char_p(source)
-            self.glShaderSource(shader, 1, ct.byref(pointer), None)
-            self.glCompileShader(shader)
-            status = ct.c_int()
-            self.glGetShaderiv(shader, 0x8B81, ct.byref(status))
-            if not status.value:
-                message = ct.create_string_buffer(4096)
-                self.glGetShaderInfoLog(shader, 4096, None, message)
-                raise RuntimeError('Compute 컴파일 실패: ' + message.value.decode(errors='replace'))
-            program = self.glCreateProgram()
-            self.glAttachShader(program, shader)
-            self.glLinkProgram(program)
-            self.glGetProgramiv(program, 0x8B82, ct.byref(status))
-            if not status.value:
-                message = ct.create_string_buffer(4096)
-                self.glGetProgramInfoLog(program, 4096, None, message)
-                raise RuntimeError('Compute 링크 실패: ' + message.value.decode(errors='replace'))
-            return program, {name: self.glGetUniformLocation(program, name.encode()) for name in names}
-        except BaseException:
-            if program:
-                self.glDeleteProgram(program)
-            raise
-        finally:
-            self.glDeleteShader(shader)
 
     @contextmanager
     def _state(self):
@@ -233,7 +206,8 @@ class ComputeParticles(InstancedParticles):
         return {stage: sum(values) / len(values) for stage, values in self.gpu_samples.items() if values}
 
     def _spawn(self, request):
-        program, uniforms = self.compute_programs['spawn']
+        shader = self.compute_programs['spawn']
+        program, uniforms = shader.handle, shader.uniforms
         self.glUseProgram(program)
         self.glUniform1ui(uniforms['capacity'], self.capacity)
         self.glUniform1ui(uniforms['request_count'], request.count)
@@ -255,7 +229,8 @@ class ComputeParticles(InstancedParticles):
 
     def _update(self, delta_seconds, segments):
         self._draw_headers(segments)
-        program, uniforms = self.compute_programs['update']
+        shader = self.compute_programs['update']
+        program, uniforms = shader.handle, shader.uniforms
         self.glUseProgram(program)
         self.glUniform1ui(uniforms['capacity'], self.capacity)
         self.glUniform1f(uniforms['delta_seconds'], delta_seconds)
@@ -388,8 +363,8 @@ class ComputeParticles(InstancedParticles):
             self.glDeleteQueries(len(names), names)
             self.query_names.clear()
             self.query_pending.clear()
-        for program, _ in self.compute_programs.values():
-            self.glDeleteProgram(program)
+        for shader in self.compute_programs.values():
+            shader.close()
         self.compute_programs.clear()
         if self.buffers:
             names = (ct.c_uint * len(self.buffers))(*self.buffers)
@@ -399,6 +374,4 @@ class ComputeParticles(InstancedParticles):
             names = (ct.c_uint * len(self.textures))(*self.textures)
             self.glDeleteTextures(len(names), names)
             self.textures.clear()
-        if self.program:
-            self.glDeleteProgram(self.program)
-            self.program = 0
+        SdlOpenGLPass.close(self)

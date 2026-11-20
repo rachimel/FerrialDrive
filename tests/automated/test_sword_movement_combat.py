@@ -137,7 +137,7 @@ class MovementCombatTests(unittest.TestCase):
         self.assertFalse(bridge.active)
         self.assertAlmostEqual(bridge.controller.position_m[0], 510.8)
         bridge.update(0.1, (1, 0), (1, 0))
-        self.assertAlmostEqual(bridge.controller.position_m[0], 513.55625)
+        self.assertAlmostEqual(bridge.controller.position_m[0], 513.93125)
 
     def test_waiting_link_pose_releases_when_movement_arrives(self):
         bridge = combat()
@@ -148,9 +148,9 @@ class MovementCombatTests(unittest.TestCase):
         self.assertTrue(bridge.active)
         bridge.update(0.1, (0, -1), (1, 0))
         self.assertFalse(bridge.active)
-        self.assertAlmostEqual(bridge.controller.position_m[1], 499.4375)
+        self.assertAlmostEqual(bridge.controller.position_m[1], 499.0625)
 
-    def test_fourth_strike_returns_leftover_time_to_running(self):
+    def test_fourth_strike_returns_leftover_time_to_dash(self):
         bridge = combat()
         bridge.request_attack((1, 0))
         bridge.combo.attack_index = 3
@@ -158,7 +158,7 @@ class MovementCombatTests(unittest.TestCase):
         bridge.update(0.1, (1, 0), (1, 0))
         available = 0.1 - ((8 / 12 - 0.65) / bridge.speed)
         self.assertFalse(bridge.active)
-        self.assertAlmostEqual(bridge.controller.position_m[0], 501.9528281712963)
+        self.assertAlmostEqual(bridge.controller.position_m[0], 502.2077886651235)
 
     def test_shift_changes_attack_target_speed_on_the_same_acceleration_curve(self):
         bridge = combat()
@@ -392,7 +392,7 @@ class MovementPresentationTests(unittest.TestCase):
 
     def test_transition_shadow_resolves_endpoint_from_another_bundle(self):
         from ferrial_drive.combat.movement_application import MovementApplication
-        app = MovementApplication(ROOT / "samples/sword_movement/movement_config.json")
+        app = MovementApplication(ROOT / "samples/sword_movement/movement_config.json", player_pipeline="baked")
         clip = SpriteClip(12, (SpriteFrame((0, 0, 1, 1), (0, 0)),))
         current = SimpleNamespace(clips={"run_to_dash/e": clip},
                                   mech=SimpleNamespace(layer_rows={"shadow": 0}))
@@ -410,7 +410,7 @@ class MovementPresentationTests(unittest.TestCase):
 
     def test_attack_body_shadow_and_non_interpolated_frame_share_accelerated_time(self):
         from ferrial_drive.combat.movement_application import MovementApplication
-        app = MovementApplication(ROOT / "samples/sword_movement/movement_config.json")
+        app = MovementApplication(ROOT / "samples/sword_movement/movement_config.json", player_pipeline="baked")
         app.config["combat"]["easing"] = "accelerate"
         app.combat = combat()
         app.combat.request_attack((1, 0))

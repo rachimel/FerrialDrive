@@ -33,7 +33,7 @@ class MechBundle:
     @classmethod
     def from_data(cls, data, base):
         try:
-            if data.get("version") not in (1, 2) or data.get("type") != "mech":
+            if data.get("version") != 2 or data.get("type") != "mech":
                 raise ValueError("지원하지 않는 메카 합성 규격")
             if not isinstance(data["asset_id"], str) or not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]*", data["asset_id"]):
                 raise ValueError("메카 에셋 ID가 필요하다.")

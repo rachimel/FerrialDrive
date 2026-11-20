@@ -28,6 +28,23 @@ python tests/hardware_profile_benchmark.py --scenario combat --movement-speed-mu
 python tests/hardware_profile_benchmark.py --scenario combat --demo --auto --frames 120
 ```
 
+
+```text
+python tests/hardware_profile_benchmark.py --mute --scenario combat --enemy-count 1000 --enemy-spacing-m 12 --player-hp 100000 --auto --auto-weapon smg --target-fps 60 --warmup 30 --frames 120 --unpaced --no-resource-limits --gpu-profile none
+```
+
+현재 그래픽 설정과 카메라에서 직접 조작하는 무음 시험은 다음과 같이 실행한다. 창을 닫으면 보고서를 저장한다.
+
+```text
+python tests/hardware_profile_benchmark.py --mute --scenario combat --enemy-count 1000 --enemy-spacing-m 24 --no-resource-limits --gpu-profile none
+```
+
+같은 조건에서 24m 간격을 주면 더 넓게 분산된다. `--auto`의 시뮬레이션 시간은 고정 스텝이며 실제 표시 FPS와 프레임 시간은 `report.json`에 별도로 기록한다.
+
+적 표시와 플레이어 HUD의 비용은 무음 자동 교전에 `--compare baseline no_enemy_labels no_hud --rounds 2`를 추가해 비교한다. `no_enemy_labels`는 전장에 붙는 개별 적 이름·HP·Break 글자를 생략한다. `no_hud`는 플레이어 HUD 그리기를 생략한다. 각 회차의 `cpu_ms.draw_submit_ms`와 `work_ms.p95`를 확인한다.
+
+기체 묶음의 비용은 위 명령에 `--compare individual_enemy_parts individual_enemy_shadows baseline --rounds 2`를 추가해 같은 프로세스에서 실행 순서를 뒤집어 비교한다. 첫 조건은 근거리 본체·그림자를 개별 제출하고 둘째는 그림자만 개별 제출한다. 기본 경로는 둘 다 묶는다. 세 조건 모두 근거리 보간율과 원거리 공유 정책이 같다. `enemy_rendering_last`의 `batched_bodies`는 묶어 그린 기체 수, `body_batch_submits`와 `near_shadow_batch_submits`는 각각 본체 PBR과 지면 그림자 표시의 인스턴스 드로우 횟수다. 깊이 타일 갱신과 최종 화면 합성은 이 두 횟수에 포함하지 않는다.
+
 - 직접 조작은 창을 닫으면 저장한다. `--auto`는 레벨 3으로 2초마다 전투·HP·무장을 초기화하고 가장 가까운 생존 적을 조준한다. 기본 무장은 검이며 `--auto-weapon smg`로 기관단총을 선택한다. 전환 애니메이션과 재초기화 비용도 측정에 포함한다. `--auto-overdrive`는 매 반복 시작에 기존 강제 발동 경로를 사용한다. 실제 충전 구간을 측정하는 옵션은 아니다. 두 옵션은 `--auto`와 함께 사용한다.
 - `--movement-speed-multiplier 3`은 3배속 combat test의 같은 배율 옵션이다. `--demo`는 게임 이미지·모델 없이 플레이어 도형을 사용하며 실제 에셋 결과와 구분한다.
 - 매 실행의 `report.json`에 원자료, `report.md`에 한국어 표 보고서를 저장한다. 실패한 실행도 원인이 있는 범위에서 보고서를 생성하며 미측정값을 0으로 채우지 않는다. `limits_final.json`을 읽어 최대 프로세스 커밋을 보고한다. JSON을 보존하고 `python -m ferrial_drive.diagnostics.benchmark_report output/performance/<실행폴더>/report.json`으로 Markdown만 다시 생성할 수 있다.

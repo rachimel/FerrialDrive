@@ -4,13 +4,13 @@ from dataclasses import replace
 from types import SimpleNamespace
 from pathlib import Path
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from ferrial_drive.combat.config import CombatConfig
 from ferrial_drive.combat.geometry import Vec2
 from ferrial_drive.combat.muzzle_tracks import MuzzleTracks
 from ferrial_drive.combat.ranged_combat import RangedCombat
-from ferrial_drive.combat.weapon_animation import WeaponAnimation, relative_movement
+from ferrial_drive.combat.weapon_animation import WeaponAnimation
 
 
 class RangedRulesTests(unittest.TestCase):
@@ -198,8 +198,8 @@ class WeaponMotionTests(unittest.TestCase):
         self.assertEqual(motion.kind, "ranged")
         return motion
 
-    def choose(self, motion, state="idle", movement=(1, 0), age=100):
-        return motion.select(state, movement, (1, 0), shot_age_seconds=age,
+    def choose(self, motion, state="idle", age=100):
+        return motion.select(state, shot_age_seconds=age,
                              shot_interval_seconds=0.085, durations={})
 
     def test_switch_runs_sheath_then_draw_before_committing_kind(self):
@@ -220,19 +220,17 @@ class WeaponMotionTests(unittest.TestCase):
         self.assertEqual(self.choose(motion).name, "gun_aim_enter")
         motion.update(0.7, {}, aiming=True)
         self.assertEqual(self.choose(motion).name, "gun_aim_hold")
-        motion.update(0.1, {}, aiming=True, state="run")
-        self.assertEqual(self.choose(motion, "run", (-1, 0), age=0).name, "gun_aim_run_backward")
+        motion.update(0.1, {}, aiming=True, state="dash")
+        self.assertEqual(self.choose(motion, "dash", age=0).name, "gun_aim_dash")
         motion.update(0.1, {}, aiming=False)
         self.assertEqual(self.choose(motion).name, "gun_aim_exit")
 
-    def test_relative_directions_and_aim_dash(self):
-        self.assertEqual([relative_movement(v, (1, 0)) for v in [(1, 0), (-1, 0), (0, -1), (0, 1)]],
-                         ["forward", "backward", "left", "right"])
+    def test_boost_and_aim_dash(self):
         motion = self.armed()
         motion.update(0.1, {}, aiming=True, state="boost")
         self.assertEqual(self.choose(motion, "boost").name, "gun_aim_enter")
         motion.update(0.7, {}, aiming=True, state="boost")
-        self.assertEqual(self.choose(motion, "boost", (0, -1), age=0).name, "gun_aim_dash")
+        self.assertEqual(self.choose(motion, "boost", age=0).name, "gun_aim_dash")
 
     def test_dash_aim_enter_exit_return_to_dash(self):
         motion = self.armed()
@@ -519,7 +517,7 @@ class MovementGunIntegrationTests(unittest.TestCase):
         app.update(1/60)
         self.assertEqual(app.gun.shots_fired, 1)
         self.assertEqual(app.hud.state.hud.loadouts[0].ranged.rounds, 59)
-        self.assertIn('_run_', app.current_weapon_motion().name)
+        self.assertEqual(app.current_weapon_motion().name, "gun_hip_dash")
         self.assertFalse(app.combat.active)
         app.controller.request_boost((1, 0), app.aim())
         app.update(0.1)

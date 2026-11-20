@@ -8,6 +8,10 @@ def angle_delta_degrees(target, current):
     return (target - current + 180) % 360 - 180
 
 
+def interpolate_angles(start, end, weight):
+    return tuple((a + angle_delta_degrees(b, a) * weight) % 360 for a, b in zip(start, end))
+
+
 @dataclass(frozen=True)
 class AimFollowSettings:
     upper_response_seconds: float

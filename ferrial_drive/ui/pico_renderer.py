@@ -46,6 +46,8 @@ class PicoRenderer:
 
         self.pico = pico
         self.batch_queue = None
+        self.text_atlas = None
+        self.mask_tint_cache = True
         self.fonts = {}
         self.textures = OrderedDict()
         self.panel_textures = OrderedDict()
@@ -72,13 +74,19 @@ class PicoRenderer:
             queue.flush()
 
     @contextmanager
-    def hud_batch(self):
+    def hud_batch(self, *, text_atlas=None):
         queue = getattr(self, 'batch_queue', None)
         if queue is None:
             yield
         else:
-            with queue.frame():
-                yield
+            previous = self.text_atlas
+            if text_atlas is not None:
+                self.text_atlas = text_atlas
+            try:
+                with queue.frame():
+                    yield
+            finally:
+                self.text_atlas = previous
 
     @batch_barrier
     def clear(self, color: str):
@@ -313,7 +321,6 @@ class PicoRenderer:
                 break
             cursor += width
 
-    @batch_barrier
     def text(self, text: str, x: float, y: float, role: str, color: str,
              opacity: float = 1, max_width: float | None = None, align: str = "left",
              scale_x: float = 1, scale_y: float = 1, clip_rect: Rect | None = None, *, bold=False,
@@ -327,9 +334,13 @@ class PicoRenderer:
             if not text:
                 return
             text += "…"
-        texture, width, height = self._text_texture(text, role, color, bold=bold,
-                                                  letter_spacing_pixels=letter_spacing_pixels,
-                                                  stroke_inset_pixels=stroke_inset_pixels)
+        atlas_rect = self._atlas_text(text, role, color, bold, letter_spacing_pixels, stroke_inset_pixels)
+        if atlas_rect is None:
+            texture, width, height = self._text_texture(text, role, color, bold=bold,
+                                                      letter_spacing_pixels=letter_spacing_pixels,
+                                                      stroke_inset_pixels=stroke_inset_pixels)
+        else:
+            width, height = atlas_rect[2:]
         pico = self.pico
         draw_width, draw_height = round(width * scale_x), round(height * scale_y)
         if draw_width <= 0 or draw_height <= 0:
@@ -354,31 +365,61 @@ class PicoRenderer:
             source = pico.SDL_Rect(source_left, source_top, source_right - source_left,
                                    source_bottom - source_top)
             destination = pico.SDL_Rect(left, top, right - left, bottom - top)
+        if atlas_rect is not None:
+            left, top, right, bottom = ((source.x / width, source.y / height,
+                                         (source.x + source.w) / width, (source.y + source.h) / height)
+                                        if source is not None else (0, 0, 1, 1))
+            x, y, w, h = destination.x, destination.y, destination.w, destination.h
+            self._submit_atlas_text(atlas_rect, ((x, y), (x + w, y), (x + w, y + h), (x, y + h)),
+                                    ((left, top), (right, top), (right, bottom), (left, bottom)),
+                                    self.rgba(color if self.mask_tint_cache else "#FFFFFF", opacity))
+            return
+        self.flush_batch()
+        pico.SDL_SetTextureColorMod(texture, *(self.rgba(color)[:3] if self.mask_tint_cache else (255, 255, 255)))
         pico.SDL_SetTextureAlphaMod(texture, self.rgba(color, opacity)[3])
         pico.SDL_RenderCopy(pico.renderer, texture, byref(source) if source is not None else None,
                             byref(destination))
 
+    def _atlas_text(self, text, role, color, bold=False, letter_spacing_pixels=0, stroke_inset_pixels=0):
+        if self.text_atlas is None or not self.batch_queue.active:
+            return None
+        color = "#FFFFFF" if self.mask_tint_cache else color
+        key = text, role, color, bold, letter_spacing_pixels, stroke_inset_pixels
+        return self.text_atlas.get(key, lambda: self._text_surface(*key))
+
+    def _submit_atlas_text(self, rect, points, uv, rgba):
+        atlas = self.text_atlas
+        x, y, w, h = rect
+        coordinates = tuple(((x + u * w) / atlas.size, (y + v * h) / atlas.size) for u, v in uv)
+        self.batch_queue.text_quad(points, rgba, atlas.texture, coordinates)
+
+    def _text_surface(self, text, role, color, bold, letter_spacing_pixels, stroke_inset_pixels):
+        pico = self.pico
+        with self._font_style(role, bold) as font:
+            color_mod = pico.SDL_Color(*self.rgba(color))
+            if letter_spacing_pixels or stroke_inset_pixels:
+                from .text_style import styled_text_surface
+
+                surface = styled_text_surface(pico, font, text, color_mod, letter_spacing_pixels, stroke_inset_pixels)
+            else:
+                surface = pico.TTF_RenderUTF8_Blended(font, text.encode("utf-8"), color_mod)
+        if not surface:
+            raise RuntimeError(f"텍스트 렌더링 실패: {text}")
+        return surface
+
     def _text_texture(self, text: str, role: str, color: str, *, bold=False,
                       letter_spacing_pixels=0, stroke_inset_pixels=0):
-        styled = bool(letter_spacing_pixels or stroke_inset_pixels)
-        key = ((text, role, color, bold, letter_spacing_pixels, stroke_inset_pixels) if styled
-               else (text, role, color, bold))
+        color = "#FFFFFF" if self.mask_tint_cache else color
+        key = ((text, role, color, bold, letter_spacing_pixels, stroke_inset_pixels)
+               if letter_spacing_pixels or stroke_inset_pixels else (text, role, color, bold))
         pico = self.pico
         if key not in self.textures:
-            red, green, blue, _ = self.rgba(color)
-            with self._font_style(role, bold) as font:
-                color_mod = pico.SDL_Color(red, green, blue, 255)
-                if styled:
-                    from .text_style import styled_text_surface
-
-                    surface = styled_text_surface(pico, font, text, color_mod, letter_spacing_pixels, stroke_inset_pixels)
-                else:
-                    surface = pico.TTF_RenderUTF8_Blended(font, text.encode("utf-8"), color_mod)
-            if not surface:
-                raise RuntimeError(f"텍스트 렌더링 실패: {text}")
-            width, height = surface.contents.w, surface.contents.h
-            texture = pico.SDL_CreateTextureFromSurface(pico.renderer, surface)
-            pico.SDL_FreeSurface(surface)
+            surface = self._text_surface(text, role, color, bold, letter_spacing_pixels, stroke_inset_pixels)
+            try:
+                width, height = surface.contents.w, surface.contents.h
+                texture = pico.SDL_CreateTextureFromSurface(pico.renderer, surface)
+            finally:
+                pico.SDL_FreeSurface(surface)
             if not texture:
                 raise RuntimeError("텍스트 텍스처 생성 실패")
             self.textures[key] = (texture, width, height)
@@ -447,38 +488,62 @@ class PicoRenderer:
     def weapon_silhouette(self, kind, rect, color, opacity, outline_color, outline_width):
         """부품별 반올림 대신 합쳐 둔 원본을 일정 비율로 그린다."""
         pico = self.pico
-        key = (kind, color, outline_color, outline_width)
+        key = ((kind, "tint_masks", outline_width) if self.mask_tint_cache
+               else (kind, color, outline_color, outline_width))
         if key not in self.weapon_icons:
-            width, height, pixels = weapon_icon_pixels(kind, _rgb(color), _rgb(outline_color), outline_width)
-            surface = pico.SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, pico.SDL_PIXELFORMAT_RGBA32)
-            if not surface:
-                raise RuntimeError("무기 실루엣 surface 생성 실패")
-            try:
-                if pico.SDL_LockSurface(surface) != 0:
-                    raise RuntimeError("무기 실루엣 surface 잠금 실패")
+            if self.mask_tint_cache:
+                base = self._weapon_texture(kind, (255, 255, 255), (0, 0, 0), outline_width)
                 try:
-                    for y in range(height):
-                        row = bytes(pixels[y * width * 4:(y + 1) * width * 4])
-                        memmove(surface.contents.pixels + y * surface.contents.pitch, row, width * 4)
-                finally:
-                    pico.SDL_UnlockSurface(surface)
-                texture = pico.SDL_CreateTextureFromSurface(pico.renderer, surface)
-            finally:
-                pico.SDL_FreeSurface(surface)
-            if not texture:
-                raise RuntimeError("무기 실루엣 텍스처 생성 실패")
-            try:
-                pico.SDL_SetTextureBlendMode(texture, pico.SDL_BLENDMODE_BLEND)
-                if pico.SDL_SetTextureScaleMode(texture, pico.SDL_ScaleModeLinear) != 0:
-                    raise RuntimeError("무기 실루엣 축소 필터 설정 실패")
-            except BaseException:
-                pico.SDL_DestroyTexture(texture)
-                raise
-            self.weapon_icons[key] = texture
-        texture = self.weapon_icons[key]
+                    outline = self._weapon_texture(kind, (0, 0, 0), (255, 255, 255), outline_width)
+                    if pico.SDL_SetTextureBlendMode(outline, pico.SDL_BLENDMODE_ADD) != 0:
+                        pico.SDL_DestroyTexture(outline)
+                        raise RuntimeError("무기 외곽 마스크 합성 설정 실패")
+                except BaseException:
+                    pico.SDL_DestroyTexture(base)
+                    raise
+                self.weapon_icons[key] = base, outline
+            else:
+                self.weapon_icons[key] = self._weapon_texture(kind, _rgb(color), _rgb(outline_color), outline_width)
+        entry = self.weapon_icons[key]
+        texture = entry[0] if self.mask_tint_cache else entry
         pico.SDL_SetTextureAlphaMod(texture, self.rgba(color, opacity)[3])
+        pico.SDL_SetTextureColorMod(texture, *(self.rgba(color)[:3] if self.mask_tint_cache else (255, 255, 255)))
         target = pico.SDL_Rect(round(rect.x), round(rect.y), round(rect.width), round(rect.height))
         pico.SDL_RenderCopy(pico.renderer, texture, None, byref(target))
+        if self.mask_tint_cache:
+            outline = entry[1]
+            pico.SDL_SetTextureColorMod(outline, *self.rgba(outline_color)[:3])
+            pico.SDL_SetTextureAlphaMod(outline, self.rgba(color, opacity)[3])
+            pico.SDL_RenderCopy(pico.renderer, outline, None, byref(target))
+
+    def _weapon_texture(self, kind, fill_rgb, outline_rgb, outline_width):
+        pico = self.pico
+        width, height, pixels = weapon_icon_pixels(kind, fill_rgb, outline_rgb, outline_width)
+        surface = pico.SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, pico.SDL_PIXELFORMAT_RGBA32)
+        if not surface:
+            raise RuntimeError("무기 실루엣 surface 생성 실패")
+        try:
+            if pico.SDL_LockSurface(surface) != 0:
+                raise RuntimeError("무기 실루엣 surface 잠금 실패")
+            try:
+                for y in range(height):
+                    row = bytes(pixels[y * width * 4:(y + 1) * width * 4])
+                    memmove(surface.contents.pixels + y * surface.contents.pitch, row, width * 4)
+            finally:
+                pico.SDL_UnlockSurface(surface)
+            texture = pico.SDL_CreateTextureFromSurface(pico.renderer, surface)
+        finally:
+            pico.SDL_FreeSurface(surface)
+        if not texture:
+            raise RuntimeError("무기 실루엣 텍스처 생성 실패")
+        try:
+            if (pico.SDL_SetTextureBlendMode(texture, pico.SDL_BLENDMODE_BLEND) != 0
+                    or pico.SDL_SetTextureScaleMode(texture, pico.SDL_ScaleModeLinear) != 0):
+                raise RuntimeError("무기 실루엣 합성·필터 설정 실패")
+        except BaseException:
+            pico.SDL_DestroyTexture(texture)
+            raise
+        return texture
 
     @batch_barrier
     def save_frame(self, path: Path, width: int, height: int):
@@ -504,8 +569,11 @@ class PicoRenderer:
 
     @batch_barrier
     def close(self):
-        for texture in self.weapon_icons.values():
-            self.pico.SDL_DestroyTexture(texture)
+        if self.text_atlas is not None:
+            self.text_atlas.close()
+        for entry in self.weapon_icons.values():
+            for texture in entry if isinstance(entry, tuple) else (entry,):
+                self.pico.SDL_DestroyTexture(texture)
         self.weapon_icons.clear()
         for texture, _, _ in self.images.values():
             self.pico.SDL_DestroyTexture(texture)

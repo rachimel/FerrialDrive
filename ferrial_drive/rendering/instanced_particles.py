@@ -4,7 +4,7 @@ import ctypes as ct
 from math import hypot
 from ferrial_drive.diagnostics.gpu_profile import bind_gl
 
-from .bicubic import BicubicSampler
+from .gl_pass import SdlOpenGLPass
 from ferrial_drive.ui_v2.particle_texture import ATLAS_SIZE, build_particle_atlas
 
 
@@ -80,14 +80,14 @@ void main() {
 '''
 
 
-class InstancedParticles(BicubicSampler):
+class InstancedParticles(SdlOpenGLPass):
     def __init__(self, pico):
         self.textures = []
         self.capacity = 0
         self.slots = {}
         self.path_uploads = 0
         self.instance_upload_bytes = 0
-        super().__init__(pico, None, vertex_shader=VERTEX_SHADER, fragment_shader=FRAGMENT_SHADER,
+        super().__init__(pico, vertex_shader=VERTEX_SHADER, fragment_shader=FRAGMENT_SHADER,
                          extra_uniforms=('paths', 'instances', 'transform', 'baseColor', 'coreColor',
                                          'headWidth', 'orbRadius', 'tailFraction', 'segments', 'particleCount', 'mode'))
 
@@ -209,6 +209,4 @@ class InstancedParticles(BicubicSampler):
             self.glDeleteTextures(len(names), names)
             self.textures.clear()
         self.slots.clear()
-        if self.program:
-            self.glDeleteProgram(self.program)
-            self.program = 0
+        super().close()

@@ -114,6 +114,17 @@ class PresetTests(unittest.TestCase):
             self.assertNotIn("--frames", plan.command)
             self.assertIn("--detail", plan.command)
 
+    def test_crowd_presets_launch_the_same_muted_formation(self):
+        for name in ("combat_test_v1_5.py", "combat_test_v1_5_speed_test.py", "hardware_profile_benchmark.py"):
+            counts = (1000,) if name == "hardware_profile_benchmark.py" else (900, 1000)
+            for count in counts:
+                with self.subTest(name=name, count=count):
+                    command = prepare_test(ROOT / "tests" / name, preset=f"crowd_{count}").command
+                    self.assertEqual(command[command.index("--enemy-count") + 1], str(count))
+                    self.assertEqual(command[command.index("--enemy-spacing-m") + 1], "24")
+                    self.assertIn("--mute", command)
+                    self.assertNotIn("--auto", command)
+
 
 if __name__ == "__main__":
     unittest.main()

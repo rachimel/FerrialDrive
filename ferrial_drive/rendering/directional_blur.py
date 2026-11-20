@@ -1,6 +1,6 @@
 """한 번 렌더한 투명 레이어에 적용하는 OpenGL 방향성 모션 블러."""
 
-from .bicubic import BicubicSampler
+from .gl_pass import TexturedQuadPass
 
 
 FRAGMENT_SHADER = b'''#version 120
@@ -34,9 +34,9 @@ void main() {
 '''
 
 
-class DirectionalBlurSampler(BicubicSampler):
+class DirectionalBlurSampler(TexturedQuadPass):
     def __init__(self, pico):
-        super().__init__(pico, None, fragment_shader=FRAGMENT_SHADER,
+        super().__init__(pico, fragment_shader=FRAGMENT_SHADER,
                          extra_uniforms=('motionVector', 'blurStrength', 'sampleCount', 'forwardBias'))
 
     def draw_blurred(self, texture, size, source, destination, displacement, strength, samples=33, *, forward_bias=0):
@@ -48,8 +48,3 @@ class DirectionalBlurSampler(BicubicSampler):
             self.glUniform1f(self.uniforms['forwardBias'], forward_bias)
             self.glUniform1i(self.uniforms['sampleCount'], max(2, min(65, samples)))
             self.draw(texture, size, source, destination)
-
-    def close(self):
-        if self.program:
-            self.glDeleteProgram(self.program)
-            self.program = 0

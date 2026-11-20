@@ -1,10 +1,31 @@
 """소형 근접·중형 사격·인간형 복합 교전. 거리 m·시간 초이며 창을 소유하지 않는다."""
 
 from dataclasses import dataclass
-from math import ceil, hypot, isfinite
+from math import ceil, hypot, isfinite, isqrt
 
 from .geometry import Vec2, moving_circle_touches_polygon, segment_circle
 from .enemy_spacing import EnemySpacing
+
+
+ENEMY_KINDS = ("small", "medium", "humanoid")
+
+
+def crowd_spawns(source, count, spacing_m, center_m, map_size_m):
+    """기존 출현 순서의 기종을 반복해 플레이어 중심의 시험 대형을 만든다."""
+    if type(count) is not int or count < 1 or not source:
+        raise ValueError("대형에는 양수 적 수와 기존 출현 기종이 필요하다.")
+    if not isfinite(spacing_m) or spacing_m <= 0:
+        raise ValueError("적 간격은 양수 유한 거리여야 한다.")
+    columns = isqrt(count - 1) + 1
+    rows = (count + columns - 1) // columns
+    px, py = center_m
+    half_width = (columns - 1) * spacing_m / 2
+    half_height = (rows - 1) * spacing_m / 2
+    if half_width > min(px, map_size_m - px) or half_height > min(py, map_size_m - py):
+        raise ValueError("적 대형이 전장 범위를 벗어난다.")
+    return [{"id": f"crowd{i:04}", "profile": source[i % len(source)]["profile"],
+             "position_m": [px - half_width + (i % columns) * spacing_m,
+                            py - half_height + (i // columns) * spacing_m]} for i in range(count)]
 
 
 @dataclass(frozen=True)
@@ -29,7 +50,7 @@ class EnemyProfile:
     color: str
 
     def __post_init__(self):
-        if self.kind not in ("small", "medium", "humanoid"):
+        if self.kind not in ENEMY_KINDS:
             raise ValueError("적 유형은 small/medium/humanoid다.")
         for name in ("health", "melee_damage", "shot_damage"):
             if type(getattr(self, name)) is not int or getattr(self, name) <= 0:
@@ -55,6 +76,8 @@ class EncounterEnemy:
     remaining_seconds: float = 0
     hit_player: bool = False
     travel_m: float = 0
+    locomotion_m: float = 0
+    locomotion_step_m: Vec2 = Vec2()
     knockback_remaining_seconds: float = 0
     knockback_velocity_mps: Vec2 = Vec2()
     knockback_duration_seconds: float = .12
@@ -102,6 +125,7 @@ class EnemyEncounter:
         reaction = settings.get("knockback", {})
         self.knockback_seconds = reaction.get("duration_seconds", .12)
         self.death_seconds = reaction.get("death_seconds", .22)
+        self.sprite_death_seconds = {}
         self.knockback_distances = {"small": 3, "medium": 1.4, "humanoid": .7,
                                    **reaction.get("distance_m_by_kind", {})}
         gun = settings.get("gun_knockback", {})
@@ -128,9 +152,9 @@ class EnemyEncounter:
         if not self.enemies:
             raise ValueError("교전에는 적이 한 기 이상 필요하다.")
         self.spacing = EnemySpacing(self.enemies.values(), 2 * max(enemy.profile.radius_m for enemy in self.enemies.values()))
+        self.changed_health_ids = set()
         self.projectiles = []
         self.hit_events = []
-        self.changed_health_ids = set()
         self.elapsed_seconds = 0
         self.result = "running"
         self.shots_fired = 0
@@ -148,8 +172,10 @@ class EnemyEncounter:
         enemy.health = max(0, min(enemy.profile.health, health))
         if enemy.health != before:
             self.changed_health_ids.add(enemy.enemy_id)
-            if not enemy.alive and enemy.knockback_remaining_seconds > 0:
-                enemy.death_remaining_seconds = self.death_seconds
+            if not enemy.alive:
+                duration = self.sprite_death_seconds.get(enemy.profile.kind)
+                if duration is not None or enemy.knockback_remaining_seconds > 0:
+                    enemy.death_remaining_seconds = self.death_seconds if duration is None else duration
         return before, enemy.health
 
     def damage_enemy(self, enemy_id, amount):
@@ -219,7 +245,7 @@ class EnemyEncounter:
         for enemy in self.enemies.values():
             self._advance_reaction(enemy, seconds)
 
-    def _move(self, enemy, movement):
+    def _move(self, enemy, movement, *, locomotion=False):
         radius = enemy.profile.radius_m
         maximum = self.map_size_m - radius
         origin = enemy.position_m
@@ -233,6 +259,10 @@ class EnemyEncounter:
         dx, dy = candidate.x - origin.x, candidate.y - origin.y
         distance = hypot(dx, dy)
         enemy.travel_m += distance
+        if locomotion and movement.length > 1e-9:
+            enemy.locomotion_m += distance
+            previous = enemy.locomotion_step_m
+            enemy.locomotion_step_m = Vec2(previous.x + dx, previous.y + dy)
         enemy.position_m = candidate
 
     def _begin_attack(self, enemy, kind):
@@ -255,7 +285,8 @@ class EnemyEncounter:
             self._begin_attack(enemy, "ranged")
             return
         self._move(enemy, enemy.facing * min(profile.speed_mps * seconds,
-                                           max(0, distance - profile.radius_m - self.player_radius_m)))
+                                           max(0, distance - profile.radius_m - self.player_radius_m)),
+                   locomotion=True)
 
     def _advance_enemy(self, enemy, seconds, start, end):
         interrupts = enemy.knockback_interrupts and enemy.knockback_remaining_seconds > 0
@@ -272,7 +303,7 @@ class EnemyEncounter:
                 delta = end - enemy.position_m
                 error = delta.length - profile.preferred_range_m
                 self._move(enemy, delta.normalized() * max(-profile.speed_mps * seconds,
-                                                          min(profile.speed_mps * seconds, error)))
+                                                          min(profile.speed_mps * seconds, error)), locomotion=True)
         if enemy.phase == "active" and enemy.attack_kind == "melee" and not enemy.hit_player:
             if moving_circle_touches_polygon(start, end, self.player_radius_m, enemy.attack_polygon):
                 self.hit_events.append(EnemyHit(enemy.enemy_id, "melee", profile.melee_damage, enemy.facing))
@@ -300,6 +331,9 @@ class EnemyEncounter:
         if not isfinite(seconds) or seconds < 0:
             raise ValueError("교전 갱신 시간은 0 이상의 유한한 초다.")
         self.hit_events = []
+        stationary = Vec2()
+        for enemy in self.enemies.values():
+            enemy.locomotion_step_m = stationary
         if self.result != "running" or seconds == 0:
             return ()
         start, end = Vec2(*previous_player_m), Vec2(*player_m)

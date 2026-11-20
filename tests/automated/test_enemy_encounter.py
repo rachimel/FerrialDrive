@@ -4,11 +4,14 @@ import json
 import os
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 from ferrial_drive.combat.enemy_encounter import EnemyEncounter, EnemyProjectile
+from ferrial_drive.combat.enemy_sprites import EnemySprite
 from ferrial_drive.combat.encounter_application import EncounterApplication
+from ferrial_drive.combat.encounter_view import use_shared_frame
 from ferrial_drive.combat.geometry import Vec2
 from ferrial_drive.rendering.canvas import PicoCanvas
 from Tools.unit_test_runner.entrypoints import inspect_entrypoint
@@ -25,6 +28,51 @@ def world(kind="small", position=(510, 500)):
 
 
 class EnemyRulesTests(unittest.TestCase):
+    def test_crowd_uses_requested_formation_across_reset(self):
+        for count in (900, 1000):
+            with self.subTest(count=count):
+                app = EncounterApplication(CONFIG, encounter_path=ENCOUNTER, demo=True, mute=True,
+                                           enemy_count=count, enemy_spacing_m=24)
+                enemies = app.encounter.enemies
+                self.assertEqual(len(enemies), count)
+                self.assertEqual(enemies["crowd0001"].position_m.x - enemies["crowd0000"].position_m.x, 24)
+                self.assertEqual(enemies["crowd0030"].profile, enemies["crowd0000"].profile)
+                positions = [enemy.position_m for enemy in enemies.values()]
+                app.encounter.reset()
+                self.assertEqual([enemy.position_m for enemy in app.encounter.enemies.values()], positions)
+        default = EncounterApplication(CONFIG, encounter_path=ENCOUNTER, demo=True, mute=True)
+        self.assertEqual(len(default.encounter.enemies), 30)
+        self.assertIn("S1", default.encounter.enemies)
+
+    def test_invalid_crowd_rejected_before_start(self):
+        for count, spacing in ((0, 12), (900, 0), (900, float("nan")), (1000, 1000)):
+            with self.subTest(count=count, spacing=spacing), self.assertRaises(ValueError):
+                EncounterApplication(CONFIG, encounter_path=ENCOUNTER, demo=True, mute=True,
+                                     enemy_count=count, enemy_spacing_m=spacing)
+
+    def test_shared_frame_distance_and_lock(self):
+        enemy = world(position=(516, 500)).enemies["test"]
+        self.assertFalse(use_shared_frame(enemy, (500, 500), None, 16))
+        enemy.position_m = Vec2(516, 501)
+        self.assertTrue(use_shared_frame(enemy, (500, 500), None, 16))
+        self.assertFalse(use_shared_frame(enemy, (500, 500), "test", 16))
+        self.assertFalse(use_shared_frame(enemy, (500, 500), None, None))
+
+    def test_configured_attack_motion_uses_its_own_phase_frames(self):
+        enemy = world("humanoid").enemies["test"]
+        counts = dict(move=12, attack=12, hit=4, **{"break": 12}, rifle=18)
+        resource = SimpleNamespace(data={"sample_fps": 24, "motions": dict.fromkeys(counts, tuple("01234567"))})
+        sprite = EnemySprite(resource, 1, 16, (4, 8), {}, counts, {"ranged": {"motion": "rifle", "attack_frames": [6, 14]}})
+        sprite.validate()
+        enemy.phase, enemy.remaining_seconds = "active", enemy.profile.active_seconds
+        for kind, expected in (("melee", ("attack", 4)), ("ranged", ("rifle", 6))):
+            enemy.attack_kind = kind
+            motion, _, seconds = sprite.playback(enemy)
+            self.assertEqual((motion, seconds * 12), expected)
+        sprite.attack_motions["ranged"]["attack_frames"] = [14, 19]
+        with self.assertRaises(ValueError):
+            sprite.validate()
+
     def test_gun_knockback_is_weak_and_frame_rate_independent(self):
         for kind, distance in (("small", .3), ("medium", .14), ("humanoid", .07)):
             for fps in (30, 60, 144):
@@ -103,6 +151,18 @@ class EnemyRulesTests(unittest.TestCase):
         encounter.advance_reactions(.12)
         self.assertEqual(encounter.enemies["test"].position_m.x, 998.5)
 
+    def test_sprite_death_plays_once_even_without_knockback(self):
+        encounter = world()
+        encounter.sprite_death_seconds["small"] = 1.0
+        enemy = encounter.enemies["test"]
+        encounter.sync_health({"test": 0}, 100)
+        self.assertEqual(enemy.death_remaining_seconds, 1.0)
+        encounter.advance_reactions(.4)
+        encounter.sync_health({"test": 0}, 100)
+        self.assertAlmostEqual(enemy.death_remaining_seconds, .6)
+        encounter.advance_reactions(1.0)
+        self.assertEqual(enemy.death_remaining_seconds, 0)
+
     def test_damage_without_hud_clamps_and_does_not_repeat_death(self):
         encounter = world()
         enemy = encounter.enemies["test"]
@@ -124,6 +184,9 @@ class EnemyRulesTests(unittest.TestCase):
         self.assertLess(encounter.enemies["test"].position_m.x, 520)
         encounter.advance(.65, (500, 500), (500, 500))
         self.assertEqual(encounter.hits, [("test", 35)])
+        hit, = encounter.hit_events
+        self.assertEqual((hit.attacker_id, hit.attack_kind, hit.damage), ("test", "melee", 35))
+        self.assertEqual(hit.direction, encounter.enemies["test"].facing)
 
     def test_windup_keeps_direction_and_sideways_dodge_avoids_melee(self):
         encounter = world(position=(507, 500))
@@ -142,6 +205,26 @@ class EnemyRulesTests(unittest.TestCase):
         encounter.advance(.2, (500, 500), (500, 500))
         self.assertGreater(enemy.position_m.x, 510)
 
+    def test_sprite_plays_backward_walk_during_ranged_repositioning(self):
+        encounter = world("medium", (510, 500))
+        enemy = encounter.enemies["test"]
+        sprite = EnemySprite(SimpleNamespace(data={"sample_fps": 24}), 1, 16, (7, 9), {},
+                            {"move": 12, "attack": 12, "hit": 4, "break": 12})
+        encounter.advance(.65, (500, 500), (500, 500))
+        self.assertEqual(sprite.frame(enemy)[0], "attack/w")
+        encounter.advance(.18, (500, 500), (500, 500))
+        self.assertEqual(enemy.phase, "recovery")
+        self.assertGreater(enemy.locomotion_step_m.x, 0)
+        self.assertEqual(sprite.frame(enemy)[0], "move/w")
+        frame = sprite.frame(enemy)[1]
+        encounter.advance(.07, (500, 500), (500, 500))
+        self.assertLess(sprite.frame(enemy)[1], frame)
+        distance = enemy.locomotion_m
+        encounter.knock_back("test", Vec2(1, 0))
+        encounter.advance_reactions(.05)
+        self.assertEqual(enemy.locomotion_m, distance)
+        self.assertEqual(sprite.frame(enemy)[0], "hit/w")
+
     def test_humanoid_chooses_both_weapons_by_distance(self):
         for distance, kind in ((10, "melee"), (40, "ranged")):
             encounter = world("humanoid", (500 + distance, 500))
@@ -153,6 +236,8 @@ class EnemyRulesTests(unittest.TestCase):
         encounter.projectiles = [EnemyProjectile("test", Vec2(490, 500), Vec2(490, 500), Vec2(1, 0), 100, 120, 17)]
         encounter.advance(.2, (500, 490), (500, 510))
         self.assertEqual(encounter.hits, [("test", 17)])
+        hit, = encounter.hit_events
+        self.assertEqual((hit.attacker_id, hit.attack_kind, hit.direction), ("test", "ranged", Vec2(1, 0)))
         self.assertEqual(encounter.projectiles, [])
         encounter.projectiles = [EnemyProjectile("test", Vec2(100, 100), Vec2(100, 100), Vec2(1, 0), 1, 120, 17)]
         encounter.advance(.1, (500, 500), (500, 500))

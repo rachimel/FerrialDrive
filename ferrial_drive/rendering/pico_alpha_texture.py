@@ -2,7 +2,7 @@
 
 import ctypes as ct
 
-from ferrial_drive.assets.alpha_data import alpha_dimensions, png_dimensions, read_alpha_data
+from ferrial_drive.assets.alpha_data import png_dimensions, read_alpha_data
 from ferrial_drive.diagnostics.texture_metrics import bind_gl
 from .pico_interpolation import read_rgba_image
 
@@ -10,13 +10,9 @@ from .pico_interpolation import read_rgba_image
 def load_alpha_texture(pico, path, sampler, *, expected_size=None, scale=None):
     if expected_size is not None and png_dimensions(path) != expected_size:
         raise ValueError(f"그림자 PNG 크기와 시트 메타데이터 불일치: {path}")
-    prepared = read_alpha_data(path,scale=scale)
+    prepared = read_alpha_data(path, scale=1.0 if scale is None else scale)
     if prepared is None and scale is not None:
-        legacy = read_alpha_data(path)
-        if legacy is not None and legacy[:2] == alpha_dimensions(png_dimensions(path),scale):
-            prepared = legacy
-        else:
-            raise FileNotFoundError(f"그림자 {scale:g}배 데이터가 없다. alpha-textures --quality-profiles로 준비한다: {path}")
+        raise FileNotFoundError(f"그림자 {scale:g}배 데이터가 없다. alpha-textures로 준비한다: {path}")
     if prepared is None:
         width, height, rgba = read_rgba_image(pico, path)
         alpha = rgba[3::4]
