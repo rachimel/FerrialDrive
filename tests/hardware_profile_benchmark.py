@@ -5,6 +5,7 @@ Runner에서 Combat·Movement를 선택하고 창을 닫으면 성능 보고서�
 """
 
 from datetime import datetime
+from math import ceil, sqrt
 import argparse
 import json
 import os
@@ -48,6 +49,21 @@ def aim_at_enemy(program):
         program.mouse = program.camera.world_to_screen((x, y - enemy.profile.height_pixels))
 
 
+def populate_crowd(program, count, spacing_m):
+    """현재 출현 종 비율을 반복해 플레이어 중심의 고정 격자에 배치한다."""
+    encounter = program.encounter
+    source = encounter.settings["spawns"]
+    columns = ceil(sqrt(count))
+    rows = ceil(count / columns)
+    px, py = program.controller.position_m
+    encounter.settings["spawns"] = [
+        {"id": f"crowd{i:04}", "profile": source[i % len(source)]["profile"],
+         "position_m": [px + (i % columns - (columns - 1) / 2) * spacing_m,
+                        py + (i // columns - (rows - 1) / 2) * spacing_m]}
+        for i in range(count)]
+    encounter.reset()
+
+
 def run_worker(args, applied, profile):
     # 부모가 제한 적용을 확인한 뒤에만 게임·Pico2D 모듈을 가져온다.
     from contextlib import nullcontext
@@ -75,6 +91,8 @@ def run_worker(args, applied, profile):
     app = application_type(args.config, demo=args.demo or args.scenario == "demo", settings_file=settings_path,
                            profile=args.output / "timings.json", movement_speed_multiplier=args.movement_speed_multiplier,
                            **encounter_options)
+    if args.enemy_count is not None:
+        populate_crowd(app, args.enemy_count, args.enemy_spacing_m)
     if list(app.window_size) != profile["resolution"]:
         raise ValueError("프로필과 훈련장 설정의 출력 해상도가 다르다.")
     gpu_memory = ProcessGpuMemory()
@@ -105,6 +123,9 @@ def run_worker(args, applied, profile):
                 probe = call_profile = None
                 try:
                     app.enter()
+                    if args.player_hp is not None:
+                        app.hud.preset["player_health"] = {"current": args.player_hp, "maximum": args.player_hp}
+                        app.reset()
                     width, height = ct.c_int(), ct.c_int()
                     if canvas.pico.SDL_GetRendererOutputSize(canvas.pico.renderer, ct.byref(width), ct.byref(height)) != 0:
                         raise RuntimeError("실제 출력 해상도 조회 실패")
@@ -238,6 +259,9 @@ def main():
     parser.add_argument("--profile", type=Path, default=ROOT / "samples/hardware_profile_benchmark/profile.json")
     parser.add_argument("--config", type=Path, default=ROOT / "samples/sword_movement/movement_config.json")
     parser.add_argument("--scenario", choices=("demo", "sword", "combat"), default="sword")
+    parser.add_argument("--enemy-count", type=int, help="플레이어 주위에 배치할 교전 부하 시험 적 수")
+    parser.add_argument("--enemy-spacing-m", type=float, default=12, help="부하 시험 격자의 중심 간격(m)")
+    parser.add_argument("--player-hp", type=int, help="부하 시험 중 조기 패배를 방지할 시작 HP")
     parser.add_argument("--encounter", type=Path, default=ROOT / "samples/combat_test_v1_5/encounter.json",
                         help="combat test의 적 종류·배치·전투 설정")
     parser.add_argument("--demo", action="store_true", help="combat에서도 플레이어를 공개 도형으로 시연")
@@ -265,6 +289,12 @@ def main():
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
     from math import isfinite
+    if args.enemy_count is not None and (args.scenario != "combat" or args.enemy_count < 1):
+        parser.error("--enemy-count에는 combat 장면과 양수 적 수가 필요하다.")
+    if not isfinite(args.enemy_spacing_m) or args.enemy_spacing_m <= 0:
+        parser.error("--enemy-spacing-m는 양수 유한 거리여야 한다.")
+    if args.player_hp is not None and (args.scenario != "combat" or args.player_hp < 1):
+        parser.error("--player-hp에는 combat 장면과 양수 HP가 필요하다.")
     if not isfinite(args.movement_speed_multiplier) or args.movement_speed_multiplier <= 0:
         parser.error("이동 배율은 양수 유한값이어야 한다.")
     if not args.auto and (args.auto_weapon != "sword" or args.auto_overdrive or args.auto_dash):
