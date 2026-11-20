@@ -14,6 +14,9 @@ uniform vec4 destinations[QUAD_LIMIT], sourceRect, screenTransform;
 #ifdef SOURCE_PER_INSTANCE
 uniform vec4 sources[QUAD_LIMIT];
 #endif
+#ifdef TILE_PLACEMENTS
+uniform vec4 anchorScale;
+#endif
 uniform vec4 poseTimes[QUAD_LIMIT];
 out vec2 texel;
 out float localPhase;
@@ -21,29 +24,42 @@ flat out int pairIndex;
 void main() {
     vec2 corner=vec2(float(gl_VertexID / 2),float(gl_VertexID % 2));
     vec4 dest=destinations[gl_InstanceID];
-    vec2 pixel=screenTransform.xy+(dest.xy+corner*dest.zw)*screenTransform.zw;
-    vec2 p=pixel/outputSize;
-    gl_Position=vec4(p.x*2.0-1.0,(1.0-p.y*2.0)*targetFlip,0.0,1.0);
+#ifdef TILE_PLACEMENTS
+    vec4 src=sources[int(dest.z)];
+    vec2 pos=dest.xy+(src.xy-anchorScale.xy)*anchorScale.z+corner*max(vec2(1.0),src.zw*anchorScale.z);
+    pairIndex=int(dest.w);
+    localPhase=0.0;
+#else
+    vec2 pos=dest.xy+corner*dest.zw;
 #ifdef SOURCE_PER_INSTANCE
     vec4 src=sources[gl_InstanceID];
 #else
     vec4 src=sourceRect;
 #endif
-    texel=src.xy+corner*src.zw;
     localPhase=poseTimes[gl_InstanceID].x;
     pairIndex=int(poseTimes[gl_InstanceID].y);
+#endif
+    vec2 p=(screenTransform.xy+pos*screenTransform.zw)/outputSize;
+    gl_Position=vec4(p.x*2.0-1.0,(1.0-p.y*2.0)*targetFlip,0.0,1.0);
+    texel=src.xy+corner*src.zw;
 }
 """.replace(b"QUAD_LIMIT", str(QUAD_LIMIT).encode())
 
 
 class InstancedQuads(SdlOpenGLPass):
-    def __init__(self, pico, *, fragment_shader, extra_uniforms, per_instance_source=False):
+    def __init__(self, pico, *, fragment_shader, extra_uniforms, per_instance_source=False, tile_placements=False):
         fragment = fragment_shader.replace(b"#version 120", b"#version 140", 1)
-        vertex = VERTEX.replace(b"#version 140", b"#version 140\n#define SOURCE_PER_INSTANCE", 1) if per_instance_source else VERTEX
+        defines = b""
+        if per_instance_source or tile_placements:
+            defines += b"\n#define SOURCE_PER_INSTANCE"
+        if tile_placements:
+            defines += b"\n#define TILE_PLACEMENTS"
+        vertex = VERTEX.replace(b"#version 140", b"#version 140" + defines, 1)
         super().__init__(pico, vertex_shader=vertex, fragment_shader=fragment,
-                         extra_uniforms=(*extra_uniforms, "destinations[0]", "poseTimes[0]", "sources[0]", "sourceRect", "screenTransform"))
+                         extra_uniforms=(*extra_uniforms, "destinations[0]", "poseTimes[0]", "sources[0]",
+                                         "sourceRect", "screenTransform", "anchorScale"))
         self.rects = (ct.c_float * (QUAD_LIMIT * 4))()
-        self.sources = (ct.c_float * (QUAD_LIMIT * 4))() if per_instance_source else None
+        self.sources = (ct.c_float * (QUAD_LIMIT * 4))() if per_instance_source or tile_placements else None
         self.times = (ct.c_float * (QUAD_LIMIT * 4))()
         self.submits = 0
 
@@ -89,13 +105,12 @@ class InstancedQuads(SdlOpenGLPass):
                 self.glPixelStorei(key, value)
             self.glBindBuffer(0x88EC, buffer)
 
-    def draw_instances(self, bounds, instances, *, sources=None):
+    def _set_screen_transform(self):
         p = self.pico
         vx, vy, vw, vh = self.viewport
         sx, sy = ct.c_float(), ct.c_float()
         p.SDL_RenderGetScale(p.renderer, ct.byref(sx), ct.byref(sy))
         self.glUniform4f(self.uniforms["screenTransform"], vx, vy, sx.value, sy.value)
-        self.glUniform4f(self.uniforms["sourceRect"], *bounds)
         if p.SDL_RenderIsClipEnabled(p.renderer):
             clip = p.SDL_Rect()
             p.SDL_RenderGetClipRect(p.renderer, ct.byref(clip))
@@ -103,6 +118,35 @@ class InstancedQuads(SdlOpenGLPass):
             vw, vh = int(clip.w * sx.value), int(clip.h * sy.value)
         self.glEnable(0x0C11)
         self.glScissor(vx, self.output_size[1] - vy - vh if self.target_flip > 0 else vy, vw, vh)
+
+    def draw_tile_placements(self, groups, pivot, scale):
+        """포즈당 원본 영역 하나와 기체별 발 위치·깊이 타일만 보낸다."""
+        if len(groups) > QUAD_LIMIT:
+            raise ValueError("한 번에 보낼 그림자 영역 수를 초과했다.")
+        self._set_screen_transform()
+        self.glUniform4f(self.uniforms["anchorScale"], *pivot, scale, 0)
+        for index, (source, _, _) in enumerate(groups):
+            self.sources[index * 4:index * 4 + 4] = source
+        self.uniform_rects(self.uniforms["sources[0]"], len(groups), self.sources)
+        count = 0
+        for index, (_, slot, positions) in enumerate(groups):
+            for x, y in positions:
+                self.rects[count * 4:count * 4 + 4] = x, y, index, slot
+                count += 1
+                if count == QUAD_LIMIT:
+                    self._submit_rects(count)
+                    count = 0
+        if count:
+            self._submit_rects(count)
+
+    def _submit_rects(self, count):
+        self.uniform_rects(self.uniforms["destinations[0]"], count, self.rects)
+        self.draw_instanced(0x0005, 0, 4, count)
+        self.submits += 1
+
+    def draw_instances(self, bounds, instances, *, sources=None):
+        self._set_screen_transform()
+        self.glUniform4f(self.uniforms["sourceRect"], *bounds)
         for first in range(0, len(instances), QUAD_LIMIT):
             batch = instances[first:first + QUAD_LIMIT]
             for i, (rect, phase, first_sample) in enumerate(batch):
@@ -113,7 +157,5 @@ class InstancedQuads(SdlOpenGLPass):
                     self.sources[offset:offset + 4] = sources[first + i]
             if sources is not None:
                 self.uniform_rects(self.uniforms["sources[0]"], len(batch), self.sources)
-            self.uniform_rects(self.uniforms["destinations[0]"], len(batch), self.rects)
             self.uniform_rects(self.uniforms["poseTimes[0]"], len(batch), self.times)
-            self.draw_instanced(0x0005, 0, 4, len(batch))
-            self.submits += 1
+            self._submit_rects(len(batch))

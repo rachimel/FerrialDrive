@@ -3,7 +3,7 @@
 from collections import OrderedDict
 import ctypes as ct
 
-from .instanced_quads import InstancedQuads
+from .instanced_quads import InstancedQuads, QUAD_LIMIT
 from .part_shadow_map import GROUND_FRAGMENT, SHADOW_UNIFORMS
 
 
@@ -25,7 +25,7 @@ class EnemyShadowBatch:
         self.shadow = resource.shadow_map
         fragment = GROUND_FRAGMENT.replace(b"texture2D(lightDepth,", b"lookupDepth(")
         fragment = fragment.replace(b"float visibilityAtCoordinates(", SHADOW_TILE_LOOKUP + b"float visibilityAtCoordinates(")
-        self.sampler = InstancedQuads(resource.pico, fragment_shader=fragment, per_instance_source=True,
+        self.sampler = InstancedQuads(resource.pico, fragment_shader=fragment, tile_placements=True,
             extra_uniforms=(*SHADOW_UNIFORMS, "opacity", "perspectiveGround", "groundShadowRadius", "tileSize", "tilesPerSide"))
         self.tiles_per_side = min(TILES_PER_SIDE, self.sampler.max_texture_size // self.shadow.ground_size)
         self.texture = ct.c_uint()
@@ -92,24 +92,19 @@ class EnemyShadowBatch:
     def draw(self, groups, scale, opacity, softness):
         shadow, sampler = self.shadow, self.sampler
         factor = scale * shadow.pixel_scale
-        px, py = shadow.pivot
         before = sampler.submits
-        capacity = self.tiles_per_side ** 2
+        capacity = min(self.tiles_per_side ** 2, QUAD_LIMIT)
         count = 0
         self.resource.pico.SDL_RenderFlush(self.resource.pico.renderer)
         for start in range(0, len(groups), capacity):
             chunk = groups[start:start + capacity]
             pinned = {pose for pose, _ in chunk}
-            instances, sources = [], []
+            tiles = []
             for pose, positions in chunk:
                 slot, bounds = self._slot(pose, pinned)
                 source, radius = shadow.ground_region(factor, softness, bounds)
-                left, top, w, h = source
-                dx, dy = (left - px) * factor, (top - py) * factor
-                width, height = max(1, w * factor), max(1, h * factor)
-                for x, y in positions:
-                    instances.append(((x + dx, y + dy, width, height), 0, slot))
-                    sources.append(source)
+                tiles.append((source, slot, positions))
+                count += len(positions)
             with sampler.batch(), shadow.bind_texture(sampler, 0, self.texture):
                 u = sampler.uniforms
                 shadow.upload_projection(sampler)
@@ -121,8 +116,7 @@ class EnemyShadowBatch:
                 sampler.glUniform1f(u["opacity"], opacity)
                 sampler.glUniform1f(u["perspectiveGround"], float(shadow.surface_light_position is not None))
                 sampler.glUniform1f(u["groundShadowRadius"], radius)
-                sampler.draw_instances((0, 0, 1, 1), instances, sources=sources)
-            count += len(instances)
+                sampler.draw_tile_placements(tiles, shadow.pivot, factor)
         self.submits = sampler.submits - before
         shadow.ground_draws += count
         if shadow.surface_light_position is not None:

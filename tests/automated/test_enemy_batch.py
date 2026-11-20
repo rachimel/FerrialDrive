@@ -208,3 +208,19 @@ class EnemyBatchGpuTests(unittest.TestCase):
         self.assertTrue((result == baseline).all())
         self.assertEqual(view.primitives.stats, expected)
         self.assertEqual(expected["shared_frame_draws"], 19)
+
+    def test_one_shadow_tile_spans_multiple_placement_batches(self):
+        sprite = self.sprites["medium"]
+        scale = .77 / sprite.resource.data["pixel_scale"]
+        points = [(35.25 + i % 9 * 51, 72.75 + i // 9 * 42) for i in range(71)]
+        groups = [((sprite.part_clip("move", "se"), .125), points),
+                  ((sprite.part_clip("attack", "n"), .25), points[-3:])]
+
+        def individual():
+            for pose, positions in groups:
+                sprite.draw_ground_shadows(pose, positions, scale, .55, 3)
+
+        def batched():
+            self.assertEqual(sprite.draw_near_shadows(groups, scale, .55, 3), (74, 2))
+
+        self.compare(individual, batched, 8)
