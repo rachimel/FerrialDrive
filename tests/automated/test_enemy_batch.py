@@ -111,6 +111,8 @@ class EnemyBatchGpuTests(unittest.TestCase):
         for kind, sprite in self.sprites.items():
             with self.subTest(kind=kind):
                 shadow = sprite.resource.shadow_map
+                self.assertEqual(shadow.vertex_data.size, len(shadow.caster_indices) * 8 * 3 * 4)
+                self.assertEqual(shadow.index_count, len(shadow.caster_indices) * 12 * 3)
                 shadow.ground_geometry.clear()
                 self.addCleanup(shadow.ground_geometry.clear)
                 limit = shadow.ground_geometry_limit

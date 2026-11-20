@@ -211,7 +211,8 @@ class PartShadowMap:
         self.triangles = (
             0, 2, 3, 0, 3, 1, 4, 5, 7, 4, 7, 6, 0, 1, 5, 0, 5, 4,
             2, 6, 7, 2, 7, 3, 0, 4, 6, 0, 6, 2, 1, 3, 7, 1, 7, 5)
-        self.vertex_count = len(self.corners) * len(self.triangles)
+        self.vertex_count = len(self.corners) * 8
+        self.index_count = len(self.corners) * len(self.triangles)
         self.vertex_data = Struct(f"={self.vertex_count * 3}f")
         # 한 리그의 모든 포즈는 같은 바이트 수의 삼각형을 사용한다.
         self.ground_geometry_limit = min(MAX_GROUND_GEOMETRY_POSES,
@@ -223,7 +224,7 @@ class PartShadowMap:
             self.tracks[name] = row["hz"], row["poses"], tuple(bone in upper_bones for bone in bones)
         self.texture, self.surface_texture = ct.c_uint(), ct.c_uint()
         self.framebuffer = ct.c_uint()
-        self.buffer = ct.c_uint()
+        self.buffer, self.index_buffer = ct.c_uint(), ct.c_uint()
         self.vao = ct.c_uint()
         self.depth_sampler = self.ground_sampler = self.surface_sampler = None
         self.pose_key = None
@@ -264,6 +265,7 @@ class PartShadowMap:
             ("VertexAttribPointer", None, [u, i, u, ct.c_ubyte, i, p]),
             ("DepthMask", None, [ct.c_ubyte]), ("DepthFunc", None, [u]), ("ClearDepth", None, [ct.c_double]),
             ("GetDoublev", None, [u, p]), ("Clear", None, [u]), ("DrawArrays", None, [u, i, i]),
+            ("DrawElements", None, [u, i, u, p]),
         ):
             setattr(self, name, bind_gl(self.pico, "gl" + name, result, args))
 
@@ -275,6 +277,7 @@ class PartShadowMap:
         s = self.depth_sampler
         self.GenFramebuffers(1, ct.byref(self.framebuffer))
         self.GenBuffers(1, ct.byref(self.buffer))
+        self.GenBuffers(1, ct.byref(self.index_buffer))
         self.GenVertexArrays(1, ct.byref(self.vao))
         bound = s.integer(0x8069)
         previous_draw, previous_read = s.integer(0x8CA6), s.integer(0x8CAA)
@@ -296,6 +299,11 @@ class PartShadowMap:
             if self.CheckFramebufferStatus(0x8D40) != 0x8CD5:
                 raise RuntimeError("그림자 깊이 프레임버퍼 생성 실패")
             self.BindVertexArray(self.vao.value)
+            # 상자의 12개 삼각형은 모든 포즈에서 같은 꼭짓점 순서를 쓴다.
+            indices = (ct.c_uint * self.index_count)(
+                *(8 * box + corner for box in range(len(self.corners)) for corner in self.triangles))
+            self.BindBuffer(0x8893, self.index_buffer.value)
+            self.BufferData(0x8893, ct.sizeof(indices), indices, 0x88E4)
             self.BindBuffer(0x8892, self.buffer.value)
             self.BufferData(0x8892, self.vertex_data.size, None, 0x88E8)
             position = self.GetAttribLocation(s.program, b"shadowVertex")
@@ -359,7 +367,6 @@ class PartShadowMap:
                           for first, second in zip(start[:3], end[:3]))
             (ax, ay, az), (bx, by, bz), (cx, cy, cz) = interpolate_rotation(start[3:], end[3:], weight)
             c, s, dx, dy = (upper_c, upper_s, shift_x, shift_y) if upper[index] else (lower_c, lower_s, 0, 0)
-            projected = []
             for x, y, z in corners:
                 px = ax * x + ay * y + az * z + tx
                 py = bx * x + by * y + bz * z + ty
@@ -370,15 +377,13 @@ class PartShadowMap:
                     floor_x, floor_y = key_x + (wx - key_x) * cast, key_y + (wy - key_y) * cast
                     pixel_xs.append(gx * floor_x + gy * floor_y)
                     pixel_ys.append(hx * floor_x + hy * floor_y)
-                    projected.append((wx, wy, pz))
+                    vertices.extend((wx, wy, pz))
                 else:
                     pixel_xs.append(gx * wx + gy * wy + gz * pz)
                     pixel_ys.append(hx * wx + hy * wy + hz * pz)
-                    projected.append((lx * wx + ly * wy + lz * pz - light_x,
-                                      ux * wx + uy * wy + uz * pz - light_y,
-                                      nx * wx + ny * wy + nz * pz - light_z))
-            for corner in self.triangles:
-                vertices.extend(projected[corner])
+                    vertices.extend((lx * wx + ly * wy + lz * pz - light_x,
+                                     ux * wx + uy * wy + uz * pz - light_y,
+                                     nx * wx + ny * wy + nz * pz - light_z))
         pivot_x, pivot_y = self.pivot
         left, top = floor(min(pixel_xs) + pivot_x) - 3, floor(min(pixel_ys) + pivot_y) - 3
         right, bottom = ceil(max(pixel_xs) + pivot_x) + 3, ceil(max(pixel_ys) + pivot_y) + 3
@@ -390,7 +395,7 @@ class PartShadowMap:
                 self.upload_projection(self.depth_sampler)
             self.BindBuffer(0x8892, self.buffer.value)
             self.BufferSubData(0x8892, 0, len(vertices), vertices)
-            self.DrawArrays(0x0004, 0, self.vertex_count)
+            self.DrawElements(0x0004, self.index_count, 0x1405, None)
         self.depth_draws += 1
 
     def render_surface(self, texture, bounds, border):
@@ -542,7 +547,7 @@ class PartShadowMap:
                 sampler.close()
         self.depth_sampler = self.ground_sampler = self.surface_sampler = None
         for name, value in (("Textures", self.texture), ("Textures", self.surface_texture), ("Framebuffers", self.framebuffer),
-                            ("Buffers", self.buffer), ("VertexArrays", self.vao)):
+                            ("Buffers", self.buffer), ("Buffers", self.index_buffer), ("VertexArrays", self.vao)):
             if value.value:
                 getattr(self, "Delete" + name)(1, ct.byref(value))
                 value.value = 0
