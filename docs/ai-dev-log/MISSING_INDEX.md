@@ -757,3 +757,7 @@
 ## FDLOG-20261118-counter-expiry-reset
 
 - [카운터 자연 퇴장 후 합계 초기화](2026-11-18-counter-expiry-reset.md): `[[FDLOG_MISSING_TIME:FDLOG-20261118-counter-expiry-reset:U1]]` — 사용자 요청의 정확한 발언 시각. 검색 단서: `카운터 사라질 때 hit랑 데미지 초기화`. 구현·검사 시각과 구분한다.
+
+## FDLOG-20261120-crowd-combat
+
+- [900~1,000기 교전](2026-11-20-crowd-combat-scaling.md)의 사용자 발언 시각이 미확인이다. `[[FDLOG_MISSING_TIME:FDLOG-20261120-crowd-combat:scope]]` 검색 단서는 `900~ 1000기`, `사운드는 꺼줘요`와 `먼 적은 같은 에셋의 공유 프레임 허용`이다.
