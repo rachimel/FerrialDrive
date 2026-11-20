@@ -1,5 +1,6 @@
 """기존 이동 훈련장에 다수 적 교전과 실제 HP를 연결한다."""
 
+from dataclasses import replace
 import json
 from pathlib import Path
 
@@ -25,6 +26,7 @@ class EncounterApplication(MovementApplication):
         super()._enter_resources()
         if self.hud is None:
             raise ValueError("교전 테스트에는 HP·록온을 연결할 HUD 설정이 필요하다.")
+        self.hud.resolve_enemy_damage = self.encounter.damage_enemy
         self.encounter_view = EncounterView(self.renderer, self.camera, self.projection,
             backend=self.encounter.settings.get("rendering", {}).get("backend", "auto"))
 
@@ -60,8 +62,16 @@ class EncounterApplication(MovementApplication):
 
     def sync_encounter_health(self):
         if self.hud:
-            self.encounter.sync_health({key: row["health"].current for key, row in self.hud.enemies.items()
-                                        if key in self.encounter.enemies}, self.hud.state.hud.player_health.current)
+            for enemy_id in self.encounter.changed_health_ids:
+                entry = self.hud.enemies.get(enemy_id)
+                enemy = self.encounter.enemies[enemy_id]
+                if entry is not None and entry["health"].current != enemy.health:
+                    health = entry["health"] = Health(enemy.health, enemy.profile.health)
+                    if enemy_id == self.hud.selected_target_id:
+                        self.hud.set_hud(target=replace(self.hud.state.hud.target, health=health))
+                        self.hud.target_health.set_ratio(health.ratio)
+            self.encounter.changed_health_ids.clear()
+            self.encounter.update_result(self.hud.state.hud.player_health.current)
 
     def advance_encounter(self, seconds, previous_position_m):
         self.sync_encounter_health()

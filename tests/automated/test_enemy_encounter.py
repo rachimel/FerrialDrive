@@ -103,6 +103,21 @@ class EnemyRulesTests(unittest.TestCase):
         encounter.advance_reactions(.12)
         self.assertEqual(encounter.enemies["test"].position_m.x, 998.5)
 
+    def test_damage_without_hud_clamps_and_does_not_repeat_death(self):
+        encounter = world()
+        enemy = encounter.enemies["test"]
+        encounter.knock_back("test", Vec2(1, 0))
+        maximum = enemy.health
+        with self.assertRaises(ValueError):
+            encounter.damage_enemy("test", -1)
+        self.assertEqual(encounter.damage_enemy("test", 1), (maximum, maximum - 1))
+        self.assertEqual(encounter.damage_enemy("test", maximum), (maximum - 1, 0))
+        elapsed = encounter.death_seconds / 2
+        encounter.advance_reactions(elapsed)
+        self.assertEqual(encounter.damage_enemy("test", 1), (0, 0))
+        self.assertAlmostEqual(enemy.death_remaining_seconds, encounter.death_seconds - elapsed)
+        self.assertEqual(encounter.result, "victory")
+
     def test_small_closes_distance_and_hits_once_per_attack(self):
         encounter = world(position=(520, 500))
         encounter.advance(.2, (500, 500), (500, 500))
@@ -266,9 +281,14 @@ class EncounterIntegrationTests(unittest.TestCase):
                 program.hud.transition.update(1)
                 program.hud.apply_target("S1")
                 program.hud.damage_target("S1", 60)
-                program.update(.05)
                 self.assertEqual(program.encounter.enemies["S1"].health, 120)
-                self.assertEqual(program.hud.state.hud.total_damage_dealt, 60)
+                program.hud.damage_target("S2", 1)
+                self.assertEqual(program.encounter.enemies["S2"].health, 179)
+                program.encounter.damage_enemy("S1", 3)
+                program.update(.05)
+                self.assertEqual(program.encounter.enemies["S1"].health, 117)
+                self.assertEqual(program.hud.state.hud.target.health.current, 117)
+                self.assertEqual(program.hud.state.hud.total_damage_dealt, 61)
                 self.assertEqual(program.hud.selected_target_id, "S1")
                 program.on_sword_hit(999, "S1")
                 self.assertGreater(program.encounter.enemies["S1"].knockback_remaining_seconds, 0)

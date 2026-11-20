@@ -130,6 +130,7 @@ class EnemyEncounter:
         self.spacing = EnemySpacing(self.enemies.values(), 2 * max(enemy.profile.radius_m for enemy in self.enemies.values()))
         self.projectiles = []
         self.hit_events = []
+        self.changed_health_ids = set()
         self.elapsed_seconds = 0
         self.result = "running"
         self.shots_fired = 0
@@ -142,16 +143,34 @@ class EnemyEncounter:
     def hit_directions(self):
         return [hit.direction for hit in self.hit_events]
 
+    def _set_enemy_health(self, enemy, health):
+        before = enemy.health
+        enemy.health = max(0, min(enemy.profile.health, health))
+        if enemy.health != before:
+            self.changed_health_ids.add(enemy.enemy_id)
+            if not enemy.alive and enemy.knockback_remaining_seconds > 0:
+                enemy.death_remaining_seconds = self.death_seconds
+        return before, enemy.health
+
+    def damage_enemy(self, enemy_id, amount):
+        """교전에서 피해를 확정하고 피격 직전·직후 HP를 반환한다."""
+        if type(amount) is not int or amount < 0:
+            raise ValueError("피해량은 0 이상의 정수여야 한다.")
+        enemy = self.enemies[enemy_id]
+        before, after = self._set_enemy_health(enemy, enemy.health - amount)
+        if before > 0 and after == 0:
+            self.update_result()
+        return before, after
+
     def sync_health(self, health_by_id, player_health):
         for enemy_id, health in health_by_id.items():
-            enemy = self.enemies[enemy_id]
-            was_alive = enemy.alive
-            enemy.health = max(0, min(enemy.profile.health, health))
-            if was_alive and not enemy.alive and enemy.knockback_remaining_seconds > 0:
-                enemy.death_remaining_seconds = self.death_seconds
-        if player_health <= 0:
+            self._set_enemy_health(self.enemies[enemy_id], health)
+        self.update_result(player_health)
+
+    def update_result(self, player_health=None):
+        if player_health is not None and player_health <= 0:
             self.result = "defeat"
-        elif not any(enemy.alive for enemy in self.enemies.values()):
+        elif self.result == "running" and not any(enemy.alive for enemy in self.enemies.values()):
             self.result = "victory"
         if self.result != "running":
             self.projectiles.clear()

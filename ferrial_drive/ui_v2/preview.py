@@ -51,6 +51,7 @@ class HudPreview:
         from ferrial_drive.continuation import ContinueSession
 
         self.continuation = continuation if continuation is not None else ContinueSession(mode="test")
+        self.resolve_enemy_damage = None
         self.overdrive_controller = OverdriveController(overdrive_settings)
         self.energy_settings = energy_settings or EnergySettings()
         self.energy_decay = EnergyDecay(self.energy_settings)
@@ -423,6 +424,16 @@ class HudPreview:
             for offset in (-15, 0, 15):
                 self.absorption.add((start[0] + offset, start[1] - offset), waypoint, destination, approach_side=side)
 
+    def _damage_health(self, target_id, health, amount):
+        if type(amount) is not int or amount < 0:
+            raise ValueError("피해량은 0 이상의 정수여야 한다.")
+        if target_id is not None and self.resolve_enemy_damage is not None:
+            before, after = self.resolve_enemy_damage(target_id, amount)
+        else:
+            before = health.current
+            after = max(0, before - amount)
+        return before / health.maximum, replace(health, current=after), before - after
+
     def damage_target(self, target_id, amount=None):
         """록온을 변경하지 않고 실제 피격 대상에 피해를 적용한다."""
         if target_id not in self.enemies or self.enemies[target_id]["health"].current <= 0:
@@ -431,13 +442,11 @@ class HudPreview:
             self.perform("damage_target", damage_amount=amount)
             return
         amount = self.config.data["sample_actions"]["damage_target"] if amount is None else amount
-        if type(amount) is not int or amount < 0:
-            raise ValueError("피해량은 0 이상의 정수여야 한다.")
         enemy = self.enemies[target_id]
-        applied = min(amount, enemy["health"].current)
+        _, health, applied = self._damage_health(target_id, enemy["health"], amount)
         if applied <= 0:
             return
-        enemy["health"] = replace(enemy["health"], current=enemy["health"].current - applied)
+        enemy["health"] = health
         hud = self.state.hud
         self.set_hud(combo_count=hud.combo_count + 1, total_damage_dealt=hud.total_damage_dealt + applied)
         self.hit_counter.set_value(self.state.hud.combo_count)
@@ -491,13 +500,10 @@ class HudPreview:
                 return
             health = hud.target.health if target else hud.player_health
             amount = self.config.data["sample_actions"][action] if damage_amount is None else damage_amount
-            if type(amount) is not int or amount < 0:
-                raise ValueError("피해량은 0 이상의 정수여야 한다.")
-            applied = min(amount, health.current)
+            previous_ratio, health, applied = self._damage_health(self.selected_target_id if target else None,
+                                                                 health, amount)
             if applied <= 0:
                 return
-            previous_ratio = health.ratio
-            health = replace(health, current=health.current - applied)
             if target:
                 self.enemies[self.selected_target_id]["health"] = health
                 self.set_hud(target=replace(hud.target, health=health), combo_count=hud.combo_count + 1,
