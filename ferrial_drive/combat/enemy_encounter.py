@@ -5,6 +5,7 @@ from math import ceil, hypot, isfinite, isqrt
 
 from .geometry import Vec2, moving_circle_touches_polygon, segment_circle
 from .enemy_spacing import EnemySpacing
+from .enemy_steering import MELEE_ATTACK, pursuit, ranged_recovery
 
 
 ENEMY_KINDS = ("small", "medium", "humanoid")
@@ -222,13 +223,14 @@ class EnemyEncounter:
         if interrupts:
             enemy.phase, enemy.remaining_seconds = "stagger", 0
 
-    def _advance_reaction(self, enemy, seconds):
+    def _take_reaction_movement(self, enemy, seconds):
         remaining = enemy.knockback_remaining_seconds
         elapsed = min(seconds, remaining)
+        movement = None
         if elapsed > 0:
             # 선형 감속 속도를 구간 적분해 프레임 수와 관계없이 지정 거리만큼 민다.
             amount = (remaining * elapsed - elapsed * elapsed / 2) / enemy.knockback_duration_seconds
-            self._move(enemy, enemy.knockback_velocity_mps * amount)
+            movement = enemy.knockback_velocity_mps * amount
             enemy.knockback_remaining_seconds = max(0, remaining - elapsed)
             if enemy.knockback_remaining_seconds < 1e-9:
                 enemy.knockback_remaining_seconds = 0
@@ -236,6 +238,12 @@ class EnemyEncounter:
                     enemy.phase = "move"
         if not enemy.alive:
             enemy.death_remaining_seconds = max(0, enemy.death_remaining_seconds - seconds)
+        return movement
+
+    def _advance_reaction(self, enemy, seconds):
+        movement = self._take_reaction_movement(enemy, seconds)
+        if movement is not None:
+            self._move(enemy, movement)
 
     def advance_reactions(self, seconds):
         """교전 종료 뒤에도 잔여 밀림·사망 표시만 진행한다. 공격·게임 시간은 멈춘다."""
@@ -274,19 +282,15 @@ class EnemyEncounter:
     def _think(self, enemy, seconds, player):
         profile = enemy.profile
         dx, dy = player.x - enemy.position_m.x, player.y - enemy.position_m.y
-        distance = hypot(dx, dy)
-        if distance > 1e-9:
-            inverse = 1 / distance
-            enemy.facing = Vec2(dx * inverse, dy * inverse)
-        if profile.kind != "medium" and distance <= profile.melee_reach_m + self.player_radius_m:
-            self._begin_attack(enemy, "melee")
-            return
-        if profile.kind != "small" and distance <= profile.fire_range_m:
-            self._begin_attack(enemy, "ranged")
-            return
-        self._move(enemy, enemy.facing * min(profile.speed_mps * seconds,
-                                           max(0, distance - profile.radius_m - self.player_radius_m)),
-                   locomotion=True)
+        fx, fy, mx, my, attack = pursuit(dx, dy, enemy.facing.x, enemy.facing.y, profile.speed_mps * seconds,
+            profile.radius_m, self.player_radius_m,
+            profile.melee_reach_m + self.player_radius_m if profile.kind != "medium" else -1.,
+            profile.fire_range_m if profile.kind != "small" else -1.)
+        enemy.facing = Vec2(fx, fy)
+        if attack:
+            self._begin_attack(enemy, "melee" if attack == MELEE_ATTACK else "ranged")
+        else:
+            self._move(enemy, Vec2(mx, my), locomotion=True)
 
     def _advance_enemy(self, enemy, seconds, start, end):
         interrupts = enemy.knockback_interrupts and enemy.knockback_remaining_seconds > 0
@@ -301,9 +305,12 @@ class EnemyEncounter:
             # 사격 후 회수 중에 거리를 조절한다. 준비·공격 중에는 방향을 고정한다.
             if enemy.attack_kind == "ranged":
                 delta = end - enemy.position_m
-                error = delta.length - profile.preferred_range_m
-                self._move(enemy, delta.normalized() * max(-profile.speed_mps * seconds,
-                                                          min(profile.speed_mps * seconds, error)), locomotion=True)
+                movement = ranged_recovery(delta.x, delta.y, profile.speed_mps * seconds, profile.preferred_range_m)
+                self._move(enemy, Vec2(*movement), locomotion=True)
+        self._advance_attack(enemy, seconds, start, end)
+
+    def _advance_attack(self, enemy, seconds, start, end):
+        profile = enemy.profile
         if enemy.phase == "active" and enemy.attack_kind == "melee" and not enemy.hit_player:
             if moving_circle_touches_polygon(start, end, self.player_radius_m, enemy.attack_polygon):
                 self.hit_events.append(EnemyHit(enemy.enemy_id, "melee", profile.melee_damage, enemy.facing))
