@@ -783,3 +783,7 @@
 ## FDLOG-20261121-enemy-draw-runs
 
 - [적 본체 제출과 텍스처 전환](2026-11-21-enemy-draw-runs.md)의 사용자 발언 시각은 [[FDLOG_MISSING_TIME:FDLOG-20261121-enemy-draw-runs:U1-U2]]이다. 검색 단서는 `drawcall 중복되는 거`와 `적 이동은 Compute`다.
+
+## FDLOG-20261121-enemy-numba-movement
+
+- [적 군집 Numba 이동](2026-11-21-enemy-numba-movement.md)의 사용자 발언 시각은 [[FDLOG_MISSING_TIME:FDLOG-20261121-enemy-numba-movement:U1]]이다. 검색 단서는 `적 이동은 Numba로 합쳐`다.
