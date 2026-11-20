@@ -91,8 +91,9 @@ class EnemyBatchGpuTests(unittest.TestCase):
                     resource = sprite.resource
                     scale = 1 / resource.data["pixel_scale"]
                     clip = sprite.part_clip(motion, "s")
-                    requests = [(i, motion, "0", (1 + i % 10 + (i % 4) * .219) / 24,
+                    requests = [(i, motion, "0", (1 + i % 10 + i * .003) / 24,
                                  120 + (i % 7) * 35.7, 135 + (i // 7) * 16.35) for i in range(68)]
+                    requests.append((68, motion, "0", requests[0][3], 240, 110))
 
                     def reference():
                         for _, _, _, seconds, x, y in requests:
@@ -102,6 +103,8 @@ class EnemyBatchGpuTests(unittest.TestCase):
                         copies = sprite.prepare_bodies(requests, scale)
                         self.assertEqual(len(copies), len(requests))
                         self.assertEqual(sprite.body_batch.submits, 2)
+                        self.assertIs(copies[0][0], copies[68][0])
+                        self.assertIsNot(copies[0][0], copies[10][0])
                         for enemy_id, *_ in requests:
                             sprite.body_batch.copy(copies[enemy_id])
 

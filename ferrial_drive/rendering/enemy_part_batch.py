@@ -95,6 +95,7 @@ class EnemyPartBatch:
                 return {}
 
         groups, copies = {}, {}
+        pose_slots = {}
         left = top = row_height = 0
         px, py = r.data["pivot_top_left"]
         for enemy_id, motion, direction, seconds, x, foot in requests:
@@ -108,6 +109,13 @@ class EnemyPartBatch:
             state, instances, samples, ids = group
             bx, by, bw, bh = state["bounds"]
             width, height = max(1, round(bw * factor)), max(1, round(bh * factor))
+            destination = p.SDL_Rect(round(x - (px - bx) * factor), round(foot - (py - by) * factor), width, height)
+            pose = motion, direction, first, phase
+            source = pose_slots.get(pose)
+            if source is not None:
+                copies[enemy_id] = source, destination
+                ids.append(enemy_id)
+                continue
             if width > SHEET_WIDTH or height > MAX_SHEET_HEIGHT:
                 continue
             if left + width > SHEET_WIDTH:
@@ -115,8 +123,8 @@ class EnemyPartBatch:
             if top + height > MAX_SHEET_HEIGHT:
                 continue
             slot = left, top, width, height
-            destination = p.SDL_Rect(round(x - (px - bx) * factor), round(foot - (py - by) * factor), width, height)
-            copies[enemy_id] = p.SDL_Rect(*slot), destination
+            source = pose_slots[pose] = p.SDL_Rect(*slot)
+            copies[enemy_id] = source, destination
             instances.append((slot, phase, first))
             samples[first] = seconds
             ids.append(enemy_id)
