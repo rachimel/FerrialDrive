@@ -13,6 +13,8 @@ from .direction_reprojection import dot
 
 DEPTH_SIZE = 512
 GROUND_SHADOW_SCALE = 0.5
+GROUND_GEOMETRY_BUDGET_BYTES = 2 * 1024**2
+MAX_GROUND_GEOMETRY_POSES = 512
 LIGHT_VECTOR = (.40, .60, 1.0)
 DEPTH_RANGE_CM = 1500
 SHADOW_UNIFORMS = ("lightDepth", "lightRight", "lightUp", "lightNear", "lightDirection",
@@ -211,6 +213,9 @@ class PartShadowMap:
             2, 6, 7, 2, 7, 3, 0, 4, 6, 0, 6, 2, 1, 3, 7, 1, 7, 5)
         self.vertex_count = len(self.corners) * len(self.triangles)
         self.vertex_data = Struct(f"={self.vertex_count * 3}f")
+        # 한 리그의 모든 포즈는 같은 바이트 수의 삼각형을 사용한다.
+        self.ground_geometry_limit = min(MAX_GROUND_GEOMETRY_POSES,
+                                         GROUND_GEOMETRY_BUDGET_BYTES // max(1, self.vertex_data.size))
         self.waist = bones.index(proxy.get("anchor_bone", "waist"))
         self.tracks = {}
         for name, row in proxy["clips"].items():
@@ -324,9 +329,9 @@ class PartShadowMap:
             weight = elapsed * hz - index
             a, b = poses[index], poses[min(index + 1, len(poses) - 1)]
             geometry = self.project_pose(a, b, weight, upper, yaw)
-            if cache_geometry:
+            if cache_geometry and self.ground_geometry_limit:
                 self.ground_geometry[key] = geometry
-                if len(self.ground_geometry) > 128:
+                if len(self.ground_geometry) > self.ground_geometry_limit:
                     self.ground_geometry.popitem(last=False)
         else:
             self.ground_geometry.move_to_end(key)

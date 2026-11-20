@@ -9,6 +9,7 @@ import unittest
 from ferrial_drive.combat.enemy_sprites import load_enemy_part_sprites
 from ferrial_drive.diagnostics.timing import TimingRecorder
 from ferrial_drive.rendering.canvas import PicoCanvas
+from ferrial_drive.rendering.part_shadow_map import GROUND_GEOMETRY_BUDGET_BYTES, MAX_GROUND_GEOMETRY_POSES
 from ferrial_drive.settings import GameSettings
 
 
@@ -76,6 +77,26 @@ class EnemyBatchGpuTests(unittest.TestCase):
                             sprite.body_batch.copy(copies[enemy_id])
 
                     self.compare(reference, batched, 4)
+
+    def test_shadow_geometry_cache_respects_rig_size_and_recent_use(self):
+        for kind, sprite in self.sprites.items():
+            with self.subTest(kind=kind):
+                shadow = sprite.resource.shadow_map
+                shadow.ground_geometry.clear()
+                self.addCleanup(shadow.ground_geometry.clear)
+                limit = shadow.ground_geometry_limit
+                self.assertGreater(limit, 1)
+                keys = [("move", 0, (i / 4, i / 4)) for i in range(limit + 1)]
+                first = shadow.pose_geometry(keys[0], True)
+                for key in keys[1:limit]:
+                    shadow.pose_geometry(key, True)
+                self.assertIs(shadow.pose_geometry(keys[0], True), first)
+                shadow.pose_geometry(keys[-1], True)
+                self.assertIn(keys[0], shadow.ground_geometry)
+                self.assertNotIn(keys[1], shadow.ground_geometry)
+                entries = shadow.ground_geometry.values()
+                self.assertLessEqual(len(entries), MAX_GROUND_GEOMETRY_POSES)
+                self.assertLessEqual(sum(len(vertices) for vertices, _ in entries), GROUND_GEOMETRY_BUDGET_BYTES)
 
     def test_shadows_across_tile_eviction_and_instance_limit(self):
         for kind, sprite in self.sprites.items():
