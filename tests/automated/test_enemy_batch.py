@@ -9,6 +9,7 @@ import unittest
 from ferrial_drive.combat.enemy_sprites import load_enemy_part_sprites
 from ferrial_drive.diagnostics.timing import TimingRecorder
 from ferrial_drive.rendering.canvas import PicoCanvas
+from ferrial_drive.rendering.part_atlas_residency import AtlasFrameBudget
 from ferrial_drive.rendering.part_shadow_map import GROUND_GEOMETRY_BUDGET_BYTES, MAX_GROUND_GEOMETRY_POSES
 from ferrial_drive.settings import GameSettings
 
@@ -26,6 +27,7 @@ class EnemyBatchGpuTests(unittest.TestCase):
         light = movement.parent / json.loads(movement.read_text(encoding="utf8"))["upper_lower"]["pbr_lighting"]
         if not catalog.is_file() or not light.is_file():
             raise unittest.SkipTest("로컬 적 파츠와 조명 에셋이 필요하다.")
+        cls.catalog, cls.light = catalog, light
         canvas = cls.enterClassContext(PicoCanvas(512, 512, "기체 묶음 픽셀 검사", vsync=False))
         cls.pico = canvas.pico
         cls.sprites = load_enemy_part_sprites(catalog, cls.pico, light, GameSettings(texture_quality="medium"), TimingRecorder())
@@ -54,6 +56,26 @@ class EnemyBatchGpuTests(unittest.TestCase):
         self.assertLess(difference.mean(), 1)
         self.assertLessEqual(difference.max(), tolerance)
         np.testing.assert_array_equal(result, self.capture(batched))
+
+    def test_first_move_and_attack_use_preloaded_pages_and_metadata(self):
+        sprites = load_enemy_part_sprites(self.catalog, self.pico, self.light, GameSettings(texture_quality="medium"),
+                                          TimingRecorder(), AtlasFrameBudget())
+        for sprite in sprites.values():
+            self.addCleanup(sprite.close)
+        for kind, sprite in sprites.items():
+            with self.subTest(kind=kind):
+                resource = sprite.resource
+                catalog = resource.catalog
+                for motion in ("move", "attack"):
+                    self.assertTrue(set(catalog.data["motions"][motion].values()) <= catalog.records.keys())
+                self.assertLessEqual(resource.estimated_bytes, resource.cache_budget_bytes * 3 // 4)
+                poses = [("move", direction, .125) for direction in ("s", "sw", "w", "nw", "n", "ne", "e", "se")]
+                poses.extend(("attack", direction, .125) for direction in ("s", "n"))
+                uploads = resource.cache.uploads
+                sprite.prepare_frame(poses)
+                self.assertEqual([sprite.display_playback(pose) for pose in poses], poses)
+                self.assertEqual(resource.cache.uploads, uploads)
+                self.assertIsNone(resource.residency.prefetch)
 
     def test_overlap_preserves_order_and_each_interpolation_phase(self):
         for kind, sprite in self.sprites.items():

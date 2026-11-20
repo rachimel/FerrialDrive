@@ -88,15 +88,24 @@ class PartAtlasResidency:
             requests.setdefault(page_key, dict(page, file=page_key[0]))
         return {"data": data, "pages": fields, "keys": tuple(fields.values())}, requests
 
-    def require(self, keys):
+    def require(self, keys, *, preload_limit_bytes=None):
+        """선적재 때는 방향 정보를 읽되 남은 예산에 맞는 텍스처만 올린다."""
         if self.prefetch is not None and self.prefetch.key in keys:
             self._advance_prefetch(set(keys), required=True)
         resources, requests = {}, {}
+        remaining = None if preload_limit_bytes is None else preload_limit_bytes - self.cache.gpu_storage_bytes
         for key in keys:
-            if key not in self.resources:
-                resource, pages = self._describe_direction(key)
-                resources[key] = resource
-                requests.update(pages)
+            if key in self.resources or key in resources:
+                continue
+            resource, pages = self._describe_direction(key)
+            if remaining is not None:
+                cost = sum(self._page_storage_bytes(page) for page_key, page in pages.items()
+                           if page_key not in requests and page_key not in self.cache.entries)
+                if cost > remaining or len(self.resources) + len(resources) >= self.max_directions:
+                    continue
+                remaining -= cost
+            resources[key] = resource
+            requests.update(pages)
         if not resources:
             return
         if self.paged:

@@ -14,6 +14,7 @@ from .locomotion import direction_name
 ATTACK_PHASES = ("windup", "active", "recovery")
 MOTIONS = ("move", "attack", "hit")
 PART_DIRECTIONS = ("s", "sw", "w", "nw", "n", "ne", "e", "se")
+PRELOAD_DIRECTION_ORDER = ("0", "4", "2", "6", "1", "5", "3", "7")
 
 
 @dataclass
@@ -260,6 +261,11 @@ def load_enemy_part_sprites(path, pico, lighting, settings, timings, stream_budg
                 raise ValueError("적 파츠는 플레이어와 동일한 품질의 BC7·24fps PBR 규격을 사용한다.")
             if stream_budget is not None:
                 resource.enable_streaming(stream_budget, "move")
+            # 정면·후면은 이동과 공격을 함께, 나머지는 교전 개시 때 많은 이동부터 준비한다.
+            motions = dict.fromkeys(("move", "attack", *(spec["motion"] for spec in sprite.attack_motions.values())))
+            keys = tuple((motion, direction) for direction in PRELOAD_DIRECTION_ORDER[:2] for motion in motions)
+            keys += tuple((motion, direction) for motion in motions for direction in PRELOAD_DIRECTION_ORDER[2:])
+            resource.residency.require(keys, preload_limit_bytes=resource.cache_budget_bytes * 3 // 4)
     except BaseException:
         for sprite in sprites.values():
             sprite.resource.close()
