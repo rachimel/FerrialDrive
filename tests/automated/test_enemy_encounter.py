@@ -11,7 +11,9 @@ from unittest.mock import patch
 from ferrial_drive.combat.enemy_encounter import EnemyEncounter, EnemyProjectile
 from ferrial_drive.combat.enemy_sprites import EnemySprite
 from ferrial_drive.combat.encounter_application import EncounterApplication
-from ferrial_drive.combat.encounter_view import use_shared_frame
+from ferrial_drive.combat.camera import LookAheadCamera
+from ferrial_drive.combat.encounter_view import EncounterView, use_shared_frame
+from ferrial_drive.combat.training_ground import GroundProjection
 from ferrial_drive.combat.geometry import Vec2
 from ferrial_drive.rendering.canvas import PicoCanvas
 from Tools.unit_test_runner.entrypoints import inspect_entrypoint
@@ -28,6 +30,29 @@ def world(kind="small", position=(510, 500)):
 
 
 class EnemyRulesTests(unittest.TestCase):
+    def test_view_culling_preserves_edges_shake_and_dying_enemies(self):
+        camera = LookAheadCamera(640, 480)
+        projection = GroundProjection(25.6, .3209)
+        with patch("ferrial_drive.combat.encounter_view.PrimitiveBatch"):
+            view = EncounterView(None, camera, projection)
+        camera.reset(projection.project((497, 508)))
+        camera.update(camera.position, None, .4, target_zoom=.7)
+        camera.feedback_offset_pixels = (-13, 9)
+        enemies = []
+        for x, y, alive, death in ((840, 680, True, 0), (-200, -200, True, 0),
+                (200, 100, False, .1), (220, 110, False, 0), (840.01, 200, True, 0),
+                (-200.01, -100, True, 0), (10000, 9000, True, 0)):
+            position = Vec2(*projection.unproject(camera.screen_to_world((x, y))))
+            enemies.append(SimpleNamespace(position_m=position, alive=alive, death_remaining_seconds=death))
+        expected = []
+        for enemy in enemies:
+            x, foot = view.point(enemy.position_m)
+            if (enemy.alive or enemy.death_remaining_seconds > 0) and -200 <= x <= 840 and -200 <= foot <= 680:
+                expected.append((enemy, x, foot))
+        with patch.object(view, "point", wraps=view.point) as project:
+            self.assertEqual(list(view.visible_enemies(enemies, (640, 480))), expected)
+        self.assertNotIn(enemies[-1].position_m, [call.args[0] for call in project.call_args_list])
+
     def test_crowd_uses_requested_formation_across_reset(self):
         for count in (900, 1000):
             with self.subTest(count=count):

@@ -7,6 +7,9 @@ from ferrial_drive.rendering.primitive_batch import PrimitiveBatch
 from .geometry import Vec2
 
 
+ENEMY_VIEW_MARGIN_PIXELS = 200
+
+
 def use_shared_frame(enemy, player_position_m, locked_id, distance_m):
     if distance_m is None or player_position_m is None or enemy.enemy_id == locked_id:
         return False
@@ -27,6 +30,23 @@ class EncounterView:
     def point(self, position_m, height_pixels=0):
         x, y = self.projection.project((position_m.x, position_m.y))
         return self.camera.world_to_screen((x, y - height_pixels))
+
+    def visible_enemies(self, enemies, window_size):
+        width, height = window_size
+        margin = ENEMY_VIEW_MARGIN_PIXELS
+        # 역변환 반올림으로 경계 기체를 잃지 않도록 후보만 1px 넓게 잡는다.
+        left, top = self.projection.unproject(self.camera.screen_to_world((-margin - 1, -margin - 1)))
+        right, bottom = self.projection.unproject(
+            self.camera.screen_to_world((width + margin + 1, height + margin + 1)))
+        for enemy in enemies:
+            position = enemy.position_m
+            if not (left <= position.x <= right and top <= position.y <= bottom):
+                continue
+            if not enemy.alive and enemy.death_remaining_seconds <= 0:
+                continue
+            x, foot = self.point(position)
+            if -margin <= x <= width + margin and -margin <= foot <= height + margin:
+                yield enemy, x, foot
 
     def polygon(self, points, color, opacity=1):
         for first, second in zip(points, points[1:] + points[:1]):
@@ -65,15 +85,11 @@ class EncounterView:
         break_labels = []
         placed = []
         shared_radius = encounter.settings.get("rendering", {}).get("shared_frame_distance_m")
-        for enemy in encounter.enemies.values():
-            if not enemy.alive and enemy.death_remaining_seconds <= 0:
-                continue
-            x, foot = self.point(enemy.position_m)
-            if -200 <= x <= width + 200 and -200 <= foot <= height + 200:
-                sprite = self.sprites.get(enemy.profile.kind)
-                shared = bool(sprite and sprite.part_counts and
-                              use_shared_frame(enemy, player_position_m, locked_id, shared_radius))
-                placed.append((foot, x, enemy, sprite, sprite.playback(enemy) if sprite else None, shared))
+        for enemy, x, foot in self.visible_enemies(encounter.enemies.values(), window_size):
+            sprite = self.sprites.get(enemy.profile.kind)
+            shared = bool(sprite and sprite.part_counts and
+                          use_shared_frame(enemy, player_position_m, locked_id, shared_radius))
+            placed.append((foot, x, enemy, sprite, sprite.playback(enemy) if sprite else None, shared))
         placed.sort(key=lambda row: row[0])
         r.stats["placed_enemies"] = len(placed)
         requests = {}
