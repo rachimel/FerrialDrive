@@ -5,14 +5,20 @@ import json
 import os
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
+from ferrial_drive.combat.camera import LookAheadCamera
+from ferrial_drive.combat.encounter_view import EncounterView
+from ferrial_drive.combat.enemy_encounter import EnemyEncounter
 from ferrial_drive.combat.enemy_sprites import load_enemy_part_sprites
+from ferrial_drive.combat.training_ground import GroundProjection
 from ferrial_drive.diagnostics.timing import TimingRecorder
 from ferrial_drive.rendering.canvas import PicoCanvas
 from ferrial_drive.rendering.part_atlas_residency import AtlasFrameBudget
 from ferrial_drive.rendering.part_shadow_map import GROUND_GEOMETRY_BUDGET_BYTES, MAX_GROUND_GEOMETRY_POSES
 from ferrial_drive.rendering.pose_copy_batch import MIN_POSE_COPIES
 from ferrial_drive.settings import GameSettings
+from ferrial_drive.ui.pico_renderer import PicoRenderer
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -171,3 +177,32 @@ class EnemyBatchGpuTests(unittest.TestCase):
                     self.assertEqual((count, submits), (160, 3))
 
                 self.compare(reference, batched, 8)
+
+    def test_shared_body_runs_keep_depth_order_lock_and_attack_effects(self):
+        config = json.loads((ROOT / "samples/combat_test_v1_5/encounter.json").read_bytes())
+        config["rendering"]["shared_frame_distance_m"] = 10
+        config["spawns"] = [{"id": str(i), "profile": "medium" if i == 8 else "small",
+                             "position_m": [500 + (i % 3) * 2, 500 + i * .8]} for i in range(20)]
+        encounter = EnemyEncounter(config, map_size_m=1000, player_radius_m=2.5)
+        active = encounter.enemies["8"]
+        active.phase, active.attack_kind = "active", "ranged"
+        projection = GroundProjection(8, .5)
+        camera = LookAheadCamera(512, 512)
+        camera.reset(projection.project((500, 500)))
+        renderer = PicoRenderer({"small": ROOT / "data/fonts/SUITE-otf/SUITE-Bold.otf"}, {"small": 12})
+        self.addCleanup(renderer.close)
+        view = EncounterView(renderer, camera, projection, backend="immediate")
+        self.addCleanup(view.primitives.close)
+        view.sprites = self.sprites
+
+        def draw():
+            view.draw(encounter, {}, (512, 512), player_position_m=(400, 400), locked_id="13")
+
+        with patch.object(view, "_shared_body_key", return_value=None):
+            baseline = self.capture(draw)
+            expected = dict(view.primitives.stats)
+        result = self.capture(draw)
+        self.assertTrue((baseline != [140, 170, 200]).any())
+        self.assertTrue((result == baseline).all())
+        self.assertEqual(view.primitives.stats, expected)
+        self.assertEqual(expected["shared_frame_draws"], 19)

@@ -1,5 +1,6 @@
 """교전용 스프라이트·기본 도형·공격 표현. 판정은 EnemyEncounter가 소유한다."""
 
+from itertools import groupby
 from math import sin
 
 from ferrial_drive.ui.components import Rect
@@ -143,57 +144,7 @@ class EncounterView:
                 prepared.update(sprite.prepare_bodies(requests, zoom))
                 r.stats["body_batch_submits"] += sprite.body_batch.submits
         r.stats["batched_bodies"] = len(prepared)
-        for foot, x, enemy, sprite, playback, shared in placed:
-            profile = enemy.profile
-            y = foot - profile.height_pixels * zoom
-            facing = Vec2(*self.projection.project((enemy.facing.x, enemy.facing.y))).normalized(Vec2(-1, 0))
-            sprite_top = None
-            muzzles = ()
-            motion = None
-            if sprite is not None:
-                if r.count:
-                    r.flush()
-                sprite_top, muzzles, motion = sprite.draw(enemy, x, foot, zoom, playback=playback, shared_frame=shared,
-                                                          prepared=prepared.get(enemy.enemy_id))
-                r.stats["shared_frame_draws"] += shared
-                r.stats["sprite_draws"] += 1
-                r.stats["part_draws"] += bool(sprite.part_counts)
-                key = f"{profile.kind}/{motion}"
-                motions = r.stats["enemy_motions"]
-                motions[key] = motions.get(key, 0) + 1
-                if not enemy.alive:
-                    if self.show_enemy_labels and motion == "break" and enemy.death_remaining_seconds > .52 * sprite.death_seconds:
-                        break_labels.append((x, sprite_top - 14 * zoom))
-                    continue
-            if not enemy.alive:
-                opacity = enemy.death_remaining_seconds / encounter.death_seconds
-                size = profile.hit_radius_pixels * zoom
-                split = (1 - opacity) * size * .4
-                for sign in (-1, 1):
-                    r.rect(Rect(x + (sign - 1) * size / 2 + sign * split, y - size / 2,
-                                size * .85, size), profile.color, opacity)
-                continue
-            color = "#FFFFFF" if flashes.get(enemy.enemy_id, 0) else profile.color
-            # 준비 시 무기를 뒤로 당기고 공격 시 뻗어 별도 바닥 경고 없이 읽게 한다.
-            extension = -12 if enemy.phase == "windup" else 30 if enemy.phase == "active" else 8
-            muzzle_x, muzzle_y = x + facing.x * (35 + extension) * zoom, y + facing.y * (35 + extension) * zoom
-            if sprite is None:
-                self.draw_placeholder(enemy, facing, x, foot, y, zoom, color)
-                r.line(x, y, muzzle_x, muzzle_y, "#FFF0CE")
-            if enemy.phase == "active":
-                if enemy.attack_kind == "melee":
-                    self.polygon(tuple(self.point(p, 48) for p in enemy.attack_polygon), color, .8)
-                elif muzzles:
-                    for muzzle in muzzles:
-                        r.circle(*muzzle, 4 * zoom, "#FFF1C4")
-                else:
-                    if sprite is not None:
-                        muzzle_x, muzzle_y = self.point(enemy.position_m + enemy.facing * (profile.radius_m + .5), 48)
-                    r.circle(muzzle_x, muzzle_y, 7 * zoom, "#FFF1C4")
-            if self.show_enemy_labels:
-                top = y - (56 if profile.kind == "humanoid" else 38) * zoom
-                phase = "move" if motion == "move" else "stagger" if motion == "hit" else enemy.phase
-                labels.append((enemy, x, top if sprite_top is None else sprite_top - 7 * zoom, color, phase))
+        self._draw_bodies(placed, encounter, flashes, zoom, prepared, labels, break_labels)
         for bullet in encounter.projectiles:
             point = self.point(bullet.position_m, 48)
             tail = self.point(bullet.position_m - bullet.direction * 2, 48)
@@ -216,6 +167,88 @@ class EncounterView:
             text = "훈련 완료 · 적 전멸" if encounter.result == "victory" else "기체 파괴 · 훈련 종료"
             r.text(text, width / 2, 240, "body", "#F1DBB2", align="center")
             r.text("F5 재시작 · Esc 메뉴 · F10 종료", width / 2, 282, "small", "#CADAE4", align="center")
+
+    def _draw_bodies(self, placed, encounter, flashes, zoom, prepared, labels, break_labels):
+        r = self.primitives
+        for pose, rows in groupby(placed, self._shared_body_key):
+            if pose is None:
+                for row in rows:
+                    self._draw_enemy(row, encounter, flashes, zoom, prepared, labels, break_labels)
+                continue
+            sprite, kind, motion, direction, index = pose
+            points = [(row[1], row[0]) for row in rows]
+            if r.count:
+                r.flush()
+            sprite.shared_frames().draw_bodies(sprite.part_clip(motion, direction), index, points, sprite.scale * zoom)
+            count = len(points)
+            r.stats["shared_frame_draws"] += count
+            r.stats["sprite_draws"] += count
+            r.stats["part_draws"] += count
+            motions = r.stats["enemy_motions"]
+            key = f"{kind}/{motion}"
+            motions[key] = motions.get(key, 0) + count
+
+    def _shared_body_key(self, row):
+        _, _, enemy, sprite, playback, shared = row
+        # 공격 효과·디버그 표시·개별 기체를 경계로 원래의 가림 순서를 보존한다.
+        if self.show_enemy_labels or not shared or sprite is None or enemy.phase == "active":
+            return None
+        motion, direction, seconds = playback
+        return sprite, enemy.profile.kind, motion, direction, sprite.frame_index(motion, direction, seconds)
+
+    def _draw_enemy(self, row, encounter, flashes, zoom, prepared, labels, break_labels):
+        foot, x, enemy, sprite, playback, shared = row
+        r = self.primitives
+        profile = enemy.profile
+        y = foot - profile.height_pixels * zoom
+        facing = Vec2(*self.projection.project((enemy.facing.x, enemy.facing.y))).normalized(Vec2(-1, 0))
+        sprite_top = None
+        muzzles = ()
+        motion = None
+        if sprite is not None:
+            if r.count:
+                r.flush()
+            sprite_top, muzzles, motion = sprite.draw(enemy, x, foot, zoom, playback=playback, shared_frame=shared,
+                                                      prepared=prepared.get(enemy.enemy_id))
+            r.stats["shared_frame_draws"] += shared
+            r.stats["sprite_draws"] += 1
+            r.stats["part_draws"] += bool(sprite.part_counts)
+            key = f"{profile.kind}/{motion}"
+            motions = r.stats["enemy_motions"]
+            motions[key] = motions.get(key, 0) + 1
+            if not enemy.alive:
+                if self.show_enemy_labels and motion == "break" and enemy.death_remaining_seconds > .52 * sprite.death_seconds:
+                    break_labels.append((x, sprite_top - 14 * zoom))
+                return
+        if not enemy.alive:
+            opacity = enemy.death_remaining_seconds / encounter.death_seconds
+            size = profile.hit_radius_pixels * zoom
+            split = (1 - opacity) * size * .4
+            for sign in (-1, 1):
+                r.rect(Rect(x + (sign - 1) * size / 2 + sign * split, y - size / 2,
+                            size * .85, size), profile.color, opacity)
+            return
+        color = "#FFFFFF" if flashes.get(enemy.enemy_id, 0) else profile.color
+        # 준비 시 무기를 뒤로 당기고 공격 시 뻗어 별도 바닥 경고 없이 읽게 한다.
+        extension = -12 if enemy.phase == "windup" else 30 if enemy.phase == "active" else 8
+        muzzle_x, muzzle_y = x + facing.x * (35 + extension) * zoom, y + facing.y * (35 + extension) * zoom
+        if sprite is None:
+            self.draw_placeholder(enemy, facing, x, foot, y, zoom, color)
+            r.line(x, y, muzzle_x, muzzle_y, "#FFF0CE")
+        if enemy.phase == "active":
+            if enemy.attack_kind == "melee":
+                self.polygon(tuple(self.point(p, 48) for p in enemy.attack_polygon), color, .8)
+            elif muzzles:
+                for muzzle in muzzles:
+                    r.circle(*muzzle, 4 * zoom, "#FFF1C4")
+            else:
+                if sprite is not None:
+                    muzzle_x, muzzle_y = self.point(enemy.position_m + enemy.facing * (profile.radius_m + .5), 48)
+                r.circle(muzzle_x, muzzle_y, 7 * zoom, "#FFF1C4")
+        if self.show_enemy_labels:
+            top = y - (56 if profile.kind == "humanoid" else 38) * zoom
+            phase = "move" if motion == "move" else "stagger" if motion == "hit" else enemy.phase
+            labels.append((enemy, x, top if sprite_top is None else sprite_top - 7 * zoom, color, phase))
 
     def draw_placeholder(self, enemy, facing, x, foot, y, zoom, color):
         r = self.primitives

@@ -82,6 +82,11 @@ class EnemyPoseCache:
         return destination.y
 
     def draw(self, clip_name, index, x, foot, scale):
+        return self.draw_bodies(clip_name, index, ((x, foot),), scale)
+
+    def draw_bodies(self, clip_name, index, placements, scale):
+        if not placements:
+            return None
         key = "body", clip_name, index
         entry = self._lookup(key)
         if entry is None:
@@ -93,8 +98,10 @@ class EnemyPoseCache:
             entry = self._capture(key, bounds, lambda px, py: resource.draw(clip_name, seconds, px, py,
                                   scale=1 / resource.data["pixel_scale"], sample_shadow=False))
             if entry is None:
-                return resource.draw(clip_name, seconds, x, foot, scale=scale, sample_shadow=False).y
-        return self._copy(entry, ((x, foot),), scale)
+                for x, foot in placements:
+                    top = resource.draw(clip_name, seconds, x, foot, scale=scale, sample_shadow=False).y
+                return top
+        return self._copy(entry, placements, scale)
 
     def draw_shadows(self, pose, placements, scale, opacity, softness_pixels):
         resource = self.resource

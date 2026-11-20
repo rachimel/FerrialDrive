@@ -140,8 +140,10 @@ class EnemySprite:
 
     def frame(self, enemy):
         motion, direction, seconds = self.playback(enemy)
-        index = min(self.frame_count(motion, direction) - 1, int(seconds * self.sample_fps + 1e-7))
-        return f"{motion}/{direction}", index
+        return f"{motion}/{direction}", self.frame_index(motion, direction, seconds)
+
+    def frame_index(self, motion, direction, seconds):
+        return min(self.frame_count(motion, direction) - 1, int(seconds * self.sample_fps + 1e-7))
 
     @staticmethod
     def part_clip(motion, direction):
@@ -210,7 +212,7 @@ class EnemySprite:
     def draw(self, enemy, x, foot, zoom, *, playback=None, shared_frame=False, prepared=None):
         motion, direction, seconds = playback if playback is not None else self.playback(enemy)
         name = f"{motion}/{direction}"
-        index = min(self.frame_count(motion, direction) - 1, int(seconds * self.sample_fps + 1e-7))
+        index = self.frame_index(motion, direction, seconds)
         scale = self.scale * zoom
         if self.part_counts:
             clip = self.part_clip(motion, direction)
