@@ -1,9 +1,10 @@
 """소형 근접·중형 사격·인간형 복합 교전. 거리 m·시간 초이며 창을 소유하지 않는다."""
 
 from dataclasses import dataclass
-from math import ceil, isfinite
+from math import ceil, hypot, isfinite
 
 from .geometry import Vec2, moving_circle_touches_polygon, segment_circle
+from .enemy_spacing import EnemySpacing
 
 
 @dataclass(frozen=True)
@@ -83,6 +84,14 @@ class EnemyProjectile:
     damage: int
 
 
+@dataclass(frozen=True, slots=True)
+class EnemyHit:
+    attacker_id: str
+    attack_kind: str
+    damage: int
+    direction: Vec2
+
+
 class EnemyEncounter:
     def __init__(self, settings, *, map_size_m, player_radius_m):
         self.settings = settings
@@ -118,11 +127,20 @@ class EnemyEncounter:
             self.enemies[row["id"]] = EncounterEnemy(row["id"], profile, position, profile.health)
         if not self.enemies:
             raise ValueError("교전에는 적이 한 기 이상 필요하다.")
+        self.spacing = EnemySpacing(self.enemies.values(), 2 * max(enemy.profile.radius_m for enemy in self.enemies.values()))
         self.projectiles = []
-        self.hits = []
+        self.hit_events = []
         self.elapsed_seconds = 0
         self.result = "running"
         self.shots_fired = 0
+
+    @property
+    def hits(self):
+        return [(hit.attacker_id, hit.damage) for hit in self.hit_events]
+
+    @property
+    def hit_directions(self):
+        return [hit.direction for hit in self.hit_events]
 
     def sync_health(self, health_by_id, player_health):
         for enemy_id, health in health_by_id.items():
@@ -178,25 +196,24 @@ class EnemyEncounter:
         """교전 종료 뒤에도 잔여 밀림·사망 표시만 진행한다. 공격·게임 시간은 멈춘다."""
         if not isfinite(seconds) or seconds < 0:
             raise ValueError("피격 표현 갱신은 0 이상의 유한한 초다.")
+        self.spacing = self.spacing.sync(self.enemies.values())
         for enemy in self.enemies.values():
             self._advance_reaction(enemy, seconds)
 
     def _move(self, enemy, movement):
         radius = enemy.profile.radius_m
-        candidate = enemy.position_m + movement
-        candidate = Vec2(max(radius, min(self.map_size_m - radius, candidate.x)),
-                         max(radius, min(self.map_size_m - radius, candidate.y)))
-        # 소수 적의 몸체만 순차 분리한다. 별도 공간 자료구조는 사용하지 않는다.
-        for other in self.enemies.values():
-            if not enemy.alive or other is enemy or not other.alive:
-                continue
-            offset = candidate - other.position_m
-            minimum = radius + other.profile.radius_m
-            if offset.length < minimum:
-                candidate = other.position_m + offset.normalized(Vec2(1, 0)) * minimum
-        candidate = Vec2(max(radius, min(self.map_size_m - radius, candidate.x)),
-                         max(radius, min(self.map_size_m - radius, candidate.y)))
-        enemy.travel_m += (candidate - enemy.position_m).length
+        maximum = self.map_size_m - radius
+        origin = enemy.position_m
+        candidate = Vec2(max(radius, min(maximum, origin.x + movement.x)),
+                         max(radius, min(maximum, origin.y + movement.y)))
+        if enemy.alive:
+            resolved = self.spacing.separate(enemy, candidate)
+            if resolved is not candidate:
+                candidate = Vec2(max(radius, min(maximum, resolved.x)), max(radius, min(maximum, resolved.y)))
+            self.spacing.moved(enemy, candidate)
+        dx, dy = candidate.x - origin.x, candidate.y - origin.y
+        distance = hypot(dx, dy)
+        enemy.travel_m += distance
         enemy.position_m = candidate
 
     def _begin_attack(self, enemy, kind):
@@ -207,16 +224,19 @@ class EnemyEncounter:
 
     def _think(self, enemy, seconds, player):
         profile = enemy.profile
-        delta = player - enemy.position_m
-        enemy.facing = delta.normalized(enemy.facing)
-        if profile.kind != "medium" and delta.length <= profile.melee_reach_m + self.player_radius_m:
+        dx, dy = player.x - enemy.position_m.x, player.y - enemy.position_m.y
+        distance = hypot(dx, dy)
+        if distance > 1e-9:
+            inverse = 1 / distance
+            enemy.facing = Vec2(dx * inverse, dy * inverse)
+        if profile.kind != "medium" and distance <= profile.melee_reach_m + self.player_radius_m:
             self._begin_attack(enemy, "melee")
             return
-        if profile.kind != "small" and delta.length <= profile.fire_range_m:
+        if profile.kind != "small" and distance <= profile.fire_range_m:
             self._begin_attack(enemy, "ranged")
             return
         self._move(enemy, enemy.facing * min(profile.speed_mps * seconds,
-                                           max(0, delta.length - profile.radius_m - self.player_radius_m)))
+                                           max(0, distance - profile.radius_m - self.player_radius_m)))
 
     def _advance_enemy(self, enemy, seconds, start, end):
         interrupts = enemy.knockback_interrupts and enemy.knockback_remaining_seconds > 0
@@ -236,7 +256,7 @@ class EnemyEncounter:
                                                           min(profile.speed_mps * seconds, error)))
         if enemy.phase == "active" and enemy.attack_kind == "melee" and not enemy.hit_player:
             if moving_circle_touches_polygon(start, end, self.player_radius_m, enemy.attack_polygon):
-                self.hits.append((enemy.enemy_id, profile.melee_damage))
+                self.hit_events.append(EnemyHit(enemy.enemy_id, "melee", profile.melee_damage, enemy.facing))
                 enemy.hit_player = True
         if enemy.phase == "move":
             return
@@ -260,7 +280,7 @@ class EnemyEncounter:
     def advance(self, seconds, previous_player_m, player_m):
         if not isfinite(seconds) or seconds < 0:
             raise ValueError("교전 갱신 시간은 0 이상의 유한한 초다.")
-        self.hits = []
+        self.hit_events = []
         if self.result != "running" or seconds == 0:
             return ()
         start, end = Vec2(*previous_player_m), Vec2(*player_m)
@@ -268,6 +288,7 @@ class EnemyEncounter:
             raise ValueError("플레이어 위치는 유한한 미터 좌표다.")
         count = max(1, ceil(seconds * 120))
         step = seconds / count
+        self.spacing = self.spacing.sync(self.enemies.values())
         for index in range(count):
             first = start + (end - start) * (index / count)
             last = start + (end - start) * ((index + 1) / count)
@@ -280,7 +301,7 @@ class EnemyEncounter:
                 target_end = first + (last - first) * fraction
                 if segment_circle(bullet.position_m - first, destination - target_end,
                                   Vec2(), self.player_radius_m + .35) is not None:
-                    self.hits.append((bullet.owner, bullet.damage))
+                    self.hit_events.append(EnemyHit(bullet.owner, "ranged", bullet.damage, bullet.direction))
                     continue
                 bullet.previous_m, bullet.position_m = bullet.position_m, destination
                 bullet.remaining_m -= distance
