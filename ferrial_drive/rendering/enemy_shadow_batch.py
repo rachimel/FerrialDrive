@@ -1,4 +1,4 @@
-"""근거리 적의 원본 정밀도 깊이 맵을 타일에 보관하고 지면 그림자를 묶어 그린다."""
+"""근거리 적의 지면 깊이 맵을 타일에 보관하고 그림자를 묶어 그린다."""
 
 from collections import OrderedDict
 import ctypes as ct

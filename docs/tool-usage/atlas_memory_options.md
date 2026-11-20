@@ -47,3 +47,13 @@ high 기본 이동 아틀라스에는 여전히 큰 RGBA 벡터 페이지가 있
 ## 에너지 R8에 대한 제약
 
 현재 입력은 RGB가 같지 않고 페이지 전체의 지배 채널도 없다. 알파 제거와 RGB 보존은 `max(sample(mask).rgb)`를 유지한다. 각 픽셀의 RGB max를 먼저 계산한 R8은 일반적으로 같지 않다. 인접 RGB가 `(1,0,0)`과 `(0,1,0)`이면 중간점의 기존 max는 0.5지만, 미리 max한 R8의 보간값은 1이다. 해당 방식을 무손실 절감으로 사용하지 않는다.
+
+## PBR 재질·코팅 축소
+
+높음·보통·낮음 품질 폴더의 Material·Coat 타일을 각 축 50%로 박스 필터링한다. 홀수 크기는 올림한다. 색상·노멀/에너지·벡터·깊이 페이지는 원본을 참조한다. 이 변환은 반사 특성의 공간 해상도를 낮춘다.
+
+```text
+python automate/run.py part-surface-downsample --profiles data/runtime/part_motion/player_pbr_24/profiles --output data/runtime/part_motion/player_pbr_24/profiles/material_coat_half_r01
+```
+
+Python에 NumPy와 Pillow가 필요하다. 출력에는 품질별 카탈로그와 재질·코팅 페이지, 변환한 채널의 GPU 논리 크기와 디스크 크기를 담은 `statistics.json`이 포함된다.

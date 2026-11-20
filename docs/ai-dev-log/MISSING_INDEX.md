@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [PBR 재질·코팅과 지면 그림자 반해상도](2026-11-21-pbr-material-coat-shadow-half.md) `[[FDLOG_MISSING_TIME:FDLOG-20261121-pbr-material-coat-shadow-half:U1-U3]]`은 재질·코팅과 그림자 요청의 정확한 시각이다. 검색 단서는 `Material이랑 Coat 50%`, `Shadow도 50%`, `적의 Shadow도`다.
+
 - [SMG 금속 명중에 사용자 OGG 바탕 레이어 추가](2026-11-18-smg-metal-ogg-base.md): `[[FDLOG_MISSING_TIME:FDLOG-20261118-smg-metal-ogg-base:scope]]` — 개별 요청 시각. 검색 단서: `bullet 효과음들 동시에`, `80퍼 정도 베이스`.
 
 - [사용자 조합 OGG로 검 금속 명중음 교체](2026-11-18-metal-hit-ogg.md): `[[FDLOG_MISSING_TIME:FDLOG-20261118-metal-hit-ogg:scope]]` — 개별 요청 시각. 검색 단서: `점진적 커밋 적용`, `내가 직접 조합한 사운드`.
