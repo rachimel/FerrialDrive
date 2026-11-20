@@ -98,6 +98,7 @@ class CombatInputTests(unittest.TestCase):
             probe.step(True)
             app.update(.1)
             activity = probe.report()["combat_activity"]
+            self.assertEqual(activity["movement_backend"], "python")
             self.assertEqual(activity["sampled_frames"], 2)
             self.assertEqual(activity["alive_min"], 0)
             self.assertEqual(activity["mean"]["alive_enemies"], .5)

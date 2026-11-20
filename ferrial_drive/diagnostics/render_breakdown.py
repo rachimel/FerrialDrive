@@ -115,6 +115,8 @@ class RenderBreakdown:
             for name in ("advance", "_think", "_move", "advance_reactions"):
                 if self.detailed:
                     self.method(encounter, name, "update.enemies." + name)
+            if self.detailed and hasattr(encounter, "_advance_enemies"):
+                self.method(encounter, "_advance_enemies", "update.enemies.movement_step")
             def sample_update(original):
                 def update(*args, **kwargs):
                     result = original(*args, **kwargs)
@@ -259,6 +261,7 @@ class RenderBreakdown:
         combat = None if encounter is None else {
             "sampled_frames": combat_frames, "sampling": "측정 구간 update 직후. 준비 프레임 제외.",
             "initial_enemies": len(encounter.enemies), "alive_min": self.combat_alive_min,
+            "movement_backend": "numba" if getattr(encounter, "movement_batch", None) is not None else "python",
             "mean": {key: self.combat_samples[key] / combat_frames if combat_frames else None
                      for key in ("alive_enemies", "enemy_projectiles", "player_projectiles")},
             "peak": dict(self.combat_peaks), "running_frames": self.combat_samples["running_frames"],

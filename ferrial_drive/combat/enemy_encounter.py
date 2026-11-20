@@ -368,6 +368,13 @@ class EnemyEncounter:
         else:
             enemy.phase, enemy.remaining_seconds = "move", 0
 
+    def _advance_enemies(self, step, start, end):
+        if self.movement_batch is not None:
+            self.movement_batch.advance(self, step, start, end)
+        else:
+            for enemy in self.enemies.values():
+                self._advance_enemy(enemy, step, start, end)
+
     def advance(self, seconds, previous_player_m, player_m):
         if not isfinite(seconds) or seconds < 0:
             raise ValueError("교전 갱신 시간은 0 이상의 유한한 초다.")
@@ -404,10 +411,6 @@ class EnemyEncounter:
                         and 0 <= destination.y <= self.map_size_m):
                     survivors.append(bullet)
             self.projectiles = survivors
-            if self.movement_batch is not None:
-                self.movement_batch.advance(self, step, first, last)
-            else:
-                for enemy in self.enemies.values():
-                    self._advance_enemy(enemy, step, first, last)
+            self._advance_enemies(step, first, last)
             self.elapsed_seconds += step
         return tuple(self.hits)
