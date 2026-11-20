@@ -1,5 +1,6 @@
 {
   "upper_lower": {
+    "pbr_lighting": "../../data/runtime/part_motion/player_pbr_24/lighting.json",
     "enabled": true,
     "catalog": "../../data/runtime/upper_lower/player_20261117_compact_r01/catalog.json",
     "follow": {

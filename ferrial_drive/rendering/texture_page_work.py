@@ -4,6 +4,7 @@ from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 import hashlib
+import mmap
 from pathlib import Path
 from threading import Lock
 
@@ -12,6 +13,27 @@ from .texture_codecs import KtxDecoder, unpack_payload
 
 
 DEFAULT_DECODE_WORKERS = 4
+
+
+class TexturePageArchive:
+    """완성된 페이지 묶음에서 독립적으로 압축된 바이트 범위를 읽는다."""
+
+    def __init__(self):
+        self.lock = Lock()
+        self.files = {}
+
+    def read(self, path, offset, length):
+        with self.lock:
+            view = self.files.get(path)
+            if view is None:
+                with path.open("rb") as stream:
+                    view = self.files[path] = mmap.mmap(stream.fileno(), 0, access=mmap.ACCESS_READ)
+        return view[offset:offset + length]
+
+    def close(self):
+        for view in self.files.values():
+            view.close()
+        self.files.clear()
 
 
 @dataclass(frozen=True)
@@ -27,13 +49,15 @@ class TexturePagePayload:
 class TexturePageWork:
     """한 페이지의 읽기·검증·해제를 소유한다. lock은 상태·결과 교환에만 사용한다."""
 
-    def __init__(self, page, directory, *, timings=None, ktx_library=None):
+    def __init__(self, page, directory, *, timings=None, ktx_library=None, archive=None):
         self.path = (Path(directory) / page["file"]).resolve()
         self.key = (self.path, page["sha256"])
         self.size = (page["width"], page["height"])
         self.codec = page["codec"]
         self.timings = timings or TimingRecorder(enabled=False)
         self.ktx_library = ktx_library
+        self.archive = archive
+        self.offset, self.length = page.get("offset"), page.get("length")
         self._lock = Lock()
         self._state = "pending"
         self._result = None
@@ -44,6 +68,11 @@ class TexturePageWork:
             return self._state
 
     def run(self):
+        for _ in self.steps():
+            pass
+
+    def steps(self):
+        """작은 페이지의 파일 읽기와 디코드를 각각 한 번씩 진행한다."""
         with self._lock:
             if self._state != "pending":
                 raise RuntimeError("같은 페이지 Work는 한 번만 실행한다.")
@@ -52,7 +81,20 @@ class TexturePageWork:
             if min(self.size) < 1:
                 raise ValueError("페이지 크기는 양수여야 한다.")
             with self.timings.scope("load.file_read"):
-                packed = self.path.read_bytes()
+                if self.offset is None:
+                    packed = self.path.read_bytes()
+                else:
+                    if self.offset < 0 or self.length is None or self.length < 1:
+                        raise ValueError("아틀라스 페이지 바이트 범위가 올바르지 않다.")
+                    if self.archive is not None:
+                        packed = self.archive.read(self.path, self.offset, self.length)
+                    else:
+                        with self.path.open("rb") as stream:
+                            stream.seek(self.offset)
+                            packed = stream.read(self.length)
+                    if len(packed) != self.length:
+                        raise ValueError(f"아틀라스 페이지 범위가 잘렸다: {self.path.name}")
+            yield
             with self.timings.scope("load.integrity"):
                 if hashlib.sha256(packed).hexdigest() != self.key[1]:
                     raise ValueError(f"아틀라스 파일 해시 불일치: {self.path.name}")
@@ -79,13 +121,15 @@ class TexturePageWork:
             return result
 
 
-def decoded_pages(pages, directory, *, workers=DEFAULT_DECODE_WORKERS, timings=None, ktx_library=None):
+def decoded_pages(pages, directory, *, workers=DEFAULT_DECODE_WORKERS, timings=None, ktx_library=None, executor=None):
     """요청 순서대로 전달한다. 진행·완료 대기 Work를 합쳐 workers개로 제한한다."""
     if type(workers) is not int or workers < 1:
         raise ValueError("페이지 작업자 수는 양수 정수여야 한다.")
     requests = iter(pages)
     pending = deque()
-    executor = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="fdrive-texture")
+    owned = executor is None
+    if owned:
+        executor = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="fdrive-texture")
 
     def submit_next():
         page = next(requests, None)
@@ -110,5 +154,6 @@ def decoded_pages(pages, directory, *, workers=DEFAULT_DECODE_WORKERS, timings=N
     finally:
         for _, future in pending:
             future.cancel()
-        executor.shutdown(wait=True, cancel_futures=True)
+        if owned:
+            executor.shutdown(wait=True, cancel_futures=True)
         pending.clear()

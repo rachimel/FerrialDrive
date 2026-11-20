@@ -11,15 +11,15 @@ _ACTIVE = ContextVar("fdrive_gpu_profile", default=None)
 # 현재 프로젝트가 사용하는 OpenGL <= 4.5 기능만 허용한다. 새 함수는 검토 후 추가한다.
 PROJECT_GL_FUNCTIONS = frozenset("""glActiveTexture glAttachShader glBegin glBeginQuery glBindBuffer glBindBufferBase glBindTexture
 glBlendEquationSeparate glBlendFuncSeparate glBufferData glBufferSubData glClearBufferData
-glClientWaitSync glCompileShader glCompressedTexImage2D glCopyBufferSubData glCreateProgram
+glClientWaitSync glCompileShader glCompressedTexImage2D glCompressedTexSubImage2D glCopyBufferSubData glCreateProgram
 glCreateShader glDeleteBuffers glDeleteProgram glDeleteQueries glDeleteShader glDeleteSync
 glDeleteTextures glDisable glDispatchCompute glDrawArraysIndirect glDrawArraysInstanced
 glEnable glEnd glEndQuery glFenceSync glFinish glFlush glGenBuffers glGenQueries glGenTextures
 glGetBufferSubData glGetError glGetInteger64v glGetIntegeri_v glGetIntegerv glGetProgramInfoLog
 glGetProgramiv glGetQueryiv glGetQueryObjectiv glGetQueryObjectui64v glGetShaderInfoLog
-glGetShaderiv glGetString glGetTexLevelParameteriv glGetUniformLocation glIsEnabled glLinkProgram
+glGetShaderiv glGetString glGetStringi glGetTexLevelParameteriv glGetUniformLocation glIsEnabled glLinkProgram
 glMemoryBarrier glPixelStorei glScissor glShaderSource glTexCoord2f glTexImage2D glTexParameteri
-glTexSubImage2D glUniform1f glUniform1i glUniform1ui glUniform2f glUniform4f glUniform4fv
+glTexStorage2D glTexSubImage2D glUniform1f glUniform1i glUniform1ui glUniform2f glUniform4f glUniform4fv
 glUseProgram glVertex2f glViewport
 """.split())
 
@@ -92,6 +92,7 @@ class Uhd630Profile:
 
     def wrap(self, name, function):
         checked = {"glShaderSource", "glTexImage2D", "glCompressedTexImage2D", "glTexSubImage2D",
+                   "glTexStorage2D", "glCompressedTexSubImage2D",
                    "glBufferData", "glDispatchCompute", "glActiveTexture", "glBindBufferBase",
                    "glGetIntegerv", "glGetInteger64v", "glGetIntegeri_v", "glTexParameteri"}
         if name not in checked:
@@ -107,8 +108,12 @@ class Uhd630Profile:
                 self.texture_size(args[3], args[4])
                 if name == "glCompressedTexImage2D" and args[2] not in (0x8E8C, 0x8E8D, 0x8E8E, 0x8E8F):
                     self.reject("프로필 밖 압축 텍스처 형식")
-            elif name == "glTexSubImage2D":
+            elif name == "glTexStorage2D":
+                self.texture_size(args[3], args[4])
+            elif name in ("glTexSubImage2D", "glCompressedTexSubImage2D"):
                 self.texture_size(args[2] + args[4], args[3] + args[5])
+                if name == "glCompressedTexSubImage2D" and args[6] not in (0x8E8C, 0x8E8D, 0x8E8E, 0x8E8F):
+                    self.reject("지원하지 않는 압축 텍스처 형식이다.")
             elif name == "glBufferData" and args[1] > self.caps[0x90DE]:
                 self.reject("단일 버퍼 128MiB 상한 초과")
             elif name == "glDispatchCompute" and any(value > 65535 for value in args):

@@ -1,5 +1,11 @@
 {
-  "rendering": {"backend": "auto"},
+  "rendering": {
+    "backend": "auto",
+    "sprite_scale": 1.25,
+    "shared_frame_distance_m": 16,
+    "enemy_sprites": "../../data/candidates/enemy_cc0_v1/runtime/enemy_sprites.json",
+    "enemy_part_sprites": "../../data/candidates/enemy_cc0_break_r1/runtime/enemy_parts.json"
+  },
   "knockback": {
     "duration_seconds": 0.12,
     "death_seconds": 0.22,

@@ -53,6 +53,10 @@ def renderer_info(pico):
                         bool(info.flags & pico.SDL_RENDERER_TARGETTEXTURE))
 
 
+def renderer_name(pico):
+    return renderer_info(pico).name
+
+
 class PicoCanvas:
     """한 프로세스의 렌더 스레드에서 사용한다. 에셋은 캔버스보다 먼저 닫는다."""
 

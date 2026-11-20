@@ -7,9 +7,11 @@ from pathlib import Path
 import tempfile
 
 
-TEXTURE_QUALITY_SCALES = {"high": 0.75, "medium": 0.5, "low": 0.25}
+TEXTURE_QUALITY_SCALES = {"high": 1.0, "medium": 0.75, "low": 0.5}
 SHADOW_QUALITY_SCALES = {"high": 0.5, "medium": 0.25, "low": 0.125}
 DEFAULT_TEXTURE_QUALITY = "low"
+UPSCALE_AA_MODES = ("off", "smaa")
+DEFAULT_UPSCALE_AA = "smaa"
 SCREEN_RESOLUTIONS = ((1280, 720), (1600, 900), (1920, 1080))
 DEFAULT_SETTINGS_PATH = Path(__file__).resolve().parents[1] / "data/settings/game_settings.json"
 
@@ -19,6 +21,8 @@ class GameSettings:
     texture_quality: str = DEFAULT_TEXTURE_QUALITY
     show_key_hints: bool = True
     screen_resolution: tuple[int, int] | None = None
+    effects_volume_percent: int = 100
+    upscale_aa: str = DEFAULT_UPSCALE_AA
 
     def __post_init__(self):
         if self.texture_quality not in TEXTURE_QUALITY_SCALES:
@@ -31,6 +35,10 @@ class GameSettings:
                 or any(type(value) is not int for value in self.screen_resolution)
                 or self.screen_resolution not in SCREEN_RESOLUTIONS):
             raise ValueError("화면 해상도는 1280×720, 1600×900, 1920×1080 중 하나다.")
+        if type(self.effects_volume_percent) is not int or not 0 <= self.effects_volume_percent <= 100:
+            raise ValueError("효과음 음량은 0~100의 정수여야 한다.")
+        if self.upscale_aa not in UPSCALE_AA_MODES:
+            raise ValueError("확대 안티앨리어싱은 off 또는 smaa여야 한다.")
 
     @property
     def texture_scale(self):
@@ -53,6 +61,8 @@ class GameSettingsStore:
             raise ValueError("게임 설정 파일의 형식이 올바르지 않다.")
         if "interface" in data and not isinstance(data["interface"], dict):
             raise ValueError("인터페이스 설정 형식이 올바르지 않다.")
+        if "audio" in data and not isinstance(data["audio"], dict):
+            raise ValueError("사운드 설정 형식이 올바르지 않다.")
         return data
 
     def load(self):
@@ -61,7 +71,9 @@ class GameSettingsStore:
         if isinstance(resolution, list):
             resolution = tuple(resolution)
         return GameSettings(data["graphics"].get("texture_quality", DEFAULT_TEXTURE_QUALITY),
-                            data.get("interface", {}).get("show_key_hints", True), resolution)
+                            data.get("interface", {}).get("show_key_hints", True), resolution,
+                            data.get("audio", {}).get("effects_volume_percent", 100),
+                            data["graphics"].get("upscale_aa", DEFAULT_UPSCALE_AA))
 
     def save(self, settings):
         if not isinstance(settings, GameSettings):
@@ -69,7 +81,9 @@ class GameSettingsStore:
         data = self._document()
         data["graphics"]["texture_quality"] = settings.texture_quality
         data["graphics"]["screen_resolution"] = settings.screen_resolution
+        data["graphics"]["upscale_aa"] = settings.upscale_aa
         data.setdefault("interface", {})["show_key_hints"] = settings.show_key_hints
+        data.setdefault("audio", {})["effects_volume_percent"] = settings.effects_volume_percent
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary = None
         try:
