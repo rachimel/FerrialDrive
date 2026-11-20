@@ -1,9 +1,9 @@
 """PBR 파츠 카탈로그와 방향별 프레임·코팅 메타데이터."""
 
 from collections import OrderedDict
-import json
 from pathlib import Path
 
+from .atlas_json import read_atlas_json
 from .part_motion_atlas import MAX_PARTS
 from .part_pbr import COAT_CHANNELS
 
@@ -14,7 +14,7 @@ class PartMotionCatalog:
         self.records = OrderedDict()
         self.max_records = max(2, max_records)
         self.source = Path(source).resolve()
-        self.data = json.loads(self.source.read_text(encoding="utf-8"))
+        self.data = read_atlas_json(self.source)
         if part_spaces:
             spaces = self.data.setdefault("part_spaces", {})
             for name, parts in part_spaces.items():
@@ -39,7 +39,7 @@ class PartMotionCatalog:
             index_path = (self.source.parent / coat_index).resolve()
             if not index_path.is_relative_to(self.source.parent):
                 raise ValueError("코팅 인덱스가 품질 폴더 밖에 있다.")
-            coat_data = json.loads(index_path.read_text(encoding="utf-8"))
+            coat_data = read_atlas_json(index_path)
             members = {path for row in self.data["motions"].values() for path in row.values()}
             if tuple(coat_data["channels"]) != COAT_CHANNELS or set(coat_data["members"]) != members:
                 raise ValueError("코팅 인덱스의 프레임 범위 또는 채널이 PBR 아틀라스와 다르다.")
@@ -66,12 +66,12 @@ class PartMotionCatalog:
         return path, data
 
     def _read_direction(self, relative, path):
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = read_atlas_json(path)
         if self.coat_members:
             coat_path = (self.coat_folder / self.coat_members[relative]).resolve()
             if not coat_path.is_relative_to(self.coat_folder):
                 raise ValueError("코팅 프레임이 코팅 폴더 밖에 있다.")
-            coat = json.loads(coat_path.read_text(encoding="utf-8"))
+            coat = read_atlas_json(coat_path)
             page = coat["page"]
             texture = (coat_path.parent / page["file"]).resolve()
             if not texture.is_relative_to(self.coat_folder):

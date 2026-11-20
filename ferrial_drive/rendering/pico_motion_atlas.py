@@ -6,18 +6,11 @@ from math import isfinite
 from pathlib import Path
 
 from ferrial_drive.diagnostics.texture_metrics import bind_gl
+from .atlas_json import read_atlas_json
 from .atlas_texture_cache import AtlasTextureCache, bind_atlas_textures
 from .gl_pass import TexturedQuadPass
 from .motion_vectors import EASING_CODES
 from .texture_page_work import DEFAULT_DECODE_WORKERS, decoded_pages
-
-try:
-    from orjson import loads as _decode_atlas_manifest
-except ModuleNotFoundError as error:
-    if error.name != "orjson":
-        raise
-    from json import loads as _decode_atlas_manifest
-
 
 ATLAS_SHADER = b'''#version 120
 uniform sampler2D artwork;
@@ -113,7 +106,7 @@ class PicoMotionAtlas:
             raise ValueError("페이지 작업자 수는 양수 정수여야 한다.")
         self.pico, self.source, self.cache = pico, Path(source).resolve(), cache
         with cache.timings.scope("load.atlas_manifest"):
-            self.data = _decode_atlas_manifest(self.source.read_bytes())
+            self.data = read_atlas_json(self.source)
         if self.data.get("version") != 1:
             raise ValueError("지원하지 않는 모션 아틀라스 규격이다.")
         if self.data.get("color_alpha_mode", "premultiplied") != "premultiplied":
