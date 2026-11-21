@@ -6,7 +6,8 @@
 
 ## 기획
 
-- [전투 프로토타입](unit-tests/combat_prototype.md): 도형 기체·적 한 기 교전·실행·검증 상태
+- [전투 테스트](../samples/combat_test_v1_5/README.md): 다수 적 교전 실행과 조작
+- [초기 1대1 전투 기록](unit-tests/combat_prototype.md): 도형 기체 교전 구현과 과거 검증 범위
 - [검 이동 Unit Test](unit-tests/sword_movement.md): 실제 검 장착 기체·1km 흙바닥·눈금·달리기/대시/부스트·그림자
 
 - [사전 PRD v0.1](Ferrial_Drive_PRE_PRD_v0.1.md): 현재 게임 설계·훈련 데모 범위·검토안·미정 사항

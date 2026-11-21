@@ -10,7 +10,7 @@ JRPG식 3/4 Top-Down 화면과 사전 렌더링한 2D 에셋을 사용한다.
 이동·UI 훈련장은 `tests/sword_movement_test.py`에서 이동·검 공격·표적 명중과 UI v2를 함께 확인한다. 게임 에셋 없는 공개 도형 시연은 `--demo`로 실행한다. [현재 범위와 조작](docs/unit-tests/ui_unit_test.md)을 따른다.
 
 - [사전 PRD](docs/Ferrial_Drive_PRE_PRD_v0.1.md): 게임 방향, 현재 결정한 규칙, 미정 사항
-- [전투 프로토타입](docs/unit-tests/combat_prototype.md): 도형 기체 1대1 교전·실행·조작·구현 및 검증 범위
+- [전투 테스트](samples/combat_test_v1_5/README.md): 다수 적 교전 실행·조작·검증 범위
 - [검 이동 Unit Test](docs/unit-tests/sword_movement.md): 검 장착 기체·1km 흙바닥·눈금·달리기/대시/부스트·그림자
 - [UI 작업 정리](docs/unit-tests/ui_checkpoint.md): 완료 범위·모듈 책임·미완료·다음 작업·검증 상태
 - [UI Unit Test 명세](docs/unit-tests/ui_unit_test.md): 현재 우선 검증할 두 장면·입력·HUD·애니메이션

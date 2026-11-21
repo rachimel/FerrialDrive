@@ -24,7 +24,7 @@ python Tools/profiler/run.py record --pid 12345 --duration 30
 ## 파일 실행과 함께 수집
 
 ```text
-python Tools/profiler/run.py record --target tests/combat_test.py --duration 30
+python Tools/profiler/run.py record --target tests/combat_test_v1_5.py --duration 30 -- --demo --mute
 python Tools/profiler/run.py record --python path/to/python.exe --target tests/sword_movement_test.py --duration 30 -- --frames 600
 ```
 

@@ -7,7 +7,6 @@ Pico2D가 설치된 Python으로 실행하거나 Unit Test Runner에서 파일�
 | `sword_movement_test.py` | 이동·검 4타·부스트·보간·훈련 표적·UI v2 |
 | `sword_movement_speed_test.py` | 동일 훈련장의 3배속 시험 |
 | `overdrive_rainbow_test.py` | 오버드라이브 기체 림·검 Trail·HUD의 무지개 순환 시험 |
-| `combat_test.py` | 기본 도형의 검/기관단총·적 한 기 교전·승패 |
 | `combat_test_v1_5.py` | 소형 22기·중형 6기·인간형 2기의 다수 교전·검 넉백·기존 플레이어/HUD 연결 |
 | `combat_test_v1_5_speed_test.py` | 같은 30기 교전에서 플레이어 이동·공격 전진 3배 |
 | `asset_loader_test.py` | 2D 에셋 툴 |

@@ -1,8 +1,8 @@
 # 전투 프로토타입
 
-상태: **임시 도형 1대1 전투·전투 생성 Trail 접촉 판정 구현 / 전투 자동 검사 51개 통과 / 4단 공격 정적 렌더 확인 / 실제 조작·사용감은 사용자 테스트 담당**.
+초기 도형 1대1 전투의 구현과 검증 기록이다. 현재 독립 실행과 조작은 [다수 적 전투 테스트](../../samples/combat_test_v1_5/README.md)를 따른다.
 
-정식 에셋 제작을 기다리지 않고 이동·회피·반격과 승패를 확인한다. 독립 실행 진입점은 `tests/combat_test.py`이며, 조작과 샘플 환경은 [샘플 안내](../../samples/combat_prototype/README.md)를 따른다. Runner가 소스를 실행하지 않고 `standalone`으로 판별하는 것을 확인했다. Runner GUI 드롭 자체는 이번 작업에서 조작하지 않았다.
+당시 전투 자동 검사 51개를 통과했고 4단 공격을 정적 렌더로 확인했다. 실제 조작과 사용감은 당시 사용자 확인 범위였다.
 
 ## 모듈 책임
 
@@ -13,8 +13,7 @@
 | `ferrial_drive/combat/simulation.py` | 입력 요청을 받아 고정 주기로 이동·충돌·공격·피해·승패 처리 |
 | `ferrial_drive/combat/application.py` | 실제 장치 입력·일시정지·포커스·재시작·HUD 상태 연결 |
 | `ferrial_drive/combat/view.py` | 월드→화면 투영·임시 도형·기존 HUD 표현 |
-| `tests/combat_test.py` | 실행 옵션·공통 실행부 연결 |
-| `samples/combat_prototype/` | 개인 에셋이 필요 없는 훈련장·임시 수치·실행 안내 |
+| `samples/combat_prototype/` | 자동 검사에서 사용하는 훈련장·임시 수치와 초기 조작 기록 |
 
 규칙 모듈은 Pico2D·UI·테스트·Tools를 import하지 않는다. 화면이 없는 본편 상태에서도 `CombatWorld`와 `CombatInput`을 사용한다. 기체·탄환·사거리는 월드 좌표로 계산하고 화면에서 Y축을 압축·반전한다. 카메라는 플레이어 중심이므로 기존 HUD의 중앙 플레이어 앵커를 유지한다. 적 HP는 유일한 적 한 기에 연결하며 일반적인 타겟 선택 기능은 아니다.
 
