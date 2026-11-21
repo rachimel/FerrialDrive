@@ -1,6 +1,6 @@
 """근거리 적의 표면 시트 기록과 공통 조명을 비교하는 렌더 경로."""
 
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 import ctypes as ct
 from dataclasses import dataclass, field
 
@@ -9,6 +9,7 @@ from .atlas_texture_cache import bind_atlas_textures
 from .enemy_part_batch import EnemyPartBatch, EnemyUpscaleScratch, SheetLayout, SheetTarget, UPSCALE_GUTTER
 from .gl_pass import TexturedQuadPass
 from .instance_texture_buffer import InstanceTextureBuffer
+from .keypose_sample_buffer import KeyposeSampleBuffer
 from .part_motion_atlas import frame_phase, frame_state
 from .part_painter import PartPainter
 from .part_pbr import PBR_FUNCTIONS, PBR_UNIFORMS
@@ -139,10 +140,13 @@ class DeferredGroup:
     coverage_tiles: list = field(default_factory=list)
     material_placements: list = field(default_factory=list)
     instance_range: tuple = (0, 0)
+    sample_cached_tiles: int = 0
 
 
 class EnemyDeferredPbr:
-    def __init__(self, pico, *, screen_depth=False, batch_upload=True):
+    def __init__(self, pico, *, screen_depth=False, batch_upload=True, cache_keypose_samples=False):
+        if cache_keypose_samples and not (screen_depth and batch_upload):
+            raise ValueError("키포즈 좌표 재사용에는 깊이 선행 패스와 공유 인스턴스 버퍼가 필요하다.")
         self.pico = pico
         self.parts = {}
         self.coverage = {}
@@ -151,6 +155,7 @@ class EnemyDeferredPbr:
             from .enemy_screen_depth import EnemyScreenDepth
             self.depth = EnemyScreenDepth(pico)
         self.instance_buffer = InstanceTextureBuffer(pico) if screen_depth and batch_upload else None
+        self.keypose_buffer = KeyposeSampleBuffer(pico) if cache_keypose_samples else None
         self.scratch = EnemyUpscaleScratch(pico)
         self.output = SheetTarget(pico)
         self.surfaces = SurfaceTargets(pico)
@@ -161,6 +166,7 @@ class EnemyDeferredPbr:
         self.surface_submits = self.light_submits = 0
         self.depth_submits = self.depth_bodies = self.depth_tested_tiles = 0
         self.instance_uploads = self.instance_upload_bytes = 0
+        self.keypose_samples = self.keypose_cached_tiles = 0
 
     @property
     def storage_bytes(self):
@@ -169,7 +175,8 @@ class EnemyDeferredPbr:
         return (self.surfaces.storage_bytes + sheet_bytes + sum(batch.table_bytes for batch in self.parts.values())
                 + (upscaler.aa.storage_bytes if upscaler is not None else 0)
                 + (self.depth.storage_bytes if self.depth is not None else 0)
-                + (self.instance_buffer.storage_bytes if self.instance_buffer is not None else 0))
+                + (self.instance_buffer.storage_bytes if self.instance_buffer is not None else 0)
+                + (self.keypose_buffer.storage_bytes if self.keypose_buffer is not None else 0))
 
     def _make_painter(self, resource, *, coverage=False):
         formats = {name: getattr(resource, name) for name in ("hermite_flow", "compact_depth")
@@ -178,6 +185,7 @@ class EnemyDeferredPbr:
             surface=True, pbr=True, deferred=not coverage, depth_coverage=coverage,
             screen_depth=self.depth is not None and not coverage,
             instance_table=self.instance_buffer is not None,
+            cache_keypose_samples=self.keypose_buffer is not None,
             coat=resource.catalog.coat_members is not None, instanced=True, **formats)
 
     def _batch(self, resource):
@@ -187,9 +195,9 @@ class EnemyDeferredPbr:
             self.parts[resource] = batch
         return self.parts[resource]
 
-    def _upload_instances(self, jobs):
+    def _upload_instances(self, jobs, *, cache_samples):
         values = []
-        for _, _, groups in jobs:
+        for _, resource, groups in jobs:
             for group in groups.values():
                 start = len(values) // 12
                 coverage, duplicates = {}, []
@@ -202,7 +210,15 @@ class EnemyDeferredPbr:
                 for tile, ((sheet, phase, first), material) in enumerate(
                         zip(group.instances, group.material_placements, strict=True)):
                     screen, z = coverage.get(tile, (NO_SCREEN_PLACEMENT, 0))
-                    values.extend((*screen, *sheet, phase, first, z, float(material[2] > 0)))
+                    placement = int(material[2] > 0)
+                    if cache_samples and placement and 0 < ct.c_float(phase).value < 1:
+                        count = sheet[2] * sheet[3] * resource.catalog.part_count
+                        if self.keypose_samples + count <= self.keypose_buffer.sample_limit:
+                            # 0은 깊이 검사 생략, 1은 직접 보간, 2 이상은 좌표 시작 인덱스다.
+                            placement = self.keypose_samples + 2
+                            self.keypose_samples += count
+                            group.sample_cached_tiles += 1
+                    values.extend((*screen, *sheet, phase, first, z, placement))
                 # 같은 포즈의 다른 화면 위치는 깊이만 기록하고 시트 슬롯을 공유한다.
                 for screen, phase, first, z in duplicates:
                     values.extend((*screen, *NO_SCREEN_PLACEMENT, phase, first, z, 0))
@@ -211,18 +227,22 @@ class EnemyDeferredPbr:
         self.instance_uploads = 1
         self.instance_upload_bytes = self.instance_buffer.storage_bytes
 
-    def _write_depth(self, jobs, viewport):
+    @staticmethod
+    def _depth_region(jobs, viewport):
         rectangles = [rect for _, _, groups in jobs for group in groups.values()
                       for rect, _, _ in group.coverage_instances]
         if len(rectangles) < 2:
-            return None, 0, 0
+            return None
         left = max(0, min(rect[0] for rect in rectangles))
         top = max(0, min(rect[1] for rect in rectangles))
         right = min(viewport.w, max(x + w for x, _, w, _ in rectangles))
         bottom = min(viewport.h, max(y + h for _, y, _, h in rectangles))
         if right <= left or bottom <= top:
-            return None, 0, 0
-        size = right - left, bottom - top
+            return None
+        return (left, top), (right - left, bottom - top)
+
+    def _write_depth(self, jobs, region):
+        (left, top), size = region
         clear = True
         for _, resource, groups in jobs:
             if not any(group.coverage_instances for group in groups.values()):
@@ -252,7 +272,7 @@ class EnemyDeferredPbr:
             self.depth_submits += sampler.submits - before[0]
             self.instance_uploads += sampler.instance_uploads - before[1]
             self.instance_upload_bytes += sampler.instance_upload_bytes - before[2]
-        return (self.depth.texture.value if self.depth_submits else None), left, top
+        return self.depth.texture.value if self.depth_submits else None
 
     def _resolve(self, resources, layout, target):
         sampler = self.lighting
@@ -281,6 +301,7 @@ class EnemyDeferredPbr:
         self.surface_submits = self.light_submits = 0
         self.depth_submits = self.depth_bodies = self.depth_tested_tiles = 0
         self.instance_uploads = self.instance_upload_bytes = 0
+        self.keypose_samples = self.keypose_cached_tiles = 0
         for resource in self.parts.keys() - {sprite.resource for sprite in sprites.values()}:
             self.parts.pop(resource).close()
             if resource in self.coverage:
@@ -359,14 +380,24 @@ class EnemyDeferredPbr:
             jobs.append((profile, r, groups))
         if not copies:
             return {}
+        depth_region = self._depth_region(jobs, viewport) if use_depth else None
         if self.instance_buffer is not None:
-            self._upload_instances(jobs)
-        depth_texture, depth_left, depth_top = self._write_depth(jobs, viewport) if use_depth else (None, 0, 0)
+            self._upload_instances(jobs, cache_samples=self.keypose_buffer is not None and depth_region is not None)
+        depth_texture = None
+        depth_left, depth_top = (0, 0)
+        if depth_region is not None:
+            depth_left, depth_top = depth_region[0]
+            keyposes = self.keypose_buffer.bind(self.lighting, self.keypose_samples) if self.keypose_buffer else nullcontext()
+            with keyposes:
+                depth_texture = self._write_depth(jobs, depth_region)
+                if self.keypose_samples:
+                    self.keypose_buffer.sync()
         target = self.scratch.native
         target.reserve(native_layout)
         self.surfaces.reserve(self.lighting, target.size)
         regions, clear = [], True
-        with render_target(p, target.texture):
+        keyposes = self.keypose_buffer.bind(self.lighting, self.keypose_samples) if self.keypose_buffer else nullcontext()
+        with render_target(p, target.texture), keyposes:
             for profile, r, groups in jobs:
                 batch = self._batch(r)
                 painter, sampler = batch.painter, batch.painter.sampler
@@ -397,10 +428,13 @@ class EnemyDeferredPbr:
                             sample_shadow=False, pose_table=table, screen_depth=depth_texture, **instance_options)
                         if depth_texture is not None:
                             self.depth_tested_tiles += sum(placement[2] > 0 for placement in group.material_placements)
+                            self.keypose_cached_tiles += group.sample_cached_tiles
                         regions.extend(group.regions)
                 self.surface_submits += sampler.submits - before[0]
                 self.instance_uploads += sampler.instance_uploads - before[1]
                 self.instance_upload_bytes += sampler.instance_upload_bytes - before[2]
+            if self.keypose_samples:
+                self.keypose_buffer.sync()
             self._resolve(resources, native_layout, target)
         if regions:
             self.output.reserve(output_layout)
@@ -424,6 +458,8 @@ class EnemyDeferredPbr:
             self.depth.close()
         if self.instance_buffer is not None:
             self.instance_buffer.close()
+        if self.keypose_buffer is not None:
+            self.keypose_buffer.close()
         self.lighting.close()
         self.surfaces.close()
         self.output.close()

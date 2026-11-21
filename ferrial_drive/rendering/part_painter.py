@@ -60,6 +60,30 @@ uniform float localPhase;
 uniform float partCount, effectOpacity, brightness, realtimeLight;
 uniform vec4 colorMix;
 varying vec2 texel;
+#ifdef CACHE_KEYPOSE_SAMPLES
+flat in ivec4 sampleTile;
+flat in int sampleBase;
+uniform vec4 sourceRect;
+#ifdef DEPTH_COVERAGE
+layout(std430,binding=KEYPOSE_BINDING) writeonly buffer KeyposeSamples { vec4 samples[]; };
+#else
+layout(std430,binding=KEYPOSE_BINDING) readonly buffer KeyposeSamples { vec4 samples[]; };
+#endif
+ivec2 samplePixel() {
+    return ivec2(gl_FragCoord.xy)-sampleTile.xy;
+}
+int sampleIndex(int part) {
+    ivec2 pixel=samplePixel();
+    return sampleBase+(pixel.y*sampleTile.z+pixel.x)*PARTS+part;
+}
+vec2 sampleTexel() {
+    if(sampleBase<0) return texel;
+    return sourceRect.xy+(vec2(samplePixel())+vec2(0.5))*sourceRect.zw/vec2(sampleTile.zw);
+}
+#define SAMPLE_TEXEL sampleTexel()
+#else
+#define SAMPLE_TEXEL texel
+#endif
 #ifdef READ_SCREEN_DEPTH
 uniform sampler2D screenDepth;
 flat in vec3 screenPlacement;
@@ -169,20 +193,38 @@ vec4 shadeSurface(vec4 c,vec4 field,vec3 properties,vec2 coat,vec2 pixel,float d
 #endif
     return c;
 }
-vec4 temporalSurface(int i,vec2 p,out float depth,out vec4 material,out vec3 properties,out vec2 coat) {
-    vec2 size=PART_FIELD(crops,i).zw,a=p,b=p;
-    float bank=PART_FIELD(shifts,i).w,t=localPhase;
-    depth=0.0;
-    material=vec4(0.0);
-    properties=vec3(0.0);
-    coat=vec2(0.0);
-    if(p.x<0.0||p.y<0.0||p.x>size.x||p.y>size.y) return vec4(0.0);
+bool outsideSample(vec2 p,vec2 size) {
+    return p.x<0.0||p.y<0.0||p.x>size.x||p.y>size.y;
+}
+vec4 keyposeSamplePoints(int i,vec2 p,vec2 size,float bank,float t) {
+    vec2 a=p,b=p;
     if(t>0.0&&t<1.0) {
         for(int step=0;step<16;++step) {
             a=(a+p-t*flowAt(a,PART_FIELD(forwardRects,i),bank,size,PART_FIELD(flowSteps,i).xy))*0.5;
             b=(b+p-(1.0-t)*flowAt(b,PART_FIELD(backwardRects,i),bank,size,PART_FIELD(flowSteps,i).zw))*0.5;
         }
     }
+    return vec4(a,b);
+}
+vec4 temporalSurface(int i,vec2 p,out float depth,out vec4 material,out vec3 properties,out vec2 coat) {
+    vec2 size=PART_FIELD(crops,i).zw;
+    float bank=PART_FIELD(shifts,i).w,t=localPhase;
+    depth=0.0;
+    material=vec4(0.0);
+    properties=vec3(0.0);
+    coat=vec2(0.0);
+    if(outsideSample(p,size)) return vec4(0.0);
+    vec4 points;
+#if defined(CACHE_KEYPOSE_SAMPLES) && !defined(DEPTH_COVERAGE)
+    if(sampleBase>=0) points=samples[sampleIndex(i)];
+    else points=keyposeSamplePoints(i,p,size,bank,t);
+#else
+    points=keyposeSamplePoints(i,p,size,bank,t);
+#ifdef CACHE_KEYPOSE_SAMPLES
+    if(sampleBase>=0) samples[sampleIndex(i)]=points;
+#endif
+#endif
+    vec2 a=points.xy,b=points.zw;
     if(t<=0.0) return surfaceAt(a,PART_FIELD(colorA,i),PART_FIELD(energyA,i),PART_FIELD(depthA,i),bank,size,i,false,depth,material,properties,coat);
     if(t>=1.0) return surfaceAt(b,PART_FIELD(colorB,i),PART_FIELD(energyB,i),PART_FIELD(depthB,i),bank,size,i,true,depth,material,properties,coat);
     vec4 ma,mb;
@@ -234,15 +276,36 @@ vec4 angleSurface(int i,vec2 target,int matrixIndex,out float targetDepth,out ve
 #endif
 #ifdef DEPTH_COVERAGE
 void main() {
+    vec2 point=SAMPLE_TEXEL;
+#ifdef CACHE_KEYPOSE_SAMPLES
+    bool opaque=false;
+#endif
     for(int i=0;i<PARTS;++i) {
         if(float(i)>=partCount) break;
+        vec4 crop=PART_FIELD(crops,i), shift=PART_FIELD(shifts,i);
+        vec2 p=point-crop.xy-shift.xy;
+#ifdef CACHE_KEYPOSE_SAMPLES
+        // 이미 가림이 확정된 픽셀의 나머지 파츠는 보간 좌표만 기록한다.
+        if(opaque) {
+            if(!outsideSample(p,crop.zw))
+                samples[sampleIndex(i)]=keyposeSamplePoints(i,p,crop.zw,shift.w,localPhase);
+            continue;
+        }
+#endif
         float depth;
         vec4 material;
         vec3 properties;
         vec2 coat;
-        if(temporalSurface(i,texel-PART_FIELD(crops,i).xy-PART_FIELD(shifts,i).xy,
-                           depth,material,properties,coat).a>=1.0) return;
+        if(temporalSurface(i,p,depth,material,properties,coat).a>=1.0) {
+#ifdef CACHE_KEYPOSE_SAMPLES
+            if(sampleBase>=0) { opaque=true; continue; }
+#endif
+            return;
+        }
     }
+#ifdef CACHE_KEYPOSE_SAMPLES
+    if(opaque) return;
+#endif
     discard;
 }
 #else
@@ -292,7 +355,7 @@ void main() {
                 depth=(za<zb?za:zb)+(upper?waistDepthShift:0.0);
         }
 #else
-        vec4 c=temporalSurface(i,texel-PART_FIELD(crops,i).xy-PART_FIELD(shifts,i).xy,depth,material,properties,coat);
+        vec4 c=temporalSurface(i,SAMPLE_TEXEL-PART_FIELD(crops,i).xy-PART_FIELD(shifts,i).xy,depth,material,properties,coat);
         depth+=PART_FIELD(shifts,i).z;
 #endif
 #ifdef PBR
@@ -401,7 +464,7 @@ class PartPainter:
 
     def __init__(self, pico, *, angular=False, part_count=MAX_PARTS, paged=False, frame_crop=False, surface=False,
                  pbr=False, coat=False, instanced=False, deferred=False, depth_coverage=False,
-                 screen_depth=False, instance_table=False):
+                 screen_depth=False, instance_table=False, cache_keypose_samples=False):
         self.pico = pico
         self.paged = paged
         self.frame_crop = frame_crop
@@ -450,6 +513,9 @@ class PartPainter:
         if screen_depth:
             defines += "\n#define READ_SCREEN_DEPTH"
             uniforms.append("screenDepth")
+        if cache_keypose_samples:
+            from .keypose_sample_buffer import KEYPOSE_SAMPLE_BINDING
+            defines += f"\n#define CACHE_KEYPOSE_SAMPLES\n#define KEYPOSE_BINDING {KEYPOSE_SAMPLE_BINDING}"
         shader = PART_SHADER.replace(b"#version 120", defines.encode(), 1)
         shader = shader.replace(b"PART_LIMIT", str(part_count).encode())
         shader = shader.replace(b"PAGE_SAMPLERS", "\n".join(declarations).encode())
@@ -479,6 +545,8 @@ class PartPainter:
         sampler_options = {"screen_depth": True} if depth_coverage or screen_depth else {}
         if instance_table:
             sampler_options.update(instance_table=True, coverage_instances=depth_coverage)
+        if cache_keypose_samples:
+            sampler_options["cache_keypose_samples"] = True
         self.sampler = sampler_type(pico, fragment_shader=shader, **sampler_options,
             extra_uniforms=tuple(name + "[0]" for name in self.arrays) +
             tuple(uniforms) + ("bankData[0]", "energyTint", "rimLight", "localPhase", "partCount", "effectOpacity",

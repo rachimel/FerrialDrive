@@ -28,6 +28,10 @@ uniform vec2 depthOrigin;
 uniform vec4 screenPlacements[QUAD_LIMIT];
 flat out vec3 screenPlacement;
 #endif
+#ifdef CACHE_KEYPOSE_SAMPLES
+flat out ivec4 sampleTile;
+flat out int sampleBase;
+#endif
 out vec2 texel;
 out float localPhase;
 flat out int pairIndex;
@@ -47,7 +51,14 @@ void main() {
     screenPlacement=vec3(0.0,0.0,pose.z);
 #else
     vec4 dest=sheetRect;
-    screenPlacement=vec3(screenRect.xy-sheetRect.xy-depthOrigin,screenDepthReady!=0?pose.z*pose.w:0.0);
+    screenPlacement=vec3(screenRect.xy-sheetRect.xy-depthOrigin,screenDepthReady!=0&&pose.w>0.0?pose.z:0.0);
+#endif
+#ifdef CACHE_KEYPOSE_SAMPLES
+    sampleTile=ivec4(dest);
+    sampleBase=int(pose.w)-2;
+#ifndef COVERAGE_INSTANCES
+    if(screenDepthReady==0) sampleBase=-1;
+#endif
 #endif
     vec2 pos=dest.xy+corner*dest.zw;
 #else
@@ -86,8 +97,9 @@ void main() {
 
 class InstancedQuads(SdlOpenGLPass):
     def __init__(self, pico, *, fragment_shader, extra_uniforms, per_instance_source=False, tile_placements=False,
-                 screen_depth=False, instance_table=False, coverage_instances=False):
-        fragment = fragment_shader.replace(b"#version 120", b"#version 140", 1)
+                 screen_depth=False, instance_table=False, coverage_instances=False, cache_keypose_samples=False):
+        version = b"#version 430 compatibility" if cache_keypose_samples else b"#version 140"
+        fragment = fragment_shader.replace(b"#version 120", version, 1)
         defines = b""
         if per_instance_source or tile_placements:
             defines += b"\n#define SOURCE_PER_INSTANCE"
@@ -101,7 +113,9 @@ class InstancedQuads(SdlOpenGLPass):
             if coverage_instances:
                 defines += b"\n#define COVERAGE_INSTANCES"
             extra_uniforms = (*extra_uniforms, "instanceTable", "instanceStart", "depthOrigin", "screenDepthReady")
-        vertex = VERTEX.replace(b"#version 140", b"#version 140" + defines, 1)
+        if cache_keypose_samples:
+            defines += b"\n#define CACHE_KEYPOSE_SAMPLES"
+        vertex = VERTEX.replace(b"#version 140", version + defines, 1)
         super().__init__(pico, vertex_shader=vertex, fragment_shader=fragment,
                          extra_uniforms=(*extra_uniforms, "destinations[0]", "poseTimes[0]", "sources[0]",
                                          "sourceRect", "screenTransform", "anchorScale"))

@@ -329,22 +329,24 @@ class EnemyBatchGpuTests(unittest.TestCase):
         baseline = EnemyDeferredPbr(self.pico)
         uniforms = EnemyDeferredPbr(self.pico, screen_depth=True, batch_upload=False)
         experiment = EnemyDeferredPbr(self.pico, screen_depth=True)
-        for renderer in (baseline, uniforms, experiment):
+        cached = EnemyDeferredPbr(self.pico, screen_depth=True, cache_keypose_samples=True)
+        for renderer in (baseline, uniforms, experiment, cached):
             self.addCleanup(renderer.close)
 
         def draw(renderer, *, behind_only=False):
             records = renderer.prepare(requests, self.sprites, .7, body_depth_ranks=ranks)
             self.assertEqual(len(records), len(ranks))
-            renderer.copy(records["behind"])
-            if not behind_only:
-                renderer.copy(records["front"])
-                if "reused" in ranks:
-                    renderer.copy(records["reused"])
+            for enemy_id in sorted(ranks, key=ranks.get, reverse=True):
+                if not behind_only or enemy_id == "behind":
+                    renderer.copy(records[enemy_id])
 
         reference = self.capture(lambda: draw(baseline))
         result = self.capture(lambda: draw(experiment))
         np.testing.assert_array_equal(reference, result)
         np.testing.assert_array_equal(self.capture(lambda: draw(uniforms)), result)
+        np.testing.assert_array_equal(self.capture(lambda: draw(cached)), result)
+        self.assertEqual(cached.keypose_cached_tiles, 2)
+        self.assertGreater(cached.keypose_buffer.storage_bytes, 16)
         self.assertEqual((experiment.depth_submits, experiment.depth_bodies, experiment.depth_tested_tiles), (1, 2, 2))
         self.assertEqual((uniforms.instance_uploads, uniforms.instance_upload_bytes), (6, 192))
         self.assertEqual((experiment.instance_uploads, experiment.instance_upload_bytes), (1, 96))
@@ -360,8 +362,24 @@ class EnemyBatchGpuTests(unittest.TestCase):
         ranks["reused"] = 3
         result = self.capture(lambda: draw(experiment))
         np.testing.assert_array_equal(self.capture(lambda: draw(uniforms)), result)
+        np.testing.assert_array_equal(self.capture(lambda: draw(cached)), result)
+        self.assertEqual(cached.keypose_cached_tiles, 1)
         self.assertEqual((experiment.depth_bodies, experiment.depth_tested_tiles), (3, 1))
         self.assertEqual((experiment.instance_uploads, experiment.instance_upload_bytes), (1, 144))
+
+        requests["small"] = [("behind", "move", "0", .18, 12, 230)]
+        requests["medium"] = [("front", "attack", "4", .500012, 21, 230)]
+        del ranks["reused"]
+        result = self.capture(lambda: draw(experiment))
+        # 클리핑된 쿼드의 픽셀 중심을 두 패스에서 같게 계산할 때 최종 RGBA8에 반올림 차이가 날 수 있다.
+        np.testing.assert_allclose(self.capture(lambda: draw(cached)), result, rtol=0, atol=1)
+        self.assertEqual(cached.keypose_cached_tiles, 2)
+
+        del requests["medium"]
+        del ranks["front"]
+        result = self.capture(lambda: draw(experiment))
+        np.testing.assert_array_equal(self.capture(lambda: draw(cached)), result)
+        self.assertEqual(cached.keypose_cached_tiles, 0)
 
     def test_deferred_box_mask_submits_both_profiles_once(self):
         import numpy as np

@@ -35,6 +35,7 @@ class EncounterView:
         self.deferred_enemy_enabled = False
         self.deferred_enemy_screen_depth = False
         self.deferred_enemy_batch_upload = True
+        self.deferred_enemy_cache_keypose_samples = False
         self.deferred_pbr = self.deferred_box_shadows = None
         self.show_enemy_labels = False
 
@@ -82,11 +83,13 @@ class EncounterView:
             if self.deferred_enemy_screen_depth:
                 self.primitives.stats.update(deferred_depth_submits=0, deferred_depth_bodies=0,
                                              deferred_depth_tested_tiles=0, deferred_depth_bytes=0,
-                                             deferred_instance_uploads=0, deferred_instance_upload_bytes=0)
+                                             deferred_instance_uploads=0, deferred_instance_upload_bytes=0,
+                                             deferred_keypose_cached_tiles=0, deferred_keypose_buffer_bytes=0)
             else:
                 for key in ("submits", "bodies", "tested_tiles", "bytes"):
                     self.primitives.stats.pop("deferred_depth_" + key, None)
-                for key in ("deferred_instance_uploads", "deferred_instance_upload_bytes"):
+                for key in ("deferred_instance_uploads", "deferred_instance_upload_bytes",
+                            "deferred_keypose_cached_tiles", "deferred_keypose_buffer_bytes"):
                     self.primitives.stats.pop(key, None)
             self.primitives.stats["enemy_motions"] = {}
             self._draw(encounter, flashes, window_size, shadow_opacity, shadow_softness_pixels,
@@ -202,14 +205,16 @@ class EncounterView:
         if self.deferred_enemy_enabled and body_requests:
             screen_depth = self.deferred_enemy_screen_depth
             batch_upload = screen_depth and self.deferred_enemy_batch_upload
+            cache_samples = batch_upload and self.deferred_enemy_cache_keypose_samples
             current = self.deferred_pbr
-            if current is not None and ((current.depth is not None, current.instance_buffer is not None)
-                                        != (screen_depth, batch_upload)):
+            if current is not None and ((current.depth is not None, current.instance_buffer is not None,
+                                         current.keypose_buffer is not None) != (screen_depth, batch_upload, cache_samples)):
                 self.deferred_pbr.close()
                 self.deferred_pbr = None
             if self.deferred_pbr is None:
                 from ferrial_drive.rendering.enemy_deferred_pbr import EnemyDeferredPbr
-                self.deferred_pbr = EnemyDeferredPbr(self.renderer.pico, screen_depth=screen_depth, batch_upload=batch_upload)
+                self.deferred_pbr = EnemyDeferredPbr(self.renderer.pico, screen_depth=screen_depth,
+                    batch_upload=batch_upload, cache_keypose_samples=cache_samples)
             ranks = {row[2].enemy_id: len(placed) - index for index, row in enumerate(placed)} if screen_depth else None
             deferred = self.deferred_pbr.prepare(body_requests, self.sprites, zoom, body_depth_ranks=ranks)
             r.stats["deferred_bodies"] = len(deferred)
@@ -222,7 +227,10 @@ class EncounterView:
                                deferred_depth_tested_tiles=self.deferred_pbr.depth_tested_tiles,
                                deferred_depth_bytes=self.deferred_pbr.depth.storage_bytes,
                                deferred_instance_uploads=self.deferred_pbr.instance_uploads,
-                               deferred_instance_upload_bytes=self.deferred_pbr.instance_upload_bytes)
+                               deferred_instance_upload_bytes=self.deferred_pbr.instance_upload_bytes,
+                               deferred_keypose_cached_tiles=self.deferred_pbr.keypose_cached_tiles,
+                               deferred_keypose_buffer_bytes=(self.deferred_pbr.keypose_buffer.storage_bytes
+                                                             if cache_samples else 0))
         for kind, requests in body_requests.items():
             if deferred:
                 requests = [request for request in requests if request[0] not in deferred]
