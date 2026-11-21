@@ -18,7 +18,8 @@ glEnable glEnd glEndQuery glFenceSync glFinish glFlush glGenBuffers glGenQueries
 glGetBufferSubData glGetError glGetInteger64v glGetIntegeri_v glGetIntegerv glGetProgramInfoLog
 glGetProgramiv glGetQueryiv glGetQueryObjectiv glGetQueryObjectui64v glGetShaderInfoLog
 glGetShaderiv glGetString glGetStringi glGetTexLevelParameteriv glGetUniformLocation glIsEnabled glLinkProgram
-glMemoryBarrier glPixelStorei glScissor glShaderSource glTexCoord2f glTexImage2D glTexParameteri
+glMemoryBarrier glPixelStorei glPopAttrib glPopClientAttrib glPushAttrib glPushClientAttrib
+glScissor glShaderSource glTexCoord2f glTexImage2D glTexParameteri
 glTexStorage2D glTexSubImage2D glUniform1f glUniform1i glUniform1ui glUniform2f glUniform4f glUniform4fv
 glUseProgram glVertex2f glViewport
 """.split())

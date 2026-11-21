@@ -123,6 +123,60 @@ class PrimitiveSoftwareTests(PrimitiveBatchChecks, unittest.TestCase):
 class PrimitiveGpuTests(PrimitiveBatchChecks, unittest.TestCase):
     driver = "windows"
 
+    def test_native_submit_restores_blend_clip_and_unpack_after_upload_failure(self):
+        from ferrial_drive.diagnostics.gpu_profile import bind_gl
+
+        native = self.batch("instanced").native
+        p = self.pico
+        p.SDL_RenderFlush(p.renderer)
+        gen = bind_gl(p, "glGenBuffers", None, [ct.c_int, ct.c_void_p])
+        delete = bind_gl(p, "glDeleteBuffers", None, [ct.c_int, ct.c_void_p])
+        error = bind_gl(p, "glGetError", ct.c_uint, [])
+        unpack_buffer = ct.c_uint()
+        gen(1, ct.byref(unpack_buffer))
+        keys = (0x0CF5, 0x0CF2, 0x0CF3, 0x0CF4, 0x0CF0)
+
+        def state():
+            values = tuple(native.integer(key) for key in
+                           (*keys, 0x88EF, 0x84E0, 0x8B8D, 0x80C9, 0x80C8, 0x80CB, 0x80CA, 0x8009, 0x883D))
+            return (values, native.integer(0x0BA2, 4), native.integer(0x0C10, 4),
+                    native.glIsEnabled(0x0BE2), native.glIsEnabled(0x0C11))
+
+        original = state()
+        try:
+            native.glBlendFuncSeparate(1, 0, 0, 1)
+            native.glBlendEquationSeparate(0x800A, 0x800B)
+            native.glDisable(0x0BE2)
+            native.glEnable(0x0C11)
+            native.glScissor(4, 6, 80, 87)
+            native.glActiveTexture(0x84C1)
+            native.glBindBuffer(0x88EC, unpack_buffer.value)
+            for key, value in zip(keys, (8, 7, 2, 1, 1)):
+                native.glPixelStorei(key, value)
+            before = state()
+            data = (ct.c_float * 12)(5, 5, 30, 30, 1, 1, 1, 1)
+            # SDL 명령을 비운 뒤의 외부 GL 상태를 검증한다.
+            with patch.object(p, "SDL_RenderDrawPoint"), patch.object(p, "SDL_RenderFlush"):
+                self.assertEqual(native.render(data, 1, 1), 1)
+                self.assertEqual(state(), before)
+                with patch.object(native, "glTexSubImage2D", side_effect=RuntimeError("도형 업로드 중단")):
+                    with self.assertRaisesRegex(RuntimeError, "도형 업로드 중단"):
+                        native.render(data, 1, 1)
+                self.assertEqual(state(), before)
+                self.assertEqual(error(), 0)
+        finally:
+            values, _, clip, blend, clipped = original
+            for key, value in zip(keys, values):
+                native.glPixelStorei(key, value)
+            native.glBindBuffer(0x88EC, values[5])
+            native.glActiveTexture(values[6])
+            native.glBlendFuncSeparate(*values[8:12])
+            native.glBlendEquationSeparate(*values[12:14])
+            (native.glEnable if blend else native.glDisable)(0x0BE2)
+            (native.glEnable if clipped else native.glDisable)(0x0C11)
+            native.glScissor(*clip)
+            delete(1, ct.byref(unpack_buffer))
+
     def test_texture_height_limit_preserves_all_chunks_in_order(self):
         batch = self.batch("instanced")
         images = []

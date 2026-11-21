@@ -76,43 +76,55 @@ class PrimitiveInstances(SdlOpenGLPass):
             'glTexSubImage2D': (None, [uint, integer, integer, integer, integer, integer, uint, uint, pointer]),
             'glDrawArraysInstanced': (None, [uint, integer, integer, integer]),
             'glPixelStorei': (None, [uint, integer]), 'glBindBuffer': (None, [uint, uint]),
+            'glPushAttrib': (None, [uint]), 'glPopAttrib': (None, []),
+            'glPushClientAttrib': (None, [uint]), 'glPopClientAttrib': (None, []),
         }
         for name, (result, arguments) in signatures.items():
             setattr(self, name, bind_gl(self.pico, name, result, arguments))
+
+    @contextmanager
+    def _preserve_color(self):
+        # 이 도형 제출은 현재 가위 영역을 사용하며 변경하지 않는다.
+        self.glPushAttrib(0x00004000)  # GL_COLOR_BUFFER_BIT
+        try:
+            yield
+        finally:
+            self.glPopAttrib()
+
+    @contextmanager
+    def _packed_float_rows(self):
+        self.glPushClientAttrib(0x00000001)  # GL_CLIENT_PIXEL_STORE_BIT
+        try:
+            self.glBindBuffer(0x88EC, 0)
+            for key, value in ((0x0CF5, 4), (0x0CF2, 0), (0x0CF3, 0), (0x0CF4, 0), (0x0CF0, 0)):
+                self.glPixelStorei(key, value)
+            yield
+        finally:
+            self.glPopClientAttrib()
 
     def render(self, data, count, capacity, *, vertices=4, primitive=0x0005, instances_per_row=1):
         if not count:
             return 0
         capacity = min(capacity, self.max_rows)
-        with self.batch():
-            keys = (0x0CF5, 0x0CF2, 0x0CF3, 0x0CF4)
-            unpack, buffer = tuple(self.integer(key) for key in keys), self.integer(0x88EF)
-            try:
-                self.glBindBuffer(0x88EC, 0)
-                for key, value in zip(keys, (4, 0, 0, 0)):
-                    self.glPixelStorei(key, value)
-                if not self.texture:
-                    texture = ct.c_uint()
-                    self.glGenTextures(1, ct.byref(texture))
-                    self.texture = texture.value
-                self.glBindTexture(0x0DE1, self.texture)
-                if capacity > self.capacity:
-                    self.glTexParameteri(0x0DE1, 0x2801, 0x2600)
-                    self.glTexParameteri(0x0DE1, 0x2800, 0x2600)
-                    self.glTexImage2D(0x0DE1, 0, 0x8814, 3, capacity, 0, 0x1908, 0x1406, None)
-                    self.capacity = capacity
-                sx, sy = ct.c_float(), ct.c_float()
-                self.pico.SDL_RenderGetScale(self.pico.renderer, ct.byref(sx), ct.byref(sy))
-                self.glUniform1i(self.uniforms['instances'], 0)
-                self.glUniform4f(self.uniforms['transform'], *self.viewport[:2], sx.value, sy.value)
-                for start in range(0, count, capacity):
-                    rows = min(count - start, capacity)
-                    self.glTexSubImage2D(0x0DE1, 0, 0, 0, 3, rows, 0x1908, 0x1406, ct.byref(data, start * 48))
-                    self.glDrawArraysInstanced(primitive, 0, vertices, rows * instances_per_row)
-            finally:
-                for key, value in zip(keys, unpack):
-                    self.glPixelStorei(key, value)
-                self.glBindBuffer(0x88EC, buffer)
+        with self.batch(preserve_raster=self._preserve_color), self._packed_float_rows():
+            if not self.texture:
+                texture = ct.c_uint()
+                self.glGenTextures(1, ct.byref(texture))
+                self.texture = texture.value
+            self.glBindTexture(0x0DE1, self.texture)
+            if capacity > self.capacity:
+                self.glTexParameteri(0x0DE1, 0x2801, 0x2600)
+                self.glTexParameteri(0x0DE1, 0x2800, 0x2600)
+                self.glTexImage2D(0x0DE1, 0, 0x8814, 3, capacity, 0, 0x1908, 0x1406, None)
+                self.capacity = capacity
+            sx, sy = ct.c_float(), ct.c_float()
+            self.pico.SDL_RenderGetScale(self.pico.renderer, ct.byref(sx), ct.byref(sy))
+            self.glUniform1i(self.uniforms['instances'], 0)
+            self.glUniform4f(self.uniforms['transform'], *self.viewport[:2], sx.value, sy.value)
+            for start in range(0, count, capacity):
+                rows = min(count - start, capacity)
+                self.glTexSubImage2D(0x0DE1, 0, 0, 0, 3, rows, 0x1908, 0x1406, ct.byref(data, start * 48))
+                self.glDrawArraysInstanced(primitive, 0, vertices, rows * instances_per_row)
         return (count + capacity - 1) // capacity
 
     def close(self):

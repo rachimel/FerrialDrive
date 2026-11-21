@@ -58,7 +58,22 @@ class SdlOpenGLPass:
         return tuple(value) if count > 1 else value[0]
 
     @contextmanager
-    def batch(self):
+    def _preserve_blend_and_clip(self):
+        factors = tuple(self.integer(key) for key in (0x80C9, 0x80C8, 0x80CB, 0x80CA))
+        equations = self.integer(0x8009), self.integer(0x883D)
+        blend, clipped = self.glIsEnabled(0x0BE2), self.glIsEnabled(0x0C11)
+        scissor = self.integer(0x0C10, 4)
+        try:
+            yield
+        finally:
+            self.glBlendFuncSeparate(*factors)
+            self.glBlendEquationSeparate(*equations)
+            (self.glEnable if blend else self.glDisable)(0x0BE2)
+            (self.glEnable if clipped else self.glDisable)(0x0C11)
+            self.glScissor(*scissor)
+
+    @contextmanager
+    def batch(self, *, preserve_raster=None):
         if self.depth:
             self.depth += 1
             try:
@@ -70,13 +85,8 @@ class SdlOpenGLPass:
         # SDL의 지연된 viewport/clip 상태를 화면 밖 점으로 먼저 확정한다.
         p.SDL_RenderDrawPoint(p.renderer, -1000000, -1000000)
         p.SDL_RenderFlush(p.renderer)
-        old = {name: self.integer(enum) for name, enum in
-               (('program', 0x8B8D), ('active', 0x84E0), ('src', 0x80C9), ('dst', 0x80C8),
-                ('src_alpha', 0x80CB), ('dst_alpha', 0x80CA), ('equation', 0x8009), ('equation_alpha', 0x883D))}
-        old['viewport'], old['scissor'] = self.integer(0x0BA2, 4), self.integer(0x0C10, 4)
-        old['blend'], old['clipped'] = self.glIsEnabled(0x0BE2), self.glIsEnabled(0x0C11)
-        self.glActiveTexture(0x84C0)
-        old['texture'] = self.integer(0x8069)
+        program, active = self.integer(0x8B8D), self.integer(0x84E0)
+        viewport = self.integer(0x0BA2, 4)
         width, height = ct.c_int(), ct.c_int()
         target = p.SDL_GetRenderTarget(p.renderer)
         if target:
@@ -85,30 +95,27 @@ class SdlOpenGLPass:
             p.SDL_GetRendererOutputSize(p.renderer, ct.byref(width), ct.byref(height))
         self.output_size = width.value, height.value
         self.target_flip = -1 if target else 1
-        viewport = old['viewport']
         self.viewport = (viewport[0], height.value - viewport[1] - viewport[3] if not target else viewport[1],
                          viewport[2], viewport[3])
-        self.depth = 1
-        try:
-            self.glUseProgram(self.program)
-            self.glEnable(0x0BE2)
-            self.glBlendEquationSeparate(0x8006, 0x8006)
-            self.glBlendFuncSeparate(0x0302, 0x0303, 1, 0x0303)
-            self.glViewport(0, 0, width.value, height.value)
-            self.glUniform2f(self.uniforms['outputSize'], width.value, height.value)
-            self.glUniform1f(self.uniforms['targetFlip'], self.target_flip)
-            yield
-        finally:
-            self.depth = 0
-            self.glUseProgram(old['program'])
-            self.glBindTexture(0x0DE1, old['texture'])
-            self.glActiveTexture(old['active'])
-            self.glBlendFuncSeparate(old['src'], old['dst'], old['src_alpha'], old['dst_alpha'])
-            self.glBlendEquationSeparate(old['equation'], old['equation_alpha'])
-            (self.glEnable if old['blend'] else self.glDisable)(0x0BE2)
-            (self.glEnable if old['clipped'] else self.glDisable)(0x0C11)
-            self.glScissor(*old['scissor'])
-            self.glViewport(*old['viewport'])
+        with (preserve_raster or self._preserve_blend_and_clip)():
+            self.glActiveTexture(0x84C0)
+            texture = self.integer(0x8069)
+            self.depth = 1
+            try:
+                self.glUseProgram(self.program)
+                self.glEnable(0x0BE2)
+                self.glBlendEquationSeparate(0x8006, 0x8006)
+                self.glBlendFuncSeparate(0x0302, 0x0303, 1, 0x0303)
+                self.glViewport(0, 0, width.value, height.value)
+                self.glUniform2f(self.uniforms['outputSize'], width.value, height.value)
+                self.glUniform1f(self.uniforms['targetFlip'], self.target_flip)
+                yield
+            finally:
+                self.depth = 0
+                self.glUseProgram(program)
+                self.glBindTexture(0x0DE1, texture)
+                self.glActiveTexture(active)
+                self.glViewport(*viewport)
 
 
 class TexturedQuadPass(SdlOpenGLPass):
