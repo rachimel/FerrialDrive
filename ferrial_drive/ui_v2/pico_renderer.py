@@ -3,6 +3,7 @@
 from contextlib import contextmanager
 from collections import OrderedDict
 from ctypes import byref, c_float, c_int, c_ubyte, memmove, string_at
+from functools import lru_cache
 from math import ceil, cos, exp, floor, hypot, isfinite, log2, sin, tau
 from random import Random
 from struct import Struct
@@ -14,6 +15,7 @@ from ferrial_drive.rendering.hud_text_atlas import HudTextAtlas
 
 
 PARTICLE_VERTEX = Struct("=ff4Bff")
+FULL_TEXTURE_UV = ((0, 0), (1, 0), (1, 1), (0, 1))
 RADAR_SEGMENTS = 128
 RADAR_CIRCLE = tuple((cos(tau * index / RADAR_SEGMENTS), sin(tau * index / RADAR_SEGMENTS))
                      for index in range(RADAR_SEGMENTS))
@@ -23,10 +25,22 @@ RADAR_RING_INDICES = tuple(index for inner in range(RADAR_SEGMENTS)
                                          2 * outer, 2 * inner + 1, 2 * outer + 1))
 
 
+def _filtered_geometry(polygons):
+    left = floor(min(x for polygon in polygons for x, _ in polygon)) - 1
+    top = floor(min(y for polygon in polygons for _, y in polygon)) - 1
+    width = ceil(max(x for polygon in polygons for x, _ in polygon)) - left + 1
+    height = ceil(max(y for polygon in polygons for _, y in polygon)) - top + 1
+    local = tuple(tuple((round(x - left, 6), round(y - top, 6)) for x, y in polygon)
+                  for polygon in polygons)
+    return left, top, width, height, local
+
+
 class PicoV2Renderer(PicoRenderer):
     def __init__(self, font_paths, font_sizes):
         self.ink_bottoms = {}
         self.filtered_textures = OrderedDict()
+        self.filtered_polygons_batch_enabled = True
+        self._filtered_geometry_cache = lru_cache(maxsize=128)(_filtered_geometry)
         self.scanline_textures = OrderedDict()
         self.grain_textures = OrderedDict()
         self.neon_textures = OrderedDict()
@@ -454,19 +468,19 @@ class PicoV2Renderer(PicoRenderer):
             self._geometry_polygon(polygon, (255, 255, 255, 255), texture=texture, uv=uv, colors=colors,
                                    separate_triangles=True)
 
-    @batch_barrier
     def filtered_polygons(self, polygons, color, opacity=1, samples=2, *, grain=None):
         """확대 렌더를 선형 축소하고 이동·투명도와 무관한 도형 텍스처를 재사용한다."""
         if opacity <= 0:
             return
         if type(samples) is not int or not 2 <= samples <= 4:
             raise ValueError("도형 필터 배율은 2~4의 정수여야 한다.")
-        left = floor(min(x for polygon in polygons for x, _ in polygon)) - 1
-        top = floor(min(y for polygon in polygons for _, y in polygon)) - 1
-        width = ceil(max(x for polygon in polygons for x, _ in polygon)) - left + 1
-        height = ceil(max(y for polygon in polygons for _, y in polygon)) - top + 1
-        local = tuple(tuple((round(x - left, 6), round(y - top, 6)) for x, y in polygon)
-                      for polygon in polygons)
+        if self.filtered_polygons_batch_enabled:
+            try:
+                left, top, width, height, local = self._filtered_geometry_cache(polygons)
+            except TypeError:
+                left, top, width, height, local = _filtered_geometry(polygons)
+        else:
+            left, top, width, height, local = _filtered_geometry(polygons)
         paired = grain is not None and self.mask_tint_cache
         mask_color = "#FFFFFF" if self.mask_tint_cache else color
         key_color = "grain_tint_masks" if paired else mask_color
@@ -487,22 +501,33 @@ class PicoV2Renderer(PicoRenderer):
             else:
                 self.filtered_textures[key] = self._filtered_texture(local, mask_color, width, height, samples, grain=grain)
             if len(self.filtered_textures) > 128:
+                self.flush_batch()
                 _, old = self.filtered_textures.popitem(last=False)
                 for texture in old if isinstance(old, tuple) else (old,):
                     p.SDL_DestroyTexture(texture)
         self.filtered_textures.move_to_end(key)
         entry = self.filtered_textures[key]
         texture = entry[0] if paired else entry
-        tint = self.rgba(color)[:3] if self.mask_tint_cache else (255, 255, 255)
-        p.SDL_SetTextureColorMod(texture, *tint)
-        p.SDL_SetTextureAlphaMod(texture, self.rgba(color, opacity)[3])
+        rgba = self.rgba(color if self.mask_tint_cache else "#FFFFFF", opacity)
+        queue = self.batch_queue
+        # SDL은 배율이 바뀌면 텍스처 복사와 꼭짓점의 위치를 다르게 반올림한다.
+        if self.filtered_polygons_batch_enabled and queue.active and queue.unit_scale():
+            right, bottom = left + width, top + height
+            points = ((left, top), (right, top), (right, bottom), (left, bottom))
+            queue.texture_quad(points, rgba, texture, FULL_TEXTURE_UV)
+            if paired:
+                queue.texture_quad(points, (255, 255, 255, rgba[3]), entry[1], FULL_TEXTURE_UV)
+            return
+        self.flush_batch()
+        p.SDL_SetTextureColorMod(texture, *rgba[:3])
+        p.SDL_SetTextureAlphaMod(texture, rgba[3])
         destination = p.SDL_FRect(left, top, width, height)
         if p.SDL_RenderCopyF(p.renderer, texture, None, byref(destination)) != 0:
             raise RuntimeError("필터 도형 표시 실패")
         if paired:
             # 바탕은 표준 알파, 회색 성분은 가산 합성해 원래 노이즈의 밝기를 보존한다.
             noise = entry[1]
-            p.SDL_SetTextureAlphaMod(noise, self.rgba(color, opacity)[3])
+            p.SDL_SetTextureAlphaMod(noise, rgba[3])
             if p.SDL_RenderCopyF(p.renderer, noise, None, byref(destination)) != 0:
                 raise RuntimeError("패널 노이즈 마스크 표시 실패")
 
@@ -797,6 +822,7 @@ class PicoV2Renderer(PicoRenderer):
             for texture in entry if isinstance(entry, tuple) else (entry,):
                 self.pico.SDL_DestroyTexture(texture)
         self.filtered_textures.clear()
+        self._filtered_geometry_cache.cache_clear()
         self.ink_bottoms.clear()
         super().close()
 

@@ -173,6 +173,37 @@ class BatchPixelChecks:
         self.assertEqual(r.batch_queue.stats['geometry_submits'], 1)
         self.assertEqual(r.batch_queue.stats['rectangle_submits'], 1)
 
+    def test_filtered_masks_share_one_submission_after_warmup(self):
+        r = self.renderer
+        r.filtered_polygons((TRIANGLE,), '#112233')
+        shifted = tuple((x + 24, y + 18) for x, y in TRIANGLE)
+        with r.hud_batch():
+            r.filtered_polygons((TRIANGLE,), '#FF5555', .7)
+            r.filtered_polygons((shifted,), '#55FF88', .4)
+        self.assertGreater(r._filtered_geometry_cache.cache_info().hits, 0)
+        self.assertEqual(r.batch_queue.stats['filtered_requests'], 2)
+        self.assertEqual(r.batch_queue.stats['geometry_submits'], 1)
+
+    def test_filtered_batch_keeps_overlap_clip_scale_and_additive_grain(self):
+        from ferrial_drive.ui.components import Rect
+        r = self.renderer
+        shape = ((12.25, 12.5), (100.75, 15), (94.5, 100.75), (14, 96))
+        for scale in (1, .8):
+            images = []
+            for enabled in (False, True, False):
+                r.filtered_polygons_batch_enabled = enabled
+                r.clear('#31435C')
+                with r.hud_batch(), r.clip(Rect(20, 18, 92, 92)), r.scaled(scale, (64, 64)):
+                    r.filtered_polygons((shape,), '#2165A8', .63, grain=(.18, 32, 1.25, 173))
+                    r.scanline_layer(shape, '#91ABDE', .7, 4, 1, 1.5)
+                    r.filtered_polygons((shape,), '#A0B8FE', .28)
+                    r.filtered_polygons((shape,), '#F955AB', .15)
+                    r.rect(Rect(32, 30, 36, 40), '#CCA722', .31)
+                    r.filtered_polygons((shape,), '#402B98', .47, grain=(.18, 32, 1.25, 173))
+                images.append(self.pixels())
+            self.assertEqual(images[0], images[1], scale)
+            self.assertEqual(images[0], images[2], scale)
+
     def test_radar_submits_ring_and_all_arrows_as_one_geometry(self):
         r = self.renderer
         # 큐 초기 용량보다 큰 군집에서도 레이더 메시를 분할하지 않는다.

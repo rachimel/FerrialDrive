@@ -11,6 +11,7 @@ from .timing import TimingRecorder
 VARIANTS = ("baseline", "no_hud", "no_world", "no_ui_blur", "no_camera_blur", "no_actor_blur",
             "no_auxiliary", "no_body_wind", "no_trail", "no_echoes", "no_ground_effects", "no_shadow",
             "no_radar", "no_dialogue", "no_resources", "no_rings", "cpu_trail", "compute_trail", "no_hud_batch",
+            "no_filtered_batch",
             "collision_polygon", "collision_capsule", "ground_individual", "ground_batched", "individual_enemy_parts", "individual_enemy_shadows", "no_enemy_labels", "debug_enemy_labels")
 
 
@@ -155,6 +156,8 @@ class RenderBreakdown:
             self.replace(app.sword_effects,"update",update_wrapper)
         if self.variant == 'no_hud_batch':
             self.replace(app.hud.renderer.batch_queue, 'enabled', lambda old: False)
+        if self.variant == 'no_filtered_batch':
+            self.replace(app.hud.renderer, 'filtered_polygons_batch_enabled', lambda old: False)
         if self.variant in ("cpu_trail", "compute_trail"):
             self.replace(app.sword_renderer,"trail_backend",lambda old: self.variant.removesuffix("_trail"))
         self.method(app, "draw_world", "world.total")

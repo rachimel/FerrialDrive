@@ -44,7 +44,7 @@ class HudBatchQueue:
     def reset_stats(self):
         self.stats = dict(geometry_requests=0, rectangle_requests=0, geometry_submits=0,
                           rectangle_submits=0, vertices=0, rectangles=0, buffer_allocations=0,
-                          text_requests=0, text_submits=0)
+                          text_requests=0, text_submits=0, filtered_requests=0)
 
     @property
     def active(self):
@@ -100,6 +100,9 @@ class HudBatchQueue:
         return self.vertex_count
 
     def text_quad(self, points, rgba, texture, uv):
+        self.texture_quad(points, rgba, texture, uv, text=True)
+
+    def texture_quad(self, points, rgba, texture, uv, *, text=False):
         start = self._begin_geometry(4, 6, texture)
         for index, ((x, y), (u, v)) in enumerate(zip(points, uv)):
             VERTEX.pack_into(self.vertices, (start + index) * VERTEX.size, x, y, *rgba, u, v)
@@ -109,8 +112,11 @@ class HudBatchQueue:
         self.index_count += 6
         self.stats['geometry_requests'] += 1
         self.stats['vertices'] += 4
-        self.stats['text_requests'] += 1
-        self.contains_text = True
+        if text:
+            self.stats['text_requests'] += 1
+            self.contains_text = True
+        else:
+            self.stats['filtered_requests'] += 1
         if not self.active:
             self.flush()
 
