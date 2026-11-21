@@ -439,33 +439,44 @@ class PicoV2Renderer(PicoRenderer):
         p.SDL_RenderGetScale(p.renderer, byref(sx), byref(sy))
         p.SDL_RenderGetViewport(p.renderer, byref(viewport))
         p.SDL_GetRendererOutputSize(p.renderer, byref(output_width), byref(output_height))
-        screen_y = lambda y: (y + viewport.y) * sy.value
-        left = min(x for x, _ in surface)
-        width = max(x for x, _ in surface) - left
-        visible_surface = clip_panel_band(surface, -viewport.y, output_height.value / sy.value)
-        polygons = (visible_surface,)
+        scale_y, viewport_y, height = sy.value, viewport.y, output_height.value
+        top, bottom = -viewport_y, height / scale_y - viewport_y
+        left, right = min(x for x, _ in surface), max(x for x, _ in surface)
+        width = right - left
+        panel_top, panel_bottom = min(y for _, y in surface), max(y for _, y in surface)
+        if panel_bottom < top or panel_top > bottom:
+            return
+        # 화면을 벗어난 패널만 잘라낸다. 패널 내부의 UV 위상은 화면 좌표를 유지한다.
+        visible = surface
+        if panel_top < top or panel_bottom > bottom:
+            visible = clip_panel_band(surface, top, height / scale_y)
+        polygons = (visible,)
         if bright_band is not None:
             band_top, band_height = bright_band
-            local_top = band_top / sy.value - viewport.y
-            local_height = band_height / sy.value
-            polygons = tuple(clip_panel_band(visible_surface, local_top + index * local_height / 2, local_height / 2)
+            half_height = band_height / 2
+            local_top = band_top / scale_y - viewport_y
+            local_height = band_height / scale_y
+            polygons = tuple(clip_panel_band(visible, local_top + index * local_height / 2, local_height / 2)
                              for index in range(2))
         polygons = tuple(polygon for polygon in polygons if len(polygon) >= 3)
         if not polygons:
             return
-        texture, texture_height = self._scanline_texture(output_height.value, spacing_pixels, thickness_pixels, color)
+        texture, texture_height = self._scanline_texture(height, spacing_pixels, thickness_pixels, color)
         offset = spacing_pixels - offset_pixels % spacing_pixels
+        rgba = self.rgba(color, opacity)
+        rgb = rgba[:3] if self.mask_tint_cache else (255, 255, 255)
+        base_color = (*rgb, rgba[3])
         for polygon in polygons:
-            colors, uv = [], []
+            uv, colors = [], None
+            if bright_band is not None:
+                colors = []
             for x, y in polygon:
-                weight = 1
-                if bright_band is not None:
-                    weight = max(0, 1 - abs((screen_y(y) - band_top - band_height / 2) / (band_height / 2)))
-                rgb = self.rgba(color)[:3] if self.mask_tint_cache else (255, 255, 255)
-                colors.append((*rgb, self.rgba(color, opacity * weight)[3]))
-                uv.append(((x - left) / width, (screen_y(y) + offset) / texture_height))
-            # 사각형 복사 경로를 피하고 배율이 달라도 UV 위상을 유지한다.
-            self._geometry_polygon(polygon, (255, 255, 255, 255), texture=texture, uv=uv, colors=colors,
+                screen_y = (y + viewport_y) * scale_y
+                uv.append(((x - left) / width, (screen_y + offset) / texture_height))
+                if colors is not None:
+                    weight = max(0, 1 - abs((screen_y - band_top - half_height) / half_height))
+                    colors.append((*rgb, round(max(0., min(1., opacity * weight)) * 255)))
+            self._geometry_polygon(polygon, base_color, texture=texture, uv=uv, colors=colors,
                                    separate_triangles=True)
 
     def filtered_polygons(self, polygons, color, opacity=1, samples=2, *, grain=None):
