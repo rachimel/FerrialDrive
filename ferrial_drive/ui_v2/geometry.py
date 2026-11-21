@@ -169,12 +169,6 @@ def quad_fill(points, ratio):
     return a, mix(a, b), mix(d, c), d
 
 
-def quadratic_curve(start, control, end, steps=10):
-    return tuple(tuple((1 - t) ** 2 * a + 2 * (1 - t) * t * b + t ** 2 * c
-                       for a, b, c in zip(start, control, end))
-                 for t in (index / steps for index in range(1, steps + 1)))
-
-
 @dataclass(frozen=True)
 class ResourceGeometry:
     icon_center: tuple
