@@ -375,6 +375,11 @@ class PicoV2Renderer(PicoRenderer):
         if p.SDL_RenderCopyF(p.renderer, texture, None, byref(destination)) != 0:
             raise RuntimeError("네온 본문 표시 실패")
 
+    def gradient_text(self, text, x, y, role, color, opacity=1, *, gradient_bottom_ratio=1):
+        """글자 내부에만 세로 밝기 변화를 적용한다."""
+        if opacity > 0 and text:
+            self._draw_neon_core(text, x, y, role, color, opacity, gradient_bottom_ratio=gradient_bottom_ratio)
+
     def neon_text(self, text, x, y, role, color, opacity=1, *, glow_color, radius_pixels=4, glow_opacity=0.12,
                   glow_passes=1, bold=False, gradient_bottom_ratio=1):
         """캐시한 가우시안 광을 먼저 그리고 원래 글자를 같은 위치에 겹친다."""

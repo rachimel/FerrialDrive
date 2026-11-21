@@ -49,7 +49,10 @@ class WeaponCardTests(unittest.TestCase):
         self.assertLess(name.args[2], clip.y)
         self.assertGreaterEqual(kind.args[2], clip.y)
         self.assertAlmostEqual(attr.args[5], 0.5 * self.view.style["weapon_card"]["attribute_opacity"])
-        self.assertEqual(self.renderer.neon_text.call_args.args[0], "999")
+        self.renderer.gradient_text.assert_called_once_with(
+            "999", 310, 9, "v2_ammo", self.config.colors["text"], 0.5 * self.view.style["weapon_text_opacity"],
+            gradient_bottom_ratio=self.view.style["weapon_card"]["ammo_gradient_bottom_ratio"])
+        self.renderer.neon_text.assert_not_called()
 
     def test_optional_attribute_icons_and_auxiliary_images_follow_card_opacity(self):
         weapon = WeaponInfo("도검", base_attribute="SLASH", additional_attributes=("FIRE",),

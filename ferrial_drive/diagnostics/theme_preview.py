@@ -15,7 +15,7 @@ class ThemePreviewRenderer:
     """실제 렌더러에 위임한다. 미리보기 캡처 프레임에서만 연결한다."""
 
     DRAW_METHODS = {"rect", "metallic_rect", "line", "soft_line", "ring", "filled_triangle",
-                    "text", "rich_text", "neon_text", "warped_text", "filtered_polygons",
+                    "text", "rich_text", "neon_text", "gradient_text", "warped_text", "filtered_polygons",
                     "scanline_layer", "weapon_silhouette", "image"}
 
     def __init__(self, source):
@@ -87,7 +87,7 @@ class ThemePreviewRenderer:
             return tuple(point for polygon in v["polygons"] for point in polygon)
         if method == "scanline_layer":
             return v["surface"]
-        if method in ("text", "rich_text", "neon_text", "warped_text"):
+        if method in ("text", "rich_text", "neon_text", "gradient_text", "warped_text"):
             if not v["text"]:
                 return ()
             if method == "rich_text":

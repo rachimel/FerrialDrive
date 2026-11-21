@@ -118,9 +118,8 @@ def draw_weapon_card(view, weapon, kind, left, top, right, height, opacity):
     view.weapon_image(weapon, kind, Rect(image_left, image_top, image_width,
                                        max(1, band_top - image_top - 5)), opacity)
     if weapon.rounds is not None:
-        r.neon_text(str(weapon.rounds), right - ammo_width - 6, top + 9, "v2_ammo", c["text"],
-                    text_alpha, gradient_bottom_ratio=settings.get("ammo_gradient_bottom_ratio", 1),
-                    **view.style["weapon_text_neon"])
+        r.gradient_text(str(weapon.rounds), right - ammo_width - 6, top + 9, "v2_ammo", c["text"],
+                        text_alpha, gradient_bottom_ratio=settings.get("ammo_gradient_bottom_ratio", 1))
     label = "MELEE" if kind == "melee" else "RANGED"
     label_w, label_h = r.text_size(label, "v2_weapon_kind")
     label_scale = min(1, (label_width - right_cut - 9) / max(1, label_w), (band_height - 7) / max(1, label_h))
