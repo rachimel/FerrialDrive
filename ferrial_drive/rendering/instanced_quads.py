@@ -19,6 +19,10 @@ flat out vec4 sourceBounds;
 uniform vec4 anchorScale;
 #endif
 uniform vec4 poseTimes[QUAD_LIMIT];
+#ifdef SCREEN_DEPTH
+uniform vec4 screenPlacements[QUAD_LIMIT];
+flat out vec3 screenPlacement;
+#endif
 out vec2 texel;
 out float localPhase;
 flat out int pairIndex;
@@ -42,6 +46,10 @@ void main() {
 #endif
     vec2 p=(screenTransform.xy+pos*screenTransform.zw)/outputSize;
     gl_Position=vec4(p.x*2.0-1.0,(1.0-p.y*2.0)*targetFlip,0.0,1.0);
+#ifdef SCREEN_DEPTH
+    screenPlacement=screenPlacements[gl_InstanceID].xyz;
+    gl_Position.z=2.0*screenPlacement.z-1.0;
+#endif
     texel=src.xy+corner*src.zw;
 #ifdef SOURCE_PER_INSTANCE
     sourceBounds=vec4(src.xy,src.xy+src.zw);
@@ -51,13 +59,17 @@ void main() {
 
 
 class InstancedQuads(SdlOpenGLPass):
-    def __init__(self, pico, *, fragment_shader, extra_uniforms, per_instance_source=False, tile_placements=False):
+    def __init__(self, pico, *, fragment_shader, extra_uniforms, per_instance_source=False, tile_placements=False,
+                 screen_depth=False):
         fragment = fragment_shader.replace(b"#version 120", b"#version 140", 1)
         defines = b""
         if per_instance_source or tile_placements:
             defines += b"\n#define SOURCE_PER_INSTANCE"
         if tile_placements:
             defines += b"\n#define TILE_PLACEMENTS"
+        if screen_depth:
+            defines += b"\n#define SCREEN_DEPTH"
+            extra_uniforms = (*extra_uniforms, "screenPlacements[0]")
         vertex = VERTEX.replace(b"#version 140", b"#version 140" + defines, 1)
         super().__init__(pico, vertex_shader=vertex, fragment_shader=fragment,
                          extra_uniforms=(*extra_uniforms, "destinations[0]", "poseTimes[0]", "sources[0]",
@@ -65,6 +77,7 @@ class InstancedQuads(SdlOpenGLPass):
         self.rects = (ct.c_float * (QUAD_LIMIT * 4))()
         self.sources = (ct.c_float * (QUAD_LIMIT * 4))() if per_instance_source or tile_placements else None
         self.times = (ct.c_float * (QUAD_LIMIT * 4))()
+        self.screen_placements = (ct.c_float * (QUAD_LIMIT * 4))() if screen_depth else None
         self.submits = 0
 
     def _bind_functions(self):
@@ -160,7 +173,7 @@ class InstancedQuads(SdlOpenGLPass):
             self.uniform_rects(self.uniforms["sources[0]"], len(chunk), self.sources)
             self._submit_rects(len(chunk))
 
-    def draw_instances(self, bounds, instances, *, sources=None):
+    def draw_instances(self, bounds, instances, *, sources=None, screen_placements=None):
         self._set_screen_transform()
         self.glUniform4f(self.uniforms["sourceRect"], *bounds)
         for first in range(0, len(instances), QUAD_LIMIT):
@@ -171,7 +184,12 @@ class InstancedQuads(SdlOpenGLPass):
                 self.times[offset:offset + 2] = phase, first_sample
                 if sources is not None:
                     self.sources[offset:offset + 4] = sources[first + i]
+                if self.screen_placements is not None:
+                    self.screen_placements[offset:offset + 4] = (
+                        (0, 0, 0, 0) if screen_placements is None else screen_placements[first + i])
             if sources is not None:
                 self.uniform_rects(self.uniforms["sources[0]"], len(batch), self.sources)
+            if self.screen_placements is not None:
+                self.uniform_rects(self.uniforms["screenPlacements[0]"], len(batch), self.screen_placements)
             self.uniform_rects(self.uniforms["poseTimes[0]"], len(batch), self.times)
             self._submit_rects(len(batch))

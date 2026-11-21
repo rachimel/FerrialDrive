@@ -33,6 +33,7 @@ class EncounterView:
         self.batch_enemy_parts = True
         self.batch_enemy_shadows = True
         self.deferred_enemy_enabled = False
+        self.deferred_enemy_screen_depth = False
         self.deferred_pbr = self.deferred_box_shadows = None
         self.show_enemy_labels = False
 
@@ -77,6 +78,12 @@ class EncounterView:
             self.primitives.stats["body_batch_submits"] = 0
             self.primitives.stats.update(deferred_bodies=0, deferred_surface_submits=0, deferred_light_submits=0,
                                          deferred_shadow_submits=0, deferred_gpu_bytes=0)
+            if self.deferred_enemy_screen_depth:
+                self.primitives.stats.update(deferred_depth_submits=0, deferred_depth_bodies=0,
+                                             deferred_depth_tested_tiles=0, deferred_depth_bytes=0)
+            else:
+                for key in ("submits", "bodies", "tested_tiles", "bytes"):
+                    self.primitives.stats.pop("deferred_depth_" + key, None)
             self.primitives.stats["enemy_motions"] = {}
             self._draw(encounter, flashes, window_size, shadow_opacity, shadow_softness_pixels,
                        player_position_m, locked_id)
@@ -189,14 +196,24 @@ class EncounterView:
         prepared = {}
         deferred = {}
         if self.deferred_enemy_enabled and body_requests:
+            screen_depth = self.deferred_enemy_screen_depth
+            if self.deferred_pbr is not None and (self.deferred_pbr.depth is not None) != screen_depth:
+                self.deferred_pbr.close()
+                self.deferred_pbr = None
             if self.deferred_pbr is None:
                 from ferrial_drive.rendering.enemy_deferred_pbr import EnemyDeferredPbr
-                self.deferred_pbr = EnemyDeferredPbr(self.renderer.pico)
-            deferred = self.deferred_pbr.prepare(body_requests, self.sprites, zoom)
+                self.deferred_pbr = EnemyDeferredPbr(self.renderer.pico, screen_depth=screen_depth)
+            ranks = {row[2].enemy_id: len(placed) - index for index, row in enumerate(placed)} if screen_depth else None
+            deferred = self.deferred_pbr.prepare(body_requests, self.sprites, zoom, body_depth_ranks=ranks)
             r.stats["deferred_bodies"] = len(deferred)
             r.stats["deferred_surface_submits"] = self.deferred_pbr.surface_submits
             r.stats["deferred_light_submits"] = self.deferred_pbr.light_submits
             r.stats["deferred_gpu_bytes"] += self.deferred_pbr.storage_bytes
+            if screen_depth:
+                r.stats.update(deferred_depth_submits=self.deferred_pbr.depth_submits,
+                               deferred_depth_bodies=self.deferred_pbr.depth_bodies,
+                               deferred_depth_tested_tiles=self.deferred_pbr.depth_tested_tiles,
+                               deferred_depth_bytes=self.deferred_pbr.depth.storage_bytes)
         for kind, requests in body_requests.items():
             if deferred:
                 requests = [request for request in requests if request[0] not in deferred]

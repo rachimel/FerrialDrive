@@ -319,6 +319,37 @@ class EnemyBatchGpuTests(unittest.TestCase):
 
         self.compare(draw_reference, draw_deferred, 8)
 
+    def test_deferred_depth_skips_covered_tile_pixels_and_preserves_blending(self):
+        import numpy as np
+        from ferrial_drive.rendering.enemy_deferred_pbr import EnemyDeferredPbr
+
+        requests = {"small": [("behind", "move", "0", .18, 202, 230),
+                              ("front", "move", "0", .18001, 204, 230)]}
+        ranks = {"behind": 2, "front": 1}
+        baseline = EnemyDeferredPbr(self.pico)
+        experiment = EnemyDeferredPbr(self.pico, screen_depth=True)
+        for renderer in (baseline, experiment):
+            self.addCleanup(renderer.close)
+
+        def draw(renderer, *, behind_only=False):
+            records = renderer.prepare(requests, self.sprites, .7, body_depth_ranks=ranks)
+            self.assertEqual(len(records), 2)
+            renderer.copy(records["behind"])
+            if not behind_only:
+                renderer.copy(records["front"])
+
+        reference = self.capture(lambda: draw(baseline))
+        result = self.capture(lambda: draw(experiment))
+        np.testing.assert_array_equal(reference, result)
+        self.assertEqual((experiment.depth_submits, experiment.depth_bodies, experiment.depth_tested_tiles), (1, 2, 2))
+
+        full = self.capture(lambda: draw(baseline, behind_only=True))
+        culled = self.capture(lambda: draw(experiment, behind_only=True))
+        background = np.array([140, 170, 200])
+        removed = np.any(full != background, axis=2) & np.all(culled == background, axis=2)
+        self.assertGreater(removed.sum(), 50)
+        self.assertGreater(np.any(culled != background, axis=2).sum(), 20)
+
     def test_deferred_box_mask_submits_both_profiles_once(self):
         import numpy as np
         from ferrial_drive.rendering.enemy_shadow_batch import EnemyBoxMask

@@ -2,6 +2,7 @@
 
 from contextlib import contextmanager
 import ctypes as ct
+from dataclasses import dataclass, field
 
 from ferrial_drive.diagnostics.gpu_profile import bind_gl
 from .atlas_texture_cache import bind_atlas_textures
@@ -16,6 +17,8 @@ from .part_upscale import PART_UPSCALE_BORDER, render_target
 ATTACHMENT_FORMATS = (0x881A, 0x881A, 0x8058, 0x881A)  # RGBA16F, RGBA16F, RGBA8, RGBA16F
 SURFACE_BYTES_PER_PIXEL = 28
 MAX_PROFILES = 3
+DEPTH_RANK_SCALE = 65536
+NO_SCREEN_PLACEMENT = (0, 0, 0, 0)
 LIGHT_FRAGMENT = b"""#version 120
 #define COAT
 uniform sampler2D albedo, normalEnergy, materialCoat, positionCoat;
@@ -121,10 +124,29 @@ class SurfaceTargets:
         self.size = (0, 0)
 
 
+@dataclass
+class DeferredGroup:
+    bank_data: dict
+    clip: dict
+    state: dict
+    instances: list = field(default_factory=list)
+    samples: dict = field(default_factory=dict)
+    ids: list = field(default_factory=list)
+    regions: list = field(default_factory=list)
+    coverage_instances: list = field(default_factory=list)
+    coverage_placements: list = field(default_factory=list)
+    material_placements: list = field(default_factory=list)
+
+
 class EnemyDeferredPbr:
-    def __init__(self, pico):
+    def __init__(self, pico, *, screen_depth=False):
         self.pico = pico
         self.parts = {}
+        self.coverage = {}
+        self.depth = None
+        if screen_depth:
+            from .enemy_screen_depth import EnemyScreenDepth
+            self.depth = EnemyScreenDepth(pico)
         self.scratch = EnemyUpscaleScratch(pico)
         self.output = SheetTarget(pico)
         self.surfaces = SurfaceTargets(pico)
@@ -133,24 +155,66 @@ class EnemyDeferredPbr:
                             "viewDirections[0]", "emissionColors[0]"))
         self.upload_array = bind_gl(pico, "glUniform4fv", None, [ct.c_int, ct.c_int, ct.c_void_p])
         self.surface_submits = self.light_submits = 0
+        self.depth_submits = self.depth_bodies = self.depth_tested_tiles = 0
 
     @property
     def storage_bytes(self):
         upscaler = self.scratch.upscaler
         sheet_bytes = sum(target.size[0] * target.size[1] * 4 for target in (self.output, self.scratch.native))
         return (self.surfaces.storage_bytes + sheet_bytes + sum(batch.table_bytes for batch in self.parts.values())
-                + (upscaler.aa.storage_bytes if upscaler is not None else 0))
+                + (upscaler.aa.storage_bytes if upscaler is not None else 0)
+                + (self.depth.storage_bytes if self.depth is not None else 0))
+
+    def _make_painter(self, resource, *, coverage=False):
+        formats = {name: getattr(resource, name) for name in ("hermite_flow", "compact_depth")
+                   if hasattr(resource, name)}
+        return PartPainter(self.pico, part_count=resource.catalog.part_count, frame_crop=resource.catalog.frame_crop,
+            surface=True, pbr=True, deferred=not coverage, depth_coverage=coverage,
+            screen_depth=self.depth is not None and not coverage,
+            coat=resource.catalog.coat_members is not None, instanced=True, **formats)
 
     def _batch(self, resource):
         if resource not in self.parts:
             batch = EnemyPartBatch(resource, scratch=self.scratch)
-            formats = {name: getattr(resource, name) for name in ("hermite_flow", "compact_depth")
-                       if hasattr(resource, name)}
-            batch.painter = PartPainter(self.pico, part_count=resource.catalog.part_count,
-                frame_crop=resource.catalog.frame_crop, surface=True, pbr=True, deferred=True,
-                coat=resource.catalog.coat_members is not None, instanced=True, **formats)
+            batch.painter = self._make_painter(resource)
             self.parts[resource] = batch
         return self.parts[resource]
+
+    def _write_depth(self, jobs, viewport):
+        rectangles = [rect for _, _, groups in jobs for group in groups.values()
+                      for rect, _, _ in group.coverage_instances]
+        if len(rectangles) < 2:
+            return None, 0, 0
+        left = max(0, min(rect[0] for rect in rectangles))
+        top = max(0, min(rect[1] for rect in rectangles))
+        right = min(viewport.w, max(x + w for x, _, w, _ in rectangles))
+        bottom = min(viewport.h, max(y + h for _, y, _, h in rectangles))
+        if right <= left or bottom <= top:
+            return None, 0, 0
+        size = right - left, bottom - top
+        clear = True
+        for _, resource, groups in jobs:
+            if not any(group.coverage_instances for group in groups.values()):
+                continue
+            if resource not in self.coverage:
+                self.coverage[resource] = self._make_painter(resource, coverage=True)
+            painter = self.coverage[resource]
+            batch, sampler = self._batch(resource), painter.sampler
+            before = sampler.submits
+            with sampler.batch(), self.depth.bind(sampler, size, clear=clear):
+                clear = False
+                for key, group in groups.items():
+                    if not group.coverage_instances:
+                        continue
+                    table = batch._table(key, group.bank_data, group.samples)
+                    if table is not None:
+                        instances = [((x - left, y - top, w, h), phase, first)
+                                     for (x, y, w, h), phase, first in group.coverage_instances]
+                        painter.paint(resource.cache, (group.bank_data,), group.state, None, instances=instances,
+                                      pose_table=table, screen_placements=group.coverage_placements)
+                        self.depth_bodies += len(group.coverage_instances)
+            self.depth_submits += sampler.submits - before
+        return (self.depth.texture.value if self.depth_submits else None), left, top
 
     def _resolve(self, resources, layout, target):
         sampler = self.lighting
@@ -175,15 +239,24 @@ class EnemyDeferredPbr:
             sampler.draw(None, target.size, rect, rect)
         self.light_submits = 1
 
-    def prepare(self, body_requests, sprites, zoom):
+    def prepare(self, body_requests, sprites, zoom, *, body_depth_ranks=None):
         self.surface_submits = self.light_submits = 0
+        self.depth_submits = self.depth_bodies = self.depth_tested_tiles = 0
         for resource in self.parts.keys() - {sprite.resource for sprite in sprites.values()}:
             self.parts.pop(resource).close()
+            if resource in self.coverage:
+                self.coverage.pop(resource).close()
         p = self.pico
         sx, sy = ct.c_float(), ct.c_float()
         p.SDL_RenderGetScale(p.renderer, ct.byref(sx), ct.byref(sy))
         if (sx.value, sy.value) != (1, 1) or len(body_requests) > MAX_PROFILES:
             return {}
+        viewport = p.SDL_Rect()
+        if body_depth_ranks:
+            p.SDL_RenderGetViewport(p.renderer, ct.byref(viewport))
+        use_depth = (self.depth is not None and body_depth_ranks and not (viewport.x or viewport.y)
+                     and not p.SDL_RenderIsClipEnabled(p.renderer)
+                     and max(body_depth_ranks.values()) < DEPTH_RANK_SCALE)
         native_layout, output_layout = SheetLayout(), SheetLayout(UPSCALE_GUTTER)
         resources, jobs, copies = [], [], {}
         for kind, requests in body_requests.items():
@@ -207,13 +280,15 @@ class EnemyDeferredPbr:
                 if key not in groups:
                     bank_data = r.get(*key)
                     clip = bank_data["data"]["clip"]
-                    groups[key] = (bank_data, clip, frame_state(clip, clip, seconds), [], {}, [], [])
-                bank_data, clip, state, instances, samples, ids, regions = groups[key]
-                first, phase = frame_phase(clip, seconds)
-                left, top, width, height = state["bounds"]
+                    groups[key] = DeferredGroup(bank_data, clip, frame_state(clip, clip, seconds))
+                group = groups[key]
+                first, phase = frame_phase(group.clip, seconds)
+                left, top, width, height = group.state["bounds"]
                 draw_w, draw_h = max(1, round(width * factor)), max(1, round(height * factor))
                 destination = p.SDL_Rect(round(x - (pivot_x - left) * factor) - pad,
                     round(foot - (pivot_y - top) * factor) - pad, draw_w + 2 * pad, draw_h + 2 * pad)
+                # 확대 필터의 이웃 픽셀은 기존 시트에서 함께 처리한다.
+                z = body_depth_ranks.get(enemy_id, 0) / DEPTH_RANK_SCALE if use_depth and not upscale else 0
                 pose = (*key, first, phase)
                 if pose not in poses:
                     slot = native_layout.place(width + 2 * border, height + 2 * border) if upscale else native_layout.place(draw_w, draw_h)
@@ -225,16 +300,26 @@ class EnemyDeferredPbr:
                         continue
                     if upscale:
                         paint_slot = slot[0] + border, slot[1] + border, width, height
-                        regions.append((slot, source))
-                    poses[pose] = (self.output if upscale else self.scratch.native, p.SDL_Rect(*source))
-                    instances.append((paint_slot, phase, first))
-                    samples[first] = seconds
-                target, rect = poses[pose]
+                        group.regions.append((slot, source))
+                    poses[pose] = (self.output if upscale else self.scratch.native, p.SDL_Rect(*source), len(group.instances))
+                    group.instances.append((paint_slot, phase, first))
+                    group.samples[first] = seconds
+                    if self.depth is not None:
+                        group.material_placements.append((destination.x - slot[0], destination.y - slot[1], z, 0)
+                                                         if z else NO_SCREEN_PLACEMENT)
+                elif self.depth is not None:
+                    # 공유 포즈는 모든 배치에서 같은 시트 픽셀을 읽는다.
+                    group.material_placements[poses[pose][2]] = NO_SCREEN_PLACEMENT
+                if z:
+                    group.coverage_instances.append(((destination.x, destination.y, destination.w, destination.h), phase, first))
+                    group.coverage_placements.append((0, 0, z, 0))
+                target, rect, _ = poses[pose]
                 copies[enemy_id] = target, rect, destination
-                ids.append(enemy_id)
+                group.ids.append(enemy_id)
             jobs.append((profile, r, groups))
         if not copies:
             return {}
+        depth_texture, depth_left, depth_top = self._write_depth(jobs, viewport) if use_depth else (None, 0, 0)
         target = self.scratch.native
         target.reserve(native_layout)
         self.surfaces.reserve(self.lighting, target.size)
@@ -247,18 +332,25 @@ class EnemyDeferredPbr:
                 with sampler.batch(), self.surfaces.bind(sampler, clear=clear):
                     clear = False
                     sampler.glUniform1f(sampler.uniforms["deferredProfile"], profile)
-                    for key, (bank_data, _, state, instances, samples, ids, upsized) in groups.items():
-                        if not instances:
+                    for key, group in groups.items():
+                        if not group.instances:
                             continue
-                        table = batch._table(key, bank_data, samples)
+                        table = batch._table(key, group.bank_data, group.samples)
                         if table is None:
-                            for enemy_id in ids:
+                            for enemy_id in group.ids:
                                 copies.pop(enemy_id, None)
                             continue
-                        painter.paint(r.cache, (bank_data,), state, None, energy_color=r.energy_color,
+                        placements = None
+                        if depth_texture is not None:
+                            placements = [(x - depth_left, y - depth_top, z, 0)
+                                          for x, y, z, _ in group.material_placements]
+                        painter.paint(r.cache, (group.bank_data,), group.state, None, energy_color=r.energy_color,
                             energy_gain=r.energy_mask_gain, shadow_map=r.shadow_map, pbr_lighting=r.pbr_lighting,
-                            sample_shadow=False, instances=instances, pose_table=table)
-                        regions.extend(upsized)
+                            sample_shadow=False, instances=group.instances, pose_table=table,
+                            screen_depth=depth_texture, screen_placements=placements)
+                        if placements:
+                            self.depth_tested_tiles += sum(placement[2] > 0 for placement in placements)
+                        regions.extend(group.regions)
                 self.surface_submits += sampler.submits - before
             self._resolve(resources, native_layout, target)
         if regions:
@@ -276,6 +368,11 @@ class EnemyDeferredPbr:
         for batch in self.parts.values():
             batch.close()
         self.parts.clear()
+        for painter in self.coverage.values():
+            painter.close()
+        self.coverage.clear()
+        if self.depth is not None:
+            self.depth.close()
         self.lighting.close()
         self.surfaces.close()
         self.output.close()

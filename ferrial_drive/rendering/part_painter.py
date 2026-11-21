@@ -60,6 +60,16 @@ uniform float localPhase;
 uniform float partCount, effectOpacity, brightness, realtimeLight;
 uniform vec4 colorMix;
 varying vec2 texel;
+#ifdef READ_SCREEN_DEPTH
+uniform sampler2D screenDepth;
+flat in vec3 screenPlacement;
+bool obscured() {
+    if(screenPlacement.z<=0.0) return false;
+    ivec2 pixel=ivec2(floor(gl_FragCoord.xy)+screenPlacement.xy);
+    return any(lessThan(pixel,ivec2(0)))||any(greaterThanEqual(pixel,textureSize(screenDepth,0)))||
+           texelFetch(screenDepth,pixel,0).r<screenPlacement.z;
+}
+#endif
 vec2 coord(vec2 p,vec4 rect,vec2 size) {
     return (rect.xy+clamp(p,vec2(0.5),rect.zw-0.5))/size;
 }
@@ -109,6 +119,7 @@ vec4 surfaceAt(vec2 p,vec4 rect,vec4 maskRect,vec4 depthRect,float bank,vec2 siz
     if(c.a<0.000001) return vec4(0.0);
     depth=depthAt(p,depthRect,bank,size,part,second);
     if(depth<=0.0) return vec4(0.0);
+#ifndef DEPTH_COVERAGE
 #ifdef SURFACE
 #ifdef PBR
     if(depthOutput>0.5) return c;
@@ -133,6 +144,7 @@ vec4 surfaceAt(vec2 p,vec4 rect,vec4 maskRect,vec4 depthRect,float bank,vec2 siz
         float weight=clamp(strength/c.a*energyTint.a,0.0,1.0);
         c.rgb=mix(c.rgb,energyTint.rgb*max(c.r,max(c.g,c.b)),weight);
     }
+#endif
 #endif
     return c;
 }
@@ -220,7 +232,24 @@ vec4 angleSurface(int i,vec2 target,int matrixIndex,out float targetDepth,out ve
     return c;
 }
 #endif
+#ifdef DEPTH_COVERAGE
 void main() {
+    for(int i=0;i<PARTS;++i) {
+        if(float(i)>=partCount) break;
+        float depth;
+        vec4 material;
+        vec3 properties;
+        vec2 coat;
+        if(temporalSurface(i,texel-PART_FIELD(crops,i).xy-PART_FIELD(shifts,i).xy,
+                           depth,material,properties,coat).a>=1.0) return;
+    }
+    discard;
+}
+#else
+void main() {
+#ifdef READ_SCREEN_DEPTH
+    if(obscured()) discard;
+#endif
     vec4 colors[PARTS];
     float depths[PARTS];
 #ifdef PBR
@@ -361,6 +390,7 @@ void main() {
     gl_FragData[3]=vec4(0.0);
 #endif
 }
+#endif
 '''.encode("utf-8")
 
 
@@ -370,7 +400,8 @@ class PartPainter:
               "crops", "shifts", "flowSteps")
 
     def __init__(self, pico, *, angular=False, part_count=MAX_PARTS, paged=False, frame_crop=False, surface=False,
-                 pbr=False, coat=False, instanced=False, deferred=False):
+                 pbr=False, coat=False, instanced=False, deferred=False, depth_coverage=False,
+                 screen_depth=False):
         self.pico = pico
         self.paged = paged
         self.frame_crop = frame_crop
@@ -389,8 +420,9 @@ class PartPainter:
             self.arrays += ("colorPlacementA", "colorPlacementB", "depthPlacementA", "depthPlacementB")
         banks = 4 if angular else 2
         texture_banks = 1 if paged else banks
+        input_kinds = ("color", "vector", "depth") if depth_coverage else self.page_kinds
         self.texture_names = {kind: tuple("artwork" if kind == "color" and bank == 0 else f"{kind}Page{bank}"
-                                         for bank in range(texture_banks)) for kind in self.page_kinds}
+                                         for bank in range(texture_banks)) for kind in input_kinds}
         declarations, uniforms = [], []
         for kind, names in self.texture_names.items():
             samples = []
@@ -413,11 +445,16 @@ class PartPainter:
         if deferred:
             defines += "\n#define DEFERRED_SURFACE"
             uniforms.append("deferredProfile")
+        if depth_coverage:
+            defines += "\n#define DEPTH_COVERAGE"
+        if screen_depth:
+            defines += "\n#define READ_SCREEN_DEPTH"
+            uniforms.append("screenDepth")
         shader = PART_SHADER.replace(b"#version 120", defines.encode(), 1)
         shader = shader.replace(b"PART_LIMIT", str(part_count).encode())
         shader = shader.replace(b"PAGE_SAMPLERS", "\n".join(declarations).encode())
         shadow_uniforms = ()
-        if surface:
+        if surface and not depth_coverage:
             from .part_shadow_map import SHADOW_FUNCTIONS, SHADOW_UNIFORMS
             shader = shader.replace(b"SURFACE_FUNCTIONS", b"#define SURFACE\n" + SHADOW_FUNCTIONS + (PBR_FUNCTIONS if pbr else b""))
             shadow_uniforms = SHADOW_UNIFORMS + (PBR_UNIFORMS + ("depthOutput",) if pbr else ())
@@ -439,7 +476,9 @@ class PartPainter:
         else:
             access = "#define PART_FIELD(name,index) name[index]"
         shader = shader.replace(b"PART_FIELD_ACCESS", access.encode())
-        self.sampler = sampler_type(pico, fragment_shader=shader, extra_uniforms=tuple(name + "[0]" for name in self.arrays) +
+        sampler_options = {"screen_depth": True} if depth_coverage or screen_depth else {}
+        self.sampler = sampler_type(pico, fragment_shader=shader, **sampler_options,
+            extra_uniforms=tuple(name + "[0]" for name in self.arrays) +
             tuple(uniforms) + ("bankData[0]", "energyTint", "rimLight", "localPhase", "partCount", "effectOpacity",
                                "brightness", "colorMix", "realtimeLight", "modulation") + angular_uniforms + shadow_uniforms)
         self.uniform_array = bind_gl(pico, "glUniform4fv", None, [ct.c_int, ct.c_int, ct.c_void_p])
@@ -471,19 +510,26 @@ class PartPainter:
 
     def paint(self, cache, resources, state, destination, *, energy_color=None, energy_gain=1, rim=(0, 0, 0, 0),
               opacity=1, tint=(1, 1, 1), tint_mix=0, brightness=1, realtime_light=0, shadow_map=None, pbr_lighting=None,
-              sample_shadow=True, depth_output=False, instances=None, pose_table=None):
+              sample_shadow=True, depth_output=False, instances=None, pose_table=None,
+              screen_depth=None, screen_placements=None):
         entries = (cache.bindings(self.page_kinds) if self.paged else
-                   [resource["pages"][kind] for kind in self.page_kinds for resource in resources])
+                   [resource["pages"][kind] for kind in self.texture_names for resource in resources])
         if pbr_lighting:
             entries.append(pbr_lighting["entry"])
             environment_unit = len(entries) - 1
         if pose_table is not None:
+            pose_unit = len(entries)
             entries.append({"gl_texture": pose_table})
+        if screen_depth is not None:
+            depth_unit = len(entries)
+            entries.append({"gl_texture": screen_depth})
         arrays = self.frame_arrays(cache, resources, state) if pose_table is None else {}
         sampler = self.sampler
         with sampler.batch(), bind_atlas_textures(sampler, cache, entries):
             if pose_table is not None:
-                sampler.glUniform1i(sampler.uniforms["poseTable"], len(entries) - 1)
+                sampler.glUniform1i(sampler.uniforms["poseTable"], pose_unit)
+            if screen_depth is not None:
+                sampler.glUniform1i(sampler.uniforms["screenDepth"], depth_unit)
             if pbr_lighting:
                 sampler.glUniform1i(sampler.uniforms["pbrEnvironment"], environment_unit)
                 for uniform, field in (("pbrEnvironmentSize", "environment_size"), ("pbrKeyPosition", "key_position"),
@@ -527,7 +573,7 @@ class PartPainter:
                     sampler.draw(entries[0].get("texture"), entries[0]["size"], self.pico.SDL_Rect(*state["bounds"]), destination)
                 else:
                     sampler.glUniform4f(sampler.uniforms["modulation"], 1, 1, 1, 1)
-                    sampler.draw_instances(state["bounds"], instances)
+                    sampler.draw_instances(state["bounds"], instances, screen_placements=screen_placements)
 
     def close(self):
         self.sampler.close()
