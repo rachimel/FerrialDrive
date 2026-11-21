@@ -79,6 +79,31 @@ class ProbeRestorationTests(unittest.TestCase):
         self.assertNotIn("draw", target.__dict__)
         self.assertEqual(target.draw(), 42)
 
+    def test_scanline_flush_is_counted_by_texture_not_trigger(self):
+        scanline, another_texture = object(), object()
+        pico = SimpleNamespace(SDL_RenderGeometry=lambda: 0)
+        queue = SimpleNamespace(kind="geometry", texture=another_texture, contains_text=False,
+                                flush=lambda: pico.SDL_RenderGeometry())
+        renderer = SimpleNamespace(batch_queue=queue, scanline_textures={"pattern": scanline})
+        probe = RenderBreakdown(None, detailed=True)
+        self.addCleanup(probe.close)
+        probe._install_sdl_counts(pico)
+        probe._install_hud_submissions(renderer)
+        probe.step(True)
+        with probe.scope("hud.total"):
+            with probe.scope("renderer.scanline_layer"):
+                queue.flush()
+            queue.texture = scanline
+            with probe.scope("renderer.text"):
+                queue.flush()
+        report = probe.report()
+        calls = report["sdl_calls_per_frame"]
+        self.assertEqual(calls["hud.total"]["SDL_RenderGeometry"], 2)
+        self.assertEqual(calls["hud.submit.scanlines"]["SDL_RenderGeometry"], 1)
+        self.assertEqual(calls["hud.submit.other_textured"]["SDL_RenderGeometry"], 1)
+        self.assertEqual(report["hud_submit_triggers_per_frame"]["scanlines"], {"renderer.text": 1})
+        self.assertNotIn("renderer.scanline_layer", calls)
+
     def test_blur_exception_preserves_context_cleanup(self):
         cleanup = []
 

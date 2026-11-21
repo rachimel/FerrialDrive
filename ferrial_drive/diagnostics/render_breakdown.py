@@ -8,7 +8,7 @@ from time import perf_counter_ns
 from .timing import TimingRecorder
 
 
-VARIANTS = ("baseline", "no_hud", "no_world", "no_ui_blur", "no_camera_blur", "no_actor_blur",
+VARIANTS = ("baseline", "individual_crowd_atlas", "no_hud", "no_world", "no_ui_blur", "no_camera_blur", "no_actor_blur",
             "no_auxiliary", "no_body_wind", "no_trail", "no_echoes", "no_ground_effects", "no_shadow",
             "no_radar", "no_dialogue", "no_resources", "no_rings", "cpu_trail", "compute_trail", "no_hud_batch",
             "no_filtered_batch",
@@ -27,6 +27,7 @@ class RenderBreakdown:
         self.active, self.frames = False, 0
         self.stack, self.originals = [], []
         self.calls = defaultdict(Counter)
+        self.hud_submit_triggers = defaultdict(Counter)
         self.self_ns = Counter()
         self.blur_requests = Counter()
         self.latest_ms = {}
@@ -119,6 +120,15 @@ class RenderBreakdown:
             if view is None:
                 raise ValueError("적 이름표·체력 막대 대조에는 교전 장면이 필요하다.")
             self.replace(view, "show_enemy_labels", lambda old: self.variant == "debug_enemy_labels")
+        atlas = getattr(view, "crowd_atlas", None)
+        if self.variant == "individual_crowd_atlas":
+            if atlas is None:
+                raise ValueError("군집 아틀라스 비교에는 고정 아틀라스가 연결된 교전 장면이 필요하다.")
+            self.replace(view, "batch_crowd_atlas", lambda old: False)
+        if self.detailed and atlas is not None:
+            self.method(atlas, "draw", "world.crowd_atlas.body_copy")
+            self.method(atlas, "draw_bodies", "world.crowd_atlas.body_batch")
+            self.method(atlas, "draw_shadows", "world.crowd_atlas.shadows")
         if self.variant in ("individual_enemy_parts", "individual_enemy_shadows"):
             view = getattr(app, "encounter_view", None)
             if view is None:
@@ -223,6 +233,7 @@ class RenderBreakdown:
             for name in ("film_grain", "scanline_layer", "filtered_polygons", "ring", "neon_text", "text"):
                 self.method(app.hud.renderer, name, "renderer." + name, skip="no_rings" if name == "ring" else None)
             self._install_sdl_counts(app.pico)
+            self._install_hud_submissions(app.hud.renderer)
         self._install_blur(app.hud.renderer)
         return self
 
@@ -239,11 +250,41 @@ class RenderBreakdown:
                         owner = self.stack[-1][0] if self.stack else "outside"
                         domain = next((entry[0] for entry in self.stack if entry[0] in ("hud.total", "world.total")), "outside")
                         self.calls[domain][api] += 1
+                        if owner == "renderer.scanline_layer" and api == "SDL_RenderGeometry":
+                            owner = "hud.submit.scanlines"
                         if owner != domain:
                             self.calls[owner][api] += 1
                     return original(*args)
                 return counted
             self.replace(pico, name, wrapper)
+
+    def _install_hud_submissions(self, renderer):
+        queue = getattr(renderer, "batch_queue", None)
+        if queue is None:
+            return
+
+        def wrap(original):
+            def flush():
+                if not self.active or queue.kind is None or not any(row[0] == "hud.total" for row in self.stack):
+                    return original()
+                texture = queue.texture
+                if queue.kind == "rectangles":
+                    label = "rectangles"
+                elif queue.contains_text:
+                    label = "text_atlas"
+                elif texture is None:
+                    label = "untextured"
+                elif any(texture is item for item in renderer.scanline_textures.values()):
+                    label = "scanlines"
+                else:
+                    label = "other_textured"
+                # 호출 위치와 관계없이 큐에 남은 도형의 실제 제출 시간을 기록한다.
+                self.hud_submit_triggers[label][self.stack[-1][0]] += 1
+                with self.scope("hud.submit." + label):
+                    return original()
+            return flush
+
+        self.replace(queue, "flush", wrap)
 
     def _install_blur(self, renderer):
         def wrapper(original):
@@ -305,6 +346,9 @@ class RenderBreakdown:
                 "self_ms_per_frame": {k: v / max(1, self.frames) / 1e6 for k, v in self.self_ns.items()},
                 "sdl_calls_per_frame": {k: {api: count/max(1, self.frames) for api, count in counts.items()}
                                         for k, counts in self.calls.items()},
+                "hud_submit_triggers_per_frame": {
+                    label: {trigger: count / max(1, self.frames) for trigger, count in counts.items()}
+                    for label, counts in self.hud_submit_triggers.items()},
                 "blur_requests_per_frame": {k: v/max(1, self.frames) for k, v in self.blur_requests.items()},
                 "collision_checks_per_frame":self.collision_checks/max(1,self.frames),
                 "collision_hits":self.collision_hits,
