@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [현행 무기 카드의 잔탄 네온 광 제외](2026-11-22-weapon-ammo-glow.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-weapon-ammo-glow:U1]]`은 잔탄 네온 광 제외 요청의 정확한 시각이다. 검색 단서는 `구 버전 웨폰 카드에 있었던 기능`이다.
+
 - [HUD 스캔라인 호출 귀속과 GL 상태 조회 단축](2026-11-22-hud-gl-state.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-hud-gl-state:U1]]`은 HUD 조회 분해와 스캔라인 귀속 요청의 정확한 시각이다. 검색 단서는 `HUD에서 나오는 glGet 60회도 쪼개봐`다.
 
 - [플레이어 파츠·SMAA의 반복 GL 상태 조회](2026-11-22-player-part-gl-state.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-player-part-gl-state:U1]]`은 파츠·업스케일 조회 분해 요청의 정확한 시각이다. 검색 단서는 `플레이어 파츠랑 업스케일에서 나오는 glGet 98회`다.
