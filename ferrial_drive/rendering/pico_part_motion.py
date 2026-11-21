@@ -254,7 +254,7 @@ class PicoPartMotion:
                     continue
                 page = frames[kind][part[end][field]]["page"]
                 if page >= 0:
-                    key, spec = resource["pages"][kind][page]
+                    _, key, spec = resource["pages"][kind][page]
                     requests[key] = spec
         return requests
 

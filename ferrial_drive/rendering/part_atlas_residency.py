@@ -79,7 +79,8 @@ class PartAtlasResidency:
                 fields[kind] = []
                 for page in pages:
                     file = os.path.abspath(path.parent / page["file"])
-                    fields[kind].append(((kind, file, page["sha256"], page.get("offset", 0)), dict(page, file=file)))
+                    key = kind, file, page["sha256"], page.get("offset", 0)
+                    fields[kind].append((self.cache.page_handle(key), key, dict(page, file=file)))
             return {"data": data, "pages": fields}, requests
         for kind, pages in data["pages"].items():
             page, = pages

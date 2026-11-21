@@ -46,6 +46,7 @@ class PartPageCache:
         max_side = self.binding.integer(0x0D33)
         self.pools = {kind: TexturePool(kind, side, capacity, max_side) for kind, side in PAGE_SIDES.items()}
         self.entries, self.jobs = {}, {}
+        self.page_handles, self.resident = {}, []
         self.draw_serial = 0
         self.executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="fdrive-part-page")
         self.archive = TexturePageArchive()
@@ -99,6 +100,15 @@ class PartPageCache:
                     self.glPixelStorei(key, value)
                 self.glBindBuffer(0x88EC, old_buffer)
 
+    def page_handle(self, key):
+        """카탈로그가 교체되거나 슬롯에서 빠져도 같은 페이지의 번호를 보존한다."""
+        handle = self.page_handles.get(key)
+        if handle is None:
+            handle = len(self.resident)
+            self.page_handles[key] = handle
+            self.resident.append(None)
+        return handle
+
     def _schedule(self, key, spec):
         work = TexturePageWork(spec, self.directory, timings=self.timings, archive=self.archive)
         self.jobs[key] = work, self.executor.submit(work.run), self.draw_serial
@@ -121,7 +131,9 @@ class PartPageCache:
             if old is None:
                 raise RuntimeError(f"동시에 필요한 {kind} 페이지가 풀의 슬롯 수를 초과한다.")
             index = pool.slots.pop(old)
-            self.resident_bytes -= self.entries.pop(old)[2]
+            old_handle = self.entries.pop(old)
+            self.resident_bytes -= self.resident[old_handle][2]
+            self.resident[old_handle] = None
             self.prefetched.discard(old)
             self.evictions += 1
         try:
@@ -140,7 +152,9 @@ class PartPageCache:
             raise
         size = len(prepared.pixels)
         pool.slots[key] = index
-        self.entries[key] = x, y, size
+        handle = self.page_handles[key]
+        self.entries[key] = handle
+        self.resident[handle] = x, y, size
         self.resident_bytes += size
         self.peak_resident_bytes = max(self.peak_resident_bytes, self.resident_bytes)
         self.uploaded_bytes += size
@@ -191,8 +205,8 @@ class PartPageCache:
         page = frame["page"]
         if page < 0:
             return 0, 0, 0, 0
-        key, _ = resource["pages"][kind][page]
-        slot = self.entries.get(key)
+        handle, _, _ = resource["pages"][kind][page]
+        slot = self.resident[handle]
         return (x + slot[0], y + slot[1], w, h) if slot is not None else (0, 0, 0, 0)
 
     def bindings(self, kinds):
@@ -219,6 +233,8 @@ class PartPageCache:
                 pool.texture.value = 0
             pool.slots.clear()
             pool.free[:] = range(pool.capacity - 1, -1, -1)
+        for handle in self.entries.values():
+            self.resident[handle] = None
         self.entries.clear()
         self.prefetched.clear()
         self.gpu_storage_bytes = self.resident_bytes = 0
@@ -227,3 +243,5 @@ class PartPageCache:
         self.clear()
         self.executor.shutdown(wait=True, cancel_futures=True)
         self.archive.close()
+        self.page_handles.clear()
+        self.resident.clear()
