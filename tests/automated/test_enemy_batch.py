@@ -294,6 +294,53 @@ class EnemyBatchGpuTests(unittest.TestCase):
             prepare.assert_called_once()
         self.assertEqual(view.primitives.stats["crowd_atlas_draws"], 0)
 
+    def test_fixed_atlas_batches_preserve_overlap_locks_and_attack_effects(self):
+        import numpy as np
+
+        path = ROOT / "samples/combat_test_v1_5/encounter.json"
+        config = json.loads(path.read_bytes())
+        atlas_path = (path.parent / config["rendering"]["enemy_repacked_sprites"]).with_name("crowd_atlas.json")
+        if not atlas_path.is_file():
+            self.skipTest("로컬 군집 아틀라스가 필요하다.")
+        config["spawns"] = [{"id": str(i), "profile": "small" if i % 2 else "medium",
+                             "position_m": [501 + (i % 3) * .7, 499 + i * .36]} for i in range(24)]
+        encounter = EnemyEncounter(config, map_size_m=1000, player_radius_m=2.5)
+        for index, kind in ((7, "melee"), (12, "ranged")):
+            enemy = encounter.enemies[str(index)]
+            enemy.phase, enemy.attack_kind = "active", kind
+            enemy.remaining_seconds = enemy.profile.active_seconds * .5
+        projection = GroundProjection(10, .5)
+        camera = LookAheadCamera(512, 512)
+        camera.reset(projection.project((500, 500)))
+        renderer = PicoRenderer({"small": ROOT / "data/fonts/SUITE-otf/SUITE-Bold.otf"}, {"small": 12})
+        self.addCleanup(renderer.close)
+        view = EncounterView(renderer, camera, projection, backend="immediate")
+        self.addCleanup(view.primitives.close)
+        view.sprites = self.sprites
+        atlas = view.crowd_atlas = EnemyCrowdAtlas(self.pico, atlas_path)
+        self.addCleanup(atlas.close)
+
+        def draw():
+            view.draw(encounter, {}, (512, 512), player_position_m=(400, 400), locked_id="17",
+                      shadow_opacity=.54)
+
+        with patch.object(view, "batch_crowd_atlas", False):
+            baseline = self.capture(draw)
+        with patch.object(atlas, "_submit_quads", wraps=atlas._submit_quads) as submits:
+            batched = self.capture(draw)
+        self.assertEqual(view.primitives.stats["crowd_atlas_draws"], 23)
+        self.assertEqual(view.primitives.stats["crowd_atlas_batched_bodies"], 21)
+        # 그림자 1묶음과 두 공격 이펙트·록온으로 나뉜 본체 4묶음
+        self.assertEqual(submits.call_count, 5)
+        self.assertGreater(np.any(baseline[200:305, 201:321] != [140, 170, 200], axis=2).sum(), 100)
+        self.assertLessEqual(np.abs(batched - baseline).max(), 1)
+
+        with patch("ferrial_drive.rendering.enemy_crowd_atlas.MAX_QUADS", 6), \
+                patch.object(atlas, "_submit_quads", wraps=atlas._submit_quads) as submits:
+            split = self.capture(draw)
+        self.assertEqual(submits.call_count, 9)
+        np.testing.assert_array_equal(split, batched)
+
     def test_deferred_shades_both_profiles_once_and_keeps_body_placement(self):
         from ferrial_drive.rendering.enemy_deferred_pbr import EnemyDeferredPbr
 

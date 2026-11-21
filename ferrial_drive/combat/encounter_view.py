@@ -29,6 +29,7 @@ class EncounterView:
         self.primitives = PrimitiveBatch(renderer, backend=backend)
         self.sprites = {}
         self.crowd_atlas = None
+        self.batch_crowd_atlas = True
         self.upscale_scratch = None
         self.batch_enemy_parts = True
         self.batch_enemy_shadows = True
@@ -77,6 +78,7 @@ class EncounterView:
             self.primitives.stats["fallback_poses"] = 0
             self.primitives.stats["shared_frame_draws"] = 0
             self.primitives.stats["crowd_atlas_draws"] = 0
+            self.primitives.stats["crowd_atlas_batched_bodies"] = 0
             self.primitives.stats["pbr_pose_requests"] = 0
             self.primitives.stats["batched_bodies"] = 0
             self.primitives.stats["body_batch_submits"] = 0
@@ -174,7 +176,8 @@ class EncounterView:
             if r.count:
                 r.flush()
             if crowd_shadows:
-                r.stats["shadow_draws"] += self.crowd_atlas.draw_shadows(crowd_shadows, shadow_opacity)
+                r.stats["shadow_draws"] += self.crowd_atlas.draw_shadows(
+                    crowd_shadows, shadow_opacity, batched=self.batch_crowd_atlas)
             near_shadows = {}
             for (kind, pose, shared), placements in shadow_groups.items():
                 if not shared and self.batch_enemy_shadows:
@@ -285,6 +288,9 @@ class EncounterView:
                 for row in items:
                     self._draw_enemy(row, encounter, flashes, zoom, prepared, labels, break_labels, deferred)
                 continue
+            if pose == CROWD_ATLAS:
+                self._draw_crowd_bodies(items, zoom)
+                continue
             sprite, kind, motion, direction, index = pose
             if r.count:
                 r.flush()
@@ -297,13 +303,30 @@ class EncounterView:
             key = f"{kind}/{motion}"
             motions[key] = motions.get(key, 0) + count
 
+    def _draw_crowd_bodies(self, rows, zoom):
+        r = self.primitives
+        if r.count:
+            r.flush()
+        placements = []
+        motions = r.stats["enemy_motions"]
+        for foot, x, enemy, sprite, playback, _ in rows:
+            kind = enemy.profile.kind
+            placements.append((kind, playback, x, foot, sprite.scale * zoom))
+            key = f"{kind}/{playback[0]}"
+            motions[key] = motions.get(key, 0) + 1
+        self.crowd_atlas.draw_bodies(placements)
+        count = len(placements)
+        r.stats["crowd_atlas_draws"] += count
+        r.stats["crowd_atlas_batched_bodies"] += count
+        r.stats["sprite_draws"] += count
+
     def _body_runs(self, placed, zoom):
         pending = []
         for pose, rows in groupby(placed, self._shared_body_key):
-            if pose is None:
+            if pose is None or pose == CROWD_ATLAS:
                 yield from pending
                 pending.clear()
-                yield None, rows, None
+                yield pose, rows, None
                 continue
             sprite, _, motion, direction, index = pose
             points = [(row[1], row[0]) for row in rows]
@@ -333,7 +356,11 @@ class EncounterView:
     def _shared_body_key(self, row):
         _, _, enemy, sprite, playback, shared = row
         # 공격 효과·디버그 표시·개별 기체를 경계로 원래의 가림 순서를 보존한다.
-        if self.show_enemy_labels or shared is not True or sprite is None or enemy.phase == "active":
+        if self.show_enemy_labels or sprite is None or enemy.phase == "active":
+            return None
+        if shared == CROWD_ATLAS and self.batch_crowd_atlas:
+            return CROWD_ATLAS
+        if shared is not True:
             return None
         motion, direction, seconds = playback
         return sprite, enemy.profile.kind, motion, direction, sprite.shared_frame_index(motion, direction, seconds)
