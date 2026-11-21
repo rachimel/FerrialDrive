@@ -46,5 +46,6 @@
 - **A1** 변경 후 세부 재계측의 같은 프레임 130에서 12타일의 업로드 구간은 0.0042ms였다. GPU 깊이 쓰기 전체는 0.0231ms였다.
 - **A1** 실제 GPU 검사 4개를 통과했다. 매핑 호출 수와 포즈별 정점 오프셋, GL 상태 조회와 실패 시 복구, 타일 퇴출, 인스턴스 제출 제한을 확인했다.
 - **A1** 기본 자동 검사 1,179개 중 1,090개를 통과했고 89개는 실행 조건에 따라 건너뛰었다.
+- **후속 독립 실행 검증** 2026-11-22 KST. 일반 `tests/combat_test_v1_5.py`와 3배속 `tests/combat_test_v1_5_speed_test.py`가 같은 `EncounterApplication`과 타일 기록 경로를 사용한다. Runner의 별도 프로세스 실행 경로로 FHD·높음 PBR·SMAA·무음 상태에서 실제 창을 열어 각각 135프레임을 자동 구동했다. 기본 30기, 12m 밀집 600기, 3배속 24m 1,000기에서 마지막 프레임의 근거리 그림자 배치 제출은 각각 1·4·1회였고, 모두 정상 종료했다. 실행별 화면과 결과는 `output/performance/standalone_shadow_depth/`에 있다.
 
 원자료와 재생 코드는 `output/performance/post_neon_600/`의 `tile_ops_stock_all.json`, `tile_ops_final_after_detail.json`, `tile_ops_600_comparison.json`, `tile_pixels_600.json`, `shadow_tile_ops.py`, `shadow_tile_pixels.py`에 있다. UHD 630 실기는 미측정이다.
