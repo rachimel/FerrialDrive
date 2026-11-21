@@ -11,8 +11,48 @@ from unittest.mock import patch
 import zlib
 
 from ferrial_drive.rendering.atlas_compact import compact_variant, compact_energy_variant, read_document, verify_variant
+from ferrial_drive.rendering.atlas_texture_cache import AtlasTextureBindings, bind_atlas_textures
 from ferrial_drive.rendering.motion_atlas import AtlasItem, pack_items
 from ferrial_drive.rendering.texture_codecs import texture_payload_size, unpack_payload
+
+
+class AtlasBindingTests(unittest.TestCase):
+    def test_queries_each_unit_target_once_and_restores_after_failure(self):
+        class Sampler:
+            def __init__(self):
+                self.unit = 0
+                self.bound = {(0, 0x0DE1): 41, (1, 0x0DE1): 42, (1, 0x8C2A): 43}
+                self.queries = []
+                self.binds = []
+
+            def glActiveTexture(self, texture):
+                self.unit = texture - 0x84C0
+
+            def integer(self, binding):
+                self.queries.append((self.unit, binding))
+                return self.bound[self.unit, {0x8069: 0x0DE1, 0x8C2C: 0x8C2A}[binding]]
+
+            def glBindTexture(self, target, name):
+                self.binds.append((self.unit, target, name))
+                self.bound[self.unit, target] = name
+
+        sampler = Sampler()
+        original = sampler.bound.copy()
+        with self.assertRaisesRegex(RuntimeError, "그리기 실패"):
+            with AtlasTextureBindings(sampler) as bindings:
+                first = [{"gl_texture": 5}, {"texture": object(), "gl_name": 6}]
+                with bind_atlas_textures(sampler, None, first, bindings):
+                    self.assertEqual(sampler.bound[1, 0x0DE1], 6)
+                with bind_atlas_textures(sampler, None, first, bindings):
+                    self.assertEqual(len(sampler.binds), 2)
+                second = [first[0], {"gl_texture": 7, "gl_target": 0x8C2A, "gl_binding": 0x8C2C}]
+                with bind_atlas_textures(sampler, None, second, bindings):
+                    self.assertEqual(sampler.bound[1, 0x8C2A], 7)
+                self.assertEqual(sampler.queries, [(0, 0x8069), (1, 0x8069), (1, 0x8C2C)])
+                self.assertEqual(sampler.unit, 0)
+                raise RuntimeError("그리기 실패")
+        self.assertEqual(sampler.bound, original)
+        self.assertEqual(sampler.unit, 0)
 
 
 class CompactFixture:

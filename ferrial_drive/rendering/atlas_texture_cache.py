@@ -234,7 +234,8 @@ class AtlasTextureCache:
                 if compressed or compact:
                     self._upload_gl(page, buffer, len(payload), compressed=compressed, subimage=False)
                 gpu = self._texture_info(page, compressed)
-            return {"texture": texture, "gpu": gpu}, False
+                gl_name = self.binding.integer(0x8069)
+            return {"texture": texture, "gl_name": gl_name, "gpu": gpu}, False
         except BaseException:
             p.SDL_DestroyTexture(texture)
             raise
@@ -330,8 +331,66 @@ class AtlasTextureCache:
                 "textures": [dict(path=str(key[0]), codec=row["codec"], **row["gpu"]) for key, row in self.entries.items()]}
 
 
+class AtlasTextureBindings:
+    """활성 유닛 0에서 시작하는 같은 GL 패스 안의 2D/버퍼 바인딩을 추적한다."""
+
+    def __init__(self, sampler):
+        self.sampler = sampler
+        self.previous = {}
+        self.current = {}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.restore()
+
+    def apply(self, entries, names):
+        s = self.sampler
+        active = 0
+        try:
+            for unit, (entry, name) in enumerate(zip(entries, names, strict=True)):
+                target = entry.get("gl_target", 0x0DE1)
+                key = unit, target
+                if key in self.current and self.current[key] == name:
+                    continue
+                if unit != active:
+                    s.glActiveTexture(0x84C0 + unit)
+                    active = unit
+                if key not in self.previous:
+                    self.previous[key] = s.integer(entry.get("gl_binding", 0x8069))
+                if self.current.get(key, self.previous[key]) != name:
+                    s.glBindTexture(target, name)
+                self.current[key] = name
+        finally:
+            if active:
+                s.glActiveTexture(0x84C0)
+
+    def restore(self):
+        s = self.sampler
+        active = 0
+        for (unit, target), name in self.previous.items():
+            if self.current.get((unit, target)) == name:
+                continue
+            if unit != active:
+                s.glActiveTexture(0x84C0 + unit)
+                active = unit
+            s.glBindTexture(target, name)
+        if active:
+            s.glActiveTexture(0x84C0)
+        self.previous.clear()
+        self.current.clear()
+
+
 @contextmanager
-def bind_atlas_textures(sampler, cache, entries):
+def bind_atlas_textures(sampler, cache, entries, bindings=None):
+    if bindings is not None:
+        names = [entry.get("gl_texture", entry.get("gl_name")) for entry in entries]
+        if None not in names:
+            bindings.apply(entries, names)
+            yield
+            return
+        bindings.restore()
     s, previous = sampler, []
     try:
         for unit, entry in enumerate(entries):

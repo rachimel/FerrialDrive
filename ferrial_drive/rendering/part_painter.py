@@ -624,7 +624,8 @@ class PartPainter:
     def paint(self, cache, resources, state, destination, *, energy_color=None, energy_gain=1, rim=(0, 0, 0, 0),
               opacity=1, tint=(1, 1, 1), tint_mix=0, brightness=1, realtime_light=0, shadow_map=None, pbr_lighting=None,
               sample_shadow=True, depth_output=False, instances=None, pose_table=None,
-              screen_depth=None, screen_placements=None, instance_texture=None, instance_range=None, depth_origin=(0, 0)):
+              screen_depth=None, screen_placements=None, instance_texture=None, instance_range=None, depth_origin=(0, 0),
+              texture_bindings=None):
         entries = (cache.bindings(self.page_kinds) if self.paged else
                    [resource["pages"][kind] for kind in self.texture_names for resource in resources])
         if pbr_lighting:
@@ -643,7 +644,7 @@ class PartPainter:
                             "gl_binding": TEXTURE_BINDING_BUFFER})
         arrays = self.frame_arrays(cache, resources, state) if pose_table is None else {}
         sampler = self.sampler
-        with sampler.batch(), bind_atlas_textures(sampler, cache, entries):
+        with sampler.batch(), bind_atlas_textures(sampler, cache, entries, texture_bindings):
             if pose_table is not None:
                 sampler.glUniform1i(sampler.uniforms["poseTable"], pose_unit)
             if screen_depth is not None:

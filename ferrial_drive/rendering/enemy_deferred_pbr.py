@@ -5,7 +5,7 @@ import ctypes as ct
 from dataclasses import dataclass, field
 
 from ferrial_drive.diagnostics.gpu_profile import bind_gl
-from .atlas_texture_cache import bind_atlas_textures
+from .atlas_texture_cache import AtlasTextureBindings, bind_atlas_textures
 from .enemy_part_batch import EnemyPartBatch, EnemyUpscaleScratch, SheetLayout, SheetTarget, UPSCALE_GUTTER
 from .gl_pass import TexturedQuadPass
 from .instance_texture_buffer import InstanceTextureBuffer
@@ -258,22 +258,24 @@ class EnemyDeferredPbr:
             painter = self.coverage[resource]
             batch, sampler = self._batch(resource), painter.sampler
             before = sampler.submits, sampler.instance_uploads, sampler.instance_upload_bytes
-            with sampler.batch(), self.depth.bind(sampler, size, clear=clear):
+            with sampler.batch(), self.depth.bind(sampler, size, clear=clear), AtlasTextureBindings(sampler) as bindings:
                 clear = False
                 for key, group in groups.items():
                     if not group.coverage_instances:
                         continue
-                    table = batch._table(key, group.bank_data, group.samples)
+                    table = batch._table(key, group.bank_data, group.samples, bindings=bindings)
                     if table is not None:
                         if self.instance_buffer is None:
                             instances = [((x - left, y - top, w, h), phase, first)
                                          for (x, y, w, h), phase, first in group.coverage_instances]
                             painter.paint(resource.cache, (group.bank_data,), group.state, None, instances=instances,
-                                          pose_table=table, screen_placements=group.coverage_placements)
+                                          pose_table=table, screen_placements=group.coverage_placements,
+                                          texture_bindings=bindings)
                         else:
                             painter.paint(resource.cache, (group.bank_data,), group.state, None, pose_table=table,
                                           instance_texture=self.instance_buffer.texture.value,
-                                          instance_range=group.instance_range, depth_origin=(left, top))
+                                          instance_range=group.instance_range, depth_origin=(left, top),
+                                          texture_bindings=bindings)
                         self.depth_bodies += len(group.coverage_instances)
             self.depth_submits += sampler.submits - before[0]
             self.instance_uploads += sampler.instance_uploads - before[1]
@@ -408,13 +410,13 @@ class EnemyDeferredPbr:
                 batch = self._batch(r)
                 painter, sampler = batch.painter, batch.painter.sampler
                 before = sampler.submits, sampler.instance_uploads, sampler.instance_upload_bytes
-                with sampler.batch(), self.surfaces.bind(sampler, clear=clear):
+                with sampler.batch(), self.surfaces.bind(sampler, clear=clear), AtlasTextureBindings(sampler) as bindings:
                     clear = False
                     sampler.glUniform1f(sampler.uniforms["deferredProfile"], profile)
                     for key, group in groups.items():
                         if not group.instances:
                             continue
-                        table = batch._table(key, group.bank_data, group.samples)
+                        table = batch._table(key, group.bank_data, group.samples, bindings=bindings)
                         if table is None:
                             for enemy_id in group.ids:
                                 copies.pop(enemy_id, None)
@@ -431,7 +433,8 @@ class EnemyDeferredPbr:
                             instance_options.update(instances=group.instances, screen_placements=placements)
                         painter.paint(r.cache, (group.bank_data,), group.state, None, energy_color=r.energy_color,
                             energy_gain=r.energy_mask_gain, shadow_map=r.shadow_map, pbr_lighting=r.pbr_lighting,
-                            sample_shadow=False, pose_table=table, screen_depth=depth_texture, **instance_options)
+                            sample_shadow=False, pose_table=table, screen_depth=depth_texture, texture_bindings=bindings,
+                            **instance_options)
                         if depth_texture is not None:
                             self.depth_tested_tiles += sum(placement[2] > 0 for placement in group.material_placements)
                             self.keypose_cached_tiles += group.sample_cached_tiles

@@ -400,6 +400,32 @@ class EnemyBatchGpuTests(unittest.TestCase):
 
         self.compare(draw_reference, draw_deferred, 8)
 
+    def test_deferred_texture_tracking_preserves_surface_and_depth_pixels(self):
+        import numpy as np
+        from ferrial_drive.rendering.atlas_texture_cache import AtlasTextureBindings
+        from ferrial_drive.rendering.enemy_deferred_pbr import EnemyDeferredPbr
+
+        requests = {"small": [("a", "move", "0", .18, 200, 250),
+                              ("b", "move", "1", .40, 205, 251),
+                              ("c", "attack", "2", .35, 212, 255)]}
+        ranks = {"a": 3, "b": 2, "c": 1}
+        for depth in (False, True):
+            with self.subTest(depth=depth):
+                renderer = EnemyDeferredPbr(self.pico, screen_depth=depth, batch_upload=depth)
+                self.addCleanup(renderer.close)
+
+                def draw():
+                    records = renderer.prepare(requests, self.sprites, .7, body_depth_ranks=ranks if depth else None)
+                    self.assertEqual(len(records), len(ranks))
+                    for enemy_id in ranks:
+                        renderer.copy(records[enemy_id])
+
+                self.capture(draw)
+                with patch.object(AtlasTextureBindings, "__enter__", return_value=None):
+                    baseline = self.capture(draw)
+                self.assertGreater(np.any(baseline != [140, 170, 200], axis=2).sum(), 100)
+                np.testing.assert_array_equal(baseline, self.capture(draw))
+
     def test_deferred_depth_skips_covered_tile_pixels_and_preserves_blending(self):
         import numpy as np
         from ferrial_drive.rendering.enemy_deferred_pbr import EnemyDeferredPbr

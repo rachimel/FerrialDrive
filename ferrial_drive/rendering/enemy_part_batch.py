@@ -4,6 +4,7 @@ import ctypes as ct
 from collections import OrderedDict
 from contextlib import nullcontext
 
+from .atlas_texture_cache import AtlasTextureBindings
 from .part_motion_atlas import frame_phase, frame_state
 from .part_painter import PartPainter
 from .part_upscale import PART_UPSCALE_BORDER, PartSheetUpscaler, render_target
@@ -110,7 +111,7 @@ class EnemyPartBatch:
     def texture(self):
         return self.output.texture
 
-    def _table(self, key, bank, samples):
+    def _table(self, key, bank, samples, *, bindings=None):
         clip = bank["data"]["clip"]
         painter = self.painter
         sampler = painter.sampler
@@ -120,6 +121,8 @@ class EnemyPartBatch:
         if cost > TABLE_BUDGET_BYTES or max(width, height) > sampler.max_texture_size:
             return None
         if key not in self.tables:
+            if bindings is not None and self.table_bytes + cost > TABLE_BUDGET_BYTES:
+                bindings.restore()
             while self.table_bytes + cost > TABLE_BUDGET_BYTES:
                 _, (old, _, size) = self.tables.popitem(last=False)
                 sampler.glDeleteTextures(1, ct.byref(old))
@@ -218,12 +221,13 @@ class EnemyPartBatch:
         upscale_regions = []
         # 필요할 때 페이지를 올리는 경로는 SDL이 관리하는 GL 상태를 그룹마다 돌려준다.
         scope = sampler.batch() if r.stream_budget is not None else nullcontext()
-        with render_target(p, target.texture), scope:
+        textures = AtlasTextureBindings(sampler) if r.stream_budget is not None else nullcontext()
+        with render_target(p, target.texture), scope, textures as bindings:
             for key, (_, state, instances, samples, ids, regions) in groups.items():
                 if not instances:
                     continue
                 bank = r.get(*key)
-                table = self._table(key, bank, samples)
+                table = self._table(key, bank, samples, bindings=bindings)
                 if table is None:
                     for enemy_id in ids:
                         del copies[enemy_id]
@@ -231,7 +235,7 @@ class EnemyPartBatch:
                 self.painter.paint(r.cache, (bank,), state, None, energy_color=r.energy_color,
                     energy_gain=r.energy_mask_gain, rim=r.rim_light, realtime_light=r.realtime_light,
                     shadow_map=r.shadow_map, pbr_lighting=r.pbr_lighting, sample_shadow=False,
-                    instances=instances, pose_table=table)
+                    instances=instances, pose_table=table, texture_bindings=bindings)
                 upscale_regions.extend(regions)
         if upscale_regions:
             self.output.reserve(output_layout)
