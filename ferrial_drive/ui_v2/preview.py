@@ -118,7 +118,8 @@ class HudPreview:
         px, py = self.player_world
         contacts = tuple(RadarContact((entry["position"][0] - px) / settings["aim_range_pixels"],
                                       (py - entry["position"][1]) / settings["aim_range_pixels"],
-                                      *entry["position"]) for entry in self.enemies.values())
+                                      *entry["position"])
+                         for entry in self.enemies.values() if entry["health"].current > 0)
         loadouts = tuple(LoadoutInfo(WeaponInfo(**entry["melee"]), WeaponInfo(**entry["ranged"]))
                          for entry in data["loadouts"])
         hud = HudState(Health(**data["player_health"]), target, data["combo_count"],
@@ -251,7 +252,8 @@ class HudPreview:
         # 미니맵은 정규화 좌표 ±1, 레이더는 설정 반경까지 표시한다.
         extent = limit * max(1, self.config.data["radar"]["range_units"])
         contacts = tuple(RadarContact((x - px) / limit, (py - y) / limit, *self.camera.world_to_screen((x, y)))
-                         for entry in self.enemies.values() for x, y in (entry["position"],)
+                         for entry in self.enemies.values() if entry["health"].current > 0
+                         for x, y in (entry["position"],)
                          if abs(x - px) <= extent and abs(y - py) <= extent)
         self.set_hud(radar_contacts=contacts)
         for track in self.lock_motion.tracks:

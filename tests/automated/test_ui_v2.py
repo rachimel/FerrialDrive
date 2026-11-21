@@ -511,6 +511,25 @@ class UiV2Tests(unittest.TestCase):
         self.assertEqual(self.program.selected_target_id, "enemy_a")
         self.assertEqual(self.program.state.hud.target.health, damaged)
 
+    def test_radar_removes_dead_enemies_without_waiting_for_target_fade(self):
+        program = self.program
+        program.update_world_view(0)
+        self.assertEqual(len(program.state.hud.radar_contacts), 3)
+        selected = program.selected_target_id
+        other = next(enemy_id for enemy_id in program.enemies if enemy_id != selected)
+        program.damage_target(other, 1)
+        program.update_world_view(0)
+        self.assertEqual(len(program.state.hud.radar_contacts), 3)
+        program.damage_target(other, int(program.enemies[other]["health"].current))
+        program.update_world_view(0)
+        self.assertEqual(len(program.state.hud.radar_contacts), 2)
+        program.damage_target(selected, int(program.enemies[selected]["health"].current))
+        program.update_world_view(0)
+        self.assertEqual(len(program.state.hud.radar_contacts), 1)
+        self.assertIn(selected, {visual.target_id for visual in program.defeated_targets.visuals})
+        program.reset()
+        self.assertEqual(len(program.state.hud.radar_contacts), 3)
+
     def test_empty_candidate_toggle_clears_pending_and_reacquires_immediately(self):
         self.program.perform("toggle_target")
         self.assertIsNone(self.program.state.hud.target)

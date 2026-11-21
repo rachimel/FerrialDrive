@@ -435,6 +435,7 @@ class EncounterIntegrationTests(unittest.TestCase):
                     program.hud.damage_target(enemy_id, 99999)
                 program.update(.05)
                 self.assertEqual(program.encounter.result, "victory")
+                self.assertEqual(program.hud.state.hud.radar_contacts, ())
                 program.gun_contact.emit(Vec2(), Vec2(1, 0), 'metal')
                 before = program.controller.position_m, program.encounter.elapsed_seconds
                 program.keys = {"d"}
