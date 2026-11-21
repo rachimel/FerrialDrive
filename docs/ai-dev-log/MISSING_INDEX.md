@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [잔탄 네온 제거 후 600기 CPU·GPU 병목 재계측](2026-11-22-post-neon-600.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-post-neon-600:U1-U2]]`는 재계측과 RenderDoc 질문의 정확한 시각이다. 검색 단서는 `네온 뺀 지금 상태로 600기 전체 다시 계측`과 `RenderDoc 사용해봤어?`다.
+
 - [현행 무기 카드의 잔탄 네온 광 제외](2026-11-22-weapon-ammo-glow.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-weapon-ammo-glow:U1]]`은 잔탄 네온 광 제외 요청의 정확한 시각이다. 검색 단서는 `구 버전 웨폰 카드에 있었던 기능`이다.
 
 - [HUD 스캔라인 호출 귀속과 GL 상태 조회 단축](2026-11-22-hud-gl-state.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-hud-gl-state:U1]]`은 HUD 조회 분해와 스캔라인 귀속 요청의 정확한 시각이다. 검색 단서는 `HUD에서 나오는 glGet 60회도 쪼개봐`다.
