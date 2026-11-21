@@ -311,6 +311,18 @@ class CombatTests(unittest.TestCase):
         self.assertLess(world.player.health, world.config.player_health)
         self.assertTrue(world._walkable(world.enemy.position, world.config.actor_radius_units))
 
+    def test_visibility_graph_matches_obstacles_after_map_edit(self):
+        walls = [Wall(520, 300, 150, 200)]
+        arena = Arena(player_spawn=(300, 400), enemy_spawn=(900, 400), walls=walls)
+        world = CombatWorld(arena=arena)
+        start, goal = world.enemy.position, world.player.position
+        around = world._find_route(start, goal)
+        self.assertGreater(len(around), 1)
+        walls.clear()
+        self.assertEqual(world._find_route(start, goal), [goal])
+        walls.append(Wall(520, 300, 150, 200))
+        self.assertEqual(world._find_route(start, goal), around)
+
     def test_victory_defeat_freeze_and_reset(self):
         world = quiet_world()
         world.enemy.position = Vec2(390, 400)

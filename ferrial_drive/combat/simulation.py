@@ -1,5 +1,6 @@
 """고정 주기의 이동·공격·피해·승패. Pico2D와 화면 좌표를 사용하지 않는다."""
 
+from bisect import bisect_right
 from dataclasses import dataclass, field, replace
 from heapq import heappop, heappush
 from math import ceil, cos, exp, expm1, floor, isfinite, log1p, radians, sin
@@ -437,17 +438,49 @@ class CombatWorld:
     def _line_clear(self, start, end, margin=0):
         return all(segment_box(start, end, wall.expanded(margin)) is None for wall in self.arena.walls)
 
+    def _route_graph(self):
+        radius = self.config.actor_radius_units
+        walls = tuple(self.arena.walls)
+        previous = getattr(self, "_route_cache", None)
+        if previous is not None and previous[0] is self.arena and previous[1:3] == (radius, walls):
+            return previous[3:]
+        points = []
+        for wall in walls:
+            box = wall.expanded(radius + 8)
+            corners = (Vec2(box.x, box.y), Vec2(box.x + box.width, box.y),
+                       Vec2(box.x, box.y + box.height), Vec2(box.x + box.width, box.y + box.height))
+            points.extend(point for point in corners if self._walkable(point, radius))
+        boxes = sorted((wall.expanded(radius + 1) for wall in walls), key=lambda wall: wall.x)
+        starts = tuple(box.x for box in boxes)
+
+        def visible(start, end):
+            left, right = sorted((start.x, end.x))
+            top, bottom = sorted((start.y, end.y))
+            for index in range(bisect_right(starts, right)):
+                box = boxes[index]
+                if box.x + box.width >= left and box.y <= bottom and box.y + box.height >= top:
+                    if segment_box(start, end, box) is not None:
+                        return False
+            return True
+
+        edges = [[] for _ in points]
+        for index, start in enumerate(points):
+            for neighbor in range(index + 1, len(points)):
+                end = points[neighbor]
+                if visible(start, end):
+                    distance = (end - start).length
+                    edges[index].append((neighbor + 2, distance))
+                    edges[neighbor].append((index + 2, distance))
+        self._route_cache = self.arena, radius, walls, points, edges, visible
+        return points, edges, visible
+
     def _find_route(self, start, goal):
-        """작은 사각형 훈련장의 모서리 후보에 A*를 적용한다."""
-        margin = self.config.actor_radius_units + 8
-        points = [start, goal]
-        for wall in self.arena.walls:
-            box = wall.expanded(margin)
-            for point in (Vec2(box.x, box.y), Vec2(box.x + box.width, box.y),
-                          Vec2(box.x, box.y + box.height), Vec2(box.x + box.width, box.y + box.height)):
-                if self._walkable(point, self.config.actor_radius_units):
-                    points.append(point)
-        frontier, costs, parents = [(0, 0)], {0: 0}, {}
+        """정적 모서리의 연결을 재사용하고 시작점과 목표점의 연결을 계산한다."""
+        corners, adjacency, visible = self._route_graph()
+        points = (start, goal, *corners)
+        frontier = [(0, 0)]
+        costs, parents = [float("inf")] * len(points), [-1] * len(points)
+        costs[0] = 0
         while frontier:
             _, index = heappop(frontier)
             if index == 1:
@@ -456,11 +489,18 @@ class CombatWorld:
                     route.append(points[index])
                     index = parents[index]
                 return list(reversed(route))
-            for next_index, point in enumerate(points):
-                if next_index == index or not self._line_clear(points[index], point, self.config.actor_radius_units + 1):
-                    continue
-                cost = costs[index] + (point - points[index]).length
-                if cost < costs.get(next_index, float("inf")):
-                    costs[next_index], parents[next_index] = cost, index
-                    heappush(frontier, (cost + (goal - point).length, next_index))
+            point = points[index]
+            edges = []
+            if visible(point, goal):
+                edges.append((1, (point - goal).length))
+            if index == 0:
+                edges.extend((neighbor, (end - start).length) for neighbor, end in enumerate(corners, 2)
+                             if visible(start, end))
+            else:
+                edges.extend(adjacency[index - 2])
+            for neighbor, distance in edges:
+                cost = costs[index] + distance
+                if cost < costs[neighbor]:
+                    costs[neighbor], parents[neighbor] = cost, index
+                    heappush(frontier, (cost + (goal - points[neighbor]).length, neighbor))
         return []
