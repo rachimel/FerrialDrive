@@ -64,10 +64,15 @@ varying vec2 texel;
 flat in ivec4 sampleTile;
 flat in int sampleBase;
 uniform vec4 sourceRect;
-#ifdef DEPTH_COVERAGE
-layout(std430,binding=KEYPOSE_BINDING) writeonly buffer KeyposeSamples { vec4 samples[]; };
+#ifdef KEYPOSE_SAMPLES_FP16
+#define KEYPOSE_SAMPLE_TYPE uvec2
 #else
-layout(std430,binding=KEYPOSE_BINDING) readonly buffer KeyposeSamples { vec4 samples[]; };
+#define KEYPOSE_SAMPLE_TYPE vec4
+#endif
+#ifdef DEPTH_COVERAGE
+layout(std430,binding=KEYPOSE_BINDING) writeonly buffer KeyposeSamples { KEYPOSE_SAMPLE_TYPE samples[]; };
+#else
+layout(std430,binding=KEYPOSE_BINDING) readonly buffer KeyposeSamples { KEYPOSE_SAMPLE_TYPE samples[]; };
 #endif
 ivec2 samplePixel() {
     return ivec2(gl_FragCoord.xy)-sampleTile.xy;
@@ -76,6 +81,32 @@ int sampleIndex(int part) {
     ivec2 pixel=samplePixel();
     return sampleBase+(pixel.y*sampleTile.z+pixel.x)*PARTS+part;
 }
+#ifdef KEYPOSE_SAMPLES_FP16
+vec4 decodeKeyposeSamples(uvec2 packedPoints) {
+    return vec4(unpackHalf2x16(packedPoints.x),unpackHalf2x16(packedPoints.y));
+}
+#endif
+#ifdef DEPTH_COVERAGE
+vec4 storeKeyposeSamples(int part,vec4 points) {
+#ifdef KEYPOSE_SAMPLES_FP16
+    uvec2 packedPoints=uvec2(packHalf2x16(points.xy),packHalf2x16(points.zw));
+    samples[sampleIndex(part)]=packedPoints;
+    // 깊이 판정도 재질 패스와 같은 양자화 좌표로 한다.
+    return decodeKeyposeSamples(packedPoints);
+#else
+    samples[sampleIndex(part)]=points;
+    return points;
+#endif
+}
+#else
+vec4 loadKeyposeSamples(int part) {
+#ifdef KEYPOSE_SAMPLES_FP16
+    return decodeKeyposeSamples(samples[sampleIndex(part)]);
+#else
+    return samples[sampleIndex(part)];
+#endif
+}
+#endif
 vec2 sampleTexel() {
     if(sampleBase<0) return texel;
     return sourceRect.xy+(vec2(samplePixel())+vec2(0.5))*sourceRect.zw/vec2(sampleTile.zw);
@@ -216,12 +247,12 @@ vec4 temporalSurface(int i,vec2 p,out float depth,out vec4 material,out vec3 pro
     if(outsideSample(p,size)) return vec4(0.0);
     vec4 points;
 #if defined(CACHE_KEYPOSE_SAMPLES) && !defined(DEPTH_COVERAGE)
-    if(sampleBase>=0) points=samples[sampleIndex(i)];
+    if(sampleBase>=0) points=loadKeyposeSamples(i);
     else points=keyposeSamplePoints(i,p,size,bank,t);
 #else
     points=keyposeSamplePoints(i,p,size,bank,t);
 #ifdef CACHE_KEYPOSE_SAMPLES
-    if(sampleBase>=0) samples[sampleIndex(i)]=points;
+    if(sampleBase>=0) points=storeKeyposeSamples(i,points);
 #endif
 #endif
     vec2 a=points.xy,b=points.zw;
@@ -288,7 +319,7 @@ void main() {
         // 이미 가림이 확정된 픽셀의 나머지 파츠는 보간 좌표만 기록한다.
         if(opaque) {
             if(!outsideSample(p,crop.zw))
-                samples[sampleIndex(i)]=keyposeSamplePoints(i,p,crop.zw,shift.w,localPhase);
+                storeKeyposeSamples(i,keyposeSamplePoints(i,p,crop.zw,shift.w,localPhase));
             continue;
         }
 #endif
@@ -464,7 +495,7 @@ class PartPainter:
 
     def __init__(self, pico, *, angular=False, part_count=MAX_PARTS, paged=False, frame_crop=False, surface=False,
                  pbr=False, coat=False, instanced=False, deferred=False, depth_coverage=False,
-                 screen_depth=False, instance_table=False, cache_keypose_samples=False):
+                 screen_depth=False, instance_table=False, cache_keypose_samples=False, keypose_samples_fp16=False):
         self.pico = pico
         self.paged = paged
         self.frame_crop = frame_crop
@@ -516,6 +547,8 @@ class PartPainter:
         if cache_keypose_samples:
             from .keypose_sample_buffer import KEYPOSE_SAMPLE_BINDING
             defines += f"\n#define CACHE_KEYPOSE_SAMPLES\n#define KEYPOSE_BINDING {KEYPOSE_SAMPLE_BINDING}"
+            if keypose_samples_fp16:
+                defines += "\n#define KEYPOSE_SAMPLES_FP16"
         shader = PART_SHADER.replace(b"#version 120", defines.encode(), 1)
         shader = shader.replace(b"PART_LIMIT", str(part_count).encode())
         shader = shader.replace(b"PAGE_SAMPLERS", "\n".join(declarations).encode())

@@ -9,14 +9,15 @@ from ferrial_drive.diagnostics.gpu_profile import bind_gl
 SHADER_STORAGE_BUFFER = 0x90D2
 SHADER_STORAGE_BUFFER_BINDING = 0x90D3
 KEYPOSE_SAMPLE_BINDING = 7
-SAMPLE_BYTES = 16
 ALLOCATION_PAGE_BYTES = 256 * 1024
 
 
 class KeyposeSampleBuffer:
-    def __init__(self, pico):
+    def __init__(self, pico, *, fp16=False):
         self.buffer = ct.c_uint()
         self.storage_bytes = 0
+        self.fp16 = fp16
+        self.sample_bytes = 8 if fp16 else 16
         u, i, p, size = ct.c_uint, ct.c_int, ct.c_void_p, ct.c_ssize_t
         for name, args in (
             ("glGenBuffers", [i, p]), ("glDeleteBuffers", [i, p]),
@@ -30,7 +31,7 @@ class KeyposeSampleBuffer:
         self.glGetInteger64v(0x90DE, ct.byref(limit))  # GL_MAX_SHADER_STORAGE_BLOCK_SIZE
         self.limit_bytes = limit.value
         # 인스턴스의 float 슬롯에 저장하는 시작 인덱스에는 정확한 정수가 필요하다.
-        self.sample_limit = min(self.limit_bytes // SAMPLE_BYTES, (1 << 24) - 2)
+        self.sample_limit = min(self.limit_bytes // self.sample_bytes, (1 << 24) - 2)
 
     @contextmanager
     def bind(self, sampler, sample_count):
@@ -44,7 +45,7 @@ class KeyposeSampleBuffer:
         try:
             if not self.buffer.value:
                 self.glGenBuffers(1, ct.byref(self.buffer))
-            requested = max(SAMPLE_BYTES, sample_count * SAMPLE_BYTES)
+            requested = max(self.sample_bytes, sample_count * self.sample_bytes)
             if requested > self.storage_bytes:
                 capacity = min(self.limit_bytes, (requested + ALLOCATION_PAGE_BYTES - 1)
                                // ALLOCATION_PAGE_BYTES * ALLOCATION_PAGE_BYTES) if sample_count else requested
