@@ -336,15 +336,16 @@ def bind_atlas_textures(sampler, cache, entries):
     try:
         for unit, entry in enumerate(entries):
             s.glActiveTexture(0x84C0 + unit)
-            previous.append(s.integer(0x8069))
+            target = entry.get("gl_target", 0x0DE1)
+            previous.append((target, s.integer(entry.get("gl_binding", 0x8069))))
             if "gl_texture" in entry:
-                s.glBindTexture(0x0DE1, entry["gl_texture"])
+                s.glBindTexture(target, entry["gl_texture"])
             else:
                 cache._bind(entry["texture"])
         s.glActiveTexture(0x84C0)
         yield
     finally:
-        for unit, texture in enumerate(previous):
+        for unit, (target, texture) in enumerate(previous):
             s.glActiveTexture(0x84C0 + unit)
-            s.glBindTexture(0x0DE1, texture)
+            s.glBindTexture(target, texture)
         s.glActiveTexture(0x84C0)

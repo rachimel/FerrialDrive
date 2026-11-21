@@ -401,7 +401,7 @@ class PartPainter:
 
     def __init__(self, pico, *, angular=False, part_count=MAX_PARTS, paged=False, frame_crop=False, surface=False,
                  pbr=False, coat=False, instanced=False, deferred=False, depth_coverage=False,
-                 screen_depth=False):
+                 screen_depth=False, instance_table=False):
         self.pico = pico
         self.paged = paged
         self.frame_crop = frame_crop
@@ -477,6 +477,8 @@ class PartPainter:
             access = "#define PART_FIELD(name,index) name[index]"
         shader = shader.replace(b"PART_FIELD_ACCESS", access.encode())
         sampler_options = {"screen_depth": True} if depth_coverage or screen_depth else {}
+        if instance_table:
+            sampler_options.update(instance_table=True, coverage_instances=depth_coverage)
         self.sampler = sampler_type(pico, fragment_shader=shader, **sampler_options,
             extra_uniforms=tuple(name + "[0]" for name in self.arrays) +
             tuple(uniforms) + ("bankData[0]", "energyTint", "rimLight", "localPhase", "partCount", "effectOpacity",
@@ -511,7 +513,7 @@ class PartPainter:
     def paint(self, cache, resources, state, destination, *, energy_color=None, energy_gain=1, rim=(0, 0, 0, 0),
               opacity=1, tint=(1, 1, 1), tint_mix=0, brightness=1, realtime_light=0, shadow_map=None, pbr_lighting=None,
               sample_shadow=True, depth_output=False, instances=None, pose_table=None,
-              screen_depth=None, screen_placements=None):
+              screen_depth=None, screen_placements=None, instance_texture=None, instance_range=None, depth_origin=(0, 0)):
         entries = (cache.bindings(self.page_kinds) if self.paged else
                    [resource["pages"][kind] for kind in self.texture_names for resource in resources])
         if pbr_lighting:
@@ -523,6 +525,11 @@ class PartPainter:
         if screen_depth is not None:
             depth_unit = len(entries)
             entries.append({"gl_texture": screen_depth})
+        if instance_texture is not None:
+            from .instance_texture_buffer import TEXTURE_BINDING_BUFFER, TEXTURE_BUFFER
+            instance_unit = len(entries)
+            entries.append({"gl_texture": instance_texture, "gl_target": TEXTURE_BUFFER,
+                            "gl_binding": TEXTURE_BINDING_BUFFER})
         arrays = self.frame_arrays(cache, resources, state) if pose_table is None else {}
         sampler = self.sampler
         with sampler.batch(), bind_atlas_textures(sampler, cache, entries):
@@ -530,6 +537,8 @@ class PartPainter:
                 sampler.glUniform1i(sampler.uniforms["poseTable"], pose_unit)
             if screen_depth is not None:
                 sampler.glUniform1i(sampler.uniforms["screenDepth"], depth_unit)
+            if instance_texture is not None:
+                sampler.glUniform1i(sampler.uniforms["instanceTable"], instance_unit)
             if pbr_lighting:
                 sampler.glUniform1i(sampler.uniforms["pbrEnvironment"], environment_unit)
                 for uniform, field in (("pbrEnvironmentSize", "environment_size"), ("pbrKeyPosition", "key_position"),
@@ -569,7 +578,10 @@ class PartPainter:
             sampler.glUniform1f(sampler.uniforms["effectOpacity"], opacity)
             with shadow_map.bind(sampler, len(entries), sample_shadow=sample_shadow,
                                  surface=pbr_lighting is not None) if shadow_map else nullcontext():
-                if instances is None:
+                if instance_range is not None:
+                    sampler.glUniform4f(sampler.uniforms["modulation"], 1, 1, 1, 1)
+                    sampler.draw_instance_range(state["bounds"], *instance_range, depth_origin, screen_depth is not None)
+                elif instances is None:
                     sampler.draw(entries[0].get("texture"), entries[0]["size"], self.pico.SDL_Rect(*state["bounds"]), destination)
                 else:
                     sampler.glUniform4f(sampler.uniforms["modulation"], 1, 1, 1, 1)

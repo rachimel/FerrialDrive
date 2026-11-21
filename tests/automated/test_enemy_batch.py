@@ -327,21 +327,27 @@ class EnemyBatchGpuTests(unittest.TestCase):
                               ("front", "move", "0", .18001, 204, 230)]}
         ranks = {"behind": 2, "front": 1}
         baseline = EnemyDeferredPbr(self.pico)
+        uniforms = EnemyDeferredPbr(self.pico, screen_depth=True, batch_upload=False)
         experiment = EnemyDeferredPbr(self.pico, screen_depth=True)
-        for renderer in (baseline, experiment):
+        for renderer in (baseline, uniforms, experiment):
             self.addCleanup(renderer.close)
 
         def draw(renderer, *, behind_only=False):
             records = renderer.prepare(requests, self.sprites, .7, body_depth_ranks=ranks)
-            self.assertEqual(len(records), 2)
+            self.assertEqual(len(records), len(ranks))
             renderer.copy(records["behind"])
             if not behind_only:
                 renderer.copy(records["front"])
+                if "reused" in ranks:
+                    renderer.copy(records["reused"])
 
         reference = self.capture(lambda: draw(baseline))
         result = self.capture(lambda: draw(experiment))
         np.testing.assert_array_equal(reference, result)
+        np.testing.assert_array_equal(self.capture(lambda: draw(uniforms)), result)
         self.assertEqual((experiment.depth_submits, experiment.depth_bodies, experiment.depth_tested_tiles), (1, 2, 2))
+        self.assertEqual((uniforms.instance_uploads, uniforms.instance_upload_bytes), (6, 192))
+        self.assertEqual((experiment.instance_uploads, experiment.instance_upload_bytes), (1, 96))
 
         full = self.capture(lambda: draw(baseline, behind_only=True))
         culled = self.capture(lambda: draw(experiment, behind_only=True))
@@ -349,6 +355,13 @@ class EnemyBatchGpuTests(unittest.TestCase):
         removed = np.any(full != background, axis=2) & np.all(culled == background, axis=2)
         self.assertGreater(removed.sum(), 50)
         self.assertGreater(np.any(culled != background, axis=2).sum(), 20)
+
+        requests["small"].append(("reused", "move", "0", .18, 414, 465))
+        ranks["reused"] = 3
+        result = self.capture(lambda: draw(experiment))
+        np.testing.assert_array_equal(self.capture(lambda: draw(uniforms)), result)
+        self.assertEqual((experiment.depth_bodies, experiment.depth_tested_tiles), (3, 1))
+        self.assertEqual((experiment.instance_uploads, experiment.instance_upload_bytes), (1, 144))
 
     def test_deferred_box_mask_submits_both_profiles_once(self):
         import numpy as np

@@ -8,6 +8,7 @@ from ferrial_drive.diagnostics.gpu_profile import bind_gl
 from .atlas_texture_cache import bind_atlas_textures
 from .enemy_part_batch import EnemyPartBatch, EnemyUpscaleScratch, SheetLayout, SheetTarget, UPSCALE_GUTTER
 from .gl_pass import TexturedQuadPass
+from .instance_texture_buffer import InstanceTextureBuffer
 from .part_motion_atlas import frame_phase, frame_state
 from .part_painter import PartPainter
 from .part_pbr import PBR_FUNCTIONS, PBR_UNIFORMS
@@ -135,11 +136,13 @@ class DeferredGroup:
     regions: list = field(default_factory=list)
     coverage_instances: list = field(default_factory=list)
     coverage_placements: list = field(default_factory=list)
+    coverage_tiles: list = field(default_factory=list)
     material_placements: list = field(default_factory=list)
+    instance_range: tuple = (0, 0)
 
 
 class EnemyDeferredPbr:
-    def __init__(self, pico, *, screen_depth=False):
+    def __init__(self, pico, *, screen_depth=False, batch_upload=True):
         self.pico = pico
         self.parts = {}
         self.coverage = {}
@@ -147,6 +150,7 @@ class EnemyDeferredPbr:
         if screen_depth:
             from .enemy_screen_depth import EnemyScreenDepth
             self.depth = EnemyScreenDepth(pico)
+        self.instance_buffer = InstanceTextureBuffer(pico) if screen_depth and batch_upload else None
         self.scratch = EnemyUpscaleScratch(pico)
         self.output = SheetTarget(pico)
         self.surfaces = SurfaceTargets(pico)
@@ -156,6 +160,7 @@ class EnemyDeferredPbr:
         self.upload_array = bind_gl(pico, "glUniform4fv", None, [ct.c_int, ct.c_int, ct.c_void_p])
         self.surface_submits = self.light_submits = 0
         self.depth_submits = self.depth_bodies = self.depth_tested_tiles = 0
+        self.instance_uploads = self.instance_upload_bytes = 0
 
     @property
     def storage_bytes(self):
@@ -163,7 +168,8 @@ class EnemyDeferredPbr:
         sheet_bytes = sum(target.size[0] * target.size[1] * 4 for target in (self.output, self.scratch.native))
         return (self.surfaces.storage_bytes + sheet_bytes + sum(batch.table_bytes for batch in self.parts.values())
                 + (upscaler.aa.storage_bytes if upscaler is not None else 0)
-                + (self.depth.storage_bytes if self.depth is not None else 0))
+                + (self.depth.storage_bytes if self.depth is not None else 0)
+                + (self.instance_buffer.storage_bytes if self.instance_buffer is not None else 0))
 
     def _make_painter(self, resource, *, coverage=False):
         formats = {name: getattr(resource, name) for name in ("hermite_flow", "compact_depth")
@@ -171,6 +177,7 @@ class EnemyDeferredPbr:
         return PartPainter(self.pico, part_count=resource.catalog.part_count, frame_crop=resource.catalog.frame_crop,
             surface=True, pbr=True, deferred=not coverage, depth_coverage=coverage,
             screen_depth=self.depth is not None and not coverage,
+            instance_table=self.instance_buffer is not None,
             coat=resource.catalog.coat_members is not None, instanced=True, **formats)
 
     def _batch(self, resource):
@@ -179,6 +186,30 @@ class EnemyDeferredPbr:
             batch.painter = self._make_painter(resource)
             self.parts[resource] = batch
         return self.parts[resource]
+
+    def _upload_instances(self, jobs):
+        values = []
+        for _, _, groups in jobs:
+            for group in groups.values():
+                start = len(values) // 12
+                coverage, duplicates = {}, []
+                for tile, (rect, phase, first), placement in zip(
+                        group.coverage_tiles, group.coverage_instances, group.coverage_placements, strict=True):
+                    if tile in coverage:
+                        duplicates.append((rect, phase, first, placement[2]))
+                    else:
+                        coverage[tile] = rect, placement[2]
+                for tile, ((sheet, phase, first), material) in enumerate(
+                        zip(group.instances, group.material_placements, strict=True)):
+                    screen, z = coverage.get(tile, (NO_SCREEN_PLACEMENT, 0))
+                    values.extend((*screen, *sheet, phase, first, z, float(material[2] > 0)))
+                # 같은 포즈의 다른 화면 위치는 깊이만 기록하고 시트 슬롯을 공유한다.
+                for screen, phase, first, z in duplicates:
+                    values.extend((*screen, *NO_SCREEN_PLACEMENT, phase, first, z, 0))
+                group.instance_range = start, len(values) // 12 - start
+        self.instance_buffer.upload(self.lighting, values)
+        self.instance_uploads = 1
+        self.instance_upload_bytes = self.instance_buffer.storage_bytes
 
     def _write_depth(self, jobs, viewport):
         rectangles = [rect for _, _, groups in jobs for group in groups.values()
@@ -200,7 +231,7 @@ class EnemyDeferredPbr:
                 self.coverage[resource] = self._make_painter(resource, coverage=True)
             painter = self.coverage[resource]
             batch, sampler = self._batch(resource), painter.sampler
-            before = sampler.submits
+            before = sampler.submits, sampler.instance_uploads, sampler.instance_upload_bytes
             with sampler.batch(), self.depth.bind(sampler, size, clear=clear):
                 clear = False
                 for key, group in groups.items():
@@ -208,12 +239,19 @@ class EnemyDeferredPbr:
                         continue
                     table = batch._table(key, group.bank_data, group.samples)
                     if table is not None:
-                        instances = [((x - left, y - top, w, h), phase, first)
-                                     for (x, y, w, h), phase, first in group.coverage_instances]
-                        painter.paint(resource.cache, (group.bank_data,), group.state, None, instances=instances,
-                                      pose_table=table, screen_placements=group.coverage_placements)
+                        if self.instance_buffer is None:
+                            instances = [((x - left, y - top, w, h), phase, first)
+                                         for (x, y, w, h), phase, first in group.coverage_instances]
+                            painter.paint(resource.cache, (group.bank_data,), group.state, None, instances=instances,
+                                          pose_table=table, screen_placements=group.coverage_placements)
+                        else:
+                            painter.paint(resource.cache, (group.bank_data,), group.state, None, pose_table=table,
+                                          instance_texture=self.instance_buffer.texture.value,
+                                          instance_range=group.instance_range, depth_origin=(left, top))
                         self.depth_bodies += len(group.coverage_instances)
-            self.depth_submits += sampler.submits - before
+            self.depth_submits += sampler.submits - before[0]
+            self.instance_uploads += sampler.instance_uploads - before[1]
+            self.instance_upload_bytes += sampler.instance_upload_bytes - before[2]
         return (self.depth.texture.value if self.depth_submits else None), left, top
 
     def _resolve(self, resources, layout, target):
@@ -242,6 +280,7 @@ class EnemyDeferredPbr:
     def prepare(self, body_requests, sprites, zoom, *, body_depth_ranks=None):
         self.surface_submits = self.light_submits = 0
         self.depth_submits = self.depth_bodies = self.depth_tested_tiles = 0
+        self.instance_uploads = self.instance_upload_bytes = 0
         for resource in self.parts.keys() - {sprite.resource for sprite in sprites.values()}:
             self.parts.pop(resource).close()
             if resource in self.coverage:
@@ -313,12 +352,15 @@ class EnemyDeferredPbr:
                 if z:
                     group.coverage_instances.append(((destination.x, destination.y, destination.w, destination.h), phase, first))
                     group.coverage_placements.append((0, 0, z, 0))
+                    group.coverage_tiles.append(poses[pose][2])
                 target, rect, _ = poses[pose]
                 copies[enemy_id] = target, rect, destination
                 group.ids.append(enemy_id)
             jobs.append((profile, r, groups))
         if not copies:
             return {}
+        if self.instance_buffer is not None:
+            self._upload_instances(jobs)
         depth_texture, depth_left, depth_top = self._write_depth(jobs, viewport) if use_depth else (None, 0, 0)
         target = self.scratch.native
         target.reserve(native_layout)
@@ -328,7 +370,7 @@ class EnemyDeferredPbr:
             for profile, r, groups in jobs:
                 batch = self._batch(r)
                 painter, sampler = batch.painter, batch.painter.sampler
-                before = sampler.submits
+                before = sampler.submits, sampler.instance_uploads, sampler.instance_upload_bytes
                 with sampler.batch(), self.surfaces.bind(sampler, clear=clear):
                     clear = False
                     sampler.glUniform1f(sampler.uniforms["deferredProfile"], profile)
@@ -340,18 +382,25 @@ class EnemyDeferredPbr:
                             for enemy_id in group.ids:
                                 copies.pop(enemy_id, None)
                             continue
-                        placements = None
-                        if depth_texture is not None:
-                            placements = [(x - depth_left, y - depth_top, z, 0)
-                                          for x, y, z, _ in group.material_placements]
+                        instance_options = {}
+                        if self.instance_buffer is not None:
+                            instance_options.update(instance_texture=self.instance_buffer.texture.value,
+                                                    instance_range=group.instance_range, depth_origin=(depth_left, depth_top))
+                        else:
+                            placements = None
+                            if depth_texture is not None:
+                                placements = [(x - depth_left, y - depth_top, z, 0)
+                                              for x, y, z, _ in group.material_placements]
+                            instance_options.update(instances=group.instances, screen_placements=placements)
                         painter.paint(r.cache, (group.bank_data,), group.state, None, energy_color=r.energy_color,
                             energy_gain=r.energy_mask_gain, shadow_map=r.shadow_map, pbr_lighting=r.pbr_lighting,
-                            sample_shadow=False, instances=group.instances, pose_table=table,
-                            screen_depth=depth_texture, screen_placements=placements)
-                        if placements:
-                            self.depth_tested_tiles += sum(placement[2] > 0 for placement in placements)
+                            sample_shadow=False, pose_table=table, screen_depth=depth_texture, **instance_options)
+                        if depth_texture is not None:
+                            self.depth_tested_tiles += sum(placement[2] > 0 for placement in group.material_placements)
                         regions.extend(group.regions)
-                self.surface_submits += sampler.submits - before
+                self.surface_submits += sampler.submits - before[0]
+                self.instance_uploads += sampler.instance_uploads - before[1]
+                self.instance_upload_bytes += sampler.instance_upload_bytes - before[2]
             self._resolve(resources, native_layout, target)
         if regions:
             self.output.reserve(output_layout)
@@ -373,6 +422,8 @@ class EnemyDeferredPbr:
         self.coverage.clear()
         if self.depth is not None:
             self.depth.close()
+        if self.instance_buffer is not None:
+            self.instance_buffer.close()
         self.lighting.close()
         self.surfaces.close()
         self.output.close()

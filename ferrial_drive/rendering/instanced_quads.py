@@ -19,6 +19,11 @@ flat out vec4 sourceBounds;
 uniform vec4 anchorScale;
 #endif
 uniform vec4 poseTimes[QUAD_LIMIT];
+#ifdef INSTANCE_TABLE
+uniform samplerBuffer instanceTable;
+uniform int instanceStart, screenDepthReady;
+uniform vec2 depthOrigin;
+#endif
 #ifdef SCREEN_DEPTH
 uniform vec4 screenPlacements[QUAD_LIMIT];
 flat out vec3 screenPlacement;
@@ -28,6 +33,24 @@ out float localPhase;
 flat out int pairIndex;
 void main() {
     vec2 corner=vec2(float(gl_VertexID / 2),float(gl_VertexID % 2));
+#ifdef INSTANCE_TABLE
+    int row=3*(instanceStart+gl_InstanceID);
+    vec4 screenRect=texelFetch(instanceTable,row);
+    vec4 sheetRect=texelFetch(instanceTable,row+1);
+    vec4 pose=texelFetch(instanceTable,row+2);
+    localPhase=pose.x;
+    pairIndex=int(pose.y);
+    vec4 src=sourceRect;
+#ifdef COVERAGE_INSTANCES
+    vec4 dest=screenRect;
+    dest.xy-=depthOrigin;
+    screenPlacement=vec3(0.0,0.0,pose.z);
+#else
+    vec4 dest=sheetRect;
+    screenPlacement=vec3(screenRect.xy-sheetRect.xy-depthOrigin,screenDepthReady!=0?pose.z*pose.w:0.0);
+#endif
+    vec2 pos=dest.xy+corner*dest.zw;
+#else
     vec4 dest=destinations[gl_InstanceID];
 #ifdef TILE_PLACEMENTS
     vec4 src=sources[int(dest.z)];
@@ -44,10 +67,13 @@ void main() {
     localPhase=poseTimes[gl_InstanceID].x;
     pairIndex=int(poseTimes[gl_InstanceID].y);
 #endif
+#ifdef SCREEN_DEPTH
+    screenPlacement=screenPlacements[gl_InstanceID].xyz;
+#endif
+#endif
     vec2 p=(screenTransform.xy+pos*screenTransform.zw)/outputSize;
     gl_Position=vec4(p.x*2.0-1.0,(1.0-p.y*2.0)*targetFlip,0.0,1.0);
 #ifdef SCREEN_DEPTH
-    screenPlacement=screenPlacements[gl_InstanceID].xyz;
     gl_Position.z=2.0*screenPlacement.z-1.0;
 #endif
     texel=src.xy+corner*src.zw;
@@ -60,7 +86,7 @@ void main() {
 
 class InstancedQuads(SdlOpenGLPass):
     def __init__(self, pico, *, fragment_shader, extra_uniforms, per_instance_source=False, tile_placements=False,
-                 screen_depth=False):
+                 screen_depth=False, instance_table=False, coverage_instances=False):
         fragment = fragment_shader.replace(b"#version 120", b"#version 140", 1)
         defines = b""
         if per_instance_source or tile_placements:
@@ -70,6 +96,11 @@ class InstancedQuads(SdlOpenGLPass):
         if screen_depth:
             defines += b"\n#define SCREEN_DEPTH"
             extra_uniforms = (*extra_uniforms, "screenPlacements[0]")
+        if instance_table:
+            defines += b"\n#define INSTANCE_TABLE"
+            if coverage_instances:
+                defines += b"\n#define COVERAGE_INSTANCES"
+            extra_uniforms = (*extra_uniforms, "instanceTable", "instanceStart", "depthOrigin", "screenDepthReady")
         vertex = VERTEX.replace(b"#version 140", b"#version 140" + defines, 1)
         super().__init__(pico, vertex_shader=vertex, fragment_shader=fragment,
                          extra_uniforms=(*extra_uniforms, "destinations[0]", "poseTimes[0]", "sources[0]",
@@ -77,8 +108,9 @@ class InstancedQuads(SdlOpenGLPass):
         self.rects = (ct.c_float * (QUAD_LIMIT * 4))()
         self.sources = (ct.c_float * (QUAD_LIMIT * 4))() if per_instance_source or tile_placements else None
         self.times = (ct.c_float * (QUAD_LIMIT * 4))()
-        self.screen_placements = (ct.c_float * (QUAD_LIMIT * 4))() if screen_depth else None
+        self.screen_placements = (ct.c_float * (QUAD_LIMIT * 4))() if screen_depth and not instance_table else None
         self.submits = 0
+        self.instance_uploads = self.instance_upload_bytes = 0
 
     def _bind_functions(self):
         super()._bind_functions()
@@ -193,3 +225,16 @@ class InstancedQuads(SdlOpenGLPass):
                 self.uniform_rects(self.uniforms["screenPlacements[0]"], len(batch), self.screen_placements)
             self.uniform_rects(self.uniforms["poseTimes[0]"], len(batch), self.times)
             self._submit_rects(len(batch))
+            arrays = 2 + int(self.screen_placements is not None) + int(sources is not None)
+            self.instance_uploads += arrays
+            self.instance_upload_bytes += arrays * len(batch) * 16
+
+    def draw_instance_range(self, bounds, start, count, depth_origin, depth_ready):
+        self._set_screen_transform()
+        uniforms = self.uniforms
+        self.glUniform4f(uniforms["sourceRect"], *bounds)
+        self.glUniform1i(uniforms["instanceStart"], start)
+        self.glUniform2f(uniforms["depthOrigin"], *depth_origin)
+        self.glUniform1i(uniforms["screenDepthReady"], int(depth_ready))
+        self.draw_instanced(0x0005, 0, 4, count)
+        self.submits += 1
