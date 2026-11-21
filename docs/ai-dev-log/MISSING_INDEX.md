@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [근거리 적 키포즈 FP16 이동량 비교](2026-11-21-near-enemy-keypose-fp16-offsets.md) `[[FDLOG_MISSING_TIME:FDLOG-20261121-near-enemy-keypose-fp16-offsets:U1]]`은 원래 픽셀 기준 이동량 저장과 180기 비교 요청의 정확한 시각이다. 검색 단서는 `원래 픽셀에서 얼마나 이동했는지만 FP16으로 저장`이다.
+
 - [근거리 적 키포즈 FP16 좌표 비교](2026-11-21-near-enemy-keypose-fp16.md) `[[FDLOG_MISSING_TIME:FDLOG-20261121-near-enemy-keypose-fp16:U1]]`은 FP16 좌표와 180기 대조 요청의 정확한 시각이다. 검색 단서는 `양쪽 키 좌표를 FP16으로 저장하면`이다.
 
 - [근거리 적 키포즈 샘플 좌표 재사용](2026-11-21-near-enemy-keypose-sample-cache.md) `[[FDLOG_MISSING_TIME:FDLOG-20261121-near-enemy-keypose-sample-cache:U1]]`은 GPU 좌표 재사용과 180기 대조 요청의 정확한 시각이다. 검색 단서는 `Pre-pass에서 구한 양쪽 키 샘플 좌표를 재질 패스에서 재사용`이다.
