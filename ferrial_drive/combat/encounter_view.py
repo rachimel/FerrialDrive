@@ -5,6 +5,7 @@ from itertools import groupby
 from math import sin
 
 from ferrial_drive.ui.components import Rect
+from ferrial_drive.rendering.enemy_part_batch import EnemyUpscaleScratch
 from ferrial_drive.rendering.primitive_batch import PrimitiveBatch
 from .geometry import Vec2
 
@@ -26,6 +27,7 @@ class EncounterView:
         self.renderer, self.camera, self.projection = renderer, camera, projection
         self.primitives = PrimitiveBatch(renderer, backend=backend)
         self.sprites = {}
+        self.upscale_scratch = None
         self.batch_enemy_parts = True
         self.batch_enemy_shadows = True
         self.show_enemy_labels = False
@@ -77,6 +79,9 @@ class EncounterView:
                 sprite.close()
             self.sprites.clear()
         finally:
+            if self.upscale_scratch is not None:
+                self.upscale_scratch.close()
+                self.upscale_scratch = None
             self.primitives.close()
 
     def _draw(self, encounter, flashes, window_size, shadow_opacity, shadow_softness_pixels,
@@ -144,7 +149,9 @@ class EncounterView:
         for kind, requests in body_requests.items():
             sprite = self.sprites[kind]
             if len(requests) >= 2:
-                prepared.update(sprite.prepare_bodies(requests, zoom))
+                if self.upscale_scratch is None:
+                    self.upscale_scratch = EnemyUpscaleScratch(sprite.resource.pico)
+                prepared.update(sprite.prepare_bodies(requests, zoom, scratch=self.upscale_scratch))
                 r.stats["body_batch_submits"] += sprite.body_batch.submits
         r.stats["batched_bodies"] = len(prepared)
         self._draw_bodies(placed, encounter, flashes, zoom, prepared, labels, break_labels)

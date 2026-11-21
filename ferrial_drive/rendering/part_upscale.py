@@ -4,7 +4,11 @@ from contextlib import contextmanager
 import ctypes as ct
 from math import ceil
 
-from .bicubic import acquire_sampler
+from .bicubic import FRAGMENT_SHADER, acquire_sampler
+from .instanced_quads import InstancedQuads
+
+
+PART_UPSCALE_BORDER = 2
 
 
 @contextmanager
@@ -121,3 +125,41 @@ class PartUpscaler:
             self.pico.SDL_DestroyTexture(self.texture)
             self.texture = None
         self.sampler.release()
+
+
+class PartSheetUpscaler:
+    """네이티브 시트의 파츠를 영역별로 확대하고 시트 단위로 AA를 적용한다."""
+
+    def __init__(self, pico):
+        from .smaa import Smaa1x
+
+        self.pico = pico
+        fragment = FRAGMENT_SHADER.replace(b"uniform vec4 frameBounds;",
+                                           b"flat in vec4 sourceBounds;\n#define frameBounds sourceBounds", 1)
+        fragment = fragment.replace(b"varying vec2 texel;", b"in vec2 texel;", 1)
+        self.sampler = InstancedQuads(pico, fragment_shader=fragment, per_instance_source=True,
+                                      extra_uniforms=("artwork", "atlasSize", "modulation", "premultipliedSource"))
+        try:
+            self.aa = Smaa1x(pico, sheet=True)
+        except BaseException:
+            self.sampler.close()
+            raise
+
+    def draw(self, source, source_size, output, output_size, regions):
+        sampler = self.sampler
+
+        def paint_color():
+            with sampler.batch():
+                if self.pico.SDL_GL_BindTexture(source, None, None):
+                    raise RuntimeError("적 확대 시트 OpenGL 연결 실패")
+                sampler.glUniform1i(sampler.uniforms["artwork"], 0)
+                sampler.glUniform2f(sampler.uniforms["atlasSize"], *source_size)
+                sampler.glUniform4f(sampler.uniforms["modulation"], 1, 1, 1, 1)
+                sampler.glUniform1f(sampler.uniforms["premultipliedSource"], 1)
+                sampler.draw_rectangles(regions)
+
+        self.aa.draw_sheet(paint_color, output, [destination for _, destination in regions], output_size, render_target)
+
+    def close(self):
+        self.aa.close()
+        self.sampler.close()

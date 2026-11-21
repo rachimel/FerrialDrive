@@ -799,3 +799,7 @@
 ## FDLOG-20261121-sparse-enemy-render-cost
 
 - [적 보간·인스턴싱 제출 비용](2026-11-21-sparse-enemy-render-cost.md)의 사용자 발언 시각은 [[FDLOG_MISSING_TIME:FDLOG-20261121-sparse-enemy-render-cost:U1-U2]]이다. 검색 단서는 `적 중간 프레임 보간이랑 인스턴싱 비용 따로 재보고`와 `같은 텍스쳐 공유하는 놈들끼리`다.
+
+## FDLOG-20261121-enemy-upscale-sheet
+
+- [적 확대 시트 통합과 교전 병목](2026-11-21-enemy-upscale-sheet.md)의 사용자 발언 시각은 [[FDLOG_MISSING_TIME:FDLOG-20261121-enemy-upscale-sheet:U1-U2]]이다. 검색 단서는 `확대 렌더 패스 통합하고`, `전반적인 Bottleneck`이다.

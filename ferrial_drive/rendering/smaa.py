@@ -6,6 +6,7 @@ from pathlib import Path
 
 from ferrial_drive.diagnostics.gpu_profile import bind_gl
 from .gl_pass import QUAD_VERTEX_SHADER, TexturedQuadPass
+from .instanced_quads import InstancedQuads
 
 
 SOURCE = Path(__file__).parent / "vendor/smaa"
@@ -61,7 +62,7 @@ void main() {
 
 
 class Smaa1x:
-    def __init__(self, pico):
+    def __init__(self, pico, *, sheet=False):
         self.pico = pico
         self.size = (0, 0)
         self.targets = []
@@ -79,8 +80,15 @@ class Smaa1x:
             vertex = QUAD_VERTEX_SHADER.replace(b"#version 120", b"#version 130", 1)
             for fragment, uniforms in ((EDGE_SHADER, ()), (WEIGHT_SHADER, ("areaLookup", "searchLookup")),
                                        (NEIGHBORHOOD_SHADER, ("blendWeights",))):
-                self.programs.append(TexturedQuadPass(pico, vertex_shader=vertex, fragment_shader=source + fragment,
-                                                    extra_uniforms=("metrics",) + uniforms))
+                shader = source + fragment
+                if sheet:
+                    shader = shader.replace(b"#version 130", b"#version 140", 1).replace(b"varying vec2 texel;", b"in vec2 texel;", 1)
+                    sampler = InstancedQuads(pico, fragment_shader=shader, per_instance_source=True,
+                                             extra_uniforms=("artwork", "metrics", *uniforms))
+                else:
+                    sampler = TexturedQuadPass(pico, vertex_shader=vertex, fragment_shader=shader,
+                                               extra_uniforms=("metrics", *uniforms))
+                self.programs.append(sampler)
             self._upload_lookups()
         except BaseException:
             self.close()
@@ -183,6 +191,33 @@ class Smaa1x:
             self._upload_metrics(blend)
             blend.glUniform1i(blend.uniforms["blendWeights"], 1)
             blend.draw(color, self.size, rect, destination)
+
+    def draw_sheet(self, paint_color, output, rects, pixels, render_target):
+        self.ensure_size(*pixels)
+        color, edges, weights = self.targets
+        edge, weight, blend = self.programs
+        regions = [(rect, rect) for rect in rects]
+        with render_target(self.pico, color):
+            paint_color()
+        with (render_target(self.pico, edges), edge.batch(), self.bind_input(edge, 0, color, sdl=True)):
+            edge.glDisable(0x0BE2)
+            self._upload_metrics(edge)
+            edge.glUniform1i(edge.uniforms["artwork"], 0)
+            edge.draw_rectangles(regions)
+        with (render_target(self.pico, weights), weight.batch(), self.bind_input(weight, 0, edges, sdl=True),
+              self.bind_input(weight, 1, self.lookups[0]), self.bind_input(weight, 2, self.lookups[1])):
+            weight.glDisable(0x0BE2)
+            self._upload_metrics(weight)
+            weight.glUniform1i(weight.uniforms["artwork"], 0)
+            weight.glUniform1i(weight.uniforms["areaLookup"], 1)
+            weight.glUniform1i(weight.uniforms["searchLookup"], 2)
+            weight.draw_rectangles(regions)
+        with (render_target(self.pico, output), blend.batch(), self.bind_input(blend, 0, color, sdl=True),
+              self.bind_input(blend, 1, weights, sdl=True)):
+            self._upload_metrics(blend)
+            blend.glUniform1i(blend.uniforms["artwork"], 0)
+            blend.glUniform1i(blend.uniforms["blendWeights"], 1)
+            blend.draw_rectangles(regions)
 
     def close(self):
         for target in self.targets:

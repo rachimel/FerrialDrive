@@ -18,7 +18,7 @@ from .part_motion_catalog import PartMotionCatalog
 from .part_pbr import COAT_CHANNELS
 from .part_painter import PART_SAMPLE_FIELDS, PartPainter
 from .part_page_cache import PartPageCache
-from .part_upscale import PartUpscaler
+from .part_upscale import PART_UPSCALE_BORDER, PartUpscaler
 from .texture_codecs import find_ktx_library
 
 
@@ -349,7 +349,7 @@ class PicoPartMotion:
                            opacity=opacity, tint=tint, tint_mix=tint_mix, brightness=brightness,
                            realtime_light=self.realtime_light, shadow_map=self.shadow_map, pbr_lighting=self.pbr_lighting,
                            sample_shadow=sample_shadow)
-            border = 2
+            border = PART_UPSCALE_BORDER
             buffer_size = width + 2 * border, height + 2 * border
             native = self.pico.SDL_Rect(border, border, width, height)
             if self.pbr_lighting and self.shadow_map.enabled and sample_shadow:

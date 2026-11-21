@@ -2,26 +2,113 @@
 
 import ctypes as ct
 from collections import OrderedDict
+from contextlib import nullcontext
 
 from .part_motion_atlas import frame_phase, frame_state
 from .part_painter import PartPainter
-from .part_upscale import render_target
+from .part_upscale import PART_UPSCALE_BORDER, PartSheetUpscaler, render_target
 
 
 SHEET_WIDTH = 1024
 MAX_SHEET_HEIGHT = 2048
 TABLE_BUDGET_BYTES = 8 * 1024 ** 2
+UPSCALE_GUTTER = 4
+
+
+class SheetLayout:
+    def __init__(self, gutter=0):
+        self.gutter = gutter
+        self.left = self.top = self.row_height = self.width = 0
+
+    @property
+    def height(self):
+        return self.top + self.row_height
+
+    def place(self, width, height):
+        width_padded, height_padded = width + self.gutter, height + self.gutter
+        if width_padded > SHEET_WIDTH or height_padded > MAX_SHEET_HEIGHT:
+            return None
+        if self.left + width_padded > SHEET_WIDTH:
+            self.left, self.top, self.row_height = 0, self.height, 0
+        if self.top + height_padded > MAX_SHEET_HEIGHT:
+            return None
+        slot = self.left, self.top, width, height
+        self.left += width_padded
+        self.width = max(self.width, self.left)
+        self.row_height = max(self.row_height, height_padded)
+        return slot
+
+
+class SheetTarget:
+    def __init__(self, pico):
+        self.pico = pico
+        self.texture = None
+        self.size = (0, 0)
+
+    def reserve(self, layout):
+        size = tuple(max(old, max(64, 1 << (required - 1).bit_length()))
+                     for old, required in zip(self.size, (layout.width, layout.height), strict=True))
+        if size == self.size:
+            return
+        p = self.pico
+        texture = p.SDL_CreateTexture(p.renderer, p.SDL_PIXELFORMAT_RGBA32, p.SDL_TEXTUREACCESS_TARGET, *size)
+        if not texture:
+            raise RuntimeError("적 기체 묶음 타깃 생성 실패")
+        blend = p.SDL_ComposeCustomBlendMode(p.SDL_BLENDFACTOR_ONE, p.SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
+            p.SDL_BLENDOPERATION_ADD, p.SDL_BLENDFACTOR_ONE, p.SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
+            p.SDL_BLENDOPERATION_ADD)
+        if p.SDL_SetTextureBlendMode(texture, blend) or p.SDL_SetTextureScaleMode(texture, p.SDL_ScaleModeNearest):
+            p.SDL_DestroyTexture(texture)
+            raise RuntimeError("적 기체 묶음 합성 설정 실패")
+        self.close()
+        self.texture, self.size = texture, size
+
+    def close(self):
+        if self.texture:
+            self.pico.SDL_DestroyTexture(self.texture)
+            self.texture = None
+            self.size = (0, 0)
+
+
+class EnemyUpscaleScratch:
+    """현재 기종의 시트 처리에만 쓰는 렌더 타깃과 필터를 공유한다."""
+
+    def __init__(self, pico):
+        self.native = SheetTarget(pico)
+        self.upscaler = None
+        self.unavailable = None
+
+    def get_upscaler(self):
+        if self.upscaler is None and self.unavailable is None:
+            try:
+                self.upscaler = PartSheetUpscaler(self.native.pico)
+            except RuntimeError as exc:
+                self.unavailable = str(exc)
+        return self.upscaler
+
+    def close(self):
+        self.native.close()
+        if self.upscaler is not None:
+            self.upscaler.close()
+            self.upscaler = None
 
 
 class EnemyPartBatch:
-    def __init__(self, resource):
+    def __init__(self, resource, *, scratch=None):
         self.resource = resource
-        self.painter = self.texture = None
-        self.height = 0
+        self.painter = None
+        self.output = SheetTarget(resource.pico)
+        self.scratch = scratch if scratch is not None else EnemyUpscaleScratch(resource.pico)
+        self.owns_scratch = scratch is None
+        self.pad = 0
         self.submits = 0
         self.unavailable = None
         self.tables = OrderedDict()
         self.table_bytes = 0
+
+    @property
+    def texture(self):
+        return self.output.texture
 
     def _table(self, key, bank, samples):
         clip = bank["data"]["clip"]
@@ -54,32 +141,16 @@ class EnemyPartBatch:
             resident.update(missing)
         return table.value
 
-    def _reserve(self, height):
-        if height <= self.height:
-            return
-        p = self.resource.pico
-        height = max(64, 1 << (height - 1).bit_length())
-        texture = p.SDL_CreateTexture(p.renderer, p.SDL_PIXELFORMAT_RGBA32, p.SDL_TEXTUREACCESS_TARGET,
-                                      SHEET_WIDTH, height)
-        if not texture:
-            raise RuntimeError("적 기체 묶음 타깃 생성 실패")
-        blend = p.SDL_ComposeCustomBlendMode(p.SDL_BLENDFACTOR_ONE, p.SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
-            p.SDL_BLENDOPERATION_ADD, p.SDL_BLENDFACTOR_ONE, p.SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
-            p.SDL_BLENDOPERATION_ADD)
-        if p.SDL_SetTextureBlendMode(texture, blend) or p.SDL_SetTextureScaleMode(texture, p.SDL_ScaleModeNearest):
-            p.SDL_DestroyTexture(texture)
-            raise RuntimeError("적 기체 묶음 합성 설정 실패")
-        if self.texture:
-            p.SDL_DestroyTexture(self.texture)
-        self.texture, self.height = texture, height
-
     def prepare(self, requests, scale):
-        """기체별 원래 표본 간 위상을 보존한다. 시트 밖·전용 확대 필터는 기존 경로로 그린다."""
+        """보간 위상을 보존하고 Bicubic·SMAA는 기종별 시트에 적용한다."""
         self.submits = 0
         r = self.resource
         factor = scale * r.data["pixel_scale"]
-        if (len(requests) < 2 or self.unavailable or r.paged or not r.pbr_lighting
-                or (factor > 1 and r.data.get("upscale_filter") == "bounded_bicubic")):
+        if len(requests) < 2 or self.unavailable or r.paged or not r.pbr_lighting:
+            return {}
+        upscale = factor > 1 and r.upscaler is not None and r.data.get("upscale_filter") == "bounded_bicubic"
+        if upscale and r.upscaler.aa_mode != "smaa":
+            # Bicubic 단독 경로는 개별 프레임의 블렌딩을 유지한다.
             return {}
         p = r.pico
         sx, sy = ct.c_float(), ct.c_float()
@@ -93,61 +164,78 @@ class EnemyPartBatch:
             except RuntimeError as exc:
                 self.unavailable = str(exc)
                 return {}
-
+        sheet_upscaler = self.scratch.get_upscaler() if upscale else None
+        if upscale and sheet_upscaler is None:
+            return {}
+        border = PART_UPSCALE_BORDER if upscale else 0
+        pad = self.pad = round(border * factor)
+        output_layout = SheetLayout(UPSCALE_GUTTER if upscale else 0)
+        native_layout = SheetLayout() if upscale else output_layout
         groups, copies = {}, {}
         pose_slots = {}
-        left = top = row_height = 0
         px, py = r.data["pivot_top_left"]
         for enemy_id, motion, direction, seconds, x, foot in requests:
-            clip = r.get(motion, direction)["data"]["clip"]
-            first, phase = frame_phase(clip, seconds)
             key = motion, direction
             group = groups.get(key)
             if group is None:
+                clip = r.get(*key)["data"]["clip"]
                 state = frame_state(clip, clip, seconds)
-                group = groups[key] = state, [], {}, []
-            state, instances, samples, ids = group
+                group = groups[key] = clip, state, [], {}, [], []
+            clip, state, instances, samples, ids, regions = group
+            first, phase = frame_phase(clip, seconds)
             bx, by, bw, bh = state["bounds"]
             width, height = max(1, round(bw * factor)), max(1, round(bh * factor))
-            destination = p.SDL_Rect(round(x - (px - bx) * factor), round(foot - (py - by) * factor), width, height)
+            destination = p.SDL_Rect(round(x - (px - bx) * factor) - pad,
+                                     round(foot - (py - by) * factor) - pad, width + 2 * pad, height + 2 * pad)
             pose = motion, direction, first, phase
             source = pose_slots.get(pose)
             if source is not None:
                 copies[enemy_id] = source, destination
                 ids.append(enemy_id)
                 continue
-            if width > SHEET_WIDTH or height > MAX_SHEET_HEIGHT:
+            slot = output_layout.place(destination.w, destination.h)
+            if slot is None:
                 continue
-            if left + width > SHEET_WIDTH:
-                left, top, row_height = 0, top + row_height, 0
-            if top + height > MAX_SHEET_HEIGHT:
-                continue
-            slot = left, top, width, height
+            paint_slot = slot
+            if upscale:
+                native_slot = native_layout.place(bw + 2 * border, bh + 2 * border)
+                if native_slot is None:
+                    continue
+                nx, ny, _, _ = native_slot
+                paint_slot = nx + border, ny + border, bw, bh
+                regions.append((native_slot, slot))
             source = pose_slots[pose] = p.SDL_Rect(*slot)
             copies[enemy_id] = source, destination
-            instances.append((slot, phase, first))
+            instances.append((paint_slot, phase, first))
             samples[first] = seconds
             ids.append(enemy_id)
-            left += width
-            row_height = max(row_height, height)
         if not copies:
             return {}
-        self._reserve(top + row_height)
+        target = self.scratch.native if upscale else self.output
+        target.reserve(native_layout)
         sampler = self.painter.sampler
         before = sampler.submits
-        with render_target(p, self.texture):
-            for key, (state, instances, samples, ids) in groups.items():
-                if instances:
-                    bank = r.get(*key)
-                    table = self._table(key, bank, samples)
-                    if table is None:
-                        for enemy_id in ids:
-                            del copies[enemy_id]
-                        continue
-                    self.painter.paint(r.cache, (bank,), state, None, energy_color=r.energy_color,
-                        energy_gain=r.energy_mask_gain, rim=r.rim_light, realtime_light=r.realtime_light,
-                        shadow_map=r.shadow_map, pbr_lighting=r.pbr_lighting, sample_shadow=False,
-                        instances=instances, pose_table=table)
+        upscale_regions = []
+        # 필요할 때 페이지를 올리는 경로는 SDL이 관리하는 GL 상태를 그룹마다 돌려준다.
+        scope = sampler.batch() if r.stream_budget is not None else nullcontext()
+        with render_target(p, target.texture), scope:
+            for key, (_, state, instances, samples, ids, regions) in groups.items():
+                if not instances:
+                    continue
+                bank = r.get(*key)
+                table = self._table(key, bank, samples)
+                if table is None:
+                    for enemy_id in ids:
+                        del copies[enemy_id]
+                    continue
+                self.painter.paint(r.cache, (bank,), state, None, energy_color=r.energy_color,
+                    energy_gain=r.energy_mask_gain, rim=r.rim_light, realtime_light=r.realtime_light,
+                    shadow_map=r.shadow_map, pbr_lighting=r.pbr_lighting, sample_shadow=False,
+                    instances=instances, pose_table=table)
+                upscale_regions.extend(regions)
+        if upscale_regions:
+            self.output.reserve(output_layout)
+            sheet_upscaler.draw(target.texture, target.size, self.texture, self.output.size, upscale_regions)
         self.submits = sampler.submits - before
         return copies
 
@@ -156,13 +244,12 @@ class EnemyPartBatch:
         p = self.resource.pico
         if p.SDL_RenderCopy(p.renderer, self.texture, source, destination):
             raise RuntimeError("적 기체 묶음 합성 실패")
-        return destination.y
+        return destination.y + self.pad
 
     def close(self):
-        if self.texture:
-            self.resource.pico.SDL_DestroyTexture(self.texture)
-            self.texture = None
-            self.height = 0
+        self.output.close()
+        if self.owns_scratch:
+            self.scratch.close()
         if self.painter is not None:
             for table, _, _ in self.tables.values():
                 self.painter.sampler.glDeleteTextures(1, ct.byref(table))

@@ -198,10 +198,10 @@ class EnemySprite:
         return self.resource.draw_ground_shadows(clip, seconds, placements, self.scale * zoom,
                                                  opacity, softness_pixels=softness_pixels, cache_geometry=True)
 
-    def prepare_bodies(self, requests, zoom):
+    def prepare_bodies(self, requests, zoom, *, scratch=None):
         if self.body_batch is None:
             from ferrial_drive.rendering.enemy_part_batch import EnemyPartBatch
-            self.body_batch = EnemyPartBatch(self.resource)
+            self.body_batch = EnemyPartBatch(self.resource, scratch=scratch)
         return self.body_batch.prepare(requests, self.scale * zoom)
 
     def draw_near_shadows(self, groups, zoom, opacity, softness):

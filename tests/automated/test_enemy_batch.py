@@ -111,6 +111,47 @@ class EnemyBatchGpuTests(unittest.TestCase):
 
                     self.compare(reference, batched, 4)
 
+    def test_upscaled_smaa_sheet_preserves_individual_filters_and_order(self):
+        from ferrial_drive.rendering.enemy_part_batch import EnemyPartBatch, EnemyUpscaleScratch
+
+        scratch = EnemyUpscaleScratch(self.pico)
+        self.addCleanup(scratch.close)
+        for kind, sprite in self.sprites.items():
+            resource = sprite.resource
+            previous_mode = resource.upscaler.aa_mode
+            self.addCleanup(self.set_upscale_mode, resource, previous_mode)
+            batch = EnemyPartBatch(resource, scratch=scratch)
+            self.addCleanup(batch.close)
+            rows = [(i, motion, direction, (i + 1.23) / 24, 155 + i % 4 * 27.5, 160 + i * 18.25)
+                    for i, (motion, direction) in enumerate(
+                        (("move", "0"), ("attack", "2"), ("move", "0"), ("move", "4"),
+                         ("attack", "2"), ("move", "4"), ("move", "0"), ("attack", "2")))]
+            self.set_upscale_mode(resource, "off")
+            self.assertEqual(batch.prepare(rows, 1.2 / resource.data["pixel_scale"]), {})
+            self.set_upscale_mode(resource, "smaa")
+            for factor in (1.2, 1.85):
+                with self.subTest(kind=kind, factor=factor):
+                    scale = factor / resource.data["pixel_scale"]
+
+                    def reference():
+                        for _, motion, d, seconds, x, y in rows:
+                            resource.draw(f"{motion}/u{d}l{d}", seconds, x, y, scale=scale, sample_shadow=False)
+
+                    def batched():
+                        copies = batch.prepare(rows, scale)
+                        self.assertEqual(len(copies), len(rows), scratch.unavailable)
+                        self.assertEqual(batch.submits, 3)
+                        for enemy_id, *_ in rows:
+                            batch.copy(copies[enemy_id])
+
+                    self.compare(reference, batched, 8)
+
+    @staticmethod
+    def set_upscale_mode(resource, mode):
+        with resource.upscaler.prepare_aa(mode) as apply:
+            if apply:
+                apply()
+
     def test_shadow_geometry_cache_respects_rig_size_and_recent_use(self):
         for kind, sprite in self.sprites.items():
             with self.subTest(kind=kind):

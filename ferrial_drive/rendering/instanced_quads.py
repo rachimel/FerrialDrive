@@ -13,6 +13,7 @@ uniform float targetFlip;
 uniform vec4 destinations[QUAD_LIMIT], sourceRect, screenTransform;
 #ifdef SOURCE_PER_INSTANCE
 uniform vec4 sources[QUAD_LIMIT];
+flat out vec4 sourceBounds;
 #endif
 #ifdef TILE_PLACEMENTS
 uniform vec4 anchorScale;
@@ -42,6 +43,9 @@ void main() {
     vec2 p=(screenTransform.xy+pos*screenTransform.zw)/outputSize;
     gl_Position=vec4(p.x*2.0-1.0,(1.0-p.y*2.0)*targetFlip,0.0,1.0);
     texel=src.xy+corner*src.zw;
+#ifdef SOURCE_PER_INSTANCE
+    sourceBounds=vec4(src.xy,src.xy+src.zw);
+#endif
 }
 """.replace(b"QUAD_LIMIT", str(QUAD_LIMIT).encode())
 
@@ -143,6 +147,18 @@ class InstancedQuads(SdlOpenGLPass):
         self.uniform_rects(self.uniforms["destinations[0]"], count, self.rects)
         self.draw_instanced(0x0005, 0, 4, count)
         self.submits += 1
+
+    def draw_rectangles(self, regions):
+        """포즈 데이터 없이 서로 다른 텍스처 영역을 묶는다."""
+        self._set_screen_transform()
+        for first in range(0, len(regions), QUAD_LIMIT):
+            chunk = regions[first:first + QUAD_LIMIT]
+            for i, (source, destination) in enumerate(chunk):
+                offset = i * 4
+                self.sources[offset:offset + 4] = source
+                self.rects[offset:offset + 4] = destination
+            self.uniform_rects(self.uniforms["sources[0]"], len(chunk), self.sources)
+            self._submit_rects(len(chunk))
 
     def draw_instances(self, bounds, instances, *, sources=None):
         self._set_screen_transform()
