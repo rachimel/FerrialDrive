@@ -37,6 +37,7 @@ class EncounterView:
         self.deferred_enemy_batch_upload = True
         self.deferred_enemy_cache_keypose_samples = False
         self.deferred_enemy_keypose_samples_fp16 = False
+        self.deferred_enemy_keypose_samples_offsets = False
         self.deferred_pbr = self.deferred_box_shadows = None
         self.show_enemy_labels = False
 
@@ -210,18 +211,21 @@ class EncounterView:
             batch_upload = screen_depth and self.deferred_enemy_batch_upload
             cache_samples = batch_upload and self.deferred_enemy_cache_keypose_samples
             sample_fp16 = cache_samples and self.deferred_enemy_keypose_samples_fp16
+            sample_offsets = sample_fp16 and self.deferred_enemy_keypose_samples_offsets
             current = self.deferred_pbr
             if current is not None:
                 keypose = current.keypose_buffer
                 current_mode = (current.depth is not None, current.instance_buffer is not None,
-                                keypose is not None, keypose is not None and keypose.fp16)
-                if current_mode != (screen_depth, batch_upload, cache_samples, sample_fp16):
+                                keypose is not None, keypose is not None and keypose.fp16,
+                                current.keypose_samples_offsets)
+                if current_mode != (screen_depth, batch_upload, cache_samples, sample_fp16, sample_offsets):
                     current.close()
                     self.deferred_pbr = None
             if self.deferred_pbr is None:
                 from ferrial_drive.rendering.enemy_deferred_pbr import EnemyDeferredPbr
                 self.deferred_pbr = EnemyDeferredPbr(self.renderer.pico, screen_depth=screen_depth,
-                    batch_upload=batch_upload, cache_keypose_samples=cache_samples, keypose_samples_fp16=sample_fp16)
+                    batch_upload=batch_upload, cache_keypose_samples=cache_samples, keypose_samples_fp16=sample_fp16,
+                    keypose_samples_offsets=sample_offsets)
             ranks = {row[2].enemy_id: len(placed) - index for index, row in enumerate(placed)} if screen_depth else None
             deferred = self.deferred_pbr.prepare(body_requests, self.sprites, zoom, body_depth_ranks=ranks)
             r.stats["deferred_bodies"] = len(deferred)

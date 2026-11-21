@@ -331,7 +331,9 @@ class EnemyBatchGpuTests(unittest.TestCase):
         experiment = EnemyDeferredPbr(self.pico, screen_depth=True)
         cached = EnemyDeferredPbr(self.pico, screen_depth=True, cache_keypose_samples=True)
         fp16 = EnemyDeferredPbr(self.pico, screen_depth=True, cache_keypose_samples=True, keypose_samples_fp16=True)
-        for renderer in (baseline, uniforms, experiment, cached, fp16):
+        offsets = EnemyDeferredPbr(self.pico, screen_depth=True, cache_keypose_samples=True,
+                                   keypose_samples_fp16=True, keypose_samples_offsets=True)
+        for renderer in (baseline, uniforms, experiment, cached, fp16, offsets):
             self.addCleanup(renderer.close)
 
         def draw(renderer, *, behind_only=False):
@@ -341,14 +343,16 @@ class EnemyBatchGpuTests(unittest.TestCase):
                 if not behind_only or enemy_id == "behind":
                     renderer.copy(records[enemy_id])
 
-        def compare_fp16(reference, tiles):
-            result = self.capture(lambda: draw(fp16))
+        def compare_fp16(renderer, reference, tiles):
+            result = self.capture(lambda: draw(renderer))
             error = np.abs(reference - result)
             nonbackground = np.any(reference != [140, 170, 200], axis=2) | np.any(result != [140, 170, 200], axis=2)
-            self.assertEqual(fp16.keypose_cached_tiles, tiles)
-            self.assertLess(error[nonbackground].mean(), .5)
+            self.assertEqual(renderer.keypose_cached_tiles, tiles)
+            mean_error = error[nonbackground].mean()
+            self.assertLess(mean_error, .5)
             self.assertLess(np.any(error[nonbackground] > 4, axis=1).mean(), .01)
-            np.testing.assert_array_equal(result, self.capture(lambda: draw(fp16)))
+            np.testing.assert_array_equal(result, self.capture(lambda: draw(renderer)))
+            return mean_error
 
         reference = self.capture(lambda: draw(baseline))
         result = self.capture(lambda: draw(experiment))
@@ -357,9 +361,11 @@ class EnemyBatchGpuTests(unittest.TestCase):
         np.testing.assert_array_equal(self.capture(lambda: draw(cached)), result)
         self.assertEqual(cached.keypose_cached_tiles, 2)
         self.assertGreater(cached.keypose_buffer.storage_bytes, 16)
-        compare_fp16(result, 2)
+        absolute_error = compare_fp16(fp16, result, 2)
+        self.assertLessEqual(compare_fp16(offsets, result, 2), absolute_error)
         self.assertEqual(fp16.keypose_buffer.sample_bytes * 2, cached.keypose_buffer.sample_bytes)
         self.assertLessEqual(fp16.keypose_buffer.storage_bytes, cached.keypose_buffer.storage_bytes)
+        self.assertEqual(offsets.keypose_buffer.storage_bytes, fp16.keypose_buffer.storage_bytes)
         self.assertEqual((experiment.depth_submits, experiment.depth_bodies, experiment.depth_tested_tiles), (1, 2, 2))
         self.assertEqual((uniforms.instance_uploads, uniforms.instance_upload_bytes), (6, 192))
         self.assertEqual((experiment.instance_uploads, experiment.instance_upload_bytes), (1, 96))
@@ -377,7 +383,8 @@ class EnemyBatchGpuTests(unittest.TestCase):
         np.testing.assert_array_equal(self.capture(lambda: draw(uniforms)), result)
         np.testing.assert_array_equal(self.capture(lambda: draw(cached)), result)
         self.assertEqual(cached.keypose_cached_tiles, 1)
-        compare_fp16(result, 1)
+        compare_fp16(fp16, result, 1)
+        compare_fp16(offsets, result, 1)
         self.assertEqual((experiment.depth_bodies, experiment.depth_tested_tiles), (3, 1))
         self.assertEqual((experiment.instance_uploads, experiment.instance_upload_bytes), (1, 144))
 
@@ -388,15 +395,18 @@ class EnemyBatchGpuTests(unittest.TestCase):
         # 클리핑된 쿼드의 픽셀 중심을 두 패스에서 같게 계산할 때 최종 RGBA8에 반올림 차이가 날 수 있다.
         np.testing.assert_allclose(self.capture(lambda: draw(cached)), result, rtol=0, atol=1)
         self.assertEqual(cached.keypose_cached_tiles, 2)
-        compare_fp16(result, 2)
+        compare_fp16(fp16, result, 2)
+        compare_fp16(offsets, result, 2)
 
         del requests["medium"]
         del ranks["front"]
         result = self.capture(lambda: draw(experiment))
         np.testing.assert_array_equal(self.capture(lambda: draw(cached)), result)
         np.testing.assert_array_equal(self.capture(lambda: draw(fp16)), result)
+        np.testing.assert_array_equal(self.capture(lambda: draw(offsets)), result)
         self.assertEqual(cached.keypose_cached_tiles, 0)
         self.assertEqual(fp16.keypose_cached_tiles, 0)
+        self.assertEqual(offsets.keypose_cached_tiles, 0)
 
     def test_deferred_box_mask_submits_both_profiles_once(self):
         import numpy as np

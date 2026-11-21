@@ -145,9 +145,11 @@ class DeferredGroup:
 
 class EnemyDeferredPbr:
     def __init__(self, pico, *, screen_depth=False, batch_upload=True, cache_keypose_samples=False,
-                 keypose_samples_fp16=False):
+                 keypose_samples_fp16=False, keypose_samples_offsets=False):
         if cache_keypose_samples and not (screen_depth and batch_upload):
             raise ValueError("키포즈 좌표 재사용에는 깊이 선행 패스와 공유 인스턴스 버퍼가 필요하다.")
+        if keypose_samples_offsets and not (cache_keypose_samples and keypose_samples_fp16):
+            raise ValueError("키포즈 이동량 저장에는 FP16 좌표 버퍼가 필요하다.")
         self.pico = pico
         self.parts = {}
         self.coverage = {}
@@ -157,6 +159,7 @@ class EnemyDeferredPbr:
             self.depth = EnemyScreenDepth(pico)
         self.instance_buffer = InstanceTextureBuffer(pico) if screen_depth and batch_upload else None
         self.keypose_buffer = KeyposeSampleBuffer(pico, fp16=keypose_samples_fp16) if cache_keypose_samples else None
+        self.keypose_samples_offsets = keypose_samples_offsets
         self.scratch = EnemyUpscaleScratch(pico)
         self.output = SheetTarget(pico)
         self.surfaces = SurfaceTargets(pico)
@@ -188,6 +191,7 @@ class EnemyDeferredPbr:
             instance_table=self.instance_buffer is not None,
             cache_keypose_samples=self.keypose_buffer is not None,
             keypose_samples_fp16=self.keypose_buffer is not None and self.keypose_buffer.fp16,
+            keypose_samples_offsets=self.keypose_samples_offsets,
             coat=resource.catalog.coat_members is not None, instanced=True, **formats)
 
     def _batch(self, resource):

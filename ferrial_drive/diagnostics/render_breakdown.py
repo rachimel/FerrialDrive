@@ -14,7 +14,8 @@ VARIANTS = ("baseline", "no_hud", "no_world", "no_ui_blur", "no_camera_blur", "n
             "no_filtered_batch",
             "collision_polygon", "collision_capsule", "ground_individual", "ground_batched", "individual_enemy_parts", "individual_enemy_shadows", "no_enemy_labels", "debug_enemy_labels",
             "deferred_enemies", "deferred_enemy_depth", "deferred_enemy_depth_uniforms",
-            "deferred_enemy_depth_cached_samples", "deferred_enemy_depth_cached_samples_fp16")
+            "deferred_enemy_depth_cached_samples", "deferred_enemy_depth_cached_samples_fp16",
+            "deferred_enemy_depth_cached_samples_fp16_offsets")
 
 
 class RenderBreakdown:
@@ -94,8 +95,9 @@ class RenderBreakdown:
 
     def install(self):
         view = getattr(self.app, "encounter_view", None)
-        if self.variant in ("deferred_enemies", "deferred_enemy_depth", "deferred_enemy_depth_uniforms",
-                            "deferred_enemy_depth_cached_samples", "deferred_enemy_depth_cached_samples_fp16"):
+        cached_samples = self.variant in ("deferred_enemy_depth_cached_samples",
+            "deferred_enemy_depth_cached_samples_fp16", "deferred_enemy_depth_cached_samples_fp16_offsets")
+        if cached_samples or self.variant in ("deferred_enemies", "deferred_enemy_depth", "deferred_enemy_depth_uniforms"):
             if view is None:
                 raise ValueError("Deferred 적 비교에는 교전 장면이 필요하다.")
             self.replace(view, "deferred_enemy_enabled", lambda old: True)
@@ -103,10 +105,12 @@ class RenderBreakdown:
                 self.replace(view, "deferred_enemy_screen_depth", lambda old: True)
             if self.variant == "deferred_enemy_depth_uniforms":
                 self.replace(view, "deferred_enemy_batch_upload", lambda old: False)
-            if self.variant in ("deferred_enemy_depth_cached_samples", "deferred_enemy_depth_cached_samples_fp16"):
+            if cached_samples:
                 self.replace(view, "deferred_enemy_cache_keypose_samples", lambda old: True)
-            if self.variant == "deferred_enemy_depth_cached_samples_fp16":
+            if self.variant in ("deferred_enemy_depth_cached_samples_fp16", "deferred_enemy_depth_cached_samples_fp16_offsets"):
                 self.replace(view, "deferred_enemy_keypose_samples_fp16", lambda old: True)
+            if self.variant == "deferred_enemy_depth_cached_samples_fp16_offsets":
+                self.replace(view, "deferred_enemy_keypose_samples_offsets", lambda old: True)
         if view is not None and getattr(self, "gpu_passes", False):
             self.time_sampler("enemy_render", view, "_draw")
         app = self.app
