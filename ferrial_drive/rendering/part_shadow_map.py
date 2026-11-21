@@ -261,11 +261,12 @@ class PartShadowMap:
             ("GenVertexArrays", None, [i, p]), ("DeleteVertexArrays", None, [i, p]), ("BindVertexArray", None, [u]),
             ("GenBuffers", None, [i, p]), ("DeleteBuffers", None, [i, p]), ("BindBuffer", None, [u, u]),
             ("BufferData", None, [u, ct.c_size_t, p, u]), ("BufferSubData", None, [u, ct.c_size_t, ct.c_size_t, p]),
+            ("MapBufferRange", p, [u, ct.c_size_t, ct.c_size_t, u]), ("UnmapBuffer", ct.c_ubyte, [u]),
             ("GetAttribLocation", i, [u, ct.c_char_p]), ("EnableVertexAttribArray", None, [u]),
             ("VertexAttribPointer", None, [u, i, u, ct.c_ubyte, i, p]),
             ("DepthMask", None, [ct.c_ubyte]), ("DepthFunc", None, [u]), ("ClearDepth", None, [ct.c_double]),
             ("GetDoublev", None, [u, p]), ("Clear", None, [u]), ("DrawArrays", None, [u, i, i]),
-            ("DrawElements", None, [u, i, u, p]),
+            ("DrawElements", None, [u, i, u, p]), ("DrawElementsBaseVertex", None, [u, i, u, p, i]),
         ):
             setattr(self, name, bind_gl(self.pico, "gl" + name, result, args))
 
@@ -410,15 +411,27 @@ class PartShadowMap:
             return
         sampler = self.depth_sampler
         size = self.ground_size
+        packed_vertices = b"".join(vertices for _, vertices in tiles)
         with self.depth_pass(sampler, texture, tiled=True):
             if self.surface_light_position is not None:
                 self.upload_projection(sampler)
             self.BindBuffer(0x8892, self.buffer.value)
-            for (x, y), vertices in tiles:
+            # 새 저장소를 매핑해 앞선 드로우가 읽는 정점 범위와 겹치지 않게 쓴다.
+            self.BufferData(0x8892, len(packed_vertices), None, 0x88E0)  # GL_STREAM_DRAW
+            mapped = self.MapBufferRange(0x8892, 0, len(packed_vertices), 0x0002 | 0x0020)
+            if not mapped:
+                raise RuntimeError("그림자 타일 정점 버퍼 매핑 실패")
+            try:
+                ct.memmove(mapped, packed_vertices, len(packed_vertices))
+            finally:
+                if not self.UnmapBuffer(0x8892):
+                    raise RuntimeError("그림자 타일 정점 버퍼 기록 실패")
+            for index, ((x, y), _) in enumerate(tiles):
                 sampler.glViewport(x, y, size, size)
                 sampler.glScissor(x, y, size, size)
                 self.Clear(0x00000100)
-                self._draw_depth_vertices(vertices)
+                self.DrawElementsBaseVertex(0x0004, self.index_count, 0x1405, None, index * self.vertex_count)
+                self.depth_draws += 1
 
     def render_surface(self, texture, bounds, border):
         s, p = self.surface_sampler, self.pico

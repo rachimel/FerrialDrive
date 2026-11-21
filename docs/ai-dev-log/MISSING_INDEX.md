@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [600기 근거리 그림자 정점 업로드 지연](2026-11-22-shadow-depth-upload.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-shadow-depth-upload:U1]]`은 깊이 쓰기 지연 분석 요청의 정확한 시각이다. 검색 단서는 `근거리 그림자 깊이 쓰기가 왜 가끔 39ms까지 튀는지`다.
+
 - [잔탄 네온 제거 후 600기 CPU·GPU 병목 재계측](2026-11-22-post-neon-600.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-post-neon-600:U1-U2]]`는 재계측과 RenderDoc 질문의 정확한 시각이다. 검색 단서는 `네온 뺀 지금 상태로 600기 전체 다시 계측`과 `RenderDoc 사용해봤어?`다.
 
 - [현행 무기 카드의 잔탄 네온 광 제외](2026-11-22-weapon-ammo-glow.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-weapon-ammo-glow:U1]]`은 잔탄 네온 광 제외 요청의 정확한 시각이다. 검색 단서는 `구 버전 웨폰 카드에 있었던 기능`이다.

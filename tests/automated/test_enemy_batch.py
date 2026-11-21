@@ -198,14 +198,18 @@ class EnemyBatchGpuTests(unittest.TestCase):
             return integers, flags, clear.value
 
         original = state()
-        with patch.object(sampler, "glGetIntegerv", wraps=sampler.glGetIntegerv) as integers:
-            with patch.object(shadow, "GetDoublev", wraps=shadow.GetDoublev) as clear:
-                shadow.render_depth_tiles(batch.texture, tiles)
-            self.assertEqual(clear.call_count, 1)
-            self.assertEqual(integers.call_count, 8)
+        with (patch.object(sampler, "glGetIntegerv", wraps=sampler.glGetIntegerv) as integers,
+              patch.object(shadow, "GetDoublev", wraps=shadow.GetDoublev) as clear,
+              patch.object(shadow, "MapBufferRange", wraps=shadow.MapBufferRange) as upload,
+              patch.object(shadow, "DrawElementsBaseVertex", wraps=shadow.DrawElementsBaseVertex) as draw):
+            shadow.render_depth_tiles(batch.texture, tiles)
+        self.assertEqual(clear.call_count, 1)
+        self.assertEqual(integers.call_count, 8)
+        self.assertEqual(upload.call_count, 1)
+        self.assertEqual([call.args[-1] for call in draw.call_args_list], [0, shadow.vertex_count])
         self.assertEqual(state(), original)
-        with patch.object(shadow, "BufferSubData", side_effect=RuntimeError("타일 제출 중단")):
-            with self.assertRaisesRegex(RuntimeError, "타일 제출 중단"):
+        with patch.object(shadow, "MapBufferRange", return_value=None):
+            with self.assertRaisesRegex(RuntimeError, "정점 버퍼 매핑 실패"):
                 shadow.render_depth_tiles(batch.texture, tiles)
         self.assertEqual(state(), original)
 
