@@ -7,7 +7,7 @@ from ferrial_drive.diagnostics.gpu_profile import bind_gl
 
 from ferrial_drive.particles import SpawnParticles, StepParticles
 from ferrial_drive.ui_v2.particle_texture import ATLAS_SIZE, build_particle_atlas
-from .gl_pass import SdlOpenGLPass
+from .gl_pass import COLOR_BUFFER_STATE, SdlOpenGLPass
 from .gl_program import COMPUTE_STAGE, ShaderProgram
 from .instanced_particles import InstancedParticles, FRAGMENT_SHADER
 from .particle_compute_shaders import MAX_SEGMENTS, PARTICLE_BYTES, PATH_POINTS, SPAWN_SHADER, UPDATE_SHADER, VERTEX_SHADER
@@ -45,7 +45,7 @@ class ComputeParticles(InstancedParticles):
             self.compute_programs['update'] = ShaderProgram(pico, ((COMPUTE_STAGE, UPDATE_SHADER),), ('capacity', 'delta_seconds', 'segments',
                 'energy_enabled', 'energy_geometry', 'energy_ratio', 'energy_acknowledged',
                 'energy_charge_mode', 'energy_charge_total'))
-            with self.batch(), self._state():
+            with self.batch(), self._state(), self._atlas_upload_state():
                 self._allocate()
             self.gpu_info = {key: self.glGetString(value).decode(errors='replace') for key, value in
                              (('vendor', 0x1F00), ('renderer', 0x1F01), ('version', 0x1F02))}
@@ -86,19 +86,14 @@ class ComputeParticles(InstancedParticles):
     @contextmanager
     def _state(self):
         generic = self.integer(SSBO_BINDING)
-        indirect, unpack_buffer = self.integer(0x8F43), self.integer(0x88EF)
+        indirect = self.integer(0x8F43)
         copy_read, copy_write = self.integer(0x8F36), self.integer(0x8F37)
-        unpack_keys = (0x0CF5, 0x0CF2, 0x0CF3, 0x0CF4)
-        unpack = tuple(self.integer(key) for key in unpack_keys)
         indexed = []
         for index in range(7):
             value = ct.c_int()
             self.glGetIntegeri_v(SSBO_BINDING, index, ct.byref(value))
             indexed.append(value.value)
         try:
-            self.glBindBuffer(0x88EC, 0)
-            for key, value in zip(unpack_keys, (4, 0, 0, 0)):
-                self.glPixelStorei(key, value)
             for index, name in enumerate(self.buffers):
                 self.glBindBufferBase(SSBO, index, name)
             yield
@@ -109,6 +104,19 @@ class ComputeParticles(InstancedParticles):
             self.glBindBuffer(INDIRECT, indirect)
             self.glBindBuffer(0x8F36, copy_read)
             self.glBindBuffer(0x8F37, copy_write)
+
+    @contextmanager
+    def _atlas_upload_state(self):
+        # 픽셀을 업로드하는 아틀라스 생성에서만 SDL의 unpack 상태를 보존한다.
+        unpack_keys = (0x0CF5, 0x0CF2, 0x0CF3, 0x0CF4)
+        unpack = tuple(self.integer(key) for key in unpack_keys)
+        unpack_buffer = self.integer(0x88EF)
+        try:
+            self.glBindBuffer(0x88EC, 0)
+            for key, value in zip(unpack_keys, (4, 0, 0, 0)):
+                self.glPixelStorei(key, value)
+            yield
+        finally:
             self.glBindBuffer(0x88EC, unpack_buffer)
             for key, value in zip(unpack_keys, unpack):
                 self.glPixelStorei(key, value)
@@ -273,7 +281,7 @@ class ComputeParticles(InstancedParticles):
 
     def render(self, settings, color, core_color, scale=(1, 1)):
         self.collect_timings()
-        with self.batch(), self._state():
+        with self.batch(raster_attributes=COLOR_BUFFER_STATE), self._state():
             if self.generation == self.system.generation:
                 self._poll_arrivals()
             self._process(settings['samples'])

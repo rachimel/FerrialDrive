@@ -1,6 +1,6 @@
 """한 번 렌더한 투명 레이어에 적용하는 OpenGL 방향성 모션 블러."""
 
-from .gl_pass import TexturedQuadPass
+from .gl_pass import COLOR_AND_SCISSOR_STATE, TexturedQuadPass
 
 
 FRAGMENT_SHADER = b'''#version 120
@@ -42,7 +42,7 @@ class DirectionalBlurSampler(TexturedQuadPass):
     def draw_blurred(self, texture, size, source, destination, displacement, strength, samples=33, *, forward_bias=0):
         if not 0 <= forward_bias <= 1:
             raise ValueError('방향성 블러의 이동 방향 치우침은 0~1이어야 한다.')
-        with self.batch():
+        with self.batch(raster_attributes=COLOR_AND_SCISSOR_STATE):
             self.glUniform2f(self.uniforms['motionVector'], *displacement)
             self.glUniform1f(self.uniforms['blurStrength'], strength)
             self.glUniform1f(self.uniforms['forwardBias'], forward_bias)

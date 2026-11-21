@@ -135,6 +135,53 @@ class ComputeParticleTests(unittest.TestCase):
                 backend.glPixelStorei(key, value)
         self.assertEqual(backend.snapshot()['particles'][0][0], 0)
 
+    def test_atlas_upload_preserves_unpack_and_render_never_queries_it(self):
+        from ferrial_drive.diagnostics.gpu_profile import bind_gl
+
+        p = self.p
+        uint, integer, pointer = ct.c_uint, ct.c_int, ct.c_void_p
+        gen = bind_gl(p, "glGenBuffers", None, [integer, pointer])
+        delete = bind_gl(p, "glDeleteBuffers", None, [integer, pointer])
+        bind = bind_gl(p, "glBindBuffer", None, [uint, uint])
+        pixel_store = bind_gl(p, "glPixelStorei", None, [uint, integer])
+        query = bind_gl(p, "glGetIntegerv", None, [uint, pointer])
+        error = bind_gl(p, "glGetError", uint, [])
+        keys = (0x0CF5, 0x0CF2, 0x0CF3, 0x0CF4)
+
+        def unpack():
+            values = []
+            for key in (0x88EF, *keys):
+                value = integer()
+                query(key, ct.byref(value))
+                values.append(value.value)
+            return values
+
+        original = unpack()
+        buffer = uint()
+        gen(1, ct.byref(buffer))
+        try:
+            bind(0x88EC, buffer.value)
+            for key, value in zip(keys, (8, 17, 1, 2)):
+                pixel_store(key, value)
+            expected = unpack()
+            system, backend = self.make_system()
+            self.assertEqual(unpack(), expected)
+            system.emit((20, 20), (40, 35), (70, 40), count=3)
+            with (patch.object(backend, "glGetIntegerv", wraps=backend.glGetIntegerv) as integers,
+                  patch.object(backend, "glGetIntegeri_v", wraps=backend.glGetIntegeri_v) as indexed,
+                  patch.object(backend, "glPixelStorei", wraps=backend.glPixelStorei) as store):
+                self.draw(system)
+            self.assertEqual((integers.call_count, indexed.call_count), (8, 7))
+            store.assert_not_called()
+            self.assertEqual(backend.snapshot()["active_count"], 3)
+            self.assertEqual(unpack(), expected)
+            self.assertEqual(error(), 0)
+        finally:
+            bind(0x88EC, original[0])
+            for key, value in zip(keys, original[1:]):
+                pixel_store(key, value)
+            delete(1, ct.byref(buffer))
+
     def test_gpu_timer_and_resource_cleanup(self):
         system, backend = self.make_system(profiling=True)
         system.emit((20, 20), (40, 35), (70, 40), count=1)
