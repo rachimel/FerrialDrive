@@ -102,6 +102,7 @@ class SwordTarget:
     radius_pixels: float
     material: str = "generic"
     position_m: tuple[float, float] | None = None
+    eid: int | None = None
 
     def __post_init__(self):
         if self.position_m is not None and (len(self.position_m) != 2 or not all(map(isfinite, self.position_m))):

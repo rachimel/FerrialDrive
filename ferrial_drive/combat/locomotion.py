@@ -1,9 +1,12 @@
 """미터 단위 이동과 모션 상태. 창·입력 장치·에셋 로딩과 독립이다."""
 
-from dataclasses import dataclass
+from ctypes import Structure, c_double
+from dataclasses import dataclass, replace
 from math import atan2, floor, hypot, isfinite, pi
 
 from ferrial_drive.assets.directional import SCREEN_DIRECTIONS
+
+from .entity_storage import DenseStorage, EntityRegistry, vector_field
 
 
 def unit_vector(vector):
@@ -45,10 +48,27 @@ class LocomotionSettings:
             raise ValueError("거리·속도·시간은 양수 유한값이며 반경은 맵 안에 들어가야 한다.")
 
 
+class PlayerTransform(Structure):
+    _fields_ = [(name, c_double) for name in ("x", "y", "fx", "fy")]
+
+
 class LocomotionController:
-    def __init__(self, settings=None):
+    position_m = vector_field("x", "y", lambda x, y: (x, y))
+    facing = vector_field("fx", "fy", lambda x, y: (x, y))
+
+    def __init__(self, settings=None, *, registry=None):
         self.settings = settings or LocomotionSettings()
+        registry = EntityRegistry() if registry is None else registry
+        self.eid = registry.create()
+        self._transforms = DenseStorage(registry, PlayerTransform, 1)
+        self._transforms.append(self.eid, self, PlayerTransform())
+        self.health = None
         self.reset()
+
+    def damage(self, amount):
+        before = self.health.current
+        self.health = replace(self.health, current=max(0, before - amount))
+        return before, self.health.current
 
     def reset(self):
         self.speed_multiplier = 1.0

@@ -11,6 +11,7 @@ class EnemySpacing:
         self.cell_size_m = cell_size_m
         self.enemies = list(enemies)
         self.positions = [enemy.position_m for enemy in self.enemies]
+        self.radii = [enemy.profile.radius_m for enemy in self.enemies]
         self.cells = {}
         self.members = {}
         for index, enemy in enumerate(self.enemies):
@@ -21,16 +22,17 @@ class EnemySpacing:
                     self.cells.setdefault(cell, []).append(index)
 
     def sync(self, enemies):
-        """리셋·사망·직접 재배치까지 반영한다. 보통 프레임은 위치 참조만 확인한다."""
+        """리셋·사망·직접 재배치까지 반영한다. 보통 프레임은 저장된 위치와 비교한다."""
         if len(enemies) == len(self.enemies):
             for index, enemy in enumerate(enemies):
-                if enemy is not self.enemies[index] or enemy.alive != (enemy.enemy_id in self.members):
+                if (enemy is not self.enemies[index] or enemy.profile.radius_m != self.radii[index]
+                        or enemy.alive != (enemy.enemy_id in self.members)):
                     break
-                if enemy.alive and enemy.position_m is not self.positions[index]:
+                if enemy.alive and enemy.position_m != self.positions[index]:
                     self.moved(enemy, enemy.position_m)
             else:
                 return self
-        return EnemySpacing(enemies, 2 * max(enemy.profile.radius_m for enemy in enemies))
+        return EnemySpacing(enemies, 2 * max((enemy.profile.radius_m for enemy in enemies), default=.5))
 
     def cell(self, point):
         return floor(point.x / self.cell_size_m), floor(point.y / self.cell_size_m)
@@ -60,8 +62,9 @@ class EnemySpacing:
                 if other is enemy:
                     continue
                 minimum = enemy.profile.radius_m + other.profile.radius_m
-                dx = x_m - other.position_m.x
-                dy = y_m - other.position_m.y
+                position = self.positions[index]
+                dx = x_m - position.x
+                dy = y_m - position.y
                 if abs(dx) >= minimum or abs(dy) >= minimum:
                     continue
                 distance = hypot(dx, dy)
@@ -71,7 +74,7 @@ class EnemySpacing:
                         dx, dy = dx * inverse, dy * inverse
                     else:
                         dx, dy = 1, 0
-                    x_m, y_m = other.position_m.x + dx * minimum, other.position_m.y + dy * minimum
+                    x_m, y_m = position.x + dx * minimum, position.y + dy * minimum
                     next_cell = floor(x_m / self.cell_size_m), floor(y_m / self.cell_size_m)
                     if next_cell != cell:
                         # 밀려난 위치의 이웃을 원래 출현 순서의 다음 적부터 검사한다.

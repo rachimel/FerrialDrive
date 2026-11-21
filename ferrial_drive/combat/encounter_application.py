@@ -38,7 +38,8 @@ class EncounterApplication(MovementApplication):
                 or self.enemy_sprite_scale <= 0):
             raise ValueError("적 표시 배율은 양수여야 한다.")
         self.encounter = EnemyEncounter(settings, map_size_m=self.controller.settings.map_size_m,
-                                        player_radius_m=self.controller.settings.radius_m)
+                                        player_radius_m=self.controller.settings.radius_m, registry=self.entities,
+                                        projectiles=self.projectile_storage)
         self.encounter_view = None
         self.crowd_atlas_enabled = crowd_atlas_enabled
         self.encounter_trace = []
@@ -121,12 +122,13 @@ class EncounterApplication(MovementApplication):
             if not enemy.alive:
                 continue
             profile = enemy.profile
-            position = enemy.position_m.x, enemy.position_m.y
+            position = enemy.position_xy
             x, foot = self.projection.project(position)
             center_y = foot - profile.height_pixels
             target = self.targets_by_id.get(enemy_id)
-            if target is None or target.position_m != position or target.radius_pixels != profile.hit_radius_pixels:
-                target = SwordTarget(enemy_id, Vec2(x, center_y), profile.hit_radius_pixels, "metal", position)
+            if (target is None or target.eid != enemy.eid or target.position_m != position
+                    or target.radius_pixels != profile.hit_radius_pixels or target.center.y != center_y):
+                target = SwordTarget(enemy_id, Vec2(x, center_y), profile.hit_radius_pixels, "metal", position, enemy.eid)
             targets[enemy_id] = target
             if self.hud:
                 if enemy_id not in self.hud.enemies:
@@ -156,7 +158,7 @@ class EncounterApplication(MovementApplication):
                         self.hud.set_hud(target=replace(self.hud.state.hud.target, health=health))
                         self.hud.target_health.set_ratio(health.ratio)
             self.encounter.changed_health_ids.clear()
-            self.encounter.update_result(self.hud.state.hud.player_health.current)
+            self.encounter.update_result(self.controller.health.current)
 
     def advance_encounter(self, seconds, previous_position_m):
         self.sync_encounter_health()

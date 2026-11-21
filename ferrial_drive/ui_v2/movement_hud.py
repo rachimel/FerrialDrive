@@ -15,7 +15,7 @@ from .radar import RadarMotion
 
 
 class MovementHud(HudPreview):
-    def __init__(self, config_path, preset_path, *, camera_motion_blur=None, settings_store=None, theme_file=None, overdrive_settings=None, energy_settings=None, targeting=None):
+    def __init__(self, config_path, preset_path, *, camera_motion_blur=None, settings_store=None, theme_file=None, overdrive_settings=None, energy_settings=None, targeting=None, player=None):
         if (targeting or {}).get("acquisition", "visible") != "visible":
             raise ValueError("훈련장 록온 획득은 화면 가시성을 사용한다.")
         self.distance_switch = {"enabled": False, "far_ratio": .7, "near_ratio": .55,
@@ -28,6 +28,7 @@ class MovementHud(HudPreview):
                 or not 0 < settings["closer_ratio"] < 1
                 or min(settings["switch_delay_seconds"], settings["manual_hold_seconds"]) < 0):
             raise ValueError("화면 거리 교체 비율·대기 시간이 유효하지 않다.")
+        self.player = player
         super().__init__(config_path, initial_scene="combat", preset_path=preset_path, theme_file=theme_file,
                          overdrive_settings=overdrive_settings, energy_settings=energy_settings)
         if settings_store is not None:
@@ -41,6 +42,19 @@ class MovementHud(HudPreview):
         self.world_camera = None
         self.map_position = (0.5, 0.5)
         self.reset_training()
+
+    def set_hud(self, **changes):
+        if self.player is not None and "player_health" in changes:
+            self.player.health = changes["player_health"]
+        super().set_hud(**changes)
+
+    def _damage_health(self, target_id, health, amount):
+        if target_id is not None or self.player is None:
+            return super()._damage_health(target_id, health, amount)
+        if type(amount) is not int or amount < 0:
+            raise ValueError("피해량은 0 이상의 정수여야 한다.")
+        before, after = self.player.damage(amount)
+        return before / self.player.health.maximum, self.player.health, before - after
 
     def reset_training(self):
         """훈련장 시연 상태만 초기화한다. 외부 이동 카메라는 보존한다."""

@@ -32,19 +32,24 @@ def cross(first, second):
 
 def segment_circle(start, end, center, radius):
     """선분이 원에 처음 들어가는 0~1 시각. 출발점이 내부면 0이다."""
-    delta, offset = end - start, start - center
-    a = delta.x * delta.x + delta.y * delta.y
-    c = offset.x * offset.x + offset.y * offset.y - radius * radius
+    dx, dy = end.x - start.x, end.y - start.y
+    fraction = _segment_circle_fraction(dx, dy, dx * dx + dy * dy,
+                                        start.x - center.x, start.y - center.y, radius)
+    return fraction if fraction >= 0 else None
+
+
+def _segment_circle_fraction(dx, dy, length_squared, offset_x, offset_y, radius):
+    c = offset_x * offset_x + offset_y * offset_y - radius * radius
     if c <= 0:
         return 0.0
-    if a < 1e-12:
-        return None
-    b = 2 * (offset.x * delta.x + offset.y * delta.y)
-    discriminant = b * b - 4 * a * c
+    if length_squared < 1e-12:
+        return -1.0
+    b = 2 * (offset_x * dx + offset_y * dy)
+    discriminant = b * b - 4 * length_squared * c
     if discriminant < 0:
-        return None
-    result = (-b - discriminant ** 0.5) / (2 * a)
-    return result if 0 <= result <= 1 else None
+        return -1.0
+    fraction = (-b - discriminant ** 0.5) / (2 * length_squared)
+    return fraction if 0 <= fraction <= 1 else -1.0
 
 
 @dataclass(frozen=True)

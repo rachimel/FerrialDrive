@@ -1,27 +1,15 @@
 """기관단총의 연사·회복·투영 월드 좌표 탄환. 창·HUD·이미지와 독립이다."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from math import cos, floor, hypot, isfinite, radians, sin
 from random import Random
 
 from .ammo import recovered_rounds
 from .config import CombatConfig
-from .geometry import Vec2, segment_circle
-
-
-@dataclass
-class GunProjectile:
-    shot_id: int
-    position: Vec2
-    direction: Vec2
-    remaining_pixels: float
-    previous: Vec2
-    traveled_pixels: float = 0
-    damage: int = 9
-    penetrations_remaining: int = 0
-    hit_target_ids: set = field(default_factory=set)
-    explosion_radius_m: float = 0
-    explosion_damage: int = 0
+from .geometry import Vec2
+from .entity_storage import EntityRegistry
+from .projectile_storage import GunProjectile, GunProjectileView, ProjectileGroup, projectile_storage
+from .projectile_contacts import ProjectileContacts
 
 
 @dataclass(frozen=True)
@@ -49,7 +37,7 @@ def explosion_targets(impact, primary_target, targets, projection):
 
 
 class RangedCombat:
-    def __init__(self, settings=None, *, seed=0, range_m=None, projection=None, penetration_count=0):
+    def __init__(self, settings=None, *, seed=0, range_m=None, projection=None, penetration_count=0, projectiles=None, owner_eid=None):
         if (range_m is None) != (projection is None):
             raise ValueError("미터 사거리와 월드 투영은 함께 지정해야 한다.")
         if range_m is not None and (isinstance(range_m, bool) or not isfinite(range_m) or range_m <= 0):
@@ -60,7 +48,16 @@ class RangedCombat:
         self.settings = settings or CombatConfig()
         self.seed = seed
         self.range_m, self.projection = range_m, projection
+        self._contacts = ProjectileContacts()
+        storage = projectile_storage(EntityRegistry()) if projectiles is None else projectiles
+        self.projectiles = ProjectileGroup(storage, GunProjectileView)
+        self.registry = storage.registry
+        self.owner_eid = self.registry.create() if owner_eid is None else owner_eid
+        self._target_ids = {}
         self.reset()
+
+    def warm_collision(self):
+        self._contacts.warm_up()
 
     def reset(self):
         self.random = Random(self.seed)
@@ -69,7 +66,10 @@ class RangedCombat:
         self.recovery_fraction = 0.0
         self.last_shot_seconds = -1e6
         self.next_shot_seconds = 0.0
-        self.projectiles = []
+        self.projectiles.clear()
+        for eid in self._target_ids.values():
+            self.registry.release(eid)
+        self._target_ids.clear()
         self.hits = []
         self.hit_details = {}
         self.impact_events = []
@@ -95,20 +95,30 @@ class RangedCombat:
         self.recovery_fraction = max(0, progress - whole) if self.ammo < self.settings.magazine_rounds else 0
         self.elapsed_seconds = time_seconds
 
+    def _target_eid(self, target):
+        eid = getattr(target, "eid", None)
+        if eid is not None:
+            return eid
+        if target.target_id not in self._target_ids:
+            self._target_ids[target.target_id] = self.registry.create()
+        return self._target_ids[target.target_id]
+
     def _advance_projectile(self, projectile, seconds, targets):
-        distance = min(projectile.remaining_pixels, self.settings.bullet_speed_units_per_second * seconds)
-        end = projectile.position + projectile.direction * distance
-        contacts = [(time, target.target_id) for target in targets
-                    if target.target_id not in projectile.hit_target_ids and (time := segment_circle(
-            projectile.position, end, target.center, target.radius_pixels + self.settings.bullet_radius_units)) is not None]
-        for time, target_id in sorted(contacts):
-            position = projectile.position + (end - projectile.position) * time
-            impact = GunImpact(position, projectile.direction, projectile.damage,
+        origin, direction = projectile.position, projectile.direction
+        distance = min(projectile.remaining_pixels, projectile._record.speed * seconds)
+        end = origin + direction * distance
+        contacts = self._contacts.find(origin, end, targets, self.settings.bullet_radius_units)
+        for time, target in sorted(contacts, key=lambda hit: (hit[0], hit[1].target_id)):
+            eid, target_id = self._target_eid(target), target.target_id
+            if not self.registry.valid(eid) or eid in projectile.hit_target_ids:
+                continue
+            position = origin + (end - origin) * time
+            impact = GunImpact(position, direction, projectile.damage,
                                projectile.explosion_radius_m, projectile.explosion_damage)
             self.hits.append((projectile.shot_id, target_id))
             self.hit_details[projectile.shot_id] = impact
             self.impact_events.append((projectile.shot_id, target_id, impact))
-            projectile.hit_target_ids.add(target_id)
+            projectile.hit_target_ids.add(eid)
             if projectile.penetrations_remaining <= 0:
                 projectile.previous, projectile.position = projectile.position, position
                 projectile.traveled_pixels += distance * time
@@ -141,7 +151,11 @@ class RangedCombat:
         if rate != self.rate:
             self.next_shot_seconds = start + max(0, self.next_shot_seconds - start) * self.rate / rate
             self.rate = rate
-        self.projectiles = [p for p in self.projectiles if self._advance_projectile(p, delta_seconds, targets)]
+        if self.projectiles or (firing and max(start, self.next_shot_seconds) < end - 1e-10):
+            self._contacts.prepare(targets, self.settings.bullet_radius_units)
+        expired = [p for p in self.projectiles if not self._advance_projectile(p, delta_seconds, targets)]
+        for projectile in expired:
+            self.projectiles.discard(projectile)
         if firing:
             time = max(start, self.next_shot_seconds)
             attempts = 0
@@ -167,11 +181,13 @@ class RangedCombat:
                         # 실제 발사 방향을 역투영해 1 투영 픽셀에 해당하는 미터를 구한다.
                         meters_per_pixel = hypot(*self.projection.unproject((direction.x, direction.y)))
                         range_pixels = self.range_m / meters_per_pixel
-                    projectile = GunProjectile(self.shots_fired, muzzle, direction,
-                        range_pixels, muzzle, damage=damage, penetrations_remaining=self.penetration_count,
-                        explosion_radius_m=explosion_radius_m, explosion_damage=explosion_damage)
-                    if self._advance_projectile(projectile, end - time, targets):
-                        self.projectiles.append(projectile)
+                    projectile = self.projectiles.spawn(self.owner_eid, shot_id=self.shots_fired,
+                        position=muzzle, direction=direction, remaining_pixels=range_pixels, previous=muzzle,
+                        traveled_pixels=0., damage=damage, penetrations_remaining=self.penetration_count,
+                        hit_target_ids=set(), explosion_radius_m=explosion_radius_m, explosion_damage=explosion_damage)
+                    projectile._record.speed = self.settings.bullet_speed_units_per_second
+                    if not self._advance_projectile(projectile, end - time, targets):
+                        self.projectiles.discard(projectile)
                 else:
                     self.trigger_events.append("empty")
                 self.next_shot_seconds = time + self.interval_seconds

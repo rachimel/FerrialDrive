@@ -3,13 +3,16 @@
 from dataclasses import dataclass
 from math import ceil, hypot, isfinite, isqrt
 
-from .geometry import Vec2, moving_circle_touches_polygon, segment_circle
+from .geometry import Vec2, _segment_circle_fraction, moving_circle_touches_polygon
 from .enemy_spacing import EnemySpacing
+from .enemy_storage import EncounterEnemy, EnemyActors
+from .entity_storage import EntityRegistry
+from .projectile_storage import EnemyProjectile, EnemyProjectileView, ProjectileGroup, projectile_storage
 from .enemy_steering import MELEE_ATTACK, pursuit, ranged_recovery
 
 
 ENEMY_KINDS = ("small", "medium", "humanoid")
-MIN_BATCH_ENEMIES = 32
+MIN_BATCH_ENEMIES = 8
 
 
 def _movement_batch(count):
@@ -81,49 +84,6 @@ class EnemyProfile:
             raise ValueError("사격 개시 거리는 유지 거리 이상이어야 한다.")
 
 
-@dataclass
-class EncounterEnemy:
-    enemy_id: str
-    profile: EnemyProfile
-    position_m: Vec2
-    health: int
-    facing: Vec2 = Vec2(-1, 0)
-    phase: str = "move"
-    attack_kind: str = "melee"
-    remaining_seconds: float = 0
-    hit_player: bool = False
-    travel_m: float = 0
-    locomotion_m: float = 0
-    locomotion_step_m: Vec2 = Vec2()
-    knockback_remaining_seconds: float = 0
-    knockback_velocity_mps: Vec2 = Vec2()
-    knockback_duration_seconds: float = .12
-    knockback_interrupts: bool = False
-    death_remaining_seconds: float = 0
-
-    @property
-    def alive(self):
-        return self.health > 0
-
-    @property
-    def attack_polygon(self):
-        length = self.profile.melee_reach_m
-        side = Vec2(-self.facing.y, self.facing.x) * (length * .3)
-        end = self.position_m + self.facing * length
-        return (self.position_m - side, end - side, end + side, self.position_m + side)
-
-
-@dataclass
-class EnemyProjectile:
-    owner: str
-    position_m: Vec2
-    previous_m: Vec2
-    direction: Vec2
-    remaining_m: float
-    speed_mps: float
-    damage: int
-
-
 @dataclass(frozen=True, slots=True)
 class EnemyHit:
     attacker_id: str
@@ -133,7 +93,7 @@ class EnemyHit:
 
 
 class EnemyEncounter:
-    def __init__(self, settings, *, map_size_m, player_radius_m):
+    def __init__(self, settings, *, map_size_m, player_radius_m, registry=None, projectiles=None):
         self.settings = settings
         self.map_size_m, self.player_radius_m = map_size_m, player_radius_m
         if not all(isfinite(v) and v > 0 for v in (map_size_m, player_radius_m)):
@@ -153,27 +113,45 @@ class EnemyEncounter:
                    (self.knockback_seconds, self.death_seconds, *self.knockback_distances.values(),
                     self.gun_knockback_seconds, *self.gun_knockback_distances.values())):
             raise ValueError("넉백 거리·시간과 사망 표시 시간은 양수 유한값이다.")
+        self.registry = registry if registry is not None else EntityRegistry()
+        self.enemies = EnemyActors(self.registry, len(settings["spawns"]))
+        storage = projectile_storage(self.registry) if projectiles is None else projectiles
+        self._projectiles = ProjectileGroup(storage, EnemyProjectileView)
         self.reset()
 
+    @property
+    def projectiles(self):
+        return self._projectiles
+
+    @projectiles.setter
+    def projectiles(self, bullets):
+        bullets = list(bullets)
+        self._projectiles.clear()
+        for bullet in bullets:
+            owner = self.enemies.get(bullet.owner)
+            self._projectiles.append(bullet, owner_eid=owner.eid if owner is not None else None)
+
     def reset(self):
-        self.enemies = {}
+        spawns = {}
         for row in self.settings["spawns"]:
             profile = self.profiles[row["profile"]]
             position = Vec2(*row["position_m"])
             radius = profile.radius_m
-            if (row["id"] in self.enemies or not row["id"]
+            if (row["id"] in spawns or not row["id"]
                     or not all(isfinite(v) and radius <= v <= self.map_size_m - radius
                                for v in (position.x, position.y))):
                 raise ValueError("적 ID 중복 또는 출현 위치 범위 오류")
-            self.enemies[row["id"]] = EncounterEnemy(row["id"], profile, position, profile.health)
-        if not self.enemies:
+            spawns[row["id"]] = EncounterEnemy(row["id"], profile, position, profile.health)
+        if not spawns:
             raise ValueError("교전에는 적이 한 기 이상 필요하다.")
-        self.movement_batch = _movement_batch(len(self.enemies))
+        self.enemies.clear()
+        self.enemies.update(spawns)
+        self.movement_batch = _movement_batch(len(spawns))
         self._spacing = None
         if self.movement_batch is None:
             self._sync_spacing()
         self.changed_health_ids = set()
-        self.projectiles = []
+        self.projectiles.clear()
         self.hit_events = []
         self.elapsed_seconds = 0
         self.result = "running"
@@ -182,7 +160,7 @@ class EnemyEncounter:
     def _sync_spacing(self):
         enemies = self.enemies.values()
         if self._spacing is None:
-            self._spacing = EnemySpacing(enemies, 2 * max(enemy.profile.radius_m for enemy in enemies))
+            self._spacing = EnemySpacing(enemies, 2 * max((enemy.profile.radius_m for enemy in enemies), default=.5))
         else:
             self._spacing = self._spacing.sync(enemies)
         return self._spacing
@@ -288,24 +266,24 @@ class EnemyEncounter:
                 self._advance_reaction(enemy, seconds)
 
     def _move(self, enemy, movement, *, locomotion=False):
-        radius = enemy.profile.radius_m
+        body = enemy._record
+        radius = body.radius
         maximum = self.map_size_m - radius
-        origin = enemy.position_m
-        candidate = Vec2(max(radius, min(maximum, origin.x + movement.x)),
-                         max(radius, min(maximum, origin.y + movement.y)))
+        candidate = Vec2(max(radius, min(maximum, body.x + movement.x)),
+                         max(radius, min(maximum, body.y + movement.y)))
         if enemy.alive:
             resolved = self._spacing.separate(enemy, candidate)
             if resolved is not candidate:
                 candidate = Vec2(max(radius, min(maximum, resolved.x)), max(radius, min(maximum, resolved.y)))
             self._spacing.moved(enemy, candidate)
-        dx, dy = candidate.x - origin.x, candidate.y - origin.y
+        dx, dy = candidate.x - body.x, candidate.y - body.y
         distance = hypot(dx, dy)
-        enemy.travel_m += distance
+        body.travel += distance
         if locomotion and movement.length > 1e-9:
-            enemy.locomotion_m += distance
-            previous = enemy.locomotion_step_m
-            enemy.locomotion_step_m = Vec2(previous.x + dx, previous.y + dy)
-        enemy.position_m = candidate
+            body.walk += distance
+            body.walk_x += dx
+            body.walk_y += dy
+        body.x, body.y = candidate.x, candidate.y
 
     def _begin_attack(self, enemy, kind):
         enemy.attack_kind = kind
@@ -314,13 +292,12 @@ class EnemyEncounter:
         enemy.hit_player = False
 
     def _think(self, enemy, seconds, player):
-        profile = enemy.profile
-        dx, dy = player.x - enemy.position_m.x, player.y - enemy.position_m.y
-        fx, fy, mx, my, attack = pursuit(dx, dy, enemy.facing.x, enemy.facing.y, profile.speed_mps * seconds,
-            profile.radius_m, self.player_radius_m,
-            profile.melee_reach_m + self.player_radius_m if profile.kind != "medium" else -1.,
-            profile.fire_range_m if profile.kind != "small" else -1.)
-        enemy.facing = Vec2(fx, fy)
+        body = enemy._record
+        dx, dy = player.x - body.x, player.y - body.y
+        reach = body.melee_reach + self.player_radius_m if body.melee_reach >= 0 else -1.
+        fx, fy, mx, my, attack = pursuit(dx, dy, body.fx, body.fy, body.speed * seconds,
+                                         body.radius, self.player_radius_m, reach, body.fire_distance)
+        body.fx, body.fy = fx, fy
         if attack:
             self._begin_attack(enemy, "melee" if attack == MELEE_ATTACK else "ranged")
         else:
@@ -359,8 +336,9 @@ class EnemyEncounter:
             enemy.remaining_seconds += profile.active_seconds
             if enemy.attack_kind == "ranged":
                 muzzle = enemy.position_m + enemy.facing * (profile.radius_m + .5)
-                self.projectiles.append(EnemyProjectile(enemy.enemy_id, muzzle, muzzle, enemy.facing,
-                    profile.projectile_range_m, profile.projectile_speed_mps, profile.shot_damage))
+                self.projectiles.spawn(enemy.eid, owner=enemy.enemy_id, position_m=muzzle, previous_m=muzzle,
+                    direction=enemy.facing, remaining_m=profile.projectile_range_m,
+                    speed_mps=profile.projectile_speed_mps, damage=profile.shot_damage)
                 self.shots_fired += 1
         elif enemy.phase == "active":
             enemy.phase = "recovery"
@@ -379,9 +357,12 @@ class EnemyEncounter:
         if not isfinite(seconds) or seconds < 0:
             raise ValueError("교전 갱신 시간은 0 이상의 유한한 초다.")
         self.hit_events = []
-        stationary = Vec2()
-        for enemy in self.enemies.values():
-            enemy.locomotion_step_m = stationary
+        if self.movement_batch is None:
+            stationary = Vec2()
+            for enemy in self.enemies.values():
+                enemy.locomotion_step_m = stationary
+        else:
+            self.movement_batch.reset_locomotion(self.enemies.storage)
         if self.result != "running" or seconds == 0:
             return ()
         start, end = Vec2(*previous_player_m), Vec2(*player_m)
@@ -395,22 +376,33 @@ class EnemyEncounter:
             first = start + (end - start) * (index / count)
             last = start + (end - start) * ((index + 1) / count)
             # 새 탄환은 다음 구간부터 이동시켜 발사 전 시간을 소비하지 않는다.
-            survivors = []
-            for bullet in self.projectiles:
-                distance = min(bullet.remaining_m, bullet.speed_mps * step)
-                destination = bullet.position_m + bullet.direction * distance
-                fraction = distance / (bullet.speed_mps * step)
-                target_end = first + (last - first) * fraction
-                if segment_circle(bullet.position_m - first, destination - target_end,
-                                  Vec2(), self.player_radius_m + .35) is not None:
-                    self.hit_events.append(EnemyHit(bullet.owner, "ranged", bullet.damage, bullet.direction))
-                    continue
-                bullet.previous_m, bullet.position_m = bullet.position_m, destination
-                bullet.remaining_m -= distance
-                if (bullet.remaining_m > 1e-9 and 0 <= destination.x <= self.map_size_m
-                        and 0 <= destination.y <= self.map_size_m):
-                    survivors.append(bullet)
-            self.projectiles = survivors
+            self._advance_projectiles(step, first, last)
             self._advance_enemies(step, first, last)
             self.elapsed_seconds += step
         return tuple(self.hits)
+
+
+    def _advance_projectiles(self, seconds, start, end):
+        expired = []
+        move_x, move_y = end.x - start.x, end.y - start.y
+        radius = self.player_radius_m + .35
+        for bullet in self.projectiles:
+            row = bullet._record
+            step = row.speed * seconds
+            distance = min(row.remaining, step)
+            x, y = row.x, row.y
+            dx, dy = x + row.dx * distance, y + row.dy * distance
+            fraction = distance / step
+            from_x, from_y = x - start.x, y - start.y
+            ray_x = dx - (start.x + move_x * fraction) - from_x
+            ray_y = dy - (start.y + move_y * fraction) - from_y
+            if _segment_circle_fraction(ray_x, ray_y, ray_x * ray_x + ray_y * ray_y, from_x, from_y, radius) >= 0:
+                self.hit_events.append(EnemyHit(bullet.owner, "ranged", bullet.damage, bullet.direction))
+                expired.append(bullet)
+                continue
+            row.previous_x, row.previous_y, row.x, row.y = x, y, dx, dy
+            row.remaining -= distance
+            if row.remaining <= 1e-9 or not (0 <= dx <= self.map_size_m and 0 <= dy <= self.map_size_m):
+                expired.append(bullet)
+        for bullet in expired:
+            self.projectiles.discard(bullet)

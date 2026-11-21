@@ -21,6 +21,8 @@ from ferrial_drive.combat.overdrive import OverdriveSettings
 from ferrial_drive.combat.energy import EnergySettings
 from ferrial_drive.combat.config import CombatConfig
 from ferrial_drive.combat.ranged_combat import RangedCombat, explosion_targets
+from ferrial_drive.combat.entity_storage import EntityRegistry
+from ferrial_drive.combat.projectile_storage import projectile_storage
 from ferrial_drive.combat.gun_contact import GunContactEffects
 from ferrial_drive.combat.weapon_animation import HELD_GUN_MOTIONS, WeaponAnimation
 from ferrial_drive.combat.muzzle_tracks import MuzzleTracks
@@ -110,7 +112,9 @@ class MovementApplication:
         self.preview_control_signature = None
         self.next_preview_frame = 0
         self.window_size = (self.config["window"]["width"], self.config["window"]["height"])
-        self.controller = LocomotionController(LocomotionSettings(**self.config["movement"]))
+        self.entities = EntityRegistry()
+        self.projectile_storage = projectile_storage(self.entities)
+        self.controller = LocomotionController(LocomotionSettings(**self.config["movement"]), registry=self.entities)
         split = self.config.get("upper_lower", {})
         self.aim_follow = (AimFollow(AimFollowSettings(**split["follow"]), yaw_degrees=45)
                            if split.get("enabled", False) else None)
@@ -138,7 +142,8 @@ class MovementApplication:
         self.part_angle_remainder_seconds, self.part_angles, self.previous_part_angles = 0, None, None
         self.projection = GroundProjection(self.style["pixels_per_meter"], self.style["projection_y_scale"])
         self.guns = [RangedCombat(gun_settings, seed=index, range_m=weapon_settings.get("range_m", 75),
-                                 projection=self.projection, penetration_count=weapon_settings.get("penetration_count", 1))
+                                 projection=self.projection, penetration_count=weapon_settings.get("penetration_count", 1),
+                                 projectiles=self.projectile_storage, owner_eid=self.controller.eid)
                      for index in range(2)]
         self.camera = LookAheadCamera(*self.window_size, max_offset_units=100,
                                       response_seconds=0.15 / movement_speed_multiplier,
@@ -255,7 +260,8 @@ class MovementApplication:
             self.hud = MovementHud(self.relative_path(hud["config"]), self.relative_path(hud["preset"]),
                                    camera_motion_blur=hud.get("camera_motion_blur"), settings_store=self.settings_store,
                                    theme_file=self.theme_file, overdrive_settings=self.overdrive_settings,
-                                   energy_settings=self.energy_settings, targeting=self.config.get("targeting"))
+                                   energy_settings=self.energy_settings, targeting=self.config.get("targeting"),
+                                   player=self.controller)
             levels = self.config.get("sword_effects", {}).get("levels")
             if levels:
                 self.hud.config.data["v2"]["style"]["energy_level_colors"] = [level["color"] for level in levels]
@@ -268,6 +274,8 @@ class MovementApplication:
             self.renderer = PicoRenderer({"body": font, "small": font}, {"body": 20, "small": 15})
         if self.weapons_enabled:
             self.loading_progress(0.10, "총탄·총구 화염 준비")
+            with self.timings.scope('loading.projectile_contacts.prepare'):
+                self.guns[0].warm_collision()
             with self.timings.scope('loading.gun_effects.prepare'):
                 self.gun_renderer = PicoGunEffects(self.renderer, self.config.get("weapons", {}).get("effects", {}))
         if self.demo:
