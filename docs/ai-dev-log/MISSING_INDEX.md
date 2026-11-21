@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [근거리 적의 깊이·재질 인스턴스 일괄 전송](2026-11-21-near-enemy-instance-upload.md) `[[FDLOG_MISSING_TIME:FDLOG-20261121-near-enemy-instance-upload:U1-U2]]`는 일괄 전송 요청과 GPU 보간 질문의 정확한 시각이다. 검색 단서는 `Pre-pass 전에 Batch로 upload`와 `키포즈 픽셀 보간도 한번만`이다.
+
 - [근거리 적의 화면 깊이 선행 패스 시험](2026-11-21-near-enemy-screen-depth.md) `[[FDLOG_MISSING_TIME:FDLOG-20261121-near-enemy-screen-depth:U1]]`은 Z-buffer 대조 요청의 정확한 시각이다. 검색 단서는 `근거리 적만 화면 좌표 공유하는 Z-buffer`다.
 
 - [Hardware Benchmark 커밋 상한 종료](2026-11-21-benchmark-commit-stop.md) `[[FDLOG_MISSING_TIME:FDLOG-20261121-benchmark-commit-stop:U1-U2]]`은 오류 및 키프레임 발언의 정확한 시각이다. 검색 단서는 `Hardware Benchmark에서 걸림`, `주요 KeyFrame들만 추출`이다.
