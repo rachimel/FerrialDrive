@@ -3,7 +3,7 @@
 from contextlib import contextmanager
 from collections import OrderedDict
 from ctypes import byref, c_float, c_int, c_ubyte, memmove, string_at
-from math import ceil, exp, floor, hypot, isfinite, log2
+from math import ceil, cos, exp, floor, hypot, isfinite, log2, sin, tau
 from random import Random
 from struct import Struct
 
@@ -14,6 +14,13 @@ from ferrial_drive.rendering.hud_text_atlas import HudTextAtlas
 
 
 PARTICLE_VERTEX = Struct("=ff4Bff")
+RADAR_SEGMENTS = 128
+RADAR_CIRCLE = tuple((cos(tau * index / RADAR_SEGMENTS), sin(tau * index / RADAR_SEGMENTS))
+                     for index in range(RADAR_SEGMENTS))
+RADAR_RING_INDICES = tuple(index for inner in range(RADAR_SEGMENTS)
+                           for outer in ((inner + 1) % RADAR_SEGMENTS,)
+                           for index in (2 * inner, 2 * inner + 1, 2 * outer,
+                                         2 * outer, 2 * inner + 1, 2 * outer + 1))
 
 
 class PicoV2Renderer(PicoRenderer):
@@ -855,6 +862,25 @@ class PicoV2Renderer(PicoRenderer):
         if opacity <= 0:
             return
         self._geometry_polygon((first, second, third), self.rgba(color, opacity))
+
+    def radar_geometry(self, x, y, radius, thickness, color, opacity, arrows):
+        """원형 띠와 적 표식을 하나의 SDL 메시로 제출한다."""
+        vertices, faces = [], []
+        if opacity > 0 and radius > 0 and thickness > 0:
+            rgba = self.rgba(color, opacity)
+            inner, outer = max(0, radius - thickness / 2), radius + thickness / 2
+            vertices.extend((x + dx * edge, y + dy * edge, rgba)
+                            for dx, dy in RADAR_CIRCLE for edge in (inner, outer))
+            faces.extend(RADAR_RING_INDICES)
+        for triangle, arrow_opacity in arrows:
+            if arrow_opacity <= 0:
+                continue
+            first = len(vertices)
+            rgba = self.rgba(color, arrow_opacity)
+            vertices.extend((px, py, rgba) for px, py in triangle)
+            faces.extend((first, first + 1, first + 2))
+        if vertices:
+            self.batch_queue.colored_mesh(vertices, faces)
 
     def warped_text(self, text, x, y, role, color, project, opacity=1, *,
                     scale_x=1, scale_y=1, clip_rect=None, bold=False):

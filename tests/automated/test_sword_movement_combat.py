@@ -463,6 +463,8 @@ class MovementPresentationTests(unittest.TestCase):
         view.framed_panel = Mock()
         view.minimap(hud.state.hud, 1, player_position=(0.25, 0.75))
         self.assertEqual(renderer.filled_triangle.call_args.args[:3], ((80, 134), (76, 144), (84, 144)))
+        view.minimap(hud.state.hud, 1, player_position=(0.25, 0.75), player_facing=(1, 0))
+        self.assertEqual(renderer.filled_triangle.call_args.args[:3], ((86, 140), (76, 136), (76, 144)))
 
 
 if __name__ == "__main__":

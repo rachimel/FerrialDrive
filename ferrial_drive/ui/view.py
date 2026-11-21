@@ -134,7 +134,10 @@ class UiView:
         min_opacity = settings.get("arrow_min_opacity", 0.3)
         thickness = settings["ring_thickness_pixels"]
         ring_opacity = settings["ring_opacity"] + (1 - settings["ring_opacity"]) * solid_ratio
-        r.ring(x, y, radius, thickness, self.ui_accent, opacity * ring_opacity)
+        draw_mesh = getattr(type(r), "radar_geometry", None)
+        arrows = []
+        if draw_mesh is None:
+            r.ring(x, y, radius, thickness, self.ui_accent, opacity * ring_opacity)
         for contact in contacts:
             distance = hypot(contact.x, contact.y)
             if contact.kind != "enemy" or distance == 0 or distance > distance_limit:
@@ -151,9 +154,13 @@ class UiView:
             base_x = tip_x - direction_x * length * scale
             base_y = tip_y - direction_y * length * scale
             side_x, side_y = -direction_y * half_width * scale, direction_x * half_width * scale
-            color = self.ui_accent
-            r.filled_triangle((tip_x, tip_y), (base_x + side_x, base_y + side_y),
-                              (base_x - side_x, base_y - side_y), color, arrow_opacity)
+            triangle = ((tip_x, tip_y), (base_x + side_x, base_y + side_y), (base_x - side_x, base_y - side_y))
+            if draw_mesh is None:
+                r.filled_triangle(*triangle, self.ui_accent, arrow_opacity)
+            else:
+                arrows.append((triangle, arrow_opacity))
+        if draw_mesh is not None:
+            draw_mesh(r, x, y, radius, thickness, self.ui_accent, opacity * ring_opacity, arrows)
 
     def player_health_bar(self, state, opacity, trailing_ratio=None):
         r, c = self.renderer, self.config

@@ -852,13 +852,21 @@ class HudPreview:
                                  loadout_visual=self.loadout_slide.visual,
                                  weapon_swap_visual=self.weapon_swap.visual,
                                  player_screen=self.camera.world_to_screen(self.player_world, include_feedback=False),
-                                 minimap_player_position=getattr(self, "map_position", (0.5, 0.5)))
+                                 minimap_player_position=getattr(self, "map_position", (0.5, 0.5)),
+                                 minimap_player_facing=self.minimap_facing())
         if self.pause.opacity > 0 and not self.graphics_settings.opened:
             self.view.pause(self.pause.opacity, self.inputs,
                             scanline_visual=self.scanline_motion.visual,
                             button_visuals=self.pause_hover_motion.visuals)
         if self.graphics_settings.opened:
             self.view.graphics_settings(self.graphics_settings)
+
+    def minimap_facing(self):
+        if self.player_idle is None:
+            return getattr(self, "map_facing", None)
+        direction = (self.player_combo.direction if self.player_combo is not None and self.player_combo.active
+                     else self.player_idle.direction)
+        return (int("e" in direction) - int("w" in direction), int("s" in direction) - int("n" in direction))
 
     def exit(self):
         if self.player_interpolator is not None:

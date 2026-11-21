@@ -69,6 +69,7 @@ class MovementHud(HudPreview):
         self.state = replace(self.state, counter=False)
         self.dash_override = None
         self.radar_motion = RadarMotion(self.config.data["radar"]["motion"])
+        self.map_facing = None
 
     def load_icon_manifest(self, path):
         """로컬 제작 아이콘을 연결하고 초기화 뒤에도 같은 원본을 사용한다."""
@@ -292,6 +293,7 @@ class MovementHud(HudPreview):
         if not self.blocking:
             speed = self.overdrive_controller.settings.animation_speed if self.state.overdrive else 1
             self.radar_motion.update(controller.state, delta_seconds * speed)
+            self.map_facing = controller.facing
             self.state = replace(self.state, radar_scale=self.radar_motion.scale.value,
                                  radar_solid_ratio=self.radar_motion.solid_ratio.value)
         x, y = controller.position_m

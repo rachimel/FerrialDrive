@@ -811,3 +811,7 @@
 ## FDLOG-20261121-reprofile-r02
 
 - [리패킹·반해상도 잔상 적용 후 교전 재계측](2026-11-21-reprofile-r02.md)의 사용자 발언 시각은 [[FDLOG_MISSING_TIME:FDLOG-20261121-reprofile-r02:U1]]이다. 검색 단서는 `일단 다시 프로파일링 부탁함`이다.
+
+## FDLOG-20261121-crowd-atlas-and-radar
+
+- [군집 공유 아틀라스 검토와 레이더 배치](2026-11-21-crowd-atlas-and-radar.md)의 사용자 발언 시각은 [[FDLOG_MISSING_TIME:FDLOG-20261121-crowd-atlas-and-radar:U1-U2]]이다. 검색 단서는 `군집에서는 고정 크기 공유 아틀라스`와 `플레이어의 화살표 object`다.

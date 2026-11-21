@@ -173,6 +173,16 @@ class BatchPixelChecks:
         self.assertEqual(r.batch_queue.stats['geometry_submits'], 1)
         self.assertEqual(r.batch_queue.stats['rectangle_submits'], 1)
 
+    def test_radar_submits_ring_and_all_arrows_as_one_geometry(self):
+        r = self.renderer
+        # 큐 초기 용량보다 큰 군집에서도 레이더 메시를 분할하지 않는다.
+        arrows = ((TRIANGLE, .2),) * 650
+        with r.hud_batch():
+            r.radar_geometry(64, 64, 38, 2, '#FFFFFF', .5, arrows)
+        self.assertEqual(r.batch_queue.stats['geometry_requests'], 1)
+        self.assertEqual(r.batch_queue.stats['geometry_submits'], 1)
+        self.assertEqual(r.batch_queue.stats['rectangle_submits'], 0)
+
     def test_failed_flush_restores_clip_scale_viewport_and_render_target(self):
         from ferrial_drive.ui.components import Rect
         r, p = self.renderer, self.canvas.pico

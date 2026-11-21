@@ -494,7 +494,7 @@ class UiV2View(UiView):
                      self.ui_accent, opacity * 0.35)
 
     @themed_widget("minimap")
-    def minimap(self, hud, opacity, scanline_visual=None, *, player_position=None):
+    def minimap(self, hud, opacity, scanline_visual=None, *, player_position=None, player_facing=None):
         r, c = self.renderer, self.config.colors
         rect = Rect(*self.layout["minimap"])
         settings = self.style["panel_scanlines"]["minimap"]
@@ -509,8 +509,13 @@ class UiV2View(UiView):
             cx, cy = rect.x + rect.width / 2, rect.y + rect.height / 2
             px, py = ((cx, cy) if player_position is None else
                       (rect.x + player_position[0] * rect.width, rect.y + player_position[1] * rect.height))
-            r.filled_triangle((px, py - 6), (px - 4, py + 4), (px + 4, py + 4),
-                              c["accent"], opacity)
+            fx, fy = player_facing or (0, -1)
+            fx, fy = fx * rect.width, fy * rect.height
+            length = hypot(fx, fy)
+            fx, fy = (fx / length, fy / length) if length else (0, -1)
+            r.filled_triangle((px + 6 * fx, py + 6 * fy),
+                              (px - 4 * fx + 4 * fy, py - 4 * fy - 4 * fx),
+                              (px - 4 * fx - 4 * fy, py - 4 * fy + 4 * fx), c["accent"], opacity)
             for contact in hud.radar_contacts:
                 if abs(contact.x) <= 1 and abs(contact.y) <= 1:
                     px, py = cx + contact.x * rect.width * 0.43, cy - contact.y * rect.height * 0.43
@@ -1128,15 +1133,13 @@ class UiV2View(UiView):
                loadout_visual=None, weapon_swap_visual=None,
                player_hit_visual=HealthHitVisual(), target_hit_visual=HealthHitVisual(), particle_system=None,
                defeated_targets=(), energy_flash=0, level_visual=None, overdrive_visual=None, ultimate_visual=None,
-                 energy_tint_ratio=None, energy_visual=None, minimap_player_position=None):
+                 energy_tint_ratio=None, energy_visual=None, minimap_player_position=None, minimap_player_facing=None):
         r, c, hud = self.renderer, self.config.colors, state.hud
         scale = self.style["hud_scale"]
         width, height = self.config.window["width"], self.config.window["height"]
         with r.scaled(self.style["map_scale"], self.layout["minimap"][:2]):
-            if minimap_player_position is None:
-                self.minimap(hud, opacity, scanline_visual)
-            else:
-                self.minimap(hud, opacity, scanline_visual, player_position=minimap_player_position)
+            self.minimap(hud, opacity, scanline_visual, player_position=minimap_player_position,
+                         player_facing=minimap_player_facing)
         self.radar(hud.radar_contacts, opacity, center=player_screen,
                    scale=state.radar_scale, solid_ratio=state.radar_solid_ratio)
         body = state.target_body

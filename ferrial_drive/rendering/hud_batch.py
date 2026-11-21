@@ -143,6 +143,21 @@ class HudBatchQueue:
         if not self.active:
             self.flush()
 
+    def colored_mesh(self, vertices, faces):
+        """하나의 색상 정점 메시를 분할 없이 큐에 추가한다."""
+        count, index_count = len(vertices), len(faces)
+        start = self._begin_geometry(count, index_count, None)
+        for offset, (x, y, rgba) in enumerate(vertices, start):
+            VERTEX.pack_into(self.vertices, offset * VERTEX.size, x, y, *rgba, 0, 0)
+        end = self.index_count + index_count
+        self.indices[self.index_count:end] = [start + index for index in faces] if start else faces
+        self.index_count = end
+        self.vertex_count += count
+        self.stats['geometry_requests'] += 1
+        self.stats['vertices'] += count
+        if not self.active:
+            self.flush()
+
     def rectangles(self, rectangles, rgba):
         """같은 색의 연속 사각형을 SDL_RenderFillRects로 묶어 전달한다."""
         if self.kind != 'rectangles' or self.rgba != rgba:
