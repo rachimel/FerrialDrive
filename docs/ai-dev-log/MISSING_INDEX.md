@@ -795,3 +795,7 @@
 ## FDLOG-20261121-sparse-part-keyframes
 
 - [PBR 파츠 키포즈와 실시간 합성](2026-11-21-sparse-part-keyframes.md)의 사용자 발언 시각은 [[FDLOG_MISSING_TIME:FDLOG-20261121-sparse-part-keyframes:U1]]이다. 검색 단서는 `일단 아틀라스에는 주요 KeyFrame들만 보존해`와 `적 같은 경우에는`다.
+
+## FDLOG-20261121-sparse-enemy-render-cost
+
+- [적 보간·인스턴싱 제출 비용](2026-11-21-sparse-enemy-render-cost.md)의 사용자 발언 시각은 [[FDLOG_MISSING_TIME:FDLOG-20261121-sparse-enemy-render-cost:U1-U2]]이다. 검색 단서는 `적 중간 프레임 보간이랑 인스턴싱 비용 따로 재보고`와 `같은 텍스쳐 공유하는 놈들끼리`다.
