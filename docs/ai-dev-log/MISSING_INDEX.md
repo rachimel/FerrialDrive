@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [근거리 그림자·PBR 패스의 GL 상태 재사용](2026-11-22-gl-state-pass.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-gl-state-pass:U1]]`은 그림자부터 상태 추적을 적용·검증하라는 요청의 정확한 시각이다. 검색 단서는 `근거리 그림자 타일부터 적용해줘`다.
+
 - [600기 그리기의 CPU·GPU 비용 분리](2026-11-22-render-cpu-gl-boundaries.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-render-cpu-gl-boundaries:U1]]`은 분리 계측 요청의 정확한 시각이다. 검색 단서는 `CPU 준비·제출·대기랑 GPU 패스 시간을 분리`다.
 
 - [고정 군집 아틀라스 묶음 제출과 HUD 계측](2026-11-22-crowd-atlas-batch.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-crowd-atlas-batch:scope]]`는 원거리 본체·그림자 배치와 스캔라인 검토 요청의 정확한 시각이다. 검색 단서는 `지금 쓰는 고정 아틀라스의 원거리 본체랑 그림자도`다.
