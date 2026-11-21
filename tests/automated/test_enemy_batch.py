@@ -279,10 +279,14 @@ class EnemyBatchGpuTests(unittest.TestCase):
 
         with patch.object(sprite, "prepare_frame") as prepare, patch.object(sprite.resource, "get") as get:
             pixels = self.capture(lambda: view.draw(encounter, {}, (512, 512), player_position_m=(400, 400)))
+            shadow_pixels = self.capture(lambda: view.draw(encounter, {}, (512, 512), player_position_m=(400, 400),
+                                                           shadow_opacity=.5))
             prepare.assert_not_called()
             get.assert_not_called()
         self.assertEqual(view.primitives.stats["crowd_atlas_draws"], 1)
         self.assertEqual(view.primitives.stats["pbr_pose_requests"], 0)
+        self.assertEqual(view.primitives.stats["shadow_draws"], 1)
+        self.assertGreater(np.any(pixels != shadow_pixels, axis=2).sum(), 0)
         self.assertGreater(np.any(pixels[200:270, 200:312] != [140, 170, 200], axis=2).sum(), 100)
 
         with patch.object(sprite, "prepare_frame") as prepare:

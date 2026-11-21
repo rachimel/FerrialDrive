@@ -15,7 +15,7 @@ class EnemyCrowdAtlas:
     def __init__(self, pico, source):
         self.pico = pico
         document = json.loads(source.read_bytes())
-        if document.get("version") != 1 or document.get("size") != CROWD_ATLAS_SIZE:
+        if document.get("version") not in (1, 2) or document.get("size") != CROWD_ATLAS_SIZE:
             raise ValueError("지원하지 않는 군집 아틀라스 형식이다.")
         self.profiles = document["profiles"]
         self.bytes = CROWD_ATLAS_SIZE ** 2 * 4
@@ -27,6 +27,9 @@ class EnemyCrowdAtlas:
             for motion in motions.values():
                 for direction, rows in motion["directions"].items():
                     motion["directions"][direction] = tuple((p.SDL_Rect(*row[:4]), row[4:]) for row in rows)
+        self.shadows = {(kind, direction): (p.SDL_Rect(*row[:4]), row[4:])
+                        for kind, directions in document.get("shadows", {}).items()
+                        for direction, row in directions.items()}
         self.destination = p.SDL_Rect()
         self.shadow_source = p.SDL_Rect(*CROWD_SHADOW_RECT)
         self.texture = p.SDL_CreateTexture(p.renderer, p.SDL_PIXELFORMAT_RGBA32, p.SDL_TEXTUREACCESS_STATIC,
@@ -68,10 +71,17 @@ class EnemyCrowdAtlas:
         if p.SDL_SetTextureAlphaMod(self.texture, alpha):
             raise RuntimeError("군집 그림자 투명도 설정 실패")
         try:
-            for x, foot, radius in placements:
-                target.x, target.y = round(x - radius), round(foot - radius * .5)
-                target.w, target.h = round(radius * 2), round(radius)
-                if p.SDL_RenderCopy(p.renderer, self.texture, self.shadow_source, target):
+            for kind, direction, x, foot, scale, radius in placements:
+                tile = self.shadows.get((kind, direction))
+                if tile is None:
+                    source = self.shadow_source
+                    target.x, target.y = round(x - radius), round(foot - radius * .5)
+                    target.w, target.h = round(radius * 2), round(radius)
+                else:
+                    source, (left, top, width, height) = tile
+                    target.x, target.y = round(x + left * scale), round(foot + top * scale)
+                    target.w, target.h = max(1, round(width * scale)), max(1, round(height * scale))
+                if p.SDL_RenderCopy(p.renderer, self.texture, source, target):
                     raise RuntimeError("군집 아틀라스 그림자 그리기 실패")
         finally:
             if p.SDL_SetTextureAlphaMod(self.texture, 255):

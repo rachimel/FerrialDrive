@@ -3,6 +3,7 @@
 import argparse
 import ctypes as ct
 import json
+from math import ceil
 from pathlib import Path
 import sys
 import zlib
@@ -11,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from ferrial_drive.combat.enemy_sprites import PART_DIRECTIONS, load_enemy_part_sprites
 from ferrial_drive.rendering.canvas import PicoCanvas
-from ferrial_drive.rendering.enemy_crowd_atlas import CROWD_ATLAS_SIZE, CROWD_CELL_SIZE, CROWD_SHADOW_RECT
+from ferrial_drive.rendering.enemy_crowd_atlas import CROWD_ATLAS_SIZE, CROWD_CELL_SIZE
 from ferrial_drive.rendering.part_motion_atlas import frame_state
 from ferrial_drive.rendering.part_upscale import render_target
 from ferrial_drive.settings import GameSettings
@@ -29,9 +30,35 @@ def pose_intervals(sprite, name):
     return list(zip(edges, edges[1:]))
 
 
+def capture_shadows(sprites, first_slot, columns, cell):
+    shadows = {}
+    for kind, sprite in sprites.items():
+        resource = sprite.resource
+        shadow = resource.shadow_map
+        pivot_x, pivot_y = shadow.pivot
+        directions = shadows[kind] = {}
+        for direction in PART_DIRECTIONS:
+            # 방향별 걷기 대표 자세의 Box 투영을 군집 전체가 사용한다.
+            seconds = sprite.duration("move") * .25
+            if not resource.prepare_shadow(sprite.part_clip("move", direction), seconds) or not shadow.ground_bounds:
+                raise ValueError(f"{kind}/{direction}의 Box 바닥 그림자가 없다.")
+            softness = 5 / shadow.pixel_scale
+            (left, top, width, height), _ = shadow.ground_region(1, softness)
+            ratio = min(1, (cell - 2) / max(width, height))
+            x, y = (first_slot % columns) * cell + 1, (first_slot // columns) * cell + 1
+            shadow.draw_ground(x + (pivot_x - left) * ratio, y + (pivot_y - top) * ratio,
+                               ratio / shadow.pixel_scale, 1, softness_pixels=softness * ratio)
+            directions[direction] = [x, y, ceil(width * ratio), ceil(height * ratio),
+                                     (left - pivot_x) * shadow.pixel_scale, (top - pivot_y) * shadow.pixel_scale,
+                                     width * shadow.pixel_scale, height * shadow.pixel_scale]
+            first_slot += 1
+    return shadows
+
+
 def capture(pico, sprites):
     size, cell = CROWD_ATLAS_SIZE, CROWD_CELL_SIZE
     columns = size // cell
+    body_slots = columns ** 2 - len(sprites) * len(PART_DIRECTIONS)
     atlas = pico.SDL_CreateTexture(pico.renderer, pico.SDL_PIXELFORMAT_RGBA32, pico.SDL_TEXTUREACCESS_TARGET,
                                    size, size)
     if not atlas:
@@ -57,7 +84,7 @@ def capture(pico, sprites):
                         clip = resource.get(name, str(bank))["data"]["clip"]
                         rows = directions[direction] = []
                         for start, end in intervals:
-                            if index >= columns ** 2 - 1:
+                            if index >= body_slots:
                                 raise ValueError("선택한 적 포즈가 고정 시트 용량을 넘는다.")
                             seconds = (start + end) / 2
                             left, top, width, height = frame_state(clip, clip, seconds)["bounds"]
@@ -71,16 +98,12 @@ def capture(pico, sprites):
                                          width * pixel_scale, height * pixel_scale])
                             index += 1
                 resource.release_pages()
+            shadows = capture_shadows(sprites, body_slots, columns, cell)
             if pico.SDL_RenderReadPixels(pico.renderer, None, pico.SDL_PIXELFORMAT_RGBA32, pixels, size * 4):
                 raise RuntimeError("군집 아틀라스 픽셀 읽기 실패")
     finally:
         pico.SDL_DestroyTexture(atlas)
-    left, top, width, height = CROWD_SHADOW_RECT
-    for y in range(height):
-        for x in range(width):
-            distance_sq = ((x + .5) * 2 / width - 1) ** 2 + ((y + .5) * 2 / height - 1) ** 2
-            pixels[4 * ((top + y) * size + left + x) + 3] = round(255 * max(0, 1 - distance_sq) ** 1.5)
-    return {"version": 1, "size": size, "profiles": profiles}, pixels
+    return {"version": 2, "size": size, "profiles": profiles, "shadows": shadows}, pixels
 
 
 def main():

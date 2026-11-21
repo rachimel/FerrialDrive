@@ -134,7 +134,8 @@ class EncounterView:
             for foot, x, enemy, sprite, playback, shared in placed:
                 if shared == CROWD_ATLAS:
                     if enemy.alive:
-                        crowd_shadows.append((x, foot, max(4, enemy.profile.hit_radius_pixels * .45 * zoom)))
+                        crowd_shadows.append((enemy.profile.kind, playback[1], x, foot, sprite.scale * zoom,
+                                              max(4, enemy.profile.hit_radius_pixels * .45 * zoom)))
                 elif sprite is not None and sprite.part_counts:
                     pose = sprite.ground_shadow_pose(playback)
                     kind = enemy.profile.kind

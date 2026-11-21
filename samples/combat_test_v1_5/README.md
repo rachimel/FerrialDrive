@@ -50,7 +50,7 @@ Bullet Trail은 현재 에너지색을 정점 색상으로 공급한다. 텍스�
 
 넉백 재현은 `--script samples/combat_test_v1_5/knockback_input.json --frames 120 --report output/combat_test_v1_5/knockback/report.json`을 추가한다. 검 반복·일시정지·재개·초기화를 포함하며 실제 HP에 따라 사망 여부는 달라진다. 현재 확인 범위와 잠정 수치는 [개발 기록](../../docs/ai-dev-log/2026-11-17-combat-v1-5-crowd-knockback.md)을 따른다.
 
-PBR 적은 `rendering.shared_frame_distance_m` 안쪽과 현재 록온 대상에서 기존 보간 품질을 사용한다. 기본 반경은 16m다. 바깥의 소형·중형 적은 기종별 카탈로그 옆에 생성한 `crowd_atlas.json`의 1024×1024 공유 시트에서 포즈와 간이 그림자를 읽는다. 원거리 적 한 기도 이 경로를 사용하며, 근거리 PBR 페이지가 준비되는 동안에도 같은 공유 포즈를 표시한다. 로컬 시트가 없으면 기존 포즈 캐시를 사용한다. 이 거리는 AI·공격·접촉 판정에 영향을 주지 않는다.
+PBR 적은 `rendering.shared_frame_distance_m` 안쪽과 현재 록온 대상에서 기존 보간 품질을 사용한다. 기본 반경은 16m다. 바깥의 소형·중형 적은 기종별 카탈로그 옆에 생성한 `crowd_atlas.json`의 1024×1024 공유 시트에서 포즈와 방향별 Box 투영 그림자를 읽는다. 원거리 적 한 기도 이 경로를 사용하며, 근거리 PBR 페이지가 준비되는 동안에도 같은 공유 포즈를 표시한다. 로컬 시트가 없으면 기존 포즈 캐시를 사용한다. 이 거리는 AI·공격·접촉 판정에 영향을 주지 않는다. `H`로 그림자를 전환한다.
 
 공유 시트는 Pico2D·OpenGL 환경에서 한 번 생성한다. 실행 중에는 압축된 RGBA 시트를 읽는다. 벤치마크의 `--legacy-enemy-render`는 이전 원거리 렌더 경로로 비교한다.
 

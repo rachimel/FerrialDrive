@@ -823,3 +823,7 @@
 ## FDLOG-20261121-filtered-hud-batch
 
 - [무장 카드·패널 필터 도형 배치](2026-11-21-filtered-hud-batch.md)의 사용자 발언 시각은 [[FDLOG_MISSING_TIME:FDLOG-20261121-filtered-hud-batch:U1]]이다. 검색 단서는 `무장 카드랑 패널의 필터 도형도 Batchdrawing`이다.
+
+## FDLOG-20261121-crowd-box-shadows
+
+- [원거리 적 Box 투영 그림자](2026-11-21-crowd-box-shadows.md)의 사용자 발언 시각은 [[FDLOG_MISSING_TIME:FDLOG-20261121-crowd-box-shadows:U1]]이다. 검색 단서는 `플레이어 마냥 Box로 표현할 순 없어`다.
