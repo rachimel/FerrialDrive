@@ -67,7 +67,7 @@ class EnemyShadowBatch:
         finally:
             s.glBindTexture(0x0DE1, old)
 
-    def _slot(self, pose, pinned):
+    def _slot(self, pose, pinned, pending):
         if pose in self.slots:
             self.slots.move_to_end(pose)
             return self.slots[pose]
@@ -85,12 +85,8 @@ class EnemyShadowBatch:
             old = next(key for key in self.slots if key not in pinned)
             slot, _ = self.slots.pop(old)
         size = shadow.ground_size
-        try:
-            shadow.render_depth(vertices, texture=self.texture,
-                                tile=(slot % self.tiles_per_side * size, slot // self.tiles_per_side * size))
-        except BaseException:
-            self.slots.clear()
-            raise
+        position = (slot % self.tiles_per_side * size, slot // self.tiles_per_side * size)
+        pending.append((position, vertices))
         self.slots[pose] = slot, bounds
         return slot, bounds
 
@@ -104,12 +100,18 @@ class EnemyShadowBatch:
         for start in range(0, len(groups), capacity):
             chunk = groups[start:start + capacity]
             pinned = {pose for pose, _ in chunk}
-            tiles = []
-            for pose, positions in chunk:
-                slot, bounds = self._slot(pose, pinned)
-                source, radius = shadow.ground_region(factor, softness, bounds)
-                tiles.append((source, slot, positions))
-                count += len(positions)
+            tiles, pending = [], []
+            try:
+                for pose, positions in chunk:
+                    slot, bounds = self._slot(pose, pinned, pending)
+                    source, radius = shadow.ground_region(factor, softness, bounds)
+                    tiles.append((source, slot, positions))
+                    count += len(positions)
+                # 방향 적재와 타일 배치를 끝낸 뒤 GL 패스에 들어간다.
+                shadow.render_depth_tiles(self.texture, pending)
+            except BaseException:
+                self.slots.clear()
+                raise
             with sampler.batch(), shadow.bind_texture(sampler, 0, self.texture):
                 u = sampler.uniforms
                 shadow.upload_projection(sampler)

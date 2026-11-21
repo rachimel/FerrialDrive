@@ -175,6 +175,40 @@ class EnemyBatchGpuTests(unittest.TestCase):
                 self.assertLessEqual(len(entries), MAX_GROUND_GEOMETRY_POSES)
                 self.assertLessEqual(sum(len(vertices) for vertices, _ in entries), GROUND_GEOMETRY_BUDGET_BYTES)
 
+    def test_depth_tiles_query_once_and_restore_on_failure(self):
+        from ferrial_drive.rendering.enemy_shadow_batch import EnemyShadowBatch
+
+        resource = next(iter(self.sprites.values())).resource
+        shadow = resource.shadow_map
+        sampler = shadow.depth_sampler
+        motion = next(iter(shadow.tracks))
+        vertices, _ = shadow.pose_geometry((motion, 0, (0, 0)), False)
+        tiles = [((0, 0), vertices), ((shadow.ground_size, 0), vertices)]
+        batch = EnemyShadowBatch(resource)
+        self.addCleanup(batch.close)
+        self.pico.SDL_RenderFlush(self.pico.renderer)
+
+        def state():
+            integers = tuple(sampler.integer(key, count) for key, count in
+                             ((0x0BA2, 4), (0x0C10, 4), (0x8B8D, 1), (0x8CA6, 1), (0x8CAA, 1),
+                              (0x85B5, 1), (0x8894, 1), (0x0B72, 1), (0x0B74, 1)))
+            flags = tuple(sampler.glIsEnabled(key) for key in (0x0B71, 0x0B44, 0x0C11))
+            clear = ct.c_double()
+            shadow.GetDoublev(0x0B73, ct.byref(clear))
+            return integers, flags, clear.value
+
+        original = state()
+        with patch.object(sampler, "glGetIntegerv", wraps=sampler.glGetIntegerv) as integers:
+            with patch.object(shadow, "GetDoublev", wraps=shadow.GetDoublev) as clear:
+                shadow.render_depth_tiles(batch.texture, tiles)
+            self.assertEqual(clear.call_count, 1)
+            self.assertEqual(integers.call_count, 8)
+        self.assertEqual(state(), original)
+        with patch.object(shadow, "BufferSubData", side_effect=RuntimeError("타일 제출 중단")):
+            with self.assertRaisesRegex(RuntimeError, "타일 제출 중단"):
+                shadow.render_depth_tiles(batch.texture, tiles)
+        self.assertEqual(state(), original)
+
     def test_shared_pose_copies_preserve_pixels_overlap_and_rounding(self):
         sprite = self.sprites["small"]
         cache = sprite.shared_frames()

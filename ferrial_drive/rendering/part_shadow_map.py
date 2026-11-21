@@ -389,14 +389,36 @@ class PartShadowMap:
         right, bottom = ceil(max(pixel_xs) + pivot_x) + 3, ceil(max(pixel_ys) + pivot_y) + 3
         return self.vertex_data.pack(*vertices), (left, top, right - left, bottom - top)
 
-    def render_depth(self, vertices, *, texture=None, tile=None):
-        with self.depth_pass(self.depth_sampler, self.texture if texture is None else texture, self.ground_size, tile=tile):
-            if self.surface_light_position is not None:
-                self.upload_projection(self.depth_sampler)
-            self.BindBuffer(0x8892, self.buffer.value)
-            self.BufferSubData(0x8892, 0, len(vertices), vertices)
-            self.DrawElements(0x0004, self.index_count, 0x1405, None)
+    def _draw_depth_vertices(self, vertices):
+        self.BufferSubData(0x8892, 0, len(vertices), vertices)
+        self.DrawElements(0x0004, self.index_count, 0x1405, None)
         self.depth_draws += 1
+
+    def render_depth(self, vertices):
+        sampler = self.depth_sampler
+        with self.depth_pass(sampler, self.texture):
+            sampler.glViewport(0, 0, self.ground_size, self.ground_size)
+            self.Clear(0x00000100)
+            if self.surface_light_position is not None:
+                self.upload_projection(sampler)
+            self.BindBuffer(0x8892, self.buffer.value)
+            self._draw_depth_vertices(vertices)
+
+    def render_depth_tiles(self, texture, tiles):
+        """같은 깊이 텍스처에 쓰는 타일의 공통 상태를 한 번만 적용한다."""
+        if not tiles:
+            return
+        sampler = self.depth_sampler
+        size = self.ground_size
+        with self.depth_pass(sampler, texture, tiled=True):
+            if self.surface_light_position is not None:
+                self.upload_projection(sampler)
+            self.BindBuffer(0x8892, self.buffer.value)
+            for (x, y), vertices in tiles:
+                sampler.glViewport(x, y, size, size)
+                sampler.glScissor(x, y, size, size)
+                self.Clear(0x00000100)
+                self._draw_depth_vertices(vertices)
 
     def render_surface(self, texture, bounds, border):
         s, p = self.surface_sampler, self.pico
@@ -409,7 +431,9 @@ class PartShadowMap:
             if p.SDL_GL_BindTexture(texture, None, None):
                 raise RuntimeError("본체 깊이 텍스처를 그림자 셰이더에 연결할 수 없다.")
             try:
-                with self.depth_pass(s, self.surface_texture, self.size, points=True):
+                with self.depth_pass(s, self.surface_texture, points=True):
+                    s.glViewport(0, 0, self.size, self.size)
+                    self.Clear(0x00000100)
                     s.glUniform1i(s.uniforms["casterSurface"], 0)
                     s.glUniform4f(s.uniforms["casterGrid"], width, border, self.caster_point_size, 0)
                     s.glUniform2f(s.uniforms["casterOrigin"], x, y)
@@ -424,32 +448,27 @@ class PartShadowMap:
         self.surface_draws += 1
 
     @contextmanager
-    def depth_pass(self, s, texture, size, *, points=False, tile=None):
+    def depth_pass(self, s, texture, *, points=False, tiled=False):
         viewport, program = s.integer(0x0BA2, 4), s.integer(0x8B8D)
         framebuffer, vao, buffer = s.integer(0x8CA6), s.integer(0x85B5), s.integer(0x8894)
-        flags = {flag: s.glIsEnabled(flag) for flag in (0x0B71, 0x0B44, 0x0C11, 0x8642)}
-        old_scissor = s.integer(0x0C10, 4) if tile is not None else None
+        flags = {flag: s.glIsEnabled(flag) for flag in (0x0B71, 0x0B44, 0x0C11)}
+        if points:
+            flags[0x8642] = s.glIsEnabled(0x8642)
+        old_scissor = s.integer(0x0C10, 4) if tiled else None
         depth_mask, depth_func = s.integer(0x0B72), s.integer(0x0B74)
         clear = ct.c_double()
         self.GetDoublev(0x0B73, ct.byref(clear))
         try:
             self.BindFramebuffer(0x8CA9, self.framebuffer.value)
             self.FramebufferTexture2D(0x8CA9, 0x8D00, 0x0DE1, texture.value, 0)
-            vx, vy = tile or (0, 0)
-            s.glViewport(vx, vy, size, size)
             s.glDisable(0x0B44)
-            if tile is None:
-                s.glDisable(0x0C11)
-            else:
-                s.glEnable(0x0C11)
-                s.glScissor(vx, vy, size, size)
+            (s.glEnable if tiled else s.glDisable)(0x0C11)
             s.glEnable(0x0B71)
             if points:
                 s.glEnable(0x8642)
             self.DepthMask(1)
             self.DepthFunc(0x0201)
             self.ClearDepth(1)
-            self.Clear(0x00000100)
             s.glUseProgram(s.program)
             self.BindVertexArray(self.vao.value)
             yield
