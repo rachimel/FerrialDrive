@@ -43,11 +43,10 @@ vec3 environmentReflection(vec3 reflection,float roughness,vec3 f0,float nv) {
     vec2 envBrdf=vec2(1.04-0.572*roughness,-0.04+0.022*roughness)+vec2(-1.04,1.04)*gain;
     return radiance*max(f0*envBrdf.x+envBrdf.y,vec3(0.0));
 }
-vec3 shadePbr(vec3 base, vec3 normal, vec3 position, vec3 attributes, vec2 coat, float shadow) {
+vec3 shadePbr(vec3 base, vec3 normal, vec3 position, vec3 attributes, vec2 coat, float shadow, vec3 viewDirection) {
     float metal=attributes.r;
     float roughness=clamp(attributes.g,0.045,1.0);
     vec3 f0=mix(vec3(0.08*attributes.b),base,metal);
-    vec3 viewDirection=-cameraForward.xyz;
     float nv=max(dot(normal,viewDirection),0.001);
     vec3 toLight=(pbrKeyPosition.xyz-position)*0.01;
     float distanceSquared=max(dot(toLight,toLight),0.01);

@@ -2,9 +2,14 @@
 
 from collections import OrderedDict
 import ctypes as ct
+from math import ceil, floor
+from struct import iter_unpack
 
+from .enemy_part_batch import SheetLayout, SheetTarget
+from .hud_batch import HudBatchQueue
 from .instanced_quads import InstancedQuads, QUAD_LIMIT
 from .part_shadow_map import GROUND_FRAGMENT, SHADOW_UNIFORMS
+from .part_upscale import render_target
 
 
 TILES_PER_SIDE = 8
@@ -129,3 +134,82 @@ class EnemyShadowBatch:
             self.texture.value = 0
         self.slots.clear()
         self.sampler.close()
+
+
+class EnemyBoxMask:
+    """근거리의 투영 Box를 반해상도 바닥 마스크에 한 번에 기록한다."""
+
+    def __init__(self, pico):
+        self.pico = pico
+        self.target = SheetTarget(pico)
+        self.batch = HudBatchQueue(pico)
+        self.submits = 0
+
+    @property
+    def storage_bytes(self):
+        width, height = self.target.size
+        return width * height * 4
+
+    def draw(self, groups_by_kind, sprites, zoom, opacity, window_size):
+        self.submits = 0
+        points, faces = [], []
+        count = 0
+        for kind, groups in groups_by_kind.items():
+            sprite = sprites[kind]
+            resource, shadow = sprite.resource, sprite.resource.shadow_map
+            if not shadow.enabled:
+                continue
+            key_x, key_y, key_z = shadow.surface_light_position
+            (gx, gy, _), (hx, hy, _) = shadow.ground_axes
+            scale = zoom * sprite.scale * shadow.pixel_scale
+            indices = tuple(box * 8 + corner for box in range(len(shadow.corners)) for corner in shadow.triangles)
+            for (clip_name, seconds), placements in groups:
+                motion, pair = clip_name.rsplit("/", 1)
+                bank = pair[3]
+                clip = resource.get(motion, bank)["data"]["clip"]
+                duration = clip["duration_seconds"]
+                elapsed = seconds % duration if clip["loop"] else min(seconds, duration)
+                body, _ = shadow.pose_geometry((motion, elapsed, (int(pair[1]) * 45, int(bank) * 45)), True)
+                projected = []
+                for x, y, z in iter_unpack("=fff", body):
+                    amount = key_z / max(1, key_z - z)
+                    px, py = key_x + (x - key_x) * amount, key_y + (y - key_y) * amount
+                    projected.append(((gx * px + gy * py) * scale, (hx * px + hy * py) * scale))
+                for x, foot in placements:
+                    start = len(points)
+                    points.extend((x + px, foot + py) for px, py in projected)
+                    faces.extend(start + index for index in indices)
+                    count += 1
+        if not points:
+            return 0
+        left = max(0, floor(min(x for x, _ in points)) - 2)
+        top = max(0, floor(min(y for _, y in points)) - 2)
+        right = min(window_size[0], ceil(max(x for x, _ in points)) + 2)
+        bottom = min(window_size[1], ceil(max(y for _, y in points)) + 2)
+        if left >= right or top >= bottom:
+            return 0
+        width, height = ceil((right - left) / 2), ceil((bottom - top) / 2)
+        layout = SheetLayout()
+        if layout.place(width, height) is None:
+            raise RuntimeError("근거리 Box 그림자 마스크는 고정 시트 범위를 넘었다.")
+        self.target.reserve(layout)
+        p, texture = self.pico, self.target.texture
+        black = (0, 0, 0, 255)
+        vertices = [((x - left) * .5, (y - top) * .5, black) for x, y in points]
+        with render_target(p, texture):
+            p.SDL_SetRenderDrawColor(p.renderer, 0, 0, 0, 0)
+            p.SDL_RenderClear(p.renderer)
+            with self.batch.frame():
+                self.batch.colored_mesh(vertices, faces)
+        self.submits = self.batch.stats["geometry_submits"]
+        source = p.SDL_Rect(0, 0, width, height)
+        destination = p.SDL_Rect(left, top, width * 2, height * 2)
+        if (p.SDL_SetTextureScaleMode(texture, p.SDL_ScaleModeLinear)
+                or p.SDL_SetTextureAlphaMod(texture, round(max(0, min(1, opacity)) * 255))
+                or p.SDL_RenderCopy(p.renderer, texture, source, destination)):
+            raise RuntimeError("근거리 Box 그림자 화면 합성 실패")
+        return count
+
+    def close(self):
+        self.batch.close()
+        self.target.close()

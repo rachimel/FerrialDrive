@@ -220,14 +220,17 @@ class EnemySprite:
         return sum(self.draw_ground_shadows(pose, positions, zoom, opacity, softness)
                    for pose, positions in groups), 0
 
-    def draw(self, enemy, x, foot, zoom, *, playback=None, shared_frame=False, prepared=None):
+    def draw(self, enemy, x, foot, zoom, *, playback=None, shared_frame=False, prepared=None, resolved=None):
         motion, direction, seconds = playback if playback is not None else self.playback(enemy)
         name = f"{motion}/{direction}"
         index = self.frame_index(motion, direction, seconds)
         scale = self.scale * zoom
         if self.part_counts:
             clip = self.part_clip(motion, direction)
-            if prepared is not None:
+            if resolved is not None:
+                copy, record = resolved
+                top = copy(record)
+            elif prepared is not None:
                 top = self.body_batch.copy(prepared)
             elif shared_frame:
                 top = self.shared_frames().draw(clip, self.shared_frame_index(motion, direction, seconds), x, foot, scale)

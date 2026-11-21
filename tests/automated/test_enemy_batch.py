@@ -294,6 +294,43 @@ class EnemyBatchGpuTests(unittest.TestCase):
             prepare.assert_called_once()
         self.assertEqual(view.primitives.stats["crowd_atlas_draws"], 0)
 
+    def test_deferred_shades_both_profiles_once_and_keeps_body_placement(self):
+        from ferrial_drive.rendering.enemy_deferred_pbr import EnemyDeferredPbr
+
+        requests = {"small": [("a", "move", "0", .18, 180, 240), ("b", "attack", "1", .35, 210, 265)],
+                    "medium": [("c", "move", "3", .4, 260, 240), ("d", "attack", "4", .5, 275, 260)]}
+        deferred = EnemyDeferredPbr(self.pico)
+        self.addCleanup(deferred.close)
+
+        def draw_reference():
+            for kind, rows in requests.items():
+                sprite = self.sprites[kind]
+                records = sprite.prepare_bodies(rows, .7)
+                self.assertEqual(len(records), 2)
+                for enemy_id, *_ in rows:
+                    sprite.body_batch.copy(records[enemy_id])
+
+        def draw_deferred():
+            records = deferred.prepare(requests, self.sprites, .7)
+            self.assertEqual((len(records), deferred.light_submits), (4, 1))
+            for rows in requests.values():
+                for enemy_id, *_ in rows:
+                    deferred.copy(records[enemy_id])
+
+        self.compare(draw_reference, draw_deferred, 8)
+
+    def test_deferred_box_mask_submits_both_profiles_once(self):
+        import numpy as np
+        from ferrial_drive.rendering.enemy_shadow_batch import EnemyBoxMask
+
+        mask = EnemyBoxMask(self.pico)
+        self.addCleanup(mask.close)
+        groups = {"small": [(("move/u0l0", .18), [(200, 260), (213, 255)])],
+                  "medium": [(("move/u3l3", .4), [(242, 264)])]}
+        pixels = self.capture(lambda: self.assertEqual(mask.draw(groups, self.sprites, 1, .5, (512, 512)), 3))
+        self.assertEqual(mask.submits, 1)
+        self.assertGreater(np.any(pixels != [140, 170, 200], axis=2).sum(), 100)
+
     def test_one_shadow_tile_spans_multiple_placement_batches(self):
         sprite = self.sprites["medium"]
         scale = .77 / sprite.resource.data["pixel_scale"]

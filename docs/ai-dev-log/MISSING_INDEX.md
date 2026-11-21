@@ -827,3 +827,7 @@
 ## FDLOG-20261121-crowd-box-shadows
 
 - [원거리 적 Box 투영 그림자](2026-11-21-crowd-box-shadows.md)의 사용자 발언 시각은 [[FDLOG_MISSING_TIME:FDLOG-20261121-crowd-box-shadows:U1]]이다. 검색 단서는 `플레이어 마냥 Box로 표현할 순 없어`다.
+
+## FDLOG-20261121-near-enemy-deferred-pbr
+
+- [근거리 적 Deferred PBR과 Box 마스크 시험](2026-11-21-near-enemy-deferred-pbr.md)의 사용자 발언 시각은 [[FDLOG_MISSING_TIME:FDLOG-20261121-near-enemy-deferred-pbr:U1-U2]]이다. 검색 단서는 `근거리 적만 대상으로 Deferred PBR 테스트`와 `KeyFrame만 저장하고 보간`이다.

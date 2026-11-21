@@ -46,6 +46,12 @@ uniform vec4 energyPlacementA[VIEWS], energyPlacementB[VIEWS];
 uniform vec4 colorPlacementA[VIEWS], colorPlacementB[VIEWS], depthPlacementA[VIEWS], depthPlacementB[VIEWS];
 #endif
 uniform vec4 energyTint, rimLight, modulation;
+#ifdef DEFERRED_SURFACE
+uniform float deferredProfile;
+#define PART_OUTPUT gl_FragData[0]
+#else
+#define PART_OUTPUT gl_FragColor
+#endif
 #ifdef PART_INSTANCES
 in float localPhase;
 #else
@@ -140,7 +146,7 @@ vec4 shadeSurface(vec4 c,vec4 field,vec3 properties,vec2 coat,vec2 pixel,float d
     float shadow=surfaceVisibilityAt(position+normal*4.0);
     vec3 base=srgbToLinear(clamp(c.rgb/c.a,0.0,1.0));
     vec3 attrs=clamp(properties/c.a,0.0,1.0);
-    c.rgb=shadePbr(base,normal,position,attrs,clamp(coat/c.a,0.0,1.0),shadow)*c.a;
+    c.rgb=shadePbr(base,normal,position,attrs,clamp(coat/c.a,0.0,1.0),shadow,-cameraForward.xyz)*c.a;
 #else
     float shadow=visibilityAt(position);
     float lambert=max(0.0,dot(normal,lightDirection.xyz));
@@ -277,11 +283,11 @@ void main() {
             if(colors[i].a>=0.5&&depths[i]>0.0) nearest=min(nearest,depths[i]);
         }
         if(nearest>=1.0e30) {
-            gl_FragColor=vec4(0.0);
+            PART_OUTPUT=vec4(0.0);
         } else {
             // 24비트 RGB에 0.25cm 단위의 깊이를 담는다.
             float encodedDepth=floor(clamp(nearest*4.0,1.0,16777215.0)+0.5);
-            gl_FragColor=vec4(vec3(floor(encodedDepth/65536.0),mod(floor(encodedDepth/256.0),256.0),
+            PART_OUTPUT=vec4(vec3(floor(encodedDepth/65536.0),mod(floor(encodedDepth/256.0),256.0),
                                    mod(encodedDepth,256.0))/255.0,1.0);
         }
         return;
@@ -301,6 +307,28 @@ void main() {
             }
         }
     }
+#ifdef DEFERRED_SURFACE
+    // 한 표면으로 표현할 수 없는 반투명 파츠 겹침은 기존 합성을 쓴다.
+    int first=-1;
+    bool overlaps=false;
+    for(int i=0;i<PARTS;++i) {
+        if(colors[i].a<=0.000001) continue;
+        if(first<0) first=i;
+        else { overlaps=true; break; }
+    }
+    if(first<0) discard;
+    if(!overlaps || colors[first].a>=0.99999) {
+        vec4 base=colors[first], field=normalEnergy[first];
+        vec3 normal=normalize(field.rgb/base.a*2.0-1.0+vec3(0.00001));
+        float emission=clamp(field.a*max(1.0,energyTint.a)/base.a,0.0,1.0);
+        vec2 coat=clamp(coatProperties[first]/base.a,0.0,1.0);
+        gl_FragData[0]=vec4(clamp(base.rgb/base.a,0.0,1.0),base.a);
+        gl_FragData[1]=vec4(normal,emission);
+        gl_FragData[2]=vec4(clamp(materialProperties[first]/base.a,0.0,1.0),coat.x);
+        gl_FragData[3]=vec4(worldAt(texel,depths[first]),2.0*(deferredProfile+1.0)+coat.y);
+        return;
+    }
+#endif
     vec4 c=vec4(0.0);
     for(int i=0;i<PARTS;++i) {
 #ifdef PBR
@@ -326,7 +354,12 @@ void main() {
         float directional=0.3+0.7*max(0.0,dot(normalize(gradient+vec2(0.00001)),normalize(vec2(0.6,-0.8))));
         rgb=mix(rgb,rimLight.rgb,edge*directional*rimLight.a);
     }
-    gl_FragColor=vec4(rgb*modulation.rgb*brightness,c.a*modulation.a*effectOpacity);
+    PART_OUTPUT=vec4(rgb*modulation.rgb*brightness,c.a*modulation.a*effectOpacity);
+#ifdef DEFERRED_SURFACE
+    gl_FragData[1]=vec4(0.0);
+    gl_FragData[2]=vec4(0.0);
+    gl_FragData[3]=vec4(0.0);
+#endif
 }
 '''.encode("utf-8")
 
@@ -337,7 +370,7 @@ class PartPainter:
               "crops", "shifts", "flowSteps")
 
     def __init__(self, pico, *, angular=False, part_count=MAX_PARTS, paged=False, frame_crop=False, surface=False,
-                 pbr=False, coat=False, instanced=False):
+                 pbr=False, coat=False, instanced=False, deferred=False):
         self.pico = pico
         self.paged = paged
         self.frame_crop = frame_crop
@@ -377,6 +410,9 @@ class PartPainter:
             defines += "\n#define PBR"
         if coat:
             defines += "\n#define COAT"
+        if deferred:
+            defines += "\n#define DEFERRED_SURFACE"
+            uniforms.append("deferredProfile")
         shader = PART_SHADER.replace(b"#version 120", defines.encode(), 1)
         shader = shader.replace(b"PART_LIMIT", str(part_count).encode())
         shader = shader.replace(b"PAGE_SAMPLERS", "\n".join(declarations).encode())

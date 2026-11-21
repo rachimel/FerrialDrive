@@ -32,6 +32,8 @@ class EncounterView:
         self.upscale_scratch = None
         self.batch_enemy_parts = True
         self.batch_enemy_shadows = True
+        self.deferred_enemy_enabled = False
+        self.deferred_pbr = self.deferred_box_shadows = None
         self.show_enemy_labels = False
 
     def point(self, position_m, height_pixels=0):
@@ -73,6 +75,8 @@ class EncounterView:
             self.primitives.stats["pbr_pose_requests"] = 0
             self.primitives.stats["batched_bodies"] = 0
             self.primitives.stats["body_batch_submits"] = 0
+            self.primitives.stats.update(deferred_bodies=0, deferred_surface_submits=0, deferred_light_submits=0,
+                                         deferred_shadow_submits=0, deferred_gpu_bytes=0)
             self.primitives.stats["enemy_motions"] = {}
             self._draw(encounter, flashes, window_size, shadow_opacity, shadow_softness_pixels,
                        player_position_m, locked_id)
@@ -86,6 +90,12 @@ class EncounterView:
             if self.crowd_atlas is not None:
                 self.crowd_atlas.close()
                 self.crowd_atlas = None
+            if self.deferred_pbr is not None:
+                self.deferred_pbr.close()
+                self.deferred_pbr = None
+            if self.deferred_box_shadows is not None:
+                self.deferred_box_shadows.close()
+                self.deferred_box_shadows = None
             if self.upscale_scratch is not None:
                 self.upscale_scratch.close()
                 self.upscale_scratch = None
@@ -155,10 +165,19 @@ class EncounterView:
                 sprite = self.sprites[kind]
                 r.stats["shadow_draws"] += sprite.draw_ground_shadows(
                     pose, placements, zoom, shadow_opacity, shadow_softness_pixels, shared_frame=shared)
-            for kind, groups in near_shadows.items():
-                count, submits = self.sprites[kind].draw_near_shadows(groups, zoom, shadow_opacity, shadow_softness_pixels)
-                r.stats["shadow_draws"] += count
-                r.stats["near_shadow_batch_submits"] += submits
+            if self.deferred_enemy_enabled and near_shadows:
+                if self.deferred_box_shadows is None:
+                    from ferrial_drive.rendering.enemy_shadow_batch import EnemyBoxMask
+                    self.deferred_box_shadows = EnemyBoxMask(self.renderer.pico)
+                mask = self.deferred_box_shadows
+                r.stats["shadow_draws"] += mask.draw(near_shadows, self.sprites, zoom, shadow_opacity, window_size)
+                r.stats["deferred_shadow_submits"] = mask.submits
+                r.stats["deferred_gpu_bytes"] += mask.storage_bytes
+            else:
+                for kind, groups in near_shadows.items():
+                    count, submits = self.sprites[kind].draw_near_shadows(groups, zoom, shadow_opacity, shadow_softness_pixels)
+                    r.stats["shadow_draws"] += count
+                    r.stats["near_shadow_batch_submits"] += submits
             r.stats["shadow_groups"] = len(shadow_groups)
         self._select_shared_bodies(placed)
         body_requests = {}
@@ -168,7 +187,19 @@ class EncounterView:
                 bank = sprite.part_clip(motion, direction)[-1]
                 body_requests.setdefault(enemy.profile.kind, []).append((enemy.enemy_id, motion, bank, seconds, x, foot))
         prepared = {}
+        deferred = {}
+        if self.deferred_enemy_enabled and body_requests:
+            if self.deferred_pbr is None:
+                from ferrial_drive.rendering.enemy_deferred_pbr import EnemyDeferredPbr
+                self.deferred_pbr = EnemyDeferredPbr(self.renderer.pico)
+            deferred = self.deferred_pbr.prepare(body_requests, self.sprites, zoom)
+            r.stats["deferred_bodies"] = len(deferred)
+            r.stats["deferred_surface_submits"] = self.deferred_pbr.surface_submits
+            r.stats["deferred_light_submits"] = self.deferred_pbr.light_submits
+            r.stats["deferred_gpu_bytes"] += self.deferred_pbr.storage_bytes
         for kind, requests in body_requests.items():
+            if deferred:
+                requests = [request for request in requests if request[0] not in deferred]
             sprite = self.sprites[kind]
             if len(requests) >= 2:
                 if self.upscale_scratch is None:
@@ -176,7 +207,7 @@ class EncounterView:
                 prepared.update(sprite.prepare_bodies(requests, zoom, scratch=self.upscale_scratch))
                 r.stats["body_batch_submits"] += sprite.body_batch.submits
         r.stats["batched_bodies"] = len(prepared)
-        self._draw_bodies(placed, encounter, flashes, zoom, prepared, labels, break_labels)
+        self._draw_bodies(placed, encounter, flashes, zoom, prepared, labels, break_labels, deferred)
         for bullet in encounter.projectiles:
             point = self.point(bullet.position_m, 48)
             tail = self.point(bullet.position_m - bullet.direction * 2, 48)
@@ -200,12 +231,12 @@ class EncounterView:
             r.text(text, width / 2, 240, "body", "#F1DBB2", align="center")
             r.text("F5 재시작 · Esc 메뉴 · F10 종료", width / 2, 282, "small", "#CADAE4", align="center")
 
-    def _draw_bodies(self, placed, encounter, flashes, zoom, prepared, labels, break_labels):
+    def _draw_bodies(self, placed, encounter, flashes, zoom, prepared, labels, break_labels, deferred):
         r = self.primitives
         for pose, items, _ in self._body_runs(placed, zoom):
             if pose is None:
                 for row in items:
-                    self._draw_enemy(row, encounter, flashes, zoom, prepared, labels, break_labels)
+                    self._draw_enemy(row, encounter, flashes, zoom, prepared, labels, break_labels, deferred)
                 continue
             sprite, kind, motion, direction, index = pose
             if r.count:
@@ -272,7 +303,7 @@ class EncounterView:
             if pose is None or counts[pose] == 1:
                 placed[index] = (*placed[index][:-1], False)
 
-    def _draw_enemy(self, row, encounter, flashes, zoom, prepared, labels, break_labels):
+    def _draw_enemy(self, row, encounter, flashes, zoom, prepared, labels, break_labels, deferred):
         foot, x, enemy, sprite, playback, shared = row
         r = self.primitives
         profile = enemy.profile
@@ -292,8 +323,9 @@ class EncounterView:
                                              x, foot, sprite.scale * zoom * sprite.resource.data["pixel_scale"])
                 r.stats["crowd_atlas_draws"] += 1
             else:
+                record = deferred.get(enemy.enemy_id)
                 sprite_top, muzzles, motion = sprite.draw(enemy, x, foot, zoom, playback=playback, shared_frame=shared,
-                                                          prepared=prepared.get(enemy.enemy_id))
+                    prepared=prepared.get(enemy.enemy_id), resolved=(self.deferred_pbr.copy, record) if record else None)
                 r.stats["shared_frame_draws"] += shared
                 r.stats["part_draws"] += bool(sprite.part_counts)
             r.stats["sprite_draws"] += 1
