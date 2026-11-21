@@ -127,6 +127,45 @@ class PartUpscaler:
         self.sampler.release()
 
 
+class PartEchoTarget:
+    """잔상 PBR의 작은 프리멀티플라이 타깃을 반복해서 사용한다."""
+
+    def __init__(self, pico):
+        self.pico = pico
+        self.texture = None
+        self.size = (0, 0)
+
+    def draw(self, width, height, destination, paint):
+        p = self.pico
+        border = PART_UPSCALE_BORDER // 2
+        inner = p.SDL_Rect(border, border, (width + 1) // 2, (height + 1) // 2)
+        source = p.SDL_Rect(0, 0, inner.w + 2 * border, inner.h + 2 * border)
+        size = tuple(max(old, (required + 31) // 32 * 32)
+                     for old, required in zip(self.size, (source.w, source.h), strict=True))
+        if size != self.size:
+            texture = p.SDL_CreateTexture(p.renderer, p.SDL_PIXELFORMAT_RGBA32, p.SDL_TEXTUREACCESS_TARGET, *size)
+            if not texture:
+                raise RuntimeError("잔상 합성 타깃을 만들 수 없다.")
+            blend = p.SDL_ComposeCustomBlendMode(p.SDL_BLENDFACTOR_ONE, p.SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
+                p.SDL_BLENDOPERATION_ADD, p.SDL_BLENDFACTOR_ONE, p.SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
+                p.SDL_BLENDOPERATION_ADD)
+            if p.SDL_SetTextureBlendMode(texture, blend) or p.SDL_SetTextureScaleMode(texture, p.SDL_ScaleModeLinear):
+                p.SDL_DestroyTexture(texture)
+                raise RuntimeError("잔상 합성 타깃 필터를 설정할 수 없다.")
+            self.close()
+            self.texture, self.size = texture, size
+        with render_target(p, self.texture):
+            paint(inner)
+        if p.SDL_RenderCopy(p.renderer, self.texture, source, destination):
+            raise RuntimeError("반해상도 잔상 그리기 실패")
+
+    def close(self):
+        if self.texture:
+            self.pico.SDL_DestroyTexture(self.texture)
+            self.texture = None
+            self.size = (0, 0)
+
+
 class PartSheetUpscaler:
     """네이티브 시트의 파츠를 영역별로 확대하고 시트 단위로 AA를 적용한다."""
 

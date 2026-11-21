@@ -139,10 +139,10 @@ class PicoPoseTable:
         name = clip_name.split("/")[0]
         spec = self.catalog.motions[name]
         phase = target_phase(min(1,seconds/(spec["source_frame_count"]/12)),easing=easing)
+        echo_options = options
         if getattr(self.parts, "pbr_lighting", None):
-            options["sample_shadow"] = False
-            options["allow_fallback"] = False
-        if self.draw_motion(clip_name, phase * spec["source_frame_count"] / 12, x, y, use_surface=False, **options):
+            echo_options = dict(options, sample_shadow=False, allow_fallback=False, half_resolution_echo=True)
+        if self.draw_motion(clip_name, phase * spec["source_frame_count"] / 12, x, y, use_surface=False, **echo_options):
             return
         frame = min(spec["frames"]-1,int(phase*spec["source_frame_count"]))
         self.draw_frame(clip_name,frame,x,y,**options)

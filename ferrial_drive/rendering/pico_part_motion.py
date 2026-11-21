@@ -18,7 +18,7 @@ from .part_motion_catalog import PartMotionCatalog
 from .part_pbr import COAT_CHANNELS
 from .part_painter import PART_SAMPLE_FIELDS, PartPainter
 from .part_page_cache import PartPageCache
-from .part_upscale import PART_UPSCALE_BORDER, PartUpscaler
+from .part_upscale import PART_UPSCALE_BORDER, PartEchoTarget, PartUpscaler
 from .texture_codecs import find_ktx_library
 
 
@@ -59,6 +59,7 @@ class PicoPartMotion:
         self.adjacent_pairs = {name: {tuple(pair) for pair in value["pairs"]} for name, value in self.correspondence.items()}
         self.angular_painter = None
         self.upscaler = None
+        self.echo_target = None
         self.shadow_map = None
         try:
             if surface:
@@ -305,7 +306,7 @@ class PicoPartMotion:
             return shadow.draw_ground_many(placements, scale, opacity, softness_pixels=softness_pixels)
 
     def draw(self, clip_name, elapsed_seconds, x, y, *, scale=1, opacity=1, tint=(1, 1, 1), tint_mix=0, brightness=1,
-             angular_span=None, sample_shadow=True, before_body=None, allow_fallback=True):
+             angular_span=None, sample_shadow=True, before_body=None, allow_fallback=True, half_resolution_echo=False):
         pose = self.display_pose(clip_name, elapsed_seconds, angular_span, allow_fallback=allow_fallback)
         if pose is None:
             return None
@@ -361,7 +362,16 @@ class PicoPartMotion:
                     self.shadow_map.render_surface(self.upscaler.texture, state["bounds"], border)
             if before_body is not None:
                 before_body()
-            if self.upscaler is not None and factor > 1 and self.data.get("upscale_filter") == "bounded_bicubic":
+            if half_resolution_echo and self.pbr_lighting:
+                if self.echo_target is None:
+                    self.echo_target = PartEchoTarget(self.pico)
+                pad = round(border * factor)
+                grown = self.pico.SDL_Rect(destination.x - pad, destination.y - pad,
+                                           destination.w + 2 * pad, destination.h + 2 * pad)
+                with self.timings.scope("parts.echo_half"):
+                    self.echo_target.draw(width, height, grown,
+                                          lambda tile: painter.paint(self.cache, resources, state, tile, **options))
+            elif self.upscaler is not None and factor > 1 and self.data.get("upscale_filter") == "bounded_bicubic":
                 with self.upscaler.native_target(*buffer_size):
                     painter.paint(self.cache, resources, state, native, **options)
                 pad = round(border * factor)
@@ -404,7 +414,8 @@ class PicoPartMotion:
                 "upscale_aa": self.upscaler.aa_mode if self.upscaler else "off",
                 "upscale_aa_draws": self.upscaler.aa_draws if self.upscaler else 0,
                 "upscale_aa_storage_bytes": self.upscaler.aa_storage_bytes if self.upscaler else 0,
-                "upscale_storage_bytes": 4 * self.upscaler.size[0] * self.upscaler.size[1] if self.upscaler else 0}
+                "upscale_storage_bytes": 4 * self.upscaler.size[0] * self.upscaler.size[1] if self.upscaler else 0,
+                "echo_storage_bytes": 4 * self.echo_target.size[0] * self.echo_target.size[1] if self.echo_target else 0}
 
     def close(self):
         self.residency.close()
@@ -414,6 +425,8 @@ class PicoPartMotion:
             self.cache.purge_pool()
         if self.angular_painter is not None:
             self.angular_painter.close()
+        if self.echo_target is not None:
+            self.echo_target.close()
         if self.upscaler is not None:
             self.upscaler.close()
         if self.shadow_map is not None:

@@ -803,3 +803,7 @@
 ## FDLOG-20261121-enemy-upscale-sheet
 
 - [적 확대 시트 통합과 교전 병목](2026-11-21-enemy-upscale-sheet.md)의 사용자 발언 시각은 [[FDLOG_MISSING_TIME:FDLOG-20261121-enemy-upscale-sheet:U1-U2]]이다. 검색 단서는 `확대 렌더 패스 통합하고`, `전반적인 Bottleneck`이다.
+
+## FDLOG-20261121-half-resolution-pbr-echoes
+
+- [PBR 잔상 반해상도와 키포즈 아틀라스 확인](2026-11-21-half-resolution-pbr-echoes.md)의 사용자 발언 시각은 [[FDLOG_MISSING_TIME:FDLOG-20261121-half-resolution-pbr-echoes:U1-U2]]이다. 검색 단서는 `잔상은 PBR 해상도 약하게 해도 되고`, `이젠 KeyFrame들만 담아`다.
