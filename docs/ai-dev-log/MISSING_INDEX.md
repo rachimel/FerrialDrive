@@ -807,3 +807,7 @@
 ## FDLOG-20261121-half-resolution-pbr-echoes
 
 - [PBR 잔상 반해상도와 키포즈 아틀라스 확인](2026-11-21-half-resolution-pbr-echoes.md)의 사용자 발언 시각은 [[FDLOG_MISSING_TIME:FDLOG-20261121-half-resolution-pbr-echoes:U1-U2]]이다. 검색 단서는 `잔상은 PBR 해상도 약하게 해도 되고`, `이젠 KeyFrame들만 담아`다.
+
+## FDLOG-20261121-reprofile-r02
+
+- [리패킹·반해상도 잔상 적용 후 교전 재계측](2026-11-21-reprofile-r02.md)의 사용자 발언 시각은 [[FDLOG_MISSING_TIME:FDLOG-20261121-reprofile-r02:U1]]이다. 검색 단서는 `일단 다시 프로파일링 부탁함`이다.
