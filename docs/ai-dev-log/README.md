@@ -1,5 +1,7 @@
 # AI 개발 로그
 
+- [2026-11-21 근거리 적의 화면 깊이 선행 패스 시험](2026-11-21-near-enemy-screen-depth.md) — 기존 Deferred와 180기 가림·GPU·메모리 대조.
+
 - [2026-11-21 Hardware Benchmark 커밋 상한 종료](2026-11-21-benchmark-commit-stop.md) — 실제 Runner 재현, 제한 시험 중단 보고서와 Combat 실기 프리셋.
 
 - [2026-11-21 독립 테스트 실행 복구와 벤치마크 메모리 표시](2026-11-21-test-launch-benchmark-memory.md) — 테스트 실행 경로, 기본 도형 비교, RAM·GPU 창 제목.

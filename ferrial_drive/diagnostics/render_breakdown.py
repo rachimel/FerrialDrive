@@ -12,7 +12,8 @@ VARIANTS = ("baseline", "no_hud", "no_world", "no_ui_blur", "no_camera_blur", "n
             "no_auxiliary", "no_body_wind", "no_trail", "no_echoes", "no_ground_effects", "no_shadow",
             "no_radar", "no_dialogue", "no_resources", "no_rings", "cpu_trail", "compute_trail", "no_hud_batch",
             "no_filtered_batch",
-            "collision_polygon", "collision_capsule", "ground_individual", "ground_batched", "individual_enemy_parts", "individual_enemy_shadows", "no_enemy_labels", "debug_enemy_labels", "deferred_enemies")
+            "collision_polygon", "collision_capsule", "ground_individual", "ground_batched", "individual_enemy_parts", "individual_enemy_shadows", "no_enemy_labels", "debug_enemy_labels",
+            "deferred_enemies", "deferred_enemy_depth")
 
 
 class RenderBreakdown:
@@ -92,10 +93,12 @@ class RenderBreakdown:
 
     def install(self):
         view = getattr(self.app, "encounter_view", None)
-        if self.variant == "deferred_enemies":
+        if self.variant in ("deferred_enemies", "deferred_enemy_depth"):
             if view is None:
                 raise ValueError("Deferred 적 비교에는 교전 장면이 필요하다.")
             self.replace(view, "deferred_enemy_enabled", lambda old: True)
+            if self.variant == "deferred_enemy_depth":
+                self.replace(view, "deferred_enemy_screen_depth", lambda old: True)
         if view is not None and getattr(self, "gpu_passes", False):
             self.time_sampler("enemy_render", view, "_draw")
         app = self.app

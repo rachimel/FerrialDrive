@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [근거리 적의 화면 깊이 선행 패스 시험](2026-11-21-near-enemy-screen-depth.md) `[[FDLOG_MISSING_TIME:FDLOG-20261121-near-enemy-screen-depth:U1]]`은 Z-buffer 대조 요청의 정확한 시각이다. 검색 단서는 `근거리 적만 화면 좌표 공유하는 Z-buffer`다.
+
 - [Hardware Benchmark 커밋 상한 종료](2026-11-21-benchmark-commit-stop.md) `[[FDLOG_MISSING_TIME:FDLOG-20261121-benchmark-commit-stop:U1-U2]]`은 오류 및 키프레임 발언의 정확한 시각이다. 검색 단서는 `Hardware Benchmark에서 걸림`, `주요 KeyFrame들만 추출`이다.
 
 - [독립 테스트 실행 복구와 벤치마크 메모리 표시](2026-11-21-test-launch-benchmark-memory.md) `[[FDLOG_MISSING_TIME:FDLOG-20261121-test-launch-benchmark-memory:U1-U2]]`은 테스트 오류와 제목 요청의 정확한 시각이다. 검색 단서는 `오류나는 테스트들`, `메모리 사용량도 제목에서`다.
