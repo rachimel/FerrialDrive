@@ -20,8 +20,8 @@ UNIT_TEST_PRESETS = (
     {"id": "movement", "label": "Movement · 이동·검 훈련장", "args": ["--scenario", "sword", "--detail"]},
     {"id": "combat_native", "label": "Combat · 실기 제한 없음",
      "args": ["--scenario", "combat", "--detail", "--gpu-profile", "none", "--no-resource-limits"]},
-    {"id": "crowd_1000", "label": "Combat · 1,000기 · 실기 무음",
-     "args": ["--scenario", "combat", "--enemy-count", "1000", "--enemy-spacing-m", "24", "--mute",
+    {"id": "crowd_1000", "label": "Combat · 1,000기 · HP 10만 · 실기 무음",
+     "args": ["--scenario", "combat", "--enemy-count", "1000", "--enemy-spacing-m", "24", "--player-hp", "100000", "--mute",
               "--gpu-profile", "none", "--no-resource-limits"]},
 )
 
@@ -77,7 +77,7 @@ def run_worker(args, applied, profile):
     GameSettingsStore(settings_path).save(initial_settings)
     application_type = EncounterApplication if args.scenario == "combat" else MovementApplication
     encounter_options = (dict(encounter_path=args.encounter, enemy_count=args.enemy_count,
-                              enemy_spacing_m=args.enemy_spacing_m,
+                              enemy_spacing_m=args.enemy_spacing_m, player_hp=args.player_hp,
                               crowd_atlas_enabled=not args.legacy_enemy_render) if args.scenario == "combat" else {})
     app = application_type(args.config, demo=args.demo or args.scenario == "demo", settings_file=settings_path,
                            profile=args.output / "timings.json", movement_speed_multiplier=args.movement_speed_multiplier,
@@ -137,9 +137,6 @@ def run_worker(args, applied, profile):
                 probe = call_profile = None
                 try:
                     app.enter()
-                    if args.player_hp is not None:
-                        app.hud.preset["player_health"] = {"current": args.player_hp, "maximum": args.player_hp}
-                        app.reset()
                     width, height = ct.c_int(), ct.c_int()
                     if canvas.pico.SDL_GetRendererOutputSize(canvas.pico.renderer, ct.byref(width), ct.byref(height)) != 0:
                         raise RuntimeError("실제 출력 해상도 조회 실패")
@@ -152,6 +149,7 @@ def run_worker(args, applied, profile):
                     result["settings"] = asdict(app.game_settings)
                     result["config_snapshot"] = json.loads(json.dumps({"movement": app.config, "hud": app.hud.config.data}))
                     if args.scenario == "combat":
+                        result["player_health_initial"] = asdict(app.controller.health)
                         result["config_snapshot"]["encounter"] = app.encounter.settings
                     result["atlas_divisor_after_load"] = (app.motion_sprite.resource.data.get("divisor")
                         if app.motion_sprite is not None and hasattr(app.motion_sprite, "resource") else None)

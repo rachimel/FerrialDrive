@@ -124,6 +124,8 @@ class PresetTests(unittest.TestCase):
                     self.assertEqual(command[command.index("--enemy-spacing-m") + 1], "24")
                     self.assertIn("--mute", command)
                     self.assertNotIn("--auto", command)
+                    if count == 1000:
+                        self.assertEqual(command[command.index("--player-hp") + 1], "100000")
 
     def test_combat_1000_preset_starts_with_high_hp(self):
         for name in ("combat_test_v1_5.py", "combat_test_v1_5_speed_test.py"):
