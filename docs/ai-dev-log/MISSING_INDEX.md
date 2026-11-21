@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [600기 그리기의 CPU·GPU 비용 분리](2026-11-22-render-cpu-gl-boundaries.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-render-cpu-gl-boundaries:U1]]`은 분리 계측 요청의 정확한 시각이다. 검색 단서는 `CPU 준비·제출·대기랑 GPU 패스 시간을 분리`다.
+
 - [고정 군집 아틀라스 묶음 제출과 HUD 계측](2026-11-22-crowd-atlas-batch.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-crowd-atlas-batch:scope]]`는 원거리 본체·그림자 배치와 스캔라인 검토 요청의 정확한 시각이다. 검색 단서는 `지금 쓰는 고정 아틀라스의 원거리 본체랑 그림자도`다.
 
 - [교전 엔티티 저장소와 자료구조 검증](2026-11-21-data-oriented-combat.md) `[[FDLOG_MISSING_TIME:FDLOG-20261121-data-oriented-combat:U1]]`은 개편안 검토·반영 요청의 정확한 시각이다. 검색 단서는 `웹세션이랑 좀 의논좀 해봤다`다.
