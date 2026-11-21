@@ -125,6 +125,16 @@ class PresetTests(unittest.TestCase):
                     self.assertIn("--mute", command)
                     self.assertNotIn("--auto", command)
 
+    def test_combat_1000_preset_starts_with_high_hp(self):
+        for name in ("combat_test_v1_5.py", "combat_test_v1_5_speed_test.py"):
+            with self.subTest(name=name):
+                path = ROOT / "tests" / name
+                plan = prepare_test(path, preset="crowd_1000")
+                self.assertEqual([preset.preset_id for preset in plan.presets],
+                                 ["standard", "crowd_900", "crowd_1000"])
+                self.assertEqual(plan.command[plan.command.index("--player-hp") + 1], "100000")
+                self.assertNotIn("--player-hp", prepare_test(path, preset="crowd_900").command)
+
 
 if __name__ == "__main__":
     unittest.main()

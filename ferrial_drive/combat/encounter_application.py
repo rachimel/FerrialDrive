@@ -21,7 +21,8 @@ ENEMY_BODY_EXTENTS = {"small": (27, 27), "medium": (30, 19), "humanoid": (38, 47
 
 class EncounterApplication(MovementApplication):
     def __init__(self, config_path, *, encounter_path, enemy_count=None, enemy_spacing_m=12,
-                 crowd_atlas_enabled=True, **options):
+                 crowd_atlas_enabled=True, player_hp=None, **options):
+        self.initial_player_health = Health(player_hp, player_hp) if player_hp is not None else None
         super().__init__(config_path, **options)
         self.config.get("sword_effects", {})["targets"] = []
         self.encounter_path = Path(encounter_path).resolve()
@@ -49,6 +50,10 @@ class EncounterApplication(MovementApplication):
         super()._enter_resources()
         if self.hud is None:
             raise ValueError("교전 테스트에는 HP·록온을 연결할 HUD 설정이 필요하다.")
+        if self.initial_player_health is not None:
+            self.hud.preset["player_health"] = {"current": self.initial_player_health.current,
+                                                "maximum": self.initial_player_health.maximum}
+            self.hud.set_hud(player_health=self.initial_player_health)
         self.hud.resolve_enemy_damage = self.encounter.damage_enemy
         self.encounter_view = EncounterView(self.renderer, self.camera, self.projection,
             backend=self.encounter.settings.get("rendering", {}).get("backend", "auto"))

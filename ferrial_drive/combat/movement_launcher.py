@@ -18,6 +18,7 @@ def launch_movement_test(*, description, movement_speed_multiplier=1,
         parser.add_argument("--encounter", type=Path, default=encounter_path, help="적 종류·출현·전투 수치 JSON")
         parser.add_argument("--enemy-count", type=int, help="기본 출현 배치를 대체할 적 수")
         parser.add_argument("--enemy-spacing-m", type=float, default=12, help="부하 시험 대형의 기체 중심 간격(m)")
+        parser.add_argument("--player-hp", type=int, help="교전 시작·재시작 때의 플레이어 최대 HP")
     parser.add_argument("--overdrive-rainbow", action="store_true",
                         help="오버드라이브 기체 림·검 Trail·HUD의 무지개 팔레트 시험")
     parser.add_argument("--mute", action="store_true", help="효과음 없이 실행")
@@ -41,8 +42,12 @@ def launch_movement_test(*, description, movement_speed_multiplier=1,
     parser.add_argument("--part-step-directions", action="store_true", help="같은 파츠 아틀라스에서 방향 재투영만 끈다.")
     args = parser.parse_args()
     program_type = application_type or MovementApplication
-    encounter_options = (dict(encounter_path=args.encounter, enemy_count=args.enemy_count,
-                              enemy_spacing_m=args.enemy_spacing_m) if encounter_path is not None else {})
+    encounter_options = {}
+    if encounter_path is not None:
+        if args.player_hp is not None and args.player_hp < 1:
+            parser.error("--player-hp는 양수 정수여야 한다.")
+        encounter_options = dict(encounter_path=args.encounter, enemy_count=args.enemy_count,
+                                 enemy_spacing_m=args.enemy_spacing_m, player_hp=args.player_hp)
     part_options = {"part_catalog": args.part_catalog, "part_mixed": args.part_mixed,
                     "part_step_directions": args.part_step_directions, "part_color_codec": args.part_color_codec,
                     "player_pipeline": args.player_pipeline}
