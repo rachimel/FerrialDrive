@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [고정 군집 아틀라스 묶음 제출과 HUD 계측](2026-11-22-crowd-atlas-batch.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-crowd-atlas-batch:scope]]`는 원거리 본체·그림자 배치와 스캔라인 검토 요청의 정확한 시각이다. 검색 단서는 `지금 쓰는 고정 아틀라스의 원거리 본체랑 그림자도`다.
+
 - [교전 엔티티 저장소와 자료구조 검증](2026-11-21-data-oriented-combat.md) `[[FDLOG_MISSING_TIME:FDLOG-20261121-data-oriented-combat:U1]]`은 개편안 검토·반영 요청의 정확한 시각이다. 검색 단서는 `웹세션이랑 좀 의논좀 해봤다`다.
 
 - [근거리 적 키포즈 FP16 이동량 비교](2026-11-21-near-enemy-keypose-fp16-offsets.md) `[[FDLOG_MISSING_TIME:FDLOG-20261121-near-enemy-keypose-fp16-offsets:U1]]`은 원래 픽셀 기준 이동량 저장과 180기 비교 요청의 정확한 시각이다. 검색 단서는 `원래 픽셀에서 얼마나 이동했는지만 FP16으로 저장`이다.
