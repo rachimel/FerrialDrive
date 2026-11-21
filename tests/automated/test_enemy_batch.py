@@ -15,6 +15,7 @@ from ferrial_drive.combat.enemy_sprites import load_enemy_part_sprites
 from ferrial_drive.combat.training_ground import GroundProjection
 from ferrial_drive.diagnostics.timing import TimingRecorder
 from ferrial_drive.rendering.canvas import PicoCanvas
+from ferrial_drive.rendering.enemy_crowd_atlas import EnemyCrowdAtlas
 from ferrial_drive.rendering.part_atlas_residency import AtlasFrameBudget
 from ferrial_drive.rendering.part_shadow_map import GROUND_GEOMETRY_BUDGET_BYTES, MAX_GROUND_GEOMETRY_POSES
 from ferrial_drive.rendering.pose_copy_batch import MIN_POSE_COPIES
@@ -253,6 +254,41 @@ class EnemyBatchGpuTests(unittest.TestCase):
         self.assertTrue((result == baseline).all())
         self.assertEqual(view.primitives.stats, expected)
         self.assertEqual(expected["shared_frame_draws"], 19)
+
+    def test_single_far_enemy_uses_atlas_without_preparing_pbr(self):
+        import numpy as np
+
+        path = ROOT / "samples/combat_test_v1_5/encounter.json"
+        config = json.loads(path.read_bytes())
+        atlas_path = (path.parent / config["rendering"]["enemy_repacked_sprites"]).with_name("crowd_atlas.json")
+        if not atlas_path.is_file():
+            self.skipTest("로컬 군집 아틀라스가 필요하다.")
+        config["spawns"] = [{"id": "far", "profile": "small", "position_m": [500, 500]}]
+        encounter = EnemyEncounter(config, map_size_m=1000, player_radius_m=2.5)
+        projection = GroundProjection(8, .5)
+        camera = LookAheadCamera(512, 512)
+        camera.reset(projection.project((500, 500)))
+        renderer = PicoRenderer({"small": ROOT / "data/fonts/SUITE-otf/SUITE-Bold.otf"}, {"small": 12})
+        self.addCleanup(renderer.close)
+        view = EncounterView(renderer, camera, projection, backend="immediate")
+        self.addCleanup(view.primitives.close)
+        view.crowd_atlas = EnemyCrowdAtlas(self.pico, atlas_path)
+        self.addCleanup(view.crowd_atlas.close)
+        sprite = self.sprites["small"]
+        view.sprites = {"small": sprite}
+
+        with patch.object(sprite, "prepare_frame") as prepare, patch.object(sprite.resource, "get") as get:
+            pixels = self.capture(lambda: view.draw(encounter, {}, (512, 512), player_position_m=(400, 400)))
+            prepare.assert_not_called()
+            get.assert_not_called()
+        self.assertEqual(view.primitives.stats["crowd_atlas_draws"], 1)
+        self.assertEqual(view.primitives.stats["pbr_pose_requests"], 0)
+        self.assertGreater(np.any(pixels[200:270, 200:312] != [140, 170, 200], axis=2).sum(), 100)
+
+        with patch.object(sprite, "prepare_frame") as prepare:
+            view.draw(encounter, {}, (512, 512), player_position_m=(400, 400), locked_id="far")
+            prepare.assert_called_once()
+        self.assertEqual(view.primitives.stats["crowd_atlas_draws"], 0)
 
     def test_one_shadow_tile_spans_multiple_placement_batches(self):
         sprite = self.sprites["medium"]

@@ -167,9 +167,9 @@ class EnemySprite:
         clips = dict.fromkeys(self.part_clip(motion, direction) for motion, direction, _ in playbacks)
         self.resource.prepare_frame(clips, self.resource.data["quality"])
 
-    def display_playback(self, playback):
+    def display_playback(self, playback, *, allow_fallback=True):
         motion, direction, seconds = playback
-        pose = self.resource.display_pose(self.part_clip(motion, direction), seconds)
+        pose = self.resource.display_pose(self.part_clip(motion, direction), seconds, allow_fallback=allow_fallback)
         if pose is None:
             return None
         name, seconds, _ = pose
@@ -238,12 +238,14 @@ class EnemySprite:
             y = self.resource.pico.get_canvas_height() - foot
             self.resource.draw(name, index, x, y, scale=scale)
             top = self.resource.target_rect(self.resource.clips[name].frames[index], x, y, scale).y
+        return top, self.muzzles(name, index, x, foot, scale), motion
+
+    def muzzles(self, name, index, x, foot, scale):
         offsets = self.muzzle_offsets.get(name)
-        muzzles = tuple((x + dx * scale, foot + dy * scale) for dx, dy in offsets[index]) if offsets else ()
-        return top, muzzles, motion
+        return tuple((x + dx * scale, foot + dy * scale) for dx, dy in offsets[index]) if offsets else ()
 
 
-def load_enemy_part_sprites(path, pico, lighting, settings, timings, stream_budget=None):
+def load_enemy_part_sprites(path, pico, lighting, settings, timings, stream_budget=None, *, preload=True):
     """전투의 적도 플레이어와 동일한 PBR 아틀라스 로더에 올린다."""
     from ferrial_drive.rendering.pico_part_motion import PicoPartMotion
 
@@ -273,7 +275,9 @@ def load_enemy_part_sprites(path, pico, lighting, settings, timings, stream_budg
                     or resource.data.get("vector_divisor") != 2):
                 raise ValueError("적 파츠는 플레이어와 동일한 품질의 BC7·24fps PBR 규격을 사용한다.")
             if stream_budget is not None:
-                resource.enable_streaming(stream_budget, "move")
+                resource.enable_streaming(stream_budget, *(("move",) if preload else ()))
+            if not preload:
+                continue
             # 정면·후면은 이동과 공격을 함께, 나머지는 교전 개시 때 많은 이동부터 준비한다.
             motions = dict.fromkeys(("move", "attack", *(spec["motion"] for spec in sprite.attack_motions.values())))
             keys = tuple((motion, direction) for direction in PRELOAD_DIRECTION_ORDER[:2] for motion in motions)

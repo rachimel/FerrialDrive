@@ -9,6 +9,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 ROUTES = {
+    "enemy-crowd-atlas": "automate/enemy_crowd_atlas.py",
     "part-sparse-atlas": "automate/part_sparse_atlas.py",
     "part-surface-downsample": "automate/part_surface_downsample.py",
     "hud-theme": "Tools/hud_theme_editor/run.py",

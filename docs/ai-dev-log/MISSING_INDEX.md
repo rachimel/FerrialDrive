@@ -815,3 +815,7 @@
 ## FDLOG-20261121-crowd-atlas-and-radar
 
 - [군집 공유 아틀라스 검토와 레이더 배치](2026-11-21-crowd-atlas-and-radar.md)의 사용자 발언 시각은 [[FDLOG_MISSING_TIME:FDLOG-20261121-crowd-atlas-and-radar:U1-U2]]이다. 검색 단서는 `군집에서는 고정 크기 공유 아틀라스`와 `플레이어의 화살표 object`다.
+
+## FDLOG-20261121-fixed-crowd-atlas
+
+- [원거리 군집 고정 아틀라스와 180기 검증](2026-11-21-fixed-crowd-atlas.md)의 사용자 발언 시각은 [[FDLOG_MISSING_TIME:FDLOG-20261121-fixed-crowd-atlas:U1]]이다. 검색 단서는 `군집용 고정 크기 공유 아틀라스부터 구현해줘`다.

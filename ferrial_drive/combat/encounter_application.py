@@ -12,6 +12,7 @@ from .encounter_view import EncounterView
 from .geometry import Vec2
 from .movement_application import MovementApplication
 from .sword_effects import SwordTarget
+from ferrial_drive.rendering.enemy_crowd_atlas import EnemyCrowdAtlas
 from ferrial_drive.ui.state import Health
 
 
@@ -19,7 +20,8 @@ ENEMY_BODY_EXTENTS = {"small": (27, 27), "medium": (30, 19), "humanoid": (38, 47
 
 
 class EncounterApplication(MovementApplication):
-    def __init__(self, config_path, *, encounter_path, enemy_count=None, enemy_spacing_m=12, **options):
+    def __init__(self, config_path, *, encounter_path, enemy_count=None, enemy_spacing_m=12,
+                 crowd_atlas_enabled=True, **options):
         super().__init__(config_path, **options)
         self.config.get("sword_effects", {})["targets"] = []
         self.encounter_path = Path(encounter_path).resolve()
@@ -38,6 +40,7 @@ class EncounterApplication(MovementApplication):
         self.encounter = EnemyEncounter(settings, map_size_m=self.controller.settings.map_size_m,
                                         player_radius_m=self.controller.settings.radius_m)
         self.encounter_view = None
+        self.crowd_atlas_enabled = crowd_atlas_enabled
         self.encounter_trace = []
         self.targets_by_id = {}
 
@@ -59,13 +62,18 @@ class EncounterApplication(MovementApplication):
             return {}
         rendering = self.encounter.settings.get("rendering", {})
         folder = self.encounter_path.parent
-        path = next((folder / rendering[key] for key in ("enemy_sparse_sprites", "enemy_part_sprites")
+        candidates = ("enemy_repacked_sprites", "enemy_sparse_sprites", "enemy_part_sprites")
+        path = next((folder / rendering[key] for key in candidates
                     if rendering.get(key) and (folder / rendering[key]).is_file()), None)
         if path is None:
             return {}
+        atlas_path = path.with_name("crowd_atlas.json")
+        atlas = self.encounter_view.crowd_atlas
+        if atlas is None and self.crowd_atlas_enabled and atlas_path.is_file():
+            atlas = self.encounter_view.crowd_atlas = EnemyCrowdAtlas(self.pico, atlas_path)
         lighting = self.relative_path(self.config["upper_lower"]["pbr_lighting"])
         return load_enemy_part_sprites(path, self.pico, lighting, settings, self.timings,
-                                       self.part_stream_budget)
+                                       self.part_stream_budget, preload=atlas is None)
 
     def _install_enemy_sprites(self, sprites):
         for sprite in sprites.values():

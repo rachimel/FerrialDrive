@@ -77,7 +77,8 @@ def run_worker(args, applied, profile):
     GameSettingsStore(settings_path).save(initial_settings)
     application_type = EncounterApplication if args.scenario == "combat" else MovementApplication
     encounter_options = (dict(encounter_path=args.encounter, enemy_count=args.enemy_count,
-                              enemy_spacing_m=args.enemy_spacing_m) if args.scenario == "combat" else {})
+                              enemy_spacing_m=args.enemy_spacing_m,
+                              crowd_atlas_enabled=not args.legacy_enemy_render) if args.scenario == "combat" else {})
     app = application_type(args.config, demo=args.demo or args.scenario == "demo", settings_file=settings_path,
                            profile=args.output / "timings.json", movement_speed_multiplier=args.movement_speed_multiplier,
                            mute=args.mute, player_pipeline=args.player_pipeline, **encounter_options)
@@ -107,6 +108,20 @@ def run_worker(args, applied, profile):
                 result["actual_gl"] = {name: query(enum).decode(errors="replace") for name, enum in
                                        (("vendor", 0x1F00), ("renderer", 0x1F01), ("version", 0x1F02))}
                 result["renderer"] = asdict(canvas.info)
+                enemy_samples = []
+
+                def sample_enemy_textures(frame, phase):
+                    view = getattr(app, "encounter_view", None)
+                    if view is None:
+                        return
+                    sprites = view.sprites.values()
+                    caches = [sprite.resource.cache for sprite in sprites if sprite.part_counts]
+                    enemy_samples.append({"frame": frame, "phase": phase,
+                        "enemy_pbr_gpu_allocated_bytes": sum(cache.gpu_storage_bytes + cache.pooled_bytes for cache in caches),
+                        "enemy_pbr_uploaded_bytes": sum(cache.uploaded_bytes for cache in caches),
+                        "enemy_pose_cache_bytes": sum(sprite.pose_cache.bytes for sprite in sprites if sprite.pose_cache),
+                        "enemy_crowd_atlas_bytes": view.crowd_atlas.bytes if view.crowd_atlas else 0})
+
                 commit_limit = applied.get("process_memory_limit_bytes", 0)
                 reserve = min(128 * 1024**2, commit_limit // 16)
 
@@ -133,6 +148,7 @@ def run_worker(args, applied, profile):
                     result["resolution_initial"] = list(result["resolution"])
                     result["load_seconds"] = perf_counter() - started
                     result["process_after_load"] = process_memory()
+                    sample_enemy_textures(None, "after_load")
                     result["settings"] = asdict(app.game_settings)
                     result["config_snapshot"] = json.loads(json.dumps({"movement": app.config, "hud": app.hud.config.data}))
                     if args.scenario == "combat":
@@ -147,6 +163,8 @@ def run_worker(args, applied, profile):
 
                     def step(program, index, measurement_start):
                         probe.active = False
+                        if index % 30 == 0:
+                            sample_enemy_textures(index, "warmup" if index < args.warmup else "measurement")
                         if measurement_start and call_profile:
                             call_profile.enable()
                         if args.auto and (index == 0 or measurement_start or
@@ -237,6 +255,9 @@ def run_worker(args, applied, profile):
                     if args.compare:
                         result["comparisons"] = comparisons
                     result["gpu_memory"] = gpu_memory.sample()
+                    sample_enemy_textures(None, "after_benchmark")
+                    if enemy_samples:
+                        result["enemy_texture_samples"] = enemy_samples
                     result["settings_final"] = asdict(app.game_settings)
                     if canvas.pico.SDL_GetRendererOutputSize(canvas.pico.renderer, ct.byref(width), ct.byref(height)) != 0:
                         raise RuntimeError("최종 출력 해상도 조회 실패")
@@ -289,6 +310,7 @@ def main():
     parser.add_argument("--mute", action="store_true", help="효과음 없이 실행")
     parser.add_argument("--player-pipeline", choices=("baked", "pbr"))
     parser.add_argument("--enemy-count", type=int, help="플레이어 주위에 배치할 교전 부하 시험 적 수")
+    parser.add_argument("--legacy-enemy-render", action="store_true", help="고정 군집 아틀라스 이전 경로로 교전한다.")
     parser.add_argument("--enemy-spacing-m", type=float, default=12, help="부하 시험 격자의 중심 간격(m)")
     parser.add_argument("--player-hp", type=int, help="부하 시험 중 조기 패배를 방지할 시작 HP")
     parser.add_argument("--encounter", type=Path, default=ROOT / "samples/combat_test_v1_5/encounter.json",

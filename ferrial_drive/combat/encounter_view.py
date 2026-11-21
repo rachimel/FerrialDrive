@@ -12,6 +12,7 @@ from .geometry import Vec2
 
 ENEMY_VIEW_MARGIN_PIXELS = 200
 BODY_RUN_WINDOW = 16
+CROWD_ATLAS = "crowd_atlas"
 
 
 def use_shared_frame(enemy, player_position_m, locked_id, distance_m):
@@ -27,6 +28,7 @@ class EncounterView:
         self.renderer, self.camera, self.projection = renderer, camera, projection
         self.primitives = PrimitiveBatch(renderer, backend=backend)
         self.sprites = {}
+        self.crowd_atlas = None
         self.upscale_scratch = None
         self.batch_enemy_parts = True
         self.batch_enemy_shadows = True
@@ -67,6 +69,8 @@ class EncounterView:
             self.primitives.stats["near_shadow_batch_submits"] = 0
             self.primitives.stats["fallback_poses"] = 0
             self.primitives.stats["shared_frame_draws"] = 0
+            self.primitives.stats["crowd_atlas_draws"] = 0
+            self.primitives.stats["pbr_pose_requests"] = 0
             self.primitives.stats["batched_bodies"] = 0
             self.primitives.stats["body_batch_submits"] = 0
             self.primitives.stats["enemy_motions"] = {}
@@ -79,6 +83,9 @@ class EncounterView:
                 sprite.close()
             self.sprites.clear()
         finally:
+            if self.crowd_atlas is not None:
+                self.crowd_atlas.close()
+                self.crowd_atlas = None
             if self.upscale_scratch is not None:
                 self.upscale_scratch.close()
                 self.upscale_scratch = None
@@ -95,28 +102,40 @@ class EncounterView:
         shared_radius = encounter.settings.get("rendering", {}).get("shared_frame_distance_m")
         for enemy, x, foot in self.visible_enemies(encounter.enemies.values(), window_size):
             sprite = self.sprites.get(enemy.profile.kind)
+            playback = sprite.playback(enemy) if sprite else None
             shared = bool(sprite and sprite.part_counts and
                           use_shared_frame(enemy, player_position_m, locked_id, shared_radius))
-            placed.append((foot, x, enemy, sprite, sprite.playback(enemy) if sprite else None, shared))
+            if shared and self.crowd_atlas and self.crowd_atlas.supports(enemy.profile.kind, playback):
+                shared = CROWD_ATLAS
+            placed.append((foot, x, enemy, sprite, playback, shared))
         placed.sort(key=lambda row: row[0])
         r.stats["placed_enemies"] = len(placed)
         requests = {}
         for _, _, enemy, sprite, playback, shared in placed:
-            if sprite is not None and sprite.part_counts:
+            if sprite is not None and sprite.part_counts and shared != CROWD_ATLAS:
                 priorities = requests.setdefault(enemy.profile.kind, ([], [], []))
                 priority = 0 if enemy.enemy_id == locked_id else 2 if shared else 1
                 priorities[priority].append(playback)
         for kind, (locked, near, far) in requests.items():
+            r.stats["pbr_pose_requests"] += len(locked) + len(near) + len(far)
             self.sprites[kind].prepare_frame(locked + near + far)
         for index, (foot, x, enemy, sprite, playback, shared) in enumerate(placed):
-            if sprite is not None and sprite.part_counts:
-                display = sprite.display_playback(playback)
+            if sprite is not None and sprite.part_counts and shared != CROWD_ATLAS:
+                has_atlas = self.crowd_atlas is not None and self.crowd_atlas.supports(enemy.profile.kind, playback)
+                display = sprite.display_playback(playback, allow_fallback=not has_atlas)
                 r.stats["fallback_poses"] += display != playback
-                placed[index] = foot, x, enemy, sprite if display is not None else None, display, shared
+                if display is None and has_atlas:
+                    placed[index] = foot, x, enemy, sprite, playback, CROWD_ATLAS
+                else:
+                    placed[index] = foot, x, enemy, sprite if display is not None else None, display, shared
         if shadow_opacity > 0:
             shadow_groups = {}
+            crowd_shadows = []
             for foot, x, enemy, sprite, playback, shared in placed:
-                if sprite is not None and sprite.part_counts:
+                if shared == CROWD_ATLAS:
+                    if enemy.alive:
+                        crowd_shadows.append((x, foot, max(4, enemy.profile.hit_radius_pixels * .45 * zoom)))
+                elif sprite is not None and sprite.part_counts:
                     pose = sprite.ground_shadow_pose(playback)
                     kind = enemy.profile.kind
                     shadow_groups.setdefault((kind, pose, shared), []).append((x, foot))
@@ -125,6 +144,8 @@ class EncounterView:
                              "#0A1015", shadow_opacity * .55)
             if r.count:
                 r.flush()
+            if crowd_shadows:
+                r.stats["shadow_draws"] += self.crowd_atlas.draw_shadows(crowd_shadows, shadow_opacity)
             near_shadows = {}
             for (kind, pose, shared), placements in shadow_groups.items():
                 if not shared and self.batch_enemy_shadows:
@@ -233,7 +254,7 @@ class EncounterView:
     def _shared_body_key(self, row):
         _, _, enemy, sprite, playback, shared = row
         # 공격 효과·디버그 표시·개별 기체를 경계로 원래의 가림 순서를 보존한다.
-        if self.show_enemy_labels or not shared or sprite is None or enemy.phase == "active":
+        if self.show_enemy_labels or shared is not True or sprite is None or enemy.phase == "active":
             return None
         motion, direction, seconds = playback
         return sprite, enemy.profile.kind, motion, direction, sprite.shared_frame_index(motion, direction, seconds)
@@ -242,7 +263,7 @@ class EncounterView:
         """실제 중복이 있는 중간 자세만 개별 포즈 텍스처에 저장한다."""
         candidates = {}
         for index, row in enumerate(placed):
-            if row[-1] and row[3] is not None and row[3].shared_pose_fps is not None:
+            if row[-1] is True and row[3] is not None and row[3].shared_pose_fps is not None:
                 pose = self._shared_body_key(row)
                 candidates[index] = None if pose is None else pose[1:]
         counts = Counter(candidates.values())
@@ -262,11 +283,19 @@ class EncounterView:
         if sprite is not None:
             if r.count:
                 r.flush()
-            sprite_top, muzzles, motion = sprite.draw(enemy, x, foot, zoom, playback=playback, shared_frame=shared,
-                                                      prepared=prepared.get(enemy.enemy_id))
-            r.stats["shared_frame_draws"] += shared
+            if shared == CROWD_ATLAS:
+                motion, direction, seconds = playback
+                sprite_top = self.crowd_atlas.draw(profile.kind, playback, x, foot, sprite.scale * zoom)
+                if enemy.phase == "active" and enemy.attack_kind != "melee":
+                    muzzles = sprite.muzzles(f"{motion}/{direction}", sprite.frame_index(motion, direction, seconds),
+                                             x, foot, sprite.scale * zoom * sprite.resource.data["pixel_scale"])
+                r.stats["crowd_atlas_draws"] += 1
+            else:
+                sprite_top, muzzles, motion = sprite.draw(enemy, x, foot, zoom, playback=playback, shared_frame=shared,
+                                                          prepared=prepared.get(enemy.enemy_id))
+                r.stats["shared_frame_draws"] += shared
+                r.stats["part_draws"] += bool(sprite.part_counts)
             r.stats["sprite_draws"] += 1
-            r.stats["part_draws"] += bool(sprite.part_counts)
             key = f"{profile.kind}/{motion}"
             motions = r.stats["enemy_motions"]
             motions[key] = motions.get(key, 0) + 1
