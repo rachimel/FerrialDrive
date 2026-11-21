@@ -6,7 +6,7 @@ import ctypes as ct
 from ferrial_drive.diagnostics.texture_metrics import bind_gl
 
 from .atlas_texture_cache import bind_atlas_textures
-from .gl_pass import TexturedQuadPass
+from .gl_pass import COLOR_AND_SCISSOR_STATE, TexturedQuadPass
 from .part_motion_atlas import MAX_PARTS
 from .part_pbr import PBR_FUNCTIONS, PBR_UNIFORMS
 
@@ -644,7 +644,11 @@ class PartPainter:
                             "gl_binding": TEXTURE_BINDING_BUFFER})
         arrays = self.frame_arrays(cache, resources, state) if pose_table is None else {}
         sampler = self.sampler
-        with sampler.batch(), bind_atlas_textures(sampler, cache, entries, texture_bindings):
+        quad_pass = instances is None and instance_range is None
+        own_quad_batch = quad_pass and not sampler.depth
+        raster = COLOR_AND_SCISSOR_STATE if quad_pass else 0
+        with (sampler.batch(raster_attributes=raster),
+              bind_atlas_textures(sampler, cache, entries, texture_bindings, restore_unit_zero=not own_quad_batch)):
             if pose_table is not None:
                 sampler.glUniform1i(sampler.uniforms["poseTable"], pose_unit)
             if screen_depth is not None:

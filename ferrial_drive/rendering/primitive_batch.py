@@ -6,7 +6,7 @@ from math import cos, hypot, sin, tau
 
 from ferrial_drive.diagnostics.gpu_profile import bind_gl
 from .canvas import renderer_name
-from .gl_pass import SdlOpenGLPass
+from .gl_pass import COLOR_BUFFER_STATE, SdlOpenGLPass
 from .hud_batch import HudBatchQueue
 from .hud_text_atlas import HudTextAtlas
 
@@ -76,20 +76,10 @@ class PrimitiveInstances(SdlOpenGLPass):
             'glTexSubImage2D': (None, [uint, integer, integer, integer, integer, integer, uint, uint, pointer]),
             'glDrawArraysInstanced': (None, [uint, integer, integer, integer]),
             'glPixelStorei': (None, [uint, integer]), 'glBindBuffer': (None, [uint, uint]),
-            'glPushAttrib': (None, [uint]), 'glPopAttrib': (None, []),
             'glPushClientAttrib': (None, [uint]), 'glPopClientAttrib': (None, []),
         }
         for name, (result, arguments) in signatures.items():
             setattr(self, name, bind_gl(self.pico, name, result, arguments))
-
-    @contextmanager
-    def _preserve_color(self):
-        # 이 도형 제출은 현재 가위 영역을 사용하며 변경하지 않는다.
-        self.glPushAttrib(0x00004000)  # GL_COLOR_BUFFER_BIT
-        try:
-            yield
-        finally:
-            self.glPopAttrib()
 
     @contextmanager
     def _packed_float_rows(self):
@@ -106,7 +96,8 @@ class PrimitiveInstances(SdlOpenGLPass):
         if not count:
             return 0
         capacity = min(capacity, self.max_rows)
-        with self.batch(preserve_raster=self._preserve_color), self._packed_float_rows():
+        # 이 도형 제출은 현재 가위 영역을 사용하며 변경하지 않는다.
+        with self.batch(raster_attributes=COLOR_BUFFER_STATE), self._packed_float_rows():
             if not self.texture:
                 texture = ct.c_uint()
                 self.glGenTextures(1, ct.byref(texture))

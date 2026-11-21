@@ -17,6 +17,18 @@ from ferrial_drive.rendering.texture_codecs import texture_payload_size, unpack_
 
 
 class AtlasBindingTests(unittest.TestCase):
+    def test_outer_pass_can_restore_unit_zero_without_reading_it_again(self):
+        from unittest.mock import Mock, call
+
+        sampler = Mock()
+        sampler.integer.return_value = 42
+        entries = [{"gl_texture": 5}, {"gl_texture": 6}]
+        with bind_atlas_textures(sampler, None, entries, restore_unit_zero=False):
+            sampler.integer.assert_called_once_with(0x8069)
+        self.assertEqual(sampler.glBindTexture.call_args_list,
+                         [call(0x0DE1, 5), call(0x0DE1, 6), call(0x0DE1, 42)])
+        self.assertEqual(sampler.glActiveTexture.call_args, call(0x84C0))
+
     def test_queries_each_unit_target_once_and_restores_after_failure(self):
         class Sampler:
             def __init__(self):

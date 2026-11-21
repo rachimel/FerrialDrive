@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from ferrial_drive.diagnostics.gpu_profile import bind_gl
-from .gl_pass import QUAD_VERTEX_SHADER, TexturedQuadPass
+from .gl_pass import COLOR_AND_SCISSOR_STATE, QUAD_VERTEX_SHADER, TexturedQuadPass
 from .instanced_quads import InstancedQuads
 
 
@@ -174,20 +174,20 @@ class Smaa1x:
         color, edges, weights = self.targets
         edge, weight, blend = self.programs
         rect = self.pico.SDL_Rect(0, 0, *pixels)
-        with render_target(self.pico, color):
+        with render_target(self.pico, color), bicubic.batch(raster_attributes=COLOR_AND_SCISSOR_STATE):
             bicubic.draw(native_texture, native_size, source, rect, premultiplied=True)
-        with render_target(self.pico, edges), edge.batch():
+        with render_target(self.pico, edges), edge.batch(raster_attributes=COLOR_AND_SCISSOR_STATE):
             edge.glDisable(0x0BE2)
             self._upload_metrics(edge)
             edge.draw(color, self.size, rect, rect)
-        with (render_target(self.pico, weights), weight.batch(),
+        with (render_target(self.pico, weights), weight.batch(raster_attributes=COLOR_AND_SCISSOR_STATE),
               self.bind_input(weight, 1, self.lookups[0]), self.bind_input(weight, 2, self.lookups[1])):
             weight.glDisable(0x0BE2)
             self._upload_metrics(weight)
             weight.glUniform1i(weight.uniforms["areaLookup"], 1)
             weight.glUniform1i(weight.uniforms["searchLookup"], 2)
             weight.draw(edges, self.size, rect, rect)
-        with blend.batch(), self.bind_input(blend, 1, weights, sdl=True):
+        with blend.batch(raster_attributes=COLOR_AND_SCISSOR_STATE), self.bind_input(blend, 1, weights, sdl=True):
             self._upload_metrics(blend)
             blend.glUniform1i(blend.uniforms["blendWeights"], 1)
             blend.draw(color, self.size, rect, destination)

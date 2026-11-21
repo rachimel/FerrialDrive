@@ -79,6 +79,50 @@ class AssetBicubicGpuTests(unittest.TestCase):
     def at(self, data, x, y):
         return tuple(data[(y * 64 + x) * 4:(y * 64 + x) * 4 + 4])
 
+    def test_part_upscale_preserves_pixels_and_sdl_clip_with_batched_gl_state(self):
+        from contextlib import ExitStack
+
+        from ferrial_drive.rendering.gl_pass import SdlOpenGLPass
+        from ferrial_drive.rendering.part_upscale import PartUpscaler
+
+        p = self.pico
+        batch = SdlOpenGLPass.batch
+        clip = p.SDL_Rect(14, 12, 29, 25)
+        destination = p.SDL_Rect(8, 7, 42, 38)
+        for mode, expected in (("off", 4), ("smaa", 19)):
+            with self.subTest(mode=mode), ExitStack() as cleanup:
+                upscaler = PartUpscaler(p, mode)
+                cleanup.callback(upscaler.close)
+                with upscaler.native_target(8, 8):
+                    p.SDL_SetRenderDrawColor(p.renderer, 120, 62, 30, 180)
+                    p.SDL_RenderFillRect(p.renderer, p.SDL_Rect(1, 1, 6, 5))
+                    p.SDL_SetRenderDrawColor(p.renderer, 32, 95, 170, 215)
+                    p.SDL_RenderFillRect(p.renderer, p.SDL_Rect(3, 3, 4, 4))
+
+                def draw():
+                    self.clear()
+                    p.SDL_RenderSetScale(p.renderer, 1.1, 0.9)
+                    p.SDL_RenderSetClipRect(p.renderer, byref(clip))
+                    try:
+                        upscaler.draw(8, 8, destination)
+                        active_clip = p.SDL_Rect()
+                        p.SDL_RenderGetClipRect(p.renderer, byref(active_clip))
+                        self.assertEqual((active_clip.x, active_clip.y, active_clip.w, active_clip.h),
+                                         (clip.x, clip.y, clip.w, clip.h))
+                        return self.pixels()
+                    finally:
+                        p.SDL_RenderSetClipRect(p.renderer, None)
+                        p.SDL_RenderSetScale(p.renderer, 1, 1)
+
+                with patch.object(SdlOpenGLPass, "batch", lambda sampler, **_: batch(sampler)):
+                    reference = draw()
+                self.assertGreater(len(set(reference)), 5)
+                programs = [upscaler.sampler, *(upscaler.aa.programs if upscaler.aa else ())]
+                queries = [cleanup.enter_context(patch.object(sampler, "glGetIntegerv", wraps=sampler.glGetIntegerv))
+                           for sampler in programs]
+                self.assertEqual(reference, draw())
+                self.assertEqual(sum(query.call_count for query in queries), expected)
+
     def test_identity_preserves_rgb_and_shared_sampler_lifetime(self):
         pixel = lambda x, y: (x * 30, y * 30, (x + y) * 15, 255)
         resource = self.resource(8, 8, pixel)

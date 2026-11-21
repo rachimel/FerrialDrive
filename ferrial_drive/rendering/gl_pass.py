@@ -8,6 +8,10 @@ from ferrial_drive.diagnostics.gpu_profile import bind_gl
 from .gl_program import FRAGMENT_STAGE, VERTEX_STAGE, ShaderProgram
 
 
+COLOR_BUFFER_STATE = 0x00004000
+COLOR_AND_SCISSOR_STATE = COLOR_BUFFER_STATE | 0x00080000
+
+
 QUAD_VERTEX_SHADER = b'''#version 120
 uniform vec2 outputSize;
 uniform float targetFlip;
@@ -25,6 +29,7 @@ class SdlOpenGLPass:
     def __init__(self, pico, *, vertex_shader, fragment_shader, extra_uniforms=()):
         self.pico = pico
         self.depth = 0
+        self._push_attrib = self._pop_attrib = None
         self._bind_functions()
         self.shader = ShaderProgram(pico, ((VERTEX_STAGE, vertex_shader), (FRAGMENT_STAGE, fragment_shader)),
                                     ("outputSize", "targetFlip", *extra_uniforms))
@@ -73,7 +78,19 @@ class SdlOpenGLPass:
             self.glScissor(*scissor)
 
     @contextmanager
-    def batch(self, *, preserve_raster=None):
+    def _preserve_raster_attributes(self, mask):
+        if self._push_attrib is None:
+            push = bind_gl(self.pico, "glPushAttrib", None, [ct.c_uint])
+            pop = bind_gl(self.pico, "glPopAttrib", None, [])
+            self._push_attrib, self._pop_attrib = push, pop
+        self._push_attrib(mask)
+        try:
+            yield
+        finally:
+            self._pop_attrib()
+
+    @contextmanager
+    def batch(self, *, raster_attributes=0):
         if self.depth:
             self.depth += 1
             try:
@@ -97,7 +114,9 @@ class SdlOpenGLPass:
         self.target_flip = -1 if target else 1
         self.viewport = (viewport[0], height.value - viewport[1] - viewport[3] if not target else viewport[1],
                          viewport[2], viewport[3])
-        with (preserve_raster or self._preserve_blend_and_clip)():
+        raster = (self._preserve_raster_attributes(raster_attributes) if raster_attributes
+                  else self._preserve_blend_and_clip())
+        with raster:
             self.glActiveTexture(0x84C0)
             texture = self.integer(0x8069)
             self.depth = 1
@@ -135,9 +154,9 @@ class TexturedQuadPass(SdlOpenGLPass):
         self.glVertex2f = bind_gl(self.pico, "glVertex2f", None, [floating, floating])
 
     @contextmanager
-    def batch(self):
+    def batch(self, *, raster_attributes=0):
         outer = not self.depth
-        with super().batch():
+        with super().batch(raster_attributes=raster_attributes):
             if outer:
                 self.glUniform1i(self.uniforms["artwork"], 0)
             yield

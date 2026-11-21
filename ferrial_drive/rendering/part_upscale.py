@@ -5,6 +5,7 @@ import ctypes as ct
 from math import ceil
 
 from .bicubic import FRAGMENT_SHADER, acquire_sampler
+from .gl_pass import COLOR_AND_SCISSOR_STATE
 from .instanced_quads import InstancedQuads
 
 
@@ -109,7 +110,8 @@ class PartUpscaler:
         p = self.pico
         source = p.SDL_Rect(0, 0, width, height)
         if self.aa is None:
-            self.sampler.draw(self.texture, self.size, source, destination, premultiplied=True)
+            with self.sampler.batch(raster_attributes=COLOR_AND_SCISSOR_STATE):
+                self.sampler.draw(self.texture, self.size, source, destination, premultiplied=True)
             return
         scale_x, scale_y = ct.c_float(), ct.c_float()
         p.SDL_RenderGetScale(p.renderer, ct.byref(scale_x), ct.byref(scale_y))

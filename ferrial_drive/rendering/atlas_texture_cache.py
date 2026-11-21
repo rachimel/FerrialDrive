@@ -383,7 +383,7 @@ class AtlasTextureBindings:
 
 
 @contextmanager
-def bind_atlas_textures(sampler, cache, entries, bindings=None):
+def bind_atlas_textures(sampler, cache, entries, bindings=None, *, restore_unit_zero=True):
     if bindings is not None:
         names = [entry.get("gl_texture", entry.get("gl_name")) for entry in entries]
         if None not in names:
@@ -396,7 +396,9 @@ def bind_atlas_textures(sampler, cache, entries, bindings=None):
         for unit, entry in enumerate(entries):
             s.glActiveTexture(0x84C0 + unit)
             target = entry.get("gl_target", 0x0DE1)
-            previous.append((target, s.integer(entry.get("gl_binding", 0x8069))))
+            # 바깥 패스가 열리면서 저장한 2D 유닛 0은 패스 종료 때 복원한다.
+            if restore_unit_zero or unit != 0 or target != 0x0DE1:
+                previous.append((unit, target, s.integer(entry.get("gl_binding", 0x8069))))
             if "gl_texture" in entry:
                 s.glBindTexture(target, entry["gl_texture"])
             else:
@@ -404,7 +406,7 @@ def bind_atlas_textures(sampler, cache, entries, bindings=None):
         s.glActiveTexture(0x84C0)
         yield
     finally:
-        for unit, (target, texture) in enumerate(previous):
+        for unit, target, texture in previous:
             s.glActiveTexture(0x84C0 + unit)
             s.glBindTexture(target, texture)
         s.glActiveTexture(0x84C0)
