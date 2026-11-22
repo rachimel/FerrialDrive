@@ -196,11 +196,16 @@ class PicoSwordEffects:
             return
         p = self.renderer.pico
         vertices, indices = [], []
+        camera_x, camera_y = camera.position
+        screen_x, screen_y = camera.screen_center
+        shake_x, shake_y = camera.feedback_offset_pixels
+        zoom = camera.zoom
 
         def quad(points, rgb, alpha):
             offset = len(vertices)
             for point in points:
-                x, y = camera.world_to_screen((point.x, point.y))
+                x = (point.x - camera_x) * zoom + screen_x + shake_x
+                y = (point.y - camera_y) * zoom + screen_y + shake_y
                 vertices.append(p.SDL_Vertex(p.SDL_FPoint(x, y), p.SDL_Color(*rgb, round(255 * alpha)),
                                              p.SDL_FPoint(0, 0)))
             indices.extend(offset + i for i in (0, 1, 2, 0, 2, 3))
@@ -234,7 +239,8 @@ class PicoSwordEffects:
                 side = normal*(width*width_scale*half_width*contact.slash_width_scale(visibility))
                 for position,color in zip(bands,palette):
                     point = center + side * position
-                    x, y = camera.world_to_screen((point.x,point.y))
+                    x = (point.x - camera_x) * zoom + screen_x + shake_x
+                    y = (point.y - camera_y) * zoom + screen_y + shake_y
                     rgba = (*color[:3],round(color[3]*opacity*visibility*.95))
                     vertices.append(p.SDL_Vertex(p.SDL_FPoint(x,y),p.SDL_Color(*rgba),p.SDL_FPoint(0,0)))
             columns = len(bands)

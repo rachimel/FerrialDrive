@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [검 베임선·불꽃 카메라 투영 비용 절감](2026-11-22-sword-contact-projection.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-sword-contact-projection:U1]]`은 요청의 정확한 시각이다. 검색 단서는 `검 베임선·불꽃부터 최적화`다.
+
 - [Shock Bot 최적화 전후 180기 병목 재계측](2026-11-22-shock-bot-ab.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-shock-bot-ab:U1-U2]]`는 요청의 정확한 시각이다. 검색 단서는 `왜 28.4 FPS`, `최대한 함수별로`다.
 
 - [Shock Bot Break 전용 눕기 동작](2026-11-22-shock-bot-prone.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-shock-bot-prone:U1]]`은 동작 수정과 Break 정정의 정확한 시각이다. 검색 단서는 `쓰러질 때, 완전히 눕게`, `Break임`이다.
