@@ -22,12 +22,63 @@ class AtlasBindingTests(unittest.TestCase):
 
         sampler = Mock()
         sampler.integer.return_value = 42
+        sampler.texture_stack_covers.return_value = False
         entries = [{"gl_texture": 5}, {"gl_texture": 6}]
         with bind_atlas_textures(sampler, None, entries, restore_unit_zero=False):
             sampler.integer.assert_called_once_with(0x8069)
         self.assertEqual(sampler.glBindTexture.call_args_list,
                          [call(0x0DE1, 5), call(0x0DE1, 6), call(0x0DE1, 42)])
         self.assertEqual(sampler.glActiveTexture.call_args, call(0x84C0))
+
+    def test_texture_stack_probe_restores_uncovered_units_and_uses_cached_result(self):
+        from ferrial_drive.rendering.gl_pass import SdlOpenGLPass, TEXTURE_STATE
+
+        for covered in (2, 4):
+            with self.subTest(covered_units=covered):
+                sampler = SdlOpenGLPass.__new__(SdlOpenGLPass)
+                sampler._texture_stack_units = None
+                bound, active, stack, probes = [41, 42, 43, 44], 0, [], []
+
+                def activate(texture):
+                    nonlocal active
+                    active = texture - 0x84C0
+
+                def integer(name):
+                    if name == 0x8872:
+                        probes.append(name)
+                        return len(bound)
+                    return bound[active]
+
+                def bind(target, name):
+                    bound[active] = name
+
+                def push(mask):
+                    self.assertEqual(mask, TEXTURE_STATE)
+                    stack.append((active, bound[:covered]))
+
+                def pop():
+                    nonlocal active
+                    active, saved = stack.pop()
+                    bound[:covered] = saved
+
+                sampler.integer = integer
+                sampler.glActiveTexture = activate
+                sampler.glBindTexture = bind
+                sampler._push_attrib = push
+                sampler._pop_attrib = pop
+
+                self.assertEqual(sampler.texture_stack_covers(3, 5), covered >= 3)
+                self.assertEqual(bound, [41, 42, 43, 44])
+                self.assertEqual(active, 0)
+                with self.assertRaisesRegex(RuntimeError, "그리기 실패"):
+                    with bind_atlas_textures(sampler, None, [{"gl_texture": name} for name in (5, 6, 7)],
+                                             restore_unit_zero=False):
+                        self.assertEqual(bound, [5, 6, 7, 44])
+                        raise RuntimeError("그리기 실패")
+                self.assertEqual(bound, [41 if covered >= 3 else 5, 42, 43, 44])
+                self.assertFalse(stack)
+                self.assertEqual(active, 0)
+                self.assertEqual(probes, [0x8872])
 
     def test_queries_each_unit_target_once_and_restores_after_failure(self):
         class Sampler:

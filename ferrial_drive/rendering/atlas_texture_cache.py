@@ -1,6 +1,6 @@
 """Pico2D/OpenGL 아틀라스 텍스처 적재와 페이지 공유."""
 
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 import ctypes as ct
 from pathlib import Path
 from threading import get_ident
@@ -392,21 +392,28 @@ def bind_atlas_textures(sampler, cache, entries, bindings=None, *, restore_unit_
             return
         bindings.restore()
     s, previous = sampler, []
-    try:
-        for unit, entry in enumerate(entries):
-            s.glActiveTexture(0x84C0 + unit)
-            target = entry.get("gl_target", 0x0DE1)
-            # 바깥 패스가 열리면서 저장한 2D 유닛 0은 패스 종료 때 복원한다.
-            if restore_unit_zero or unit != 0 or target != 0x0DE1:
-                previous.append((unit, target, s.integer(entry.get("gl_binding", 0x8069))))
-            if "gl_texture" in entry:
-                s.glBindTexture(target, entry["gl_texture"])
-            else:
-                cache._bind(entry["texture"])
-        s.glActiveTexture(0x84C0)
-        yield
-    finally:
-        for unit, target, texture in previous:
-            s.glActiveTexture(0x84C0 + unit)
-            s.glBindTexture(target, texture)
-        s.glActiveTexture(0x84C0)
+    # 유닛 0에서 시작하는 독립 파츠 패스만 바인딩 전체를 한 번에 보존한다.
+    use_stack = (bindings is None and not restore_unit_zero and len(entries) > 1
+                 and all(entry.get("gl_target", 0x0DE1) == 0x0DE1 for entry in entries)
+                 and s.texture_stack_covers(len(entries), entries[0].get("gl_texture", entries[0].get("gl_name"))))
+    with s.preserve_texture_bindings() if use_stack else nullcontext():
+        try:
+            for unit, entry in enumerate(entries):
+                if unit != 0 or not use_stack:
+                    s.glActiveTexture(0x84C0 + unit)
+                target = entry.get("gl_target", 0x0DE1)
+                # 바깥 패스가 열리면서 저장한 2D 유닛 0은 패스 종료 때 복원한다.
+                if not use_stack and (restore_unit_zero or unit != 0 or target != 0x0DE1):
+                    previous.append((unit, target, s.integer(entry.get("gl_binding", 0x8069))))
+                if "gl_texture" in entry:
+                    s.glBindTexture(target, entry["gl_texture"])
+                else:
+                    cache._bind(entry["texture"])
+            s.glActiveTexture(0x84C0)
+            yield
+        finally:
+            if not use_stack:
+                for unit, target, texture in previous:
+                    s.glActiveTexture(0x84C0 + unit)
+                    s.glBindTexture(target, texture)
+                s.glActiveTexture(0x84C0)

@@ -10,6 +10,7 @@ from .gl_program import FRAGMENT_STAGE, VERTEX_STAGE, ShaderProgram
 
 COLOR_BUFFER_STATE = 0x00004000
 COLOR_AND_SCISSOR_STATE = COLOR_BUFFER_STATE | 0x00080000
+TEXTURE_STATE = 0x00040000
 
 
 QUAD_VERTEX_SHADER = b'''#version 120
@@ -30,6 +31,7 @@ class SdlOpenGLPass:
         self.pico = pico
         self.depth = 0
         self._push_attrib = self._pop_attrib = None
+        self._texture_stack_units = None
         self._bind_functions()
         self.shader = ShaderProgram(pico, ((VERTEX_STAGE, vertex_shader), (FRAGMENT_STAGE, fragment_shader)),
                                     ("outputSize", "targetFlip", *extra_uniforms))
@@ -88,6 +90,31 @@ class SdlOpenGLPass:
             yield
         finally:
             self._pop_attrib()
+
+    def preserve_texture_bindings(self):
+        return self._preserve_raster_attributes(TEXTURE_STATE)
+
+    def texture_stack_covers(self, count, probe_texture):
+        if self._texture_stack_units is None and probe_texture:
+            # 고정 기능 범위를 넘는 유닛도 이 드라이버에서 복원되는지 한 번 확인한다.
+            capacity = self.integer(0x8872)
+            original = []
+            try:
+                with self.preserve_texture_bindings():
+                    for unit in range(capacity):
+                        self.glActiveTexture(0x84C0 + unit)
+                        name = self.integer(0x8069)
+                        original.append(name)
+                        self.glBindTexture(0x0DE1, 0 if name == probe_texture else probe_texture)
+            finally:
+                for unit, name in enumerate(original):
+                    self.glActiveTexture(0x84C0 + unit)
+                    if self.integer(0x8069) != name:
+                        capacity = min(capacity, unit)
+                        self.glBindTexture(0x0DE1, name)
+                self.glActiveTexture(0x84C0)
+            self._texture_stack_units = capacity
+        return count <= (self._texture_stack_units or 0)
 
     @contextmanager
     def batch(self, *, raster_attributes=0):
