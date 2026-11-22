@@ -352,6 +352,10 @@ class PicoPartMotion:
         painter = self.painter
         with self.timings.scope("parts.select_state"):
             state = frame_state(clips[0], clips[-1], elapsed_seconds)
+            pose_key = None
+            if self.pbr_lighting is not None and not self.paged:
+                span_banks = tuple(span[:2] for span in angular_span) if angular_span is not None else ()
+                pose_key = tuple(resource["pose_identity"] for resource in resources), state["first"], span_banks
             if angular_span is not None:
                 state = direction_frame(self.correspondence[motion], dict(zip(directions, clips)), angular_span, state)
                 if self.shadow_map:
@@ -373,7 +377,7 @@ class PicoPartMotion:
             options = dict(energy_color=self.energy_color, energy_gain=self.energy_mask_gain, rim=self.rim_light,
                            opacity=opacity, tint=tint, tint_mix=tint_mix, brightness=brightness,
                            realtime_light=self.realtime_light, shadow_map=self.shadow_map, pbr_lighting=self.pbr_lighting,
-                           sample_shadow=sample_shadow)
+                           sample_shadow=sample_shadow, pose_key=pose_key)
             border = PART_UPSCALE_BORDER
             buffer_size = width + 2 * border, height + 2 * border
             native = self.pico.SDL_Rect(border, border, width, height)
@@ -382,7 +386,7 @@ class PicoPartMotion:
                     with self.upscaler.native_target(*buffer_size):
                         painter.paint(self.cache, resources, state, native, depth_output=True,
                                       pbr_lighting=self.pbr_lighting, shadow_map=self.shadow_map,
-                                      sample_shadow=False)
+                                      sample_shadow=False, pose_key=pose_key)
                     self.shadow_map.render_surface(self.upscaler.texture, state["bounds"], border)
             if before_body is not None:
                 before_body()

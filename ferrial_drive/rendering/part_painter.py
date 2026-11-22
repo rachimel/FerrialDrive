@@ -1,5 +1,6 @@
 """파츠 아틀라스의 보간·깊이 합성과 GLSL 입력 제출."""
 
+from collections import OrderedDict
 from contextlib import nullcontext
 import ctypes as ct
 
@@ -17,6 +18,7 @@ PART_SAMPLE_FIELDS = (("colorA", "color", "a", "color"), ("colorB", "color", "b"
                       ("depthA", "depth", "a", "depth"), ("depthB", "depth", "b", "depth"))
 PBR_SAMPLE_FIELDS = (("materialA", "material", "a", "material"), ("materialB", "material", "b", "material"))
 COAT_SAMPLE_FIELDS = (("coatA", "coat", "a", "coat"), ("coatB", "coat", "b", "coat"))
+POSE_UNIFORM_CACHE_SIZE = 64
 
 
 PART_SHADER = '''#version 120
@@ -622,6 +624,8 @@ class PartPainter:
             tuple(uniforms) + ("bankData[0]", "energyTint", "rimLight", "localPhase", "partCount", "effectOpacity",
                                "brightness", "colorMix", "realtimeLight", "modulation") + angular_uniforms + shadow_uniforms)
         self.uniform_array = bind_gl(pico, "glUniform4fv", None, [ct.c_int, ct.c_int, ct.c_void_p])
+        self.pose_uniform_cache = OrderedDict()
+        self.uploaded_pose_uniforms = None
 
     def upload(self, name, values):
         self.uniform_array(self.sampler.uniforms[name + "[0]"], len(values) // 4, (ct.c_float * len(values))(*values))
@@ -651,11 +655,27 @@ class PartPainter:
             arrays["shifts"].extend((*part["shift"], bank))
         return arrays
 
+    def pose_uniforms(self, cache, resources, state, pose_key):
+        uniforms = self.pose_uniform_cache.get(pose_key)
+        if uniforms is None:
+            arrays = self.frame_arrays(cache, resources, state)
+            # 허리 정렬과 방향별 깊이 보정은 같은 키포즈 쌍에서도 바뀐다.
+            del arrays["shifts"]
+            locations = self.sampler.uniforms
+            uniforms = tuple((locations[name + "[0]"], len(values) // 4, (ct.c_float * len(values))(*values))
+                             for name, values in arrays.items())
+            self.pose_uniform_cache[pose_key] = uniforms
+            if len(self.pose_uniform_cache) > POSE_UNIFORM_CACHE_SIZE:
+                self.pose_uniform_cache.popitem(last=False)
+        else:
+            self.pose_uniform_cache.move_to_end(pose_key)
+        return uniforms
+
     def paint(self, cache, resources, state, destination, *, energy_color=None, energy_gain=1, rim=(0, 0, 0, 0),
               opacity=1, tint=(1, 1, 1), tint_mix=0, brightness=1, realtime_light=0, shadow_map=None, pbr_lighting=None,
               sample_shadow=True, depth_output=False, instances=None, pose_table=None,
               screen_depth=None, screen_placements=None, instance_texture=None, instance_range=None, depth_origin=(0, 0),
-              texture_bindings=None):
+              texture_bindings=None, pose_key=None):
         entries = (cache.bindings(self.page_kinds) if self.paged else
                    [resource["pages"][kind] for kind in self.texture_names for resource in resources])
         if pbr_lighting:
@@ -672,7 +692,9 @@ class PartPainter:
             instance_unit = len(entries)
             entries.append({"gl_texture": instance_texture, "gl_target": TEXTURE_BUFFER,
                             "gl_binding": TEXTURE_BINDING_BUFFER})
-        arrays = self.frame_arrays(cache, resources, state) if pose_table is None else {}
+        pose_uniforms = (self.pose_uniforms(cache, resources, state, pose_key)
+                         if pose_key is not None and not self.paged and pose_table is None else None)
+        arrays = self.frame_arrays(cache, resources, state) if pose_uniforms is None and pose_table is None else {}
         sampler = self.sampler
         quad_pass = instances is None and instance_range is None
         own_quad_batch = quad_pass and not sampler.depth
@@ -702,8 +724,18 @@ class PartPainter:
                 *resource["data"]["clip"]["depth_range"],
                 float(self.paged or resource["pages"]["energy"]["codec"] == "a8_zlib"),
                 float(self.paged or resource["pages"]["vector"]["codec"] == "rg8_zlib"))])
-            for name, values in arrays.items():
-                self.upload(name, values)
+            if pose_uniforms is None:
+                self.uploaded_pose_uniforms = None
+                for name, values in arrays.items():
+                    self.upload(name, values)
+            else:
+                if pose_uniforms is not self.uploaded_pose_uniforms:
+                    for uniform in pose_uniforms:
+                        self.uniform_array(*uniform)
+                    self.uploaded_pose_uniforms = pose_uniforms
+                mixed_banks = len(resources) > 1
+                self.upload("shifts", [value for part in state["parts"] for value in (
+                    *part["shift"], part["bank"] if mixed_banks else 0)])
             count = len(state["parts"])
             if "angle_matrices" in state:
                 self.upload("angleRects", state["angle_rects"])

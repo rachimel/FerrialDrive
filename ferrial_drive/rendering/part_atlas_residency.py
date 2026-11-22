@@ -87,7 +87,7 @@ class PartAtlasResidency:
             page_key = self.cache.page_key(page, path.parent)
             fields[kind] = page_key
             requests.setdefault(page_key, dict(page, file=page_key[0]))
-        return {"data": data, "pages": fields, "keys": tuple(fields.values())}, requests
+        return {"data": data, "pages": fields, "keys": tuple(fields.values()), "pose_identity": object()}, requests
 
     def require(self, keys, *, preload_limit_bytes=None):
         """선적재 때는 방향 정보를 읽되 남은 예산에 맞는 텍스처만 올린다."""
