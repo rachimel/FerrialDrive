@@ -13,7 +13,7 @@ from ferrial_drive.diagnostics.texture_metrics import bind_gl
 from .atlas_texture_cache import AtlasTextureCache
 from .direction_reprojection import direction_banks, direction_frame, direction_span
 from .part_atlas_residency import PartAtlasResidency
-from .part_motion_atlas import COMPACT_DEPTH_ENCODING, frame_state
+from .part_motion_atlas import COMPACT_DEPTH_ENCODING, frame_interval, frame_state
 from .part_motion_catalog import PartMotionCatalog
 from .part_pbr import COAT_CHANNELS
 from .part_painter import PART_SAMPLE_FIELDS, PartPainter
@@ -284,9 +284,11 @@ class PicoPartMotion:
 
     def _page_lookahead(self, resources, clips, motion, directions, span, seconds):
         future = seconds + 1 / clips[0]["fps"]
-        next_state = frame_state(clips[0], clips[-1], future)
-        if span is not None:
-            next_state = direction_frame(self.correspondence[motion], dict(zip(directions, clips)), span, next_state)
+        if span is None:
+            next_state = frame_state(clips[0], clips[-1], future)
+        else:
+            interval = frame_interval(clips[0], clips[-1], future)
+            next_state = direction_frame(self.correspondence[motion], dict(zip(directions, clips)), span, interval)
         requests = self._page_requests(resources, next_state, lookahead=True)
         if self.paged_lookahead is not None and self.paged_lookahead[0] == motion:
             future_span = self.paged_lookahead[1]
@@ -294,8 +296,8 @@ class PicoPartMotion:
             if set(future_dirs) - set(directions):
                 future_resources = tuple(self.get(motion, direction) for direction in future_dirs)
                 future_clips = tuple(resource["data"]["clip"] for resource in future_resources)
-                next_state = frame_state(future_clips[0], future_clips[-1], future)
-                next_state = direction_frame(self.correspondence[motion], dict(zip(future_dirs, future_clips)), future_span, next_state)
+                interval = frame_interval(future_clips[0], future_clips[-1], future)
+                next_state = direction_frame(self.correspondence[motion], dict(zip(future_dirs, future_clips)), future_span, interval)
                 requests.update(self._page_requests(future_resources, next_state, lookahead=True))
         return requests
 
@@ -351,7 +353,8 @@ class PicoPartMotion:
             self.prepare_shadow(clip_name, elapsed_seconds, angular_span)
         painter = self.painter
         with self.timings.scope("parts.select_state"):
-            state = frame_state(clips[0], clips[-1], elapsed_seconds)
+            select_state = frame_state if angular_span is None else frame_interval
+            state = select_state(clips[0], clips[-1], elapsed_seconds)
             pose_key = None
             if self.pbr_lighting is not None and not self.paged:
                 span_banks = tuple(span[:2] for span in angular_span) if angular_span is not None else ()

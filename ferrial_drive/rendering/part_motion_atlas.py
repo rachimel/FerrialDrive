@@ -49,15 +49,23 @@ def frame_phase(clip, elapsed_seconds, *, dense_anchors=False):
     return first, min(1, max(0, position - first))
 
 
-def frame_state(upper, lower, elapsed_seconds):
-    """같은 위상의 두 방향을 허리에 맞춘다. 깊이는 카메라 축 차이만 보정한다."""
+def frame_interval(upper, lower, elapsed_seconds):
+    """두 방향이 공유하는 키포즈와 원본 조립 기준점의 위상을 구한다."""
     if upper["fps"] != lower["fps"] or upper["duration_seconds"] != lower["duration_seconds"]:
         raise ValueError("같은 동작·표본 속도의 두 방향이 필요하다.")
     if upper.get("keyframe_seconds") != lower.get("keyframe_seconds"):
         raise ValueError("같은 시각의 키 포즈를 갖는 두 방향이 필요하다.")
     first, alpha = frame_phase(upper, elapsed_seconds)
-    anchor_first, anchor_alpha = ((first, alpha) if "keyframe_seconds" not in upper
-                                  else frame_phase(upper, elapsed_seconds, dense_anchors=True))
+    anchor_phase = ((first, alpha) if "keyframe_seconds" not in upper
+                    else frame_phase(upper, elapsed_seconds, dense_anchors=True))
+    return {"first": first, "alpha": alpha, "anchor_phase": anchor_phase}
+
+
+def frame_state(upper, lower, elapsed_seconds):
+    """같은 위상의 두 방향을 허리에 맞춘다. 깊이는 카메라 축 차이만 보정한다."""
+    state = frame_interval(upper, lower, elapsed_seconds)
+    first = state["first"]
+    anchor_first, anchor_alpha = state["anchor_phase"]
 
     def waist(clip):
         a, b = (row["waist"] for row in clip["anchors"][anchor_first:anchor_first + 2])
@@ -75,8 +83,8 @@ def frame_state(upper, lower, elapsed_seconds):
     top = floor(min(p["crop"][1] + p["shift"][1] for p in parts))
     right = ceil(max(p["crop"][0] + p["crop"][2] + p["shift"][0] for p in parts))
     bottom = ceil(max(p["crop"][1] + p["crop"][3] + p["shift"][1] for p in parts))
-    return {"first": first, "alpha": alpha, "anchor_phase": (anchor_first, anchor_alpha),
-            "parts": parts, "bounds": [left, top, right - left, bottom - top]}
+    state.update(parts=parts, bounds=[left, top, right - left, bottom - top])
+    return state
 
 
 def shadow_view(source, destination):

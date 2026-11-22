@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [각도 보간 준비·재투영 단축](2026-11-22-direction-frame.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-direction-frame:U1]]`은 요청의 정확한 시각이다. 검색 단서는 `direction_frame부터 최적화`다.
+
 - [파츠 아틀라스 바인딩·복원 단축](2026-11-22-part-atlas-binding.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-part-atlas-binding:U1]]`은 요청의 정확한 시각이다. 검색 단서는 `PartPainter.paint의 아틀라스 바인딩·복원 최적화`다.
 
 - [플레이어 파츠·잔상 키포즈 유니폼 재사용](2026-11-22-player-part-paint.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-player-part-paint:U1]]`은 요청의 정확한 시각이다. 검색 단서는 `다음은 플레이어 파츠·잔상 쪽 최적화`다.

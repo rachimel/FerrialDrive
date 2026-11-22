@@ -64,7 +64,6 @@ def direction_frame(correspondence, clips, spans, interval):
 
     endpoints = []
     rectangles = []
-    depth_extents = []
     for name, part in clips[banks[0]]["parts"].items():
         group = 0 if part["space"] == "upper" else 1
         dx, dy, _ = shift if group == 0 else (0, 0, 0)
@@ -84,7 +83,6 @@ def direction_frame(correspondence, clips, spans, interval):
                     for depth_cm in (near, far):
                         p = (u - origin[0], v - origin[1], (depth_cm - origin[2]) * scale)
                         corners.append((dot(mat[:3], p) + origin[0] + dx, dot(mat[3:6], p) + origin[1] + dy))
-                        depth_extents.append(origin[2] + (dot(mat[6:9], p) + (shift[2] if group == 0 else 0)) / scale)
         rectangles.append((min(x for x, _ in corners) - 2, min(y for _, y in corners) - 2,
                            max(x for x, _ in corners) + 2, max(y for _, y in corners) + 2))
     left = floor(min(r[0] for r in rectangles))
@@ -92,7 +90,6 @@ def direction_frame(correspondence, clips, spans, interval):
     right = -floor(-max(r[2] for r in rectangles))
     bottom = -floor(-max(r[3] for r in rectangles))
     return {"alpha": alpha, "parts": endpoints, "bounds": (left, top, right - left, bottom - top),
-            "depth_bounds": (min(depth_extents), max(depth_extents)),
             "angle_rects": [component for rect in rectangles for component in rect], "angle_matrices": matrices,
             "angle_origin": (*origin, scale), "angle_weights": (*shift[:2], spans[0][2], spans[1][2]),
             "waist_depth_shift": shift[2] / scale}
