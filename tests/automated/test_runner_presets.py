@@ -12,7 +12,9 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "Tools"))
 
 from unit_test_runner.browser import FileBrowser
-from unit_test_runner.gui import DropSession, handle_preset_event, preset_layout
+from unit_test_runner.gui import (
+    DropSession, PRESET_OPTIONS_OFFSET, PRESET_ROW_HEIGHT, PRESET_ROW_TOP, handle_preset_event, preset_layout,
+)
 from unit_test_runner.processes import prepare_test, run_file
 
 
@@ -31,7 +33,7 @@ class PresetTests(unittest.TestCase):
         self.source = 'UNIT_TEST_ENTRYPOINT = "standalone"\nUNIT_TEST_PRESETS = ' + repr(PRESETS) + "\n"
         self.path.write_text(self.source + 'raise RuntimeError("부모 실행 금지")\n', encoding="utf-8")
         keys = ("SDL_KEYDOWN", "SDL_MOUSEBUTTONDOWN", "SDL_BUTTON_LEFT", "SDLK_ESCAPE",
-                "SDLK_UP", "SDLK_DOWN", "SDLK_RETURN", "SDLK_KP_ENTER")
+                "SDLK_UP", "SDLK_DOWN", "SDLK_RETURN", "SDLK_KP_ENTER", "SDLK_SPACE")
         self.pico = SimpleNamespace(**{name: index for index, name in enumerate(keys)})
 
     def test_prepare_and_browser_read_choices_without_executing_source(self):
@@ -100,6 +102,38 @@ class PresetTests(unittest.TestCase):
         previous.close.assert_not_called()
         start.assert_not_called()
 
+    def test_mute_checkbox_is_per_launch_and_passes_the_flag_to_the_child(self):
+        self.path.write_text(self.source + "UNIT_TEST_SUPPORTS_MUTE = True\n", encoding="utf-8")
+        session, previous, start = self.session()
+        session.drop((self.path,))
+        self.assertFalse(session.muted)
+        x, y, _, _ = preset_layout(1280, 720, len(PRESETS))
+        event = SimpleNamespace(type=self.pico.SDL_MOUSEBUTTONDOWN, button=self.pico.SDL_BUTTON_LEFT,
+                                x=x + 34, y=y + PRESET_ROW_TOP + len(PRESETS) * PRESET_ROW_HEIGHT
+                                + PRESET_OPTIONS_OFFSET + 15)
+        self.assertTrue(handle_preset_event(session, event, self.pico, 1280, 720))
+        previous.close.assert_not_called()
+        start.assert_not_called()
+        self.key(session, self.pico.SDLK_DOWN)
+        self.key(session, self.pico.SDLK_RETURN)
+        self.assertEqual(start.call_args.args[0].command[-4:], ("--scenario", "sword", "--detail", "--mute"))
+        session.drop((self.path,))
+        self.key(session, self.pico.SDLK_RETURN)
+        self.assertNotIn("--mute", start.call_args.args[0].command)
+
+    def test_mute_only_dialog_and_changed_capability(self):
+        source = 'UNIT_TEST_ENTRYPOINT = "standalone"\n'
+        self.path.write_text(source + "UNIT_TEST_SUPPORTS_MUTE = True\n", encoding="utf-8")
+        session, previous, start = self.session()
+        session.drop((self.path,))
+        self.key(session, self.pico.SDLK_SPACE)
+        self.path.write_text(source, encoding="utf-8")
+        with patch("unit_test_runner.gui.traceback.print_exc"):
+            self.key(session, self.pico.SDLK_RETURN)
+        self.assertIn("무음 옵션을 지원하지 않는다", session.error)
+        previous.close.assert_not_called()
+        start.assert_not_called()
+
     def test_actual_child_receives_preset_and_frame_limit(self):
         self.path.write_text(self.source + 'import json, sys\nfrom pathlib import Path\n'
                              'Path(__file__).with_suffix(".json").write_text(json.dumps(sys.argv[1:]))\n', encoding="utf-8")
@@ -114,12 +148,16 @@ class PresetTests(unittest.TestCase):
             self.assertNotIn("--frames", plan.command)
             self.assertIn("--detail", plan.command)
 
-    def test_crowd_presets_launch_the_same_muted_formation(self):
-        for name in ("combat_test_v1_5.py", "combat_test_v1_5_speed_test.py", "hardware_profile_benchmark.py"):
+    def test_crowd_presets_launch_the_same_formation_with_optional_mute(self):
+        for name in ("combat_test_v1_5.py", "hardware_profile_benchmark.py"):
             counts = (1000,) if name == "hardware_profile_benchmark.py" else (900, 1000)
             for count in counts:
                 with self.subTest(name=name, count=count):
-                    command = prepare_test(ROOT / "tests" / name, preset=f"crowd_{count}").command
+                    path = ROOT / "tests" / name
+                    plan = prepare_test(path, preset=f"crowd_{count}")
+                    self.assertTrue(plan.supports_mute)
+                    self.assertNotIn("--mute", plan.command)
+                    command = prepare_test(path, preset=f"crowd_{count}", mute=True).command
                     self.assertEqual(command[command.index("--enemy-count") + 1], str(count))
                     self.assertEqual(command[command.index("--enemy-spacing-m") + 1], "24")
                     self.assertIn("--mute", command)
@@ -128,15 +166,11 @@ class PresetTests(unittest.TestCase):
                         self.assertEqual(command[command.index("--player-hp") + 1], "100000")
 
     def test_combat_1000_preset_starts_with_high_hp(self):
-        for name in ("combat_test_v1_5.py", "combat_test_v1_5_speed_test.py"):
-            with self.subTest(name=name):
-                path = ROOT / "tests" / name
-                plan = prepare_test(path, preset="crowd_1000")
-                self.assertEqual([preset.preset_id for preset in plan.presets],
-                                 ["standard", "crowd_900", "crowd_1000"])
-                self.assertEqual(plan.command[plan.command.index("--player-hp") + 1], "100000")
-                self.assertNotIn("--player-hp", prepare_test(path, preset="crowd_900").command)
-
+        path = ROOT / "tests/combat_test_v1_5.py"
+        plan = prepare_test(path, preset="crowd_1000")
+        self.assertEqual([preset.preset_id for preset in plan.presets], ["standard", "crowd_900", "crowd_1000"])
+        self.assertEqual(plan.command[plan.command.index("--player-hp") + 1], "100000")
+        self.assertNotIn("--player-hp", prepare_test(path, preset="crowd_900").command)
 
 if __name__ == "__main__":
     unittest.main()

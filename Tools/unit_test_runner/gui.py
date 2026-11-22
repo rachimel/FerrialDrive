@@ -19,10 +19,13 @@ LAUNCHER_WINDOW = WindowSpec(title="Unit Test Runner | 파일 탐색")
 BROWSER_TOP = 124
 BROWSER_ROW_HEIGHT = 32
 BROWSER_VISIBLE_ROWS = 11
+PRESET_ROW_TOP = 76
+PRESET_ROW_HEIGHT = 44
+PRESET_OPTIONS_OFFSET = 6
 
 
 def preset_layout(width, height, count):
-    panel_width, panel_height = min(760, width - 64), 148 + count * 44
+    panel_width, panel_height = min(760, width - 64), 148 + count * PRESET_ROW_HEIGHT
     return (width - panel_width) // 2, (height - panel_height) // 2, panel_width, panel_height
 
 
@@ -31,20 +34,29 @@ def handle_preset_event(session, event, pico, width, height):
     plan = session.pending_plan
     if plan is None:
         return False
+    count = len(plan.presets)
     if event.type == pico.SDL_KEYDOWN:
         if event.key == pico.SDLK_ESCAPE:
             session.pending_plan = None
-        elif event.key in (pico.SDLK_UP, pico.SDLK_DOWN):
+        elif count and event.key in (pico.SDLK_UP, pico.SDLK_DOWN):
             direction = -1 if event.key == pico.SDLK_UP else 1
-            session.preset_index = (session.preset_index + direction) % len(plan.presets)
+            session.preset_index = (session.preset_index + direction) % count
+        elif plan.supports_mute and event.key == pico.SDLK_SPACE:
+            session.muted = not session.muted
         elif event.key in (pico.SDLK_RETURN, pico.SDLK_KP_ENTER):
             session.launch_selected()
     elif event.type == pico.SDL_MOUSEBUTTONDOWN and event.button == pico.SDL_BUTTON_LEFT:
-        x, y, panel_width, _ = preset_layout(width, height, len(plan.presets))
-        row = (event.y - y - 76) // 44
-        if x + 20 <= event.x < x + panel_width - 20 and 0 <= row < len(plan.presets):
+        x, y, panel_width, _ = preset_layout(width, height, count)
+        row = (event.y - y - PRESET_ROW_TOP) // PRESET_ROW_HEIGHT
+        if x + 20 <= event.x < x + panel_width - 20 and 0 <= row < count:
             session.preset_index = row
             session.launch_selected()
+        options_y = y + PRESET_ROW_TOP + count * PRESET_ROW_HEIGHT + PRESET_OPTIONS_OFFSET
+        if plan.supports_mute and options_y <= event.y < options_y + 34:
+            if x + 20 <= event.x < x + 140:
+                session.muted = not session.muted
+            elif x + panel_width - 130 <= event.x < x + panel_width - 20:
+                session.launch_selected()
     return True
 
 
@@ -104,21 +116,28 @@ class DropSession:
         self.error_detail = ""
         self.pending_plan = None
         self.preset_index = 0
+        self.muted = False
 
-    def drop(self, paths, *, preset=None):
+    def drop(self, paths, *, preset=None, mute=None):
         self.pending_plan = None
         if len(paths) != 1:
             self.error = "테스트 .py 파일 하나만 드롭한다."
             return
         try:
-            plan = self.prepare(Path(paths[0])) if preset is None else self.prepare(Path(paths[0]), preset=preset)
+            options = {}
+            if preset is not None:
+                options["preset"] = preset
+            if mute:
+                options["mute"] = True
+            plan = self.prepare(Path(paths[0]), **options)
         except Exception as error:
             self.error = f"불러오기 실패: {error}"
             traceback.print_exc()
             return
-        if plan.presets and preset is None:
+        if (plan.presets or plan.supports_mute) and preset is None and mute is None:
             self.pending_plan = plan
             self.preset_index = 0
+            self.muted = False
             self.error = self.error_detail = ""
             return
         try:
@@ -135,7 +154,8 @@ class DropSession:
     def launch_selected(self):
         plan = self.pending_plan
         if plan is not None:
-            self.drop((plan.path,), preset=plan.presets[self.preset_index].preset_id)
+            preset = plan.presets[self.preset_index].preset_id if plan.presets else None
+            self.drop((plan.path,), preset=preset, mute=self.muted if plan.supports_mute else None)
 
     def poll(self):
         if self.child is None:
@@ -276,22 +296,30 @@ class DropView:
                                         byref(width), byref(height))
         return width.value if result == 0 else len(text) * RUNNER_FONTS[role][1]
 
-    def presets(self, plan, selected_index):
+    def presets(self, plan, selected_index, *, muted=False):
         width, height = self.backend.spec.width, self.backend.spec.height
         x, y, panel_width, panel_height = preset_layout(width, height, len(plan.presets))
         colors = RUNNER_COLORS
         self._section(x, y, panel_width, panel_height, colors["panel_surface"])
-        self._label("실행 시나리오 선택", x + 24, y + 25, colors["accent"], panel_width - 48, role="title")
+        title = "실행 시나리오 선택" if plan.presets else "실행 옵션"
+        self._label(title, x + 24, y + 25, colors["accent"], panel_width - 48, role="title")
         self._label(plan.path.name, x + 24, y + 53, colors["muted"], panel_width - 48)
         for index, preset in enumerate(plan.presets):
-            top = y + 76 + index * 44
+            top = y + PRESET_ROW_TOP + index * PRESET_ROW_HEIGHT
             self._fill(x + 20, top, panel_width - 40, 40,
                        colors["selected"] if index == selected_index else colors["panel"])
             self._label(preset.label, x + 36, top + 20, colors["text"], panel_width - 72)
-        self._label("선택한 시나리오를 별도 테스트 창에서 실행한다.", x + 24, y + panel_height - 44,
-                    colors["text"], panel_width - 48)
-        self._label("클릭 / ↑↓·Enter: 실행  |  Esc: 취소", x + 24, y + panel_height - 18,
-                    colors["muted"], panel_width - 48)
+        hint = "클릭 / ↑↓·Enter 실행  |  Esc 취소"
+        if plan.supports_mute:
+            options_y = y + PRESET_ROW_TOP + len(plan.presets) * PRESET_ROW_HEIGHT + PRESET_OPTIONS_OFFSET
+            self._section(x + 24, options_y + 8, 18, 18, colors["panel"])
+            if muted:
+                self._fill(x + 28, options_y + 12, 10, 10, colors["accent"])
+            self._label("무음", x + 52, options_y + 17, colors["text"], 88)
+            self._section(x + panel_width - 130, options_y, 110, 34, colors["selected"])
+            self._label("실행", x + panel_width - 108, options_y + 17, colors["text"], 78)
+            hint = "Space 무음  |  Enter 실행  |  Esc 취소"
+        self._label(hint, x + 24, y + panel_height - 18, colors["muted"], panel_width - 48)
 
     def _wrap_error(self, message, max_width, max_lines):
         lines = []
@@ -370,7 +398,7 @@ def run_gui(*, frame_limit=None, backend=None, view_factory=DropView, browser=No
             view.browser(browser, session.path)
             view.error(session.error or browser.error)
             if session.pending_plan is not None:
-                view.presets(session.pending_plan, session.preset_index)
+                view.presets(session.pending_plan, session.preset_index, muted=session.muted)
             backend.present()
             frames += 1
             if frame_limit is not None and frames >= frame_limit:

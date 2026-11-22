@@ -15,13 +15,14 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 UNIT_TEST_ENTRYPOINT = "standalone"
+UNIT_TEST_SUPPORTS_MUTE = True
 UNIT_TEST_PRESETS = (
     {"id": "combat", "label": "Combat · 2 GiB 제한", "args": ["--scenario", "combat", "--detail"]},
     {"id": "movement", "label": "Movement · 이동·검 훈련장", "args": ["--scenario", "sword", "--detail"]},
     {"id": "combat_native", "label": "Combat · 실기 제한 없음",
      "args": ["--scenario", "combat", "--detail", "--gpu-profile", "none", "--no-resource-limits"]},
-    {"id": "crowd_1000", "label": "Combat · 1,000기 · HP 10만 · 실기 무음",
-     "args": ["--scenario", "combat", "--enemy-count", "1000", "--enemy-spacing-m", "24", "--player-hp", "100000", "--mute",
+    {"id": "crowd_1000", "label": "Combat · 1,000기 · HP 10만",
+     "args": ["--scenario", "combat", "--enemy-count", "1000", "--enemy-spacing-m", "24", "--player-hp", "100000",
               "--gpu-profile", "none", "--no-resource-limits"]},
 )
 

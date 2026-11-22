@@ -33,10 +33,11 @@ python Tools/unit_test_runner/run.py
 | Combat · 2 GiB 제한 | `EncounterApplication`의 현재 다수 적 교전 | 직접 조작, 상세 계측, 창 종료 시 보고서 저장 |
 | Movement | 이동·검 훈련장(`--scenario sword`) | 직접 조작, 상세 계측, 창 종료 시 보고서 저장 |
 | Combat · 실기 제한 없음 | 현재 다수 적 30기 교전 | 직접 조작, 상세 계측, CPU·커밋 제한 없이 실행 |
+| Combat · 1,000기 · HP 10만 | 적 1,000기, 24m 간격 | 직접 조작, CPU·커밋 제한 없이 실행 |
 
-두 선택 모두 자동 공격과 프레임 제한을 넣지 않는다. 현재 저장 품질을 격리 복사하고 CPU·커밋 제한을 적용하며, PBR은 실제 GPU 기능으로 실행한다. 창 제목에 RAM과 GPU 메모리가 표시된다. 테스트 창을 정상 종료하면 `output/performance/hardware_profile/<실행시각>/report.json`·`report.md`를 저장한다. Runner 종료·다른 테스트로 강제 교체하면 저장을 보장하지 않는다. [측정·보고서 안내](../../docs/tool-usage/hardware_profile_benchmark.md)를 따른다. Runner 코드 변경은 실행기를 완전히 닫고 다시 열어 반영한다.
+모든 시나리오는 직접 조작으로 실행한다. 창 제목에 RAM과 GPU 메모리가 표시된다. 정상 종료하면 `output/performance/hardware_profile/<실행시각>/`에 JSON·Markdown 보고서를 저장한다. [측정·보고서 안내](../../docs/tool-usage/hardware_profile_benchmark.md)를 따른다. Runner 코드 변경은 실행기를 닫고 다시 열어 반영한다.
 
-다른 독립 테스트도 최상위 리터럴 `UNIT_TEST_PRESETS`를 선언하면 같은 선택창을 재사용한다. 1~8개 선택지에 중복되지 않는 `id`, 표시용 `label`, 문자열 인자 목록 `args`를 지정한다. 인자는 셸을 거치지 않고 자식 프로그램에 전달하며 Runner는 테스트 파일을 import하지 않는다. 잘못된 메타데이터는 목록에서 실행 불가로 표시한다. 선언이 없는 기존 테스트는 즉시 실행 흐름을 유지한다.
+최상위에 `UNIT_TEST_PRESETS`를 선언하면 같은 선택창을 사용한다. 1~8개 선택지에 중복되지 않는 `id`, 표시용 `label`, 문자열 인자 목록 `args`를 지정한다. `--mute`를 받는 테스트는 `UNIT_TEST_SUPPORTS_MUTE = True`로 무음 체크박스를 표시한다. 한 번의 실행에 적용되며 클릭이나 Space로 바꾼다. 인자는 셸을 거치지 않고 자식 프로그램에 전달하며 Runner는 테스트 파일을 import하지 않는다. 잘못된 메타데이터는 목록에서 실행 불가로 표시한다. 두 선언이 없는 테스트는 즉시 실행한다.
 
 ```python
 UNIT_TEST_PRESETS = (

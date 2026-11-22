@@ -869,3 +869,7 @@
 ## FDLOG-20261122-shock-bot-game-entry
 
 - [Shock Bot 교전과 본편 진입점](2026-11-22-shock-bot-game-entry.md)의 사용자 발언 시각은 [[FDLOG_MISSING_TIME:FDLOG-20261122-shock-bot-game-entry:U1-U2]]다. 검색 단서는 `일단 인간형 적 만들어 둔거 연결하자`와 `승인하고 연결`이다.
+
+## FDLOG-20261122-benchmark-runner-mute
+
+- [벤치마크 실행 복구와 무음 선택](2026-11-22-benchmark-runner-mute.md)의 사용자 발언 시각은 [[FDLOG_MISSING_TIME:FDLOG-20261122-benchmark-runner-mute:U1-U2]]다. 검색 단서는 `hardware_benchmark.py에 오류`다.

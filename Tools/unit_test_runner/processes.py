@@ -8,7 +8,9 @@ import sys
 import tempfile
 from uuid import uuid4
 
-from .entrypoints import RunPreset, entrypoint_from_tree, read_test_source, run_presets_from_tree
+from .entrypoints import (
+    RunPreset, entrypoint_from_tree, read_test_source, run_presets_from_tree, supports_mute_from_tree,
+)
 
 
 @dataclass(frozen=True)
@@ -16,9 +18,10 @@ class LaunchPlan:
     path: Path
     command: tuple[str, ...]
     presets: tuple[RunPreset, ...] = ()
+    supports_mute: bool = False
 
 
-def prepare_test(path: Path, frame_limit=None, *, preset=None) -> LaunchPlan:
+def prepare_test(path: Path, frame_limit=None, *, preset=None, mute=False) -> LaunchPlan:
     path = Path(path).resolve()
     if not path.is_file() or path.suffix.lower() != ".py":
         raise ValueError("실행할 테스트 .py 파일이 필요하다.")
@@ -27,6 +30,9 @@ def prepare_test(path: Path, frame_limit=None, *, preset=None) -> LaunchPlan:
     tree = read_test_source(path)
     mode = entrypoint_from_tree(tree)
     presets = run_presets_from_tree(tree)
+    supports_mute = supports_mute_from_tree(tree)
+    if mute and not supports_mute:
+        raise ValueError("선택한 테스트는 무음 옵션을 지원하지 않는다.")
     selected = next((item for item in presets if item.preset_id == preset), None)
     if preset is not None and selected is None:
         raise ValueError("선택한 실행 옵션이 없다. 파일을 다시 확인한다.")
@@ -39,9 +45,11 @@ def prepare_test(path: Path, frame_limit=None, *, preset=None) -> LaunchPlan:
         command.extend((str(Path(__file__).with_name("worker.py")), str(path)))
     if selected is not None:
         command.extend(selected.arguments)
+    if mute and (selected is None or "--mute" not in selected.arguments):
+        command.append("--mute")
     if frame_limit is not None:
         command.extend(("--frames", str(frame_limit)))
-    return LaunchPlan(path, tuple(command), presets)
+    return LaunchPlan(path, tuple(command), presets, supports_mute)
 
 
 def child_environment():

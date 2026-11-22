@@ -16,7 +16,7 @@ python tests/hardware_profile_benchmark.py --auto --target-fps 165 --warmup 165 
 
 Unit Test Runner에서 이 파일을 더블클릭·Enter·드롭하면 `Combat` / `Movement`를 선택한다. 둘 다 직접 조작·상세 계측이며 정상 창 종료 시 보고서를 저장한다. 자동 공격·프레임 제한은 추가하지 않는다. `Movement`는 CLI의 `--scenario sword`와 같다. Esc는 실행 선택 취소이며 기존 테스트를 유지한다. 파일 인자 실행은 `python Tools/unit_test_runner/run.py tests/hardware_profile_benchmark.py --preset combat` 또는 `--preset movement`를 사용한다.
 
-Runner의 `Combat · 1,000기 · HP 10만 · 실기 무음`은 24m 간격으로 적 1,000기를 배치한다. 플레이어 최대 HP는 100,000이며 F5 재시작 때 회복한다. 직접 조작하고 정상 종료하면 보고서를 저장한다. `player_health_initial`에 시작한 현재·최대 HP를 기록한다.
+Runner의 `Combat · 1,000기 · HP 10만`은 자원 제한 없이 24m 간격으로 적 1,000기를 배치한다. 플레이어 최대 HP는 100,000이며 F5 재시작 때 회복한다. 선택창의 `무음` 체크박스를 켜면 이번 실행의 효과음을 끈다. 직접 조작하고 정상 종료하면 보고서를 저장한다. `player_health_initial`에 시작한 현재·최대 HP를 기록한다.
 
 `--scenario combat`은 `tests/combat_test_v1_5.py`와 같은 `EncounterApplication`과 적 배치 JSON을 사용한다. 기본 배치는 소형 22기·중형 6기·인간형 2기이며 `--encounter`로 다른 배치를 지정한다. 기존 훈련장 기본 실행은 유지한다.
 

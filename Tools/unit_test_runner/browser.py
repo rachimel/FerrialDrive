@@ -3,7 +3,9 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-from .entrypoints import entrypoint_from_tree, read_test_header, read_test_source, run_presets_from_tree
+from .entrypoints import (
+    entrypoint_from_tree, read_test_header, read_test_source, run_presets_from_tree, supports_mute_from_tree,
+)
 
 
 @dataclass(frozen=True)
@@ -54,6 +56,7 @@ class FileBrowser:
                         title, description = read_test_header(tree)
                         mode = entrypoint_from_tree(tree)
                         run_presets_from_tree(tree)
+                        supports_mute_from_tree(tree)
                     except SyntaxError as error:
                         reason = f"문법 오류 ({error.lineno or '?'}행): {error.msg}"
                     except (OSError, UnicodeError, ValueError) as error:

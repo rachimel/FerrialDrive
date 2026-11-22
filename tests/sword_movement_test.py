@@ -8,6 +8,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 UNIT_TEST_ENTRYPOINT = "standalone"
+UNIT_TEST_SUPPORTS_MUTE = True
 
 
 def main():

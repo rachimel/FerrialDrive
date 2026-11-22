@@ -13,16 +13,30 @@ class RunPreset:
     arguments: tuple[str, ...]
 
 
-def run_presets_from_tree(tree: ast.Module) -> tuple[RunPreset, ...]:
-    """선택 실행 인자는 리터럴만 읽는다. 테스트 소스는 실행하지 않는다."""
+def _declaration_from_tree(tree: ast.Module, name: str) -> ast.expr | None:
     value = None
     for statement in tree.body:
         if isinstance(statement, ast.Assign) and any(
-                isinstance(target, ast.Name) and target.id == "UNIT_TEST_PRESETS" for target in statement.targets):
+                isinstance(target, ast.Name) and target.id == name for target in statement.targets):
             value = statement.value
         elif (isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name)
-              and statement.target.id == "UNIT_TEST_PRESETS"):
+              and statement.target.id == name):
             value = statement.value
+    return value
+
+
+def supports_mute_from_tree(tree: ast.Module) -> bool:
+    value = _declaration_from_tree(tree, "UNIT_TEST_SUPPORTS_MUTE")
+    if value is None:
+        return False
+    if not isinstance(value, ast.Constant) or type(value.value) is not bool:
+        raise ValueError("UNIT_TEST_SUPPORTS_MUTE는 불리언 리터럴이어야 한다.")
+    return value.value
+
+
+def run_presets_from_tree(tree: ast.Module) -> tuple[RunPreset, ...]:
+    """선택 실행 인자는 리터럴만 읽는다. 테스트 소스는 실행하지 않는다."""
+    value = _declaration_from_tree(tree, "UNIT_TEST_PRESETS")
     if value is None:
         return ()
     try:
