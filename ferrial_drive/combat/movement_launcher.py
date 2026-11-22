@@ -49,6 +49,11 @@ def launch_movement_test(*, description, movement_speed_multiplier=1,
             parser.error("--player-hp는 양수 정수여야 한다.")
         encounter_options = dict(encounter_path=args.encounter, enemy_count=args.enemy_count,
                                  enemy_spacing_m=args.enemy_spacing_m, player_hp=args.player_hp)
+    elif application_type is None and not args.demo:
+        from ferrial_drive.combat.encounter_application import EncounterApplication
+
+        program_type = EncounterApplication
+        encounter_options = {"encounter_path": root / "game/training_encounter.json"}
     part_options = {"part_catalog": args.part_catalog, "part_mixed": args.part_mixed,
                     "part_step_directions": args.part_step_directions, "part_color_codec": args.part_color_codec,
                     "player_pipeline": args.player_pipeline}

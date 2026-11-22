@@ -76,10 +76,15 @@ def run_worker(args, applied, profile):
     if args.quality is not None:
         initial_settings = replace(initial_settings, texture_quality=args.quality)
     GameSettingsStore(settings_path).save(initial_settings)
-    application_type = EncounterApplication if args.scenario == "combat" else MovementApplication
-    encounter_options = (dict(encounter_path=args.encounter, enemy_count=args.enemy_count,
-                              enemy_spacing_m=args.enemy_spacing_m, player_hp=args.player_hp,
-                              crowd_atlas_enabled=not args.legacy_enemy_render) if args.scenario == "combat" else {})
+    use_encounter = args.scenario == "combat" or (args.scenario == "sword" and not args.demo)
+    application_type = EncounterApplication if use_encounter else MovementApplication
+    encounter_options = {}
+    if use_encounter:
+        default_encounter = (ROOT / "samples/combat_test_v1_5/encounter.json" if args.scenario == "combat"
+                             else ROOT / "game/training_encounter.json")
+        encounter_options = dict(encounter_path=args.encounter or default_encounter, enemy_count=args.enemy_count,
+                                 enemy_spacing_m=args.enemy_spacing_m, player_hp=args.player_hp,
+                                 crowd_atlas_enabled=not args.legacy_enemy_render)
     app = application_type(args.config, demo=args.demo or args.scenario == "demo", settings_file=settings_path,
                            profile=args.output / "timings.json", movement_speed_multiplier=args.movement_speed_multiplier,
                            mute=args.mute, player_pipeline=args.player_pipeline, **encounter_options)
@@ -93,7 +98,7 @@ def run_worker(args, applied, profile):
               "demo": app.demo,
               "instrumentation": {"detailed": args.detail, "call_profile": args.call_profile},
               "auto_input": {"weapon": args.auto_weapon, "overdrive": args.auto_overdrive, "dash": args.auto_dash,
-                             "reset_seconds": 2, "aim": "nearest_alive" if args.scenario == "combat" else "fixed"}
+                             "reset_seconds": 2, "aim": "nearest_alive" if use_encounter else "fixed"}
                             if args.auto else None,
               "host": {"platform": platform.platform(), "processor": platform.processor(), "logical_cpus": os.cpu_count()},
               "limitations": "실기 성능 보정 없음. 현재 설정의 적 수만 측정하며 UHD 630 처리량·메모리 대역폭 재현 없음."}
@@ -136,7 +141,7 @@ def run_worker(args, applied, profile):
 
                 started = perf_counter()
                 probe = call_profile = None
-                collection = app.prepare_combat_collection() if args.scenario == "combat" else None
+                collection = app.prepare_combat_collection() if use_encounter else None
                 try:
                     app.enter()
                     width, height = ct.c_int(), ct.c_int()
@@ -159,7 +164,7 @@ def run_worker(args, applied, profile):
                     if app.pbr_enabled and any("body" in resource.texture_sizes for resource in player_sheets):
                         raise RuntimeError("PBR 시험에서 기존 플레이어 시트가 적재됐다.")
                     result["config_snapshot"] = json.loads(json.dumps({"movement": app.config, "hud": app.hud.config.data}))
-                    if args.scenario == "combat":
+                    if use_encounter:
                         result["player_health_initial"] = asdict(app.controller.health)
                         result["config_snapshot"]["encounter"] = app.encounter.settings
                         result["enemy_atlas_sources"] = {
@@ -335,8 +340,7 @@ def main():
     parser.add_argument("--legacy-enemy-render", action="store_true", help="고정 군집 아틀라스 이전 경로로 교전한다.")
     parser.add_argument("--enemy-spacing-m", type=float, default=12, help="부하 시험 격자의 중심 간격(m)")
     parser.add_argument("--player-hp", type=int, help="부하 시험 중 조기 패배를 방지할 시작 HP")
-    parser.add_argument("--encounter", type=Path, default=ROOT / "samples/combat_test_v1_5/encounter.json",
-                        help="combat test의 적 종류·배치·전투 설정")
+    parser.add_argument("--encounter", type=Path, help="이동 또는 교전 장면의 적 종류·배치·전투 설정")
     parser.add_argument("--demo", action="store_true", help="combat에서도 플레이어를 공개 도형으로 시연")
     parser.add_argument("--movement-speed-multiplier", type=float, default=1, help="3배속 combat test는 3 지정")
     parser.add_argument("--quality", choices=("low", "medium", "high"), help="생략하면 현재 저장 설정을 격리 복사")

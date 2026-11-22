@@ -26,6 +26,8 @@ python tests/sword_movement_test.py
 
 Runner에서 `tests/sword_movement_test.py`를 선택하거나 창에 드롭해도 별도 프로세스로 실행한다. 게임 에셋 없이 입력·카메라·눈금을 시연하려면 같은 명령에 `--demo`를 붙인다. 공개 글꼴은 `data/fonts/SUITE-otf/SUITE-Bold.otf`를 사용한다.
 
+실제 에셋으로 실행하는 이동·UI와 독립 파츠 합성 훈련장은 본편의 `game/training_encounter.json`을 공유한다. Shock Bot 1기의 `r03` 파츠·군집 아틀라스와 Break 동작을 사용한다. 교전이 끝나면 F5로 다시 시작한다.
+
 실제 에셋 경로에서는 회색 마찰·흙 파편·노즐 분사 연기·에너지 Trail을 함께 표시한다. 부스트/대시 공격에서는 효과를 강화하고 일반 공격은 3·4타에 발생한다. `movement_config.json`의 `ground_effects`로 조정한다. 마찰은 0.05초, 입자는 최대 128개다. 백웨폰 출력은 별도 준비 상태이며 이 훈련장의 장착·스왑에는 아직 연결하지 않았다.
 
 | 입력 | 동작 |
