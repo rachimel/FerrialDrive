@@ -412,7 +412,8 @@ class MovementApplication:
             self.sound_player = PicoSoundEffects(pico, self.relative_path(audio["bank"]),
                 self.relative_path(audio["demo_directory" if self.demo else "directory"]),
                 volume=audio.get("volume", 0.4), channels=audio.get("channels", 24),
-                user_bank=self.relative_path(audio["user_bank"]) if audio.get("user_bank") else None)
+                user_bank=self.relative_path(audio["user_bank"]) if audio.get("user_bank") else None,
+                warn_missing_files=not self.demo)
             windows = self.config.get("sword_effects", {}).get("active_phase_windows", [[0, 1]] * 4)
             self.sound_cues = MovementSoundCues(self.sound_player, windows,
                 easing=self.config.get("combat", {}).get("easing", "accelerate"),

@@ -246,15 +246,20 @@ class SoundPlayerTests(unittest.TestCase):
     def test_device_and_missing_asset_failures_leave_game_running(self):
         pico = self.pico
         pico.audio_on = False
-        with warnings.catch_warnings(record=True) as emitted:
-            player = PicoSoundEffects(pico, BANK, ROOT)
-        self.assertTrue(emitted)
+        with self.assertWarnsRegex(RuntimeWarning, "오디오 장치"):
+            player = PicoSoundEffects(pico, BANK, self.directory, warn_missing_files=False)
         self.assertFalse(player.play("boost"))
         pico.audio_on = True
-        with warnings.catch_warnings(record=True):
-            player = PicoSoundEffects(pico, BANK, ROOT)
+        missing_directory = self.directory / "missing"
+        with self.assertWarnsRegex(RuntimeWarning, "효과음이 없다"):
+            player = PicoSoundEffects(pico, BANK, missing_directory)
         self.assertTrue(player.disabled_reason)
         self.assertEqual(player.channels, ())
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            player = PicoSoundEffects(pico, BANK, missing_directory, warn_missing_files=False)
+        self.assertEqual(player.channels, ())
+        self.assertFalse(player.play("boost"))
 
     def test_level_layers_are_mixed_from_same_samples_and_rate_is_converted_in_memory(self):
         player = self.player

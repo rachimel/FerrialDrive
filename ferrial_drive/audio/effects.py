@@ -28,7 +28,8 @@ def convert_playback_rate(pico, pcm, rate, frequency, sample_format, channel_cou
 
 
 class PicoSoundEffects:
-    def __init__(self, pico, bank_path, directory, *, volume=0.4, channels=24, seed=31, user_bank=None):
+    def __init__(self, pico, bank_path, directory, *, volume=0.4, channels=24, seed=31, user_bank=None,
+                 warn_missing_files=True):
         self.pico = pico
         self.sounds = {}
         self.pcm = {}
@@ -87,7 +88,8 @@ class PicoSoundEffects:
             self.sounds.clear()
             self.pcm.clear()
             self.disabled_reason = f"효과음을 비활성화한다: {error}"
-            warnings.warn(self.disabled_reason, RuntimeWarning)
+            if warn_missing_files or not isinstance(error, FileNotFoundError):
+                warnings.warn(self.disabled_reason, RuntimeWarning)
 
     def update(self, delta_seconds):
         if not isfinite(delta_seconds) or delta_seconds < 0:
