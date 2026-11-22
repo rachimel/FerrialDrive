@@ -70,6 +70,10 @@ python automate/run.py part-sparse-atlas --catalog 원본_품질폴더/catalog.j
 
 이동 훈련장은 `player_pbr_24/profiles/sparse_keys_r01/{high,medium,low}/catalog.json`을 우선 읽는다. 교전 테스트는 `data/runtime/part_motion/enemy_sparse_r01/{mech,spider}/{high,medium,low}/catalog.json`과 원본의 상대 경로 규약을 유지한 `enemy_parts.json`을 읽는다. 해당 후보가 없으면 기존 카탈로그를 읽는다. 원거리 적은 기종·모션·방향과 초당 60단계로 맞춘 재생 위상이 같을 때 합성 결과를 공유한다.
 
+## 등 무기의 방향 선적재
+
+전투 로딩에서 `back_deploy` 전용 PBR 번들의 방향 메타데이터와 텍스처를 8방향까지 준비한다. 이 번들은 기존 64 MiB 텍스처 예산 안에서 선적재하고, 화질을 바꿔 카탈로그를 다시 만들 때도 같은 규칙을 적용한다. 전용 번들의 방향 보간은 기존 카탈로그와 셰이더를 사용한다.
+
 ## 적의 방향별 아틀라스 제한
 
 본편과 교전 테스트는 `rendering.enemy_primary_part_sprites`의 첫 사용 가능한 카탈로그를 읽는다. 단일 경로나 우선순위 배열을 사용한다. 이 카탈로그 옆에 `crowd_atlas.json`과 `enemy_compact_parts.json`이 있으면 압축 적 카탈로그를 선택한다. 기존 카탈로그에서는 `rendering.enemy_compact_sprites.catalog` 설정을 계속 사용한다. 원거리 군집 시트는 가로 1,024px에 64px 셀을 배치한다. 적 기종·동작·그림자가 들어갈 만큼 행을 늘려 본체와 그림자를 같은 텍스처에서 배치 제출한다. Shock Bot Break의 그림자는 같은 시트에서 포즈 구간에 맞춰 선택한다.

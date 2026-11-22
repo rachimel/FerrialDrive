@@ -30,6 +30,13 @@ class PicoPartMotion:
         self.source, self.data = self.catalog.source, self.catalog.data
         self.texture_scale, self.paged = self.catalog.texture_scale, self.catalog.paged
         surface, pbr = self.catalog.surface, self.catalog.pbr
+        motions = self.data["motions"]
+        back_directions = motions.get("back_deploy", {})
+        preload_back = (pbr and cache_budget_bytes is not None and len(motions) == 1
+                        and back_directions.keys() == set("01234567"))
+        if preload_back:
+            max_directions = max(max_directions, len(back_directions))
+            self.catalog.max_records = max_directions
         coat = self.catalog.coat_members is not None
         self.timings = timings or TimingRecorder(enabled=False)
         ktx_library = find_ktx_library() if self.data.get("color_codec") == "ktx2_uastc" else None
@@ -109,6 +116,14 @@ class PicoPartMotion:
         self.fallback_draws = 0
         self.draws_by_motion = Counter()
         self.paged_lookahead = None
+        if preload_back:
+            try:
+                keys = tuple(("back_deploy", direction) for direction in sorted(back_directions))
+                with self.timings.scope("loading.back_deploy"):
+                    self.residency.require(keys, preload_limit_bytes=cache_budget_bytes)
+            except BaseException:
+                self.close()
+                raise
 
     @property
     def cache_budget_bytes(self):
