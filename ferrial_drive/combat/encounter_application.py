@@ -42,6 +42,7 @@ class EncounterApplication(MovementApplication):
                                         player_radius_m=self.controller.settings.radius_m, registry=self.entities,
                                         projectiles=self.projectile_storage)
         self.encounter_view = None
+        self.enemy_sprite_bounds = {}
         self.crowd_atlas_enabled = crowd_atlas_enabled
         self.encounter_trace = []
         self.targets_by_id = {}
@@ -57,11 +58,30 @@ class EncounterApplication(MovementApplication):
         self.hud.resolve_enemy_damage = self.encounter.damage_enemy
         self.encounter_view = EncounterView(self.renderer, self.camera, self.projection,
             backend=self.encounter.settings.get("rendering", {}).get("backend", "auto"))
-        sprite_path = self.encounter.settings.get("rendering", {}).get("enemy_sprites")
-        sprites = self._enemy_parts(self.game_settings)
-        if not sprites and sprite_path and not self.demo:
-            sprites = load_enemy_sprites(self.encounter_path.parent / sprite_path)
-        self._install_enemy_sprites(sprites)
+        self._install_enemy_sprites(self._load_enemy_sprites(self.game_settings))
+
+    def _load_enemy_sprites(self, settings):
+        if self.demo:
+            return {}
+        rendering = self.encounter.settings.get("rendering", {})
+        folder = self.encounter_path.parent
+        sprites = self._enemy_parts(settings)
+        legacy_path = rendering.get("enemy_sprites")
+        if not sprites and legacy_path:
+            sprites = load_enemy_sprites(folder / legacy_path)
+        supplemental_path = rendering.get("supplemental_enemy_sprites")
+        if not supplemental_path:
+            return sprites
+        try:
+            supplemental = load_enemy_sprites(folder / supplemental_path)
+        except BaseException:
+            for sprite in sprites.values():
+                sprite.close()
+            raise
+        for kind in sprites.keys() & supplemental.keys():
+            sprites[kind].close()
+        sprites.update(supplemental)
+        return sprites
 
     def _enemy_parts(self, settings):
         if not self.pbr_enabled:
@@ -85,6 +105,8 @@ class EncounterApplication(MovementApplication):
         for sprite in sprites.values():
             sprite.scale *= self.enemy_sprite_scale
         self.encounter_view.sprites = sprites
+        self.enemy_sprite_bounds = {kind: sprite.reference_body_bounds() for kind, sprite in sprites.items()
+                                    if not sprite.part_counts}
         self.encounter.sprite_death_seconds = {kind: sprite.death_seconds for kind, sprite in sprites.items()}
 
     @contextmanager
@@ -94,7 +116,7 @@ class EncounterApplication(MovementApplication):
             reload_parts = (any(sprite.part_counts for sprite in current.values())
                             and (settings.texture_quality, settings.upscale_aa)
                             != (self.game_settings.texture_quality, self.game_settings.upscale_aa))
-            candidate = self._enemy_parts(settings) if reload_parts else {}
+            candidate = self._load_enemy_sprites(settings) if reload_parts else {}
             installed = False
 
             def commit():
@@ -137,10 +159,18 @@ class EncounterApplication(MovementApplication):
             targets[enemy_id] = target
             if self.hud:
                 if enemy_id not in self.hud.enemies:
-                    self.hud.enemies[enemy_id] = {"name": f"{profile.name} {enemy_id}",
+                    name = f"{profile.name} {enemy_id}" if self.debug_controls else profile.name
+                    self.hud.enemies[enemy_id] = {"name": name,
                                                    "health": Health(enemy.health, profile.health)}
                 entry = self.hud.enemies[enemy_id]
                 entry["position"], entry["position_m"] = (x, center_y), position
+                bounds = self.enemy_sprite_bounds.get(profile.kind)
+                if bounds is not None:
+                    left, top, width, height = bounds
+                    entry["world_bounds"] = (x + left, foot + top, width, height)
+                    entry["body_position"] = (x, foot + top + height / 2)
+                    continue
+                entry.pop("body_position", None)
                 half_width, head = ENEMY_BODY_EXTENTS[profile.kind]
                 scale = self.enemy_sprite_scale if profile.kind in sprites else 1
                 height = profile.height_pixels + head

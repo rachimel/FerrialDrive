@@ -47,6 +47,8 @@ class MovementApplication:
     parts_only = False
     pbr_enabled = False
     retired_player_motions = frozenset()
+    hud_type = MovementHud
+    debug_controls = True
 
     def __init__(self, config_path, *, demo=False, capture=None, capture_frame=1, report=None, script=None, profile=None,
                  record_directory=None, record_step=2, settings_file=None, movement_speed_multiplier=1, mute=False, theme_file=None,
@@ -257,7 +259,7 @@ class MovementApplication:
         hud = self.config.get("hud")
         self.loading_progress(0.03, "화면 준비")
         if hud:
-            self.hud = MovementHud(self.relative_path(hud["config"]), self.relative_path(hud["preset"]),
+            self.hud = self.hud_type(self.relative_path(hud["config"]), self.relative_path(hud["preset"]),
                                    camera_motion_blur=hud.get("camera_motion_blur"), settings_store=self.settings_store,
                                    theme_file=self.theme_file, overdrive_settings=self.overdrive_settings,
                                    energy_settings=self.energy_settings, targeting=self.config.get("targeting"),
@@ -880,6 +882,9 @@ class MovementApplication:
                 self.keys.clear()
                 self.release_attack()
                 return
+            elif action == "new_game":
+                self.perform_hud_action(action)
+                return
             elif action in ("resume", "show_hud"):
                 self.paused = False
                 self.hud.scene = "combat"
@@ -911,11 +916,14 @@ class MovementApplication:
                     self.hud.mouse = self.mouse
                     self.hud.select_mouse_target()
                     return
-                actions = {p.SDLK_F1: "damage_target", p.SDLK_F2: "damage_player",
-                           p.SDLK_F3: "energy_down", p.SDLK_F4: "energy_up",
-                           p.SDLK_r: "activate_overdrive", p.SDLK_F6: "overdrive", p.SDLK_F7: "target_size", p.SDLK_F8: "absorb", p.SDLK_F9: "dash",
-                           p.SDLK_c: "counter", p.SDLK_t: "toggle_target", p.SDLK_v: "ultimate",
-                           p.SDLK_b: "dialogue", p.SDLK_e: "swap", p.SDLK_f: "loadout", p.SDLK_4: "level"}
+                actions = {p.SDLK_r: "activate_overdrive", p.SDLK_v: "ultimate",
+                           p.SDLK_e: "swap", p.SDLK_f: "loadout"}
+                if self.debug_controls:
+                    actions.update({p.SDLK_F1: "damage_target", p.SDLK_F2: "damage_player",
+                                    p.SDLK_F3: "energy_down", p.SDLK_F4: "energy_up",
+                                    p.SDLK_F6: "overdrive", p.SDLK_F7: "target_size",
+                                    p.SDLK_F8: "absorb", p.SDLK_F9: "dash", p.SDLK_c: "counter",
+                                    p.SDLK_t: "toggle_target", p.SDLK_b: "dialogue", p.SDLK_4: "level"})
                 if event.key in actions:
                     self.perform_hud_action(actions[event.key])
                     self.energy_level = self.hud.state.energy_level
@@ -931,7 +939,7 @@ class MovementApplication:
             if down:
                 if event.key == p.SDLK_F10:
                     self.running = False
-                elif event.key == p.SDLK_F12 and self.part_sprite is not None:
+                elif self.debug_controls and event.key == p.SDLK_F12 and self.part_sprite is not None:
                     if self.parts_only:
                         self.part_sprite.direction_enabled = not self.part_sprite.direction_enabled
                         label = "방향 보간 ON" if self.part_sprite.direction_enabled else "8방향"
@@ -947,13 +955,13 @@ class MovementApplication:
                         self.hud.aiming = False
                 elif event.key == p.SDLK_F5:
                     self.reset()
-                elif event.key == p.SDLK_g:
+                elif self.debug_controls and event.key == p.SDLK_g:
                     self.grid = not self.grid
-                elif event.key == p.SDLK_h:
+                elif self.debug_controls and event.key == p.SDLK_h:
                     self.show_shadow = not self.show_shadow
-                elif event.key == p.SDLK_i:
+                elif self.debug_controls and event.key == p.SDLK_i:
                     self.interpolation_enabled = not self.interpolation_enabled
-                elif event.key in (p.SDLK_1, p.SDLK_2, p.SDLK_3) and not self.paused:
+                elif self.debug_controls and event.key in (p.SDLK_1, p.SDLK_2, p.SDLK_3) and not self.paused:
                     self.set_energy_level(event.key - p.SDLK_1 + 1)
                 elif event.key == p.SDLK_SPACE and not self.paused and not (self.hud and self.hud.blocking):
                     if self.hud:

@@ -865,3 +865,7 @@
 ## FDLOG-20261121-near-enemy-deferred-pbr
 
 - [근거리 적 Deferred PBR과 Box 마스크 시험](2026-11-21-near-enemy-deferred-pbr.md)의 사용자 발언 시각은 [[FDLOG_MISSING_TIME:FDLOG-20261121-near-enemy-deferred-pbr:U1-U2]]이다. 검색 단서는 `근거리 적만 대상으로 Deferred PBR 테스트`와 `KeyFrame만 저장하고 보간`이다.
+
+## FDLOG-20261122-shock-bot-game-entry
+
+- [Shock Bot 교전과 본편 진입점](2026-11-22-shock-bot-game-entry.md)의 사용자 발언 시각은 [[FDLOG_MISSING_TIME:FDLOG-20261122-shock-bot-game-entry:U1-U2]]다. 검색 단서는 `일단 인간형 적 만들어 둔거 연결하자`와 `승인하고 연결`이다.

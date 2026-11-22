@@ -113,6 +113,15 @@ class EnemySprite:
             return self.part_counts[motion] / 12
         return self.resource.clips[f"{motion}/s"].duration_ms / 1000
 
+    def reference_body_bounds(self):
+        """베이크한 중립 자세의 8방향 화면 범위를 접지점 기준으로 반환한다."""
+        frames = [self.resource.clips[f"move/{direction}"].frames[0] for direction in SCREEN_DIRECTIONS]
+        left = min(-frame.pivot[0] for frame in frames)
+        top = min(frame.pivot[1] - frame.rect[3] for frame in frames)
+        right = max(frame.rect[2] - frame.pivot[0] for frame in frames)
+        bottom = max(frame.pivot[1] for frame in frames)
+        return tuple(value * self.scale for value in (left, top, right - left, bottom - top))
+
     def playback(self, enemy):
         direction = direction_name((enemy.facing.x, enemy.facing.y))
         if not enemy.alive:

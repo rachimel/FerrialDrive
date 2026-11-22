@@ -41,6 +41,7 @@ class EncounterView:
         self.deferred_enemy_keypose_samples_offsets = False
         self.deferred_pbr = self.deferred_box_shadows = None
         self.show_enemy_labels = False
+        self.show_test_status = True
 
     def point(self, position_m, height_pixels=0):
         x, y = self.projection.project((position_m.x, position_m.y))
@@ -271,10 +272,11 @@ class EncounterView:
                    "small", color, align="center")
         for x, top in break_labels:
             r.text("Break", x, top, "small", "#FFE1B0", align="center")
-        alive = sum(enemy.alive for enemy in encounter.enemies.values())
-        r.rect(Rect(width / 2 - 270, 164, 540, 32), "#101D2B", .85)
-        r.text(f"COMBAT TEST v1.5 · 남은 적 {alive}/{len(encounter.enemies)} · F5 재시작",
-               width / 2, 170, "small", "#D5E3EF", align="center")
+        if self.show_test_status:
+            alive = sum(enemy.alive for enemy in encounter.enemies.values())
+            r.rect(Rect(width / 2 - 270, 164, 540, 32), "#101D2B", .85)
+            r.text(f"COMBAT TEST v1.5 · 남은 적 {alive}/{len(encounter.enemies)} · F5 재시작",
+                   width / 2, 170, "small", "#D5E3EF", align="center")
         if encounter.result != "running":
             r.rect(Rect(width / 2 - 240, 215, 480, 110), "#101D2B", .95)
             text = "훈련 완료 · 적 전멸" if encounter.result == "victory" else "기체 파괴 · 훈련 종료"

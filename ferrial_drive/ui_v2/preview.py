@@ -111,10 +111,12 @@ class HudPreview:
         self.auto_target = MouseAutoTargeting(settings["range_pixels"], settings["aim_range_pixels"],
                                                **self.config.data["v2"]["auto_targeting"])
         self.targets_enabled, self.aiming = True, False
-        self.selected_target_id = data["initial_target_id"]
+        self.selected_target_id = data.get("initial_target_id")
         self.auto_target.reset(self.selected_target_id)
-        enemy = self.enemies[self.selected_target_id]
-        target = TargetInfo(enemy["name"], enemy["health"])
+        target = None
+        if self.selected_target_id is not None:
+            enemy = self.enemies[self.selected_target_id]
+            target = TargetInfo(enemy["name"], enemy["health"])
         px, py = self.player_world
         contacts = tuple(RadarContact((entry["position"][0] - px) / settings["aim_range_pixels"],
                                       (py - entry["position"][1]) / settings["aim_range_pixels"],
@@ -147,7 +149,7 @@ class HudPreview:
         self.level_counter = RollingCounter(duration, self.state.energy_level, **counter_motion)
         duration = self.config.data["health_trail"]["duration_seconds"]
         self.player_health = HealthTrail(duration, hud.player_health.ratio)
-        self.target_health = HealthTrail(duration, hud.target.health.ratio)
+        self.target_health = HealthTrail(duration, target.health.ratio if target else 0)
         flash = self.config.data["v2"]["style"]["health_damage_flash"]
         self.player_flash = HealthDamageFlash(flash["hold_seconds"], flash["fade_seconds"], attack_seconds=flash["attack_seconds"])
         self.target_flash = HealthDamageFlash(flash["hold_seconds"], flash["fade_seconds"], attack_seconds=flash["attack_seconds"])

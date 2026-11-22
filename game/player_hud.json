@@ -1,0 +1,28 @@
+{
+  "player_name": "플레이어",
+  "player_world_position": [0, 0],
+  "player_health": {"current": 1000, "maximum": 1000},
+  "attack_direction_x": 1,
+  "loadouts": [
+    {
+      "melee": {"name": "도검", "base_attribute": "SLASH", "auxiliary_kind": "counter"},
+      "ranged": {"name": "PDW", "rounds": 45, "base_attribute": "IMPACT", "auxiliary_kind": "back_weapon"}
+    },
+    {
+      "melee": {"name": "톤파", "base_attribute": "IMPACT", "auxiliary_kind": "counter"},
+      "ranged": {"name": "아킴보 샷건", "rounds": 18, "base_attribute": "IMPACT", "auxiliary_kind": "back_weapon"}
+    }
+  ],
+  "active_loadout_index": 0,
+  "active_weapon_kind": "melee",
+  "enemies": [],
+  "dialogue": {"speaker": "", "lines": []},
+  "combo_count": 0,
+  "total_damage_dealt": 0,
+  "energy_ratio": 0,
+  "energy_level": 1,
+  "overdrive": false,
+  "counter": false,
+  "dash_ready": true,
+  "target_body_size_pixels": [30, 27]
+}

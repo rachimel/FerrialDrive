@@ -1,0 +1,29 @@
+{
+  "rendering": {
+    "sprite_scale": 1.25,
+    "enemy_sprites": "../data/runtime/catalog/prerender/enemy_humanoid_shock_bot_r02/enemy_sprites.json"
+  },
+  "knockback": {
+    "duration_seconds": 0.12,
+    "death_seconds": 0.22,
+    "distance_m_by_kind": {"humanoid": 0.7}
+  },
+  "gun_knockback": {
+    "duration_seconds": 0.06,
+    "distance_m_by_kind": {"humanoid": 0.07}
+  },
+  "profiles": {
+    "humanoid": {
+      "name": "Shock Bot", "kind": "humanoid", "health": 1200,
+      "radius_m": 2.5, "height_pixels": 48, "hit_radius_pixels": 34,
+      "speed_mps": 32, "melee_reach_m": 11, "melee_damage": 75,
+      "preferred_range_m": 23, "fire_range_m": 85, "shot_damage": 30,
+      "projectile_speed_mps": 105, "projectile_range_m": 190,
+      "windup_seconds": 0.3, "active_seconds": 0.18, "recovery_seconds": 0.5,
+      "color": "#AEADDF"
+    }
+  },
+  "spawns": [
+    {"id": "H1", "profile": "humanoid", "position_m": [532.043, 518.5]}
+  ]
+}

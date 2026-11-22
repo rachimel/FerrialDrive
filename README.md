@@ -5,7 +5,9 @@ JRPG식 3/4 Top-Down 화면과 사전 렌더링한 2D 에셋을 사용한다.
 
 ## 현재 상태
 
-3D 제작 기준은 **Blender 모델링 → 리그 없는 형상 → Unreal 새 리깅·애니메이션·프리렌더 → PNG 파츠+JSON → 툴 2D 조립·패킹 → Pico2D**다. 기존 Blender 리그는 재사용하지 않는다. 프리렌더는 Unreal에서 수행하고 PNG 파츠+JSON을 툴의 2D 조립·패킹으로 인계한다.  동작은 짧은 초안을 전체 재생하며 검수·수정한다. 별도 KeyPose 사전 승인과 Pose Tool은 현행 흐름에서 제외한다. [역할·지원 상태](docs/ai-asset-pipeline/unreal_pipeline.md)를 따른다.
+본편 진입점은 `python main.py`다. 타이틀에서 **START → NEW GAME**을 선택하면 Shock Bot 한 기와 훈련 교전을 시작한다. **Esc**로 일시정지 메뉴를 열고 **F5**로 교전을 다시 시작한다. 기본 도형으로 실행하려면 `python main.py --demo --mute`를 사용한다.
+
+3D 제작 기준은 **Blender 모델링 → 리그 없는 형상 → Unreal 새 리깅·애니메이션·프리렌더 → PNG 파츠+JSON → 툴 2D 조립·패킹 → Pico2D**다. 기존 Blender 리그는 재사용하지 않는다. 프리렌더는 Unreal에서 수행하고 PNG 파츠+JSON을 툴의 2D 조립·패킹으로 인계한다.  동작은 짧은 초안을 전체 재생하며 검수·수정한다. [역할·지원 상태](docs/ai-asset-pipeline/unreal_pipeline.md)를 따른다.
 
 이동·UI 훈련장은 `tests/sword_movement_test.py`에서 이동·검 공격·표적 명중과 UI v2를 함께 확인한다. 게임 에셋 없는 공개 도형 시연은 `--demo`로 실행한다. [현재 범위와 조작](docs/unit-tests/ui_unit_test.md)을 따른다.
 

@@ -15,7 +15,7 @@ from .radar import RadarMotion
 
 
 class MovementHud(HudPreview):
-    def __init__(self, config_path, preset_path, *, camera_motion_blur=None, settings_store=None, theme_file=None, overdrive_settings=None, energy_settings=None, targeting=None, player=None):
+    def __init__(self, config_path, preset_path, *, camera_motion_blur=None, settings_store=None, theme_file=None, overdrive_settings=None, energy_settings=None, targeting=None, player=None, initial_scene="combat", continuation=None):
         if (targeting or {}).get("acquisition", "visible") != "visible":
             raise ValueError("훈련장 록온 획득은 화면 가시성을 사용한다.")
         self.distance_switch = {"enabled": False, "far_ratio": .7, "near_ratio": .55,
@@ -29,8 +29,9 @@ class MovementHud(HudPreview):
                 or min(settings["switch_delay_seconds"], settings["manual_hold_seconds"]) < 0):
             raise ValueError("화면 거리 교체 비율·대기 시간이 유효하지 않다.")
         self.player = player
-        super().__init__(config_path, initial_scene="combat", preset_path=preset_path, theme_file=theme_file,
-                         overdrive_settings=overdrive_settings, energy_settings=energy_settings)
+        super().__init__(config_path, initial_scene=initial_scene, preset_path=preset_path, theme_file=theme_file,
+                         overdrive_settings=overdrive_settings, energy_settings=energy_settings,
+                         continuation=continuation)
         if settings_store is not None:
             self.graphics_settings.store = settings_store
             self.graphics_settings.saved = self.graphics_settings.draft = settings_store.load()
@@ -291,14 +292,16 @@ class MovementHud(HudPreview):
         if not update_markers:
             return
         for track in self.lock_motion.tracks:
-            x, y = self.camera.world_to_screen(self.enemies[track.target_id]["position"])
+            target = self.enemies[track.target_id]
+            x, y = self.camera.world_to_screen(target.get("body_position", target["position"]))
             track.body = Rect(x - track.body.width / 2, y - track.body.height / 2,
                               track.body.width, track.body.height)
 
     def set_target_size(self, amount):
         super().set_target_size(amount)
         if self.selected_target_id is not None:
-            x, y = self.camera.world_to_screen(self.enemies[self.selected_target_id]["position"])
+            target = self.enemies[self.selected_target_id]
+            x, y = self.camera.world_to_screen(target.get("body_position", target["position"]))
             size = 52 * amount
             self.state = replace(self.state, target_body=Rect(x - size / 2, y - size / 2, size, size))
 
