@@ -117,7 +117,7 @@ def main():
             saved[material.name] = [(link.from_socket, link.to_socket) for link in output_node.inputs["Surface"].links]
             size = request.get("size", 1024) if material.name in chosen else 1
             image = bpy.data.images.new(f"UE_{index:02d}_{channel}", width=size, height=size, alpha=False, float_buffer=False)
-            image.colorspace_settings.name = "sRGB" if channel == "base_color" else "Non-Color"
+            image.colorspace_settings.name = "sRGB" if channel in ("base_color", "emission_color") else "Non-Color"
             node = tree.nodes.new("ShaderNodeTexImage")
             node.image = image
             node.select = True
@@ -126,7 +126,8 @@ def main():
             images[material.name] = image
             if channel != "normal":
                 emit = tree.nodes.new("ShaderNodeEmission")
-                socket_name = {"base_color":"Base Color", "roughness":"Roughness", "metallic":"Metallic", "coat":"Coat Weight"}.get(channel)
+                socket_name = {"base_color":"Base Color", "roughness":"Roughness", "metallic":"Metallic", "coat":"Coat Weight",
+                               "emission_color":"Emission Color"}.get(channel)
                 if channel == "energy_mask":
                     mask = tree.nodes.get("FD_EnergyMask")
                     if mask:

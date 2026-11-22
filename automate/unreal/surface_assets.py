@@ -51,6 +51,7 @@ def import_file(filename, destination, options=None):
 def make_material(name, row, folder, source):
     import unreal
     library = unreal.MaterialEditingLibrary
+    name = row.get("asset_name", name)
     material = unreal.AssetToolsHelpers.get_asset_tools().create_asset(name, folder, unreal.Material, unreal.MaterialFactoryNew())
     material.set_editor_property("use_material_attributes",True)
     attributes = library.create_material_expression(material,unreal.MaterialExpressionMakeMaterialAttributes)
@@ -60,11 +61,12 @@ def make_material(name, row, folder, source):
             raise RuntimeError("재질 입력 연결 실패: "+field)
     nodes = {}
     for channel, filename in row["maps"].items():
+        is_color = channel in ("base_color", "emission_color")
         textures = import_file(source/filename, folder+"/Textures")
         texture = next(t for t in textures if isinstance(t, unreal.Texture2D))
-        texture.set_editor_property("srgb", channel == "base_color")
+        texture.set_editor_property("srgb", is_color)
         compression = (unreal.TextureCompressionSettings.TC_NORMALMAP if channel == "normal" else
-                       unreal.TextureCompressionSettings.TC_DEFAULT if channel == "base_color" else unreal.TextureCompressionSettings.TC_MASKS)
+                       unreal.TextureCompressionSettings.TC_DEFAULT if is_color else unreal.TextureCompressionSettings.TC_MASKS)
         texture.set_editor_property("compression_settings", compression)
         if channel == "normal":
             texture.set_editor_property("flip_green_channel", True)
@@ -73,7 +75,7 @@ def make_material(name, row, folder, source):
         node.set_editor_property("parameter_name", channel)
         node.set_editor_property("texture", texture)
         node.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL if channel == "normal" else
-                                 unreal.MaterialSamplerType.SAMPLERTYPE_COLOR if channel == "base_color" else unreal.MaterialSamplerType.SAMPLERTYPE_MASKS)
+                                 unreal.MaterialSamplerType.SAMPLERTYPE_COLOR if is_color else unreal.MaterialSamplerType.SAMPLERTYPE_MASKS)
         nodes[channel] = node
     props = {"base_color":"basecolor", "roughness":"roughness", "metallic":"metallic", "normal":"normal", "coat":"clearcoat"}
     if "coat" in nodes or row.get("coat", 0):
@@ -93,14 +95,18 @@ def make_material(name, row, folder, source):
         node = library.create_material_expression(material,unreal.MaterialExpressionConstant)
         node.set_editor_property("r",value)
         connect(node,"",prop)
-    color = library.create_material_expression(material,unreal.MaterialExpressionVectorParameter)
-    color.set_editor_property("parameter_name","EnergyColor")
-    color.set_editor_property("default_value",unreal.LinearColor(*row["energy_color"]))
+    if "emission_color" in nodes:
+        emission_color, emission_output = nodes["emission_color"], "RGB"
+    else:
+        emission_color = library.create_material_expression(material, unreal.MaterialExpressionVectorParameter)
+        emission_color.set_editor_property("parameter_name", "EnergyColor")
+        emission_color.set_editor_property("default_value", unreal.LinearColor(*row["energy_color"]))
+        emission_output = ""
     strength = library.create_material_expression(material,unreal.MaterialExpressionScalarParameter)
     strength.set_editor_property("parameter_name","EnergyStrength")
     strength.set_editor_property("default_value",row["energy_strength"])
     multiply = library.create_material_expression(material,unreal.MaterialExpressionMultiply)
-    library.connect_material_expressions(color,"",multiply,"A")
+    library.connect_material_expressions(emission_color, emission_output, multiply, "A")
     library.connect_material_expressions(strength,"",multiply,"B")
     if "energy_mask" in nodes:
         masked = library.create_material_expression(material,unreal.MaterialExpressionMultiply)
