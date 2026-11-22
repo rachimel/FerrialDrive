@@ -165,8 +165,8 @@ class Smaa1x:
             sampler.glBindTexture(0x0DE1, previous)
             sampler.glActiveTexture(0x84C0)
 
-    def _upload_metrics(self, sampler):
-        width, height = self.size
+    def _upload_metrics(self, sampler, size=None):
+        width, height = self.size if size is None else size
         sampler.glUniform4f(sampler.uniforms["metrics"], 1 / width, 1 / height, width, height)
 
     def draw(self, bicubic, native_texture, native_size, source, destination, pixels, render_target):
@@ -193,31 +193,37 @@ class Smaa1x:
             blend.draw(color, self.size, rect, destination)
 
     def draw_sheet(self, paint_color, output, rects, pixels, render_target, *, gl_sheet=None):
-        self.ensure_size(*pixels)
-        color, edges, weights = self.targets
+        layers = gl_sheet.smaa_layers if gl_sheet else None
+        if layers is None:
+            self.ensure_size(*pixels)
+            color, edges, weights = self.targets
+            size = self.size
+        else:
+            color, edges, weights = layers.keys
+            size = layers.size
         edge, weight, blend = self.programs
         regions = [(rect, rect) for rect in rects]
         target = gl_sheet.target if gl_sheet else lambda texture, size: render_target(self.pico, texture)
         batch = gl_sheet.batch if gl_sheet else lambda sampler: sampler.batch()
         bind = gl_sheet.bind_input if gl_sheet else self.bind_input
-        with target(color, self.size):
+        with target(color, size):
             paint_color()
-        with (target(edges, self.size), batch(edge), bind(edge, 0, color, sdl=True)):
+        with (target(edges, size), batch(edge), bind(edge, 0, color, sdl=True)):
             edge.glDisable(0x0BE2)
-            self._upload_metrics(edge)
+            self._upload_metrics(edge, size)
             edge.glUniform1i(edge.uniforms["artwork"], 0)
             edge.draw_rectangles(regions)
-        with (target(weights, self.size), batch(weight), bind(weight, 0, edges, sdl=True),
+        with (target(weights, size), batch(weight), bind(weight, 0, edges, sdl=True),
               bind(weight, 1, self.lookups[0]), bind(weight, 2, self.lookups[1])):
             weight.glDisable(0x0BE2)
-            self._upload_metrics(weight)
+            self._upload_metrics(weight, size)
             weight.glUniform1i(weight.uniforms["artwork"], 0)
             weight.glUniform1i(weight.uniforms["areaLookup"], 1)
             weight.glUniform1i(weight.uniforms["searchLookup"], 2)
             weight.draw_rectangles(regions)
         with (target(output, pixels), batch(blend), bind(blend, 0, color, sdl=True),
               bind(blend, 1, weights, sdl=True)):
-            self._upload_metrics(blend)
+            self._upload_metrics(blend, size)
             blend.glUniform1i(blend.uniforms["artwork"], 0)
             blend.glUniform1i(blend.uniforms["blendWeights"], 1)
             blend.draw_rectangles(regions)

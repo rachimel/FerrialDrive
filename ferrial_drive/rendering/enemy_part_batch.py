@@ -227,9 +227,13 @@ class EnemyPartBatch:
         direct = self._direct_sheet() if upscale and direct_sheet and r.stream_budget is not None else None
         if direct:
             self.output.reserve(output_layout)
-            sheet_upscaler.aa.ensure_size(*self.output.size)
-            textures = (target.texture, *sheet_upscaler.aa.targets, self.texture)
-            with direct.frame(sampler, textures):
+            if direct.smaa_layers is None:
+                sheet_upscaler.aa.ensure_size(*self.output.size)
+                intermediate = sheet_upscaler.aa.targets
+            else:
+                intermediate = ()
+            textures = (target.texture, *intermediate, self.texture)
+            with direct.frame(sampler, textures, smaa_size=self.output.size):
                 with direct.target(target.texture, target.size), direct.batch(sampler):
                     regions = self._paint_groups(groups, copies, direct.bindings)
                 if regions:
