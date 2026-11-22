@@ -5,6 +5,7 @@
     "shared_frame_distance_m": 16,
     "enemy_sprites": "../../data/candidates/enemy_cc0_v1/runtime/enemy_sprites.json",
     "supplemental_enemy_sprites": "../../data/runtime/catalog/prerender/enemy_humanoid_shock_bot_r02/enemy_sprites.json",
+    "enemy_primary_part_sprites": "../../data/runtime/part_motion/enemy_combined_r01/enemy_parts.json",
     "enemy_part_sprites": "../../data/candidates/enemy_cc0_break_r1/runtime/enemy_parts.json",
     "enemy_sparse_sprites": "../../data/runtime/part_motion/enemy_sparse_r01/enemy_parts.json",
     "enemy_repacked_sprites": "../../data/runtime/part_motion/enemy_sparse_r02/enemy_parts.json"

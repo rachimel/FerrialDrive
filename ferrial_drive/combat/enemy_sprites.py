@@ -26,6 +26,7 @@ class EnemySprite:
     muzzle_offsets: dict
     part_counts: dict | None = None
     attack_motions: dict = field(default_factory=dict)
+    part_body_bounds: tuple | None = None
     pose_cache: object = field(default=None, init=False, repr=False)
     body_batch: object = field(default=None, init=False, repr=False)
     shadow_batch: object = field(default=None, init=False, repr=False)
@@ -73,6 +74,10 @@ class EnemySprite:
     def validate(self):
         if not all(isfinite(v) and v > 0 for v in (self.scale, self.stride_m)):
             raise ValueError("적 스프라이트 배율과 보폭은 양수여야 한다.")
+        if self.part_body_bounds is not None and (len(self.part_body_bounds) != 4
+                or not all(isfinite(value) for value in self.part_body_bounds)
+                or min(self.part_body_bounds[2:]) <= 0):
+            raise ValueError("적 본체 범위에 유한한 좌표와 양수 크기가 필요하다.")
         if not isinstance(self.attack_motions, dict):
             raise ValueError("적 공격 모션은 공격 종류별 설정이 필요하다.")
         attacks = [("attack", self.attack_frames)]
@@ -114,7 +119,11 @@ class EnemySprite:
         return self.resource.clips[f"{motion}/s"].duration_ms / 1000
 
     def reference_body_bounds(self):
-        """베이크한 중립 자세의 8방향 화면 범위를 접지점 기준으로 반환한다."""
+        """중립 자세의 8방향 화면 범위를 접지점 기준으로 반환한다."""
+        if self.part_counts:
+            if self.part_body_bounds is None:
+                return None
+            return tuple(value * self.scale for value in self.part_body_bounds)
         frames = [self.resource.clips[f"move/{direction}"].frames[0] for direction in SCREEN_DIRECTIONS]
         left = min(-frame.pivot[0] for frame in frames)
         top = min(frame.pivot[1] - frame.rect[3] for frame in frames)
@@ -257,12 +266,20 @@ class EnemySprite:
         return tuple((x + dx * scale, foot + dy * scale) for dx, dy in offsets[index]) if offsets else ()
 
 
-def load_enemy_part_sprites(path, pico, lighting, settings, timings, stream_budget=None, *, preload=True):
+def load_enemy_part_sprites(path, pico, lighting, settings, timings, stream_budget=None, *, preload=True,
+                            cache_mib=None, preload_mib=None):
     """전투의 적도 플레이어와 동일한 PBR 아틀라스 로더에 올린다."""
     from ferrial_drive.rendering.pico_part_motion import PicoPartMotion
 
     if not path.is_file():
         return {}
+    cache_mib = 48 if cache_mib is None else cache_mib
+    if type(cache_mib) is not int or cache_mib < 1:
+        raise ValueError("적 기종별 아틀라스 캐시는 1 MiB 이상의 정수여야 한다.")
+    if preload_mib is not None and (type(preload_mib) is not int or not 0 <= preload_mib <= cache_mib):
+        raise ValueError("적 아틀라스 선적재는 기종별 캐시 범위의 정수 MiB여야 한다.")
+    cache_bytes = cache_mib * 1024**2
+    preload_bytes = cache_bytes * 3 // 4 if preload_mib is None else preload_mib * 1024**2
     config = json.loads(path.read_text(encoding="utf-8-sig"))
     sprites = {}
     try:
@@ -270,11 +287,13 @@ def load_enemy_part_sprites(path, pico, lighting, settings, timings, stream_budg
             if kind not in ENEMY_KINDS:
                 raise ValueError(f"교전 프로필에서 지원하지 않는 적 유형이다: {kind}")
             source = path.parent / row["qualities"][settings.texture_quality]
+            bounds = tuple(row["body_bounds"]) if "body_bounds" in row else None
             resource = PicoPartMotion(pico, source, timings=timings, direction_warp=False,
-                                      max_directions=32, cache_budget_bytes=48 * 1024**2,
+                                      max_directions=32, cache_budget_bytes=cache_bytes,
                                       pbr_lighting=lighting, upscale_aa=settings.upscale_aa)
             sprite = EnemySprite(resource, 1, row["stride_m"], tuple(row["attack_frames"]),
-                                row.get("muzzle_offsets", {}), row["frames"], row.get("attack_motions", {}))
+                                row.get("muzzle_offsets", {}), row["frames"], row.get("attack_motions", {}),
+                                part_body_bounds=bounds)
             sprites[kind] = sprite
             if "energy_color" in row:
                 color = tuple(row["energy_color"])
@@ -294,7 +313,7 @@ def load_enemy_part_sprites(path, pico, lighting, settings, timings, stream_budg
             motions = dict.fromkeys(("move", "attack", *(spec["motion"] for spec in sprite.attack_motions.values())))
             keys = tuple((motion, direction) for direction in PRELOAD_DIRECTION_ORDER[:2] for motion in motions)
             keys += tuple((motion, direction) for motion in motions for direction in PRELOAD_DIRECTION_ORDER[2:])
-            resource.residency.require(keys, preload_limit_bytes=resource.cache_budget_bytes * 3 // 4)
+            resource.residency.require(keys, preload_limit_bytes=preload_bytes)
             sprite.shared_frames()
     except BaseException:
         for sprite in sprites.values():
@@ -303,16 +322,19 @@ def load_enemy_part_sprites(path, pico, lighting, settings, timings, stream_budg
     return sprites
 
 
-def load_enemy_sprites(path):
+def load_enemy_sprites(path, *, exclude_kinds=()):
     """공개 시연은 로컬 에셋이 없어도 기존 도형으로 실행된다."""
     if not path.is_file():
         return {}
     config = json.loads(path.read_text(encoding="utf-8-sig"))
+    profiles = {kind: row for kind, row in config["profiles"].items() if kind not in exclude_kinds}
+    if not profiles:
+        return {}
     catalog = AssetCatalog.load(path.parent / config["catalog"])
     backend = PicoAssetBackend("linear", layers=("body",))
     sprites = {}
     try:
-        for kind, row in config["profiles"].items():
+        for kind, row in profiles.items():
             definition = catalog.definitions[row["asset"]]
             if kind not in ENEMY_KINDS or definition.kind != "mech":
                 raise ValueError("교전 적 에셋은 지원하는 적 유형의 메카 번들이 필요하다.")

@@ -63,7 +63,7 @@ def frame_state(upper, lower, elapsed_seconds):
         a, b = (row["waist"] for row in clip["anchors"][anchor_first:anchor_first + 2])
         return [x + (y - x) * anchor_alpha for x, y in zip(a, b)]
 
-    shift = [b - a for a, b in zip(waist(upper), waist(lower))]
+    shift = [0, 0, 0] if upper is lower else [b - a for a, b in zip(waist(upper), waist(lower))]
     parts = []
     for name, initial in upper["parts"].items():
         bank = 0 if initial["space"] == "upper" else 1

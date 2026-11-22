@@ -69,3 +69,13 @@ python automate/run.py part-sparse-atlas --catalog 원본_품질폴더/catalog.j
 제작 환경에 NumPy가 필요하다. `--motion 이름`은 비교용 모션만 변환하고 여러 번 지정할 수 있다. `--error-pixels` 기본값은 1.5다. 중간 프레임의 근사 오차가 생기므로 키의 개수와 시각, 원본·후보 텍스처 바이트를 `statistics.json`에 기록한다.
 
 이동 훈련장은 `player_pbr_24/profiles/sparse_keys_r01/{high,medium,low}/catalog.json`을 우선 읽는다. 교전 테스트는 `data/runtime/part_motion/enemy_sparse_r01/{mech,spider}/{high,medium,low}/catalog.json`과 원본의 상대 경로 규약을 유지한 `enemy_parts.json`을 읽는다. 해당 후보가 없으면 기존 카탈로그를 읽는다. 원거리 적은 기종·모션·방향과 초당 60단계로 맞춘 재생 위상이 같을 때 합성 결과를 공유한다.
+
+## 적의 방향별 아틀라스 제한
+
+본편과 교전 테스트는 먼저 `rendering.enemy_primary_part_sprites`를 찾는다. 이 카탈로그 옆에 `crowd_atlas.json`과 `enemy_compact_parts.json`이 있으면 압축 적 카탈로그를 선택한다. 기존 카탈로그에서는 `rendering.enemy_compact_sprites.catalog` 설정을 계속 사용한다. 원거리 군집 시트는 가로 1,024px에 64px 셀을 배치한다. 적 기종·동작·그림자가 들어갈 만큼 행을 늘려 본체와 그림자를 같은 텍스처에서 배치 제출한다.
+
+근거리와 록온은 `(모션, 방향)`에 필요한 PBR 페이지의 주소와 적재 상태를 조회한다. 페이지가 준비되는 동안 같은 기종·동작·방향의 군집 포즈를 표시한다. Shock Bot도 24fps 파츠 표본을 High·Medium·Low로 패킹하며, BC7 색상·축소 RG8 벡터·희소 키포즈·박스 그림자를 사용한다.
+
+- 압축 적 카탈로그의 PBR 텍스처 캐시는 기본 기종당 32 MiB다. 군집 시트나 압축 카탈로그가 로컬에 없으면 해당 기종의 일반 PBR 카탈로그로 실행한다. Shock Bot의 PBR 카탈로그가 없으면 기존 본체 시트를 사용한다.
+- 별도 시험에서는 `rendering.enemy_atlas_cache_mib`로 기종별 캐시, `rendering.enemy_atlas_preload_mib`로 군집 시트 없이 시작할 때의 추가 일괄 선적재 예산을 지정한다. 후자를 생략하면 캐시의 3/4을 사용한다. 예산은 아틀라스 텍스처에 적용한다.
+- 하드웨어 보고서에는 실제 선택한 적 카탈로그, GPU 논리 할당, 올라온 방향·동작 수, PBR 요청과 대체 표시의 프레임 표본을 기록한다.

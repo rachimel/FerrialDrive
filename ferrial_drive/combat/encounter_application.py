@@ -73,13 +73,11 @@ class EncounterApplication(MovementApplication):
         if not supplemental_path:
             return sprites
         try:
-            supplemental = load_enemy_sprites(folder / supplemental_path)
+            supplemental = load_enemy_sprites(folder / supplemental_path, exclude_kinds=sprites)
         except BaseException:
             for sprite in sprites.values():
                 sprite.close()
             raise
-        for kind in sprites.keys() & supplemental.keys():
-            sprites[kind].close()
         sprites.update(supplemental)
         return sprites
 
@@ -88,25 +86,38 @@ class EncounterApplication(MovementApplication):
             return {}
         rendering = self.encounter.settings.get("rendering", {})
         folder = self.encounter_path.parent
-        candidates = ("enemy_repacked_sprites", "enemy_sparse_sprites", "enemy_part_sprites")
-        path = next((folder / rendering[key] for key in candidates
-                    if rendering.get(key) and (folder / rendering[key]).is_file()), None)
-        if path is None:
+        candidates = ("enemy_primary_part_sprites", "enemy_repacked_sprites", "enemy_sparse_sprites",
+                      "enemy_part_sprites")
+        selected = next((key for key in candidates if rendering.get(key) and (folder / rendering[key]).is_file()), None)
+        if selected is None:
             return {}
+        path = folder / rendering[selected]
         atlas_path = path.with_name("crowd_atlas.json")
         atlas = self.encounter_view.crowd_atlas
         if atlas is None and self.crowd_atlas_enabled and atlas_path.is_file():
             atlas = self.encounter_view.crowd_atlas = EnemyCrowdAtlas(self.pico, atlas_path)
+        cache_mib = rendering.get("enemy_atlas_cache_mib")
+        compact = rendering.get("enemy_compact_sprites")
+        if atlas is not None:
+            compact_path = path.with_name("enemy_compact_parts.json")
+            if compact_path.is_file():
+                path = compact_path
+                cache_mib = (compact or {}).get("cache_mib", 32 if cache_mib is None else cache_mib)
+            elif selected != "enemy_primary_part_sprites" and compact and (folder / compact["catalog"]).is_file():
+                path = folder / compact["catalog"]
+                cache_mib = compact.get("cache_mib", cache_mib)
         lighting = self.relative_path(self.config["upper_lower"]["pbr_lighting"])
         return load_enemy_part_sprites(path, self.pico, lighting, settings, self.timings,
-                                       self.part_stream_budget, preload=atlas is None)
+                                       self.part_stream_budget, preload=atlas is None,
+                                       cache_mib=cache_mib,
+                                       preload_mib=rendering.get("enemy_atlas_preload_mib"))
 
     def _install_enemy_sprites(self, sprites):
         for sprite in sprites.values():
             sprite.scale *= self.enemy_sprite_scale
         self.encounter_view.sprites = sprites
-        self.enemy_sprite_bounds = {kind: sprite.reference_body_bounds() for kind, sprite in sprites.items()
-                                    if not sprite.part_counts}
+        self.enemy_sprite_bounds = {kind: bounds for kind, sprite in sprites.items()
+                                    if (bounds := sprite.reference_body_bounds()) is not None}
         self.encounter.sprite_death_seconds = {kind: sprite.death_seconds for kind, sprite in sprites.items()}
 
     @contextmanager

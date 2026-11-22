@@ -93,15 +93,15 @@ def capture(pico, sprites):
                             if index >= body_slots:
                                 raise ValueError("선택한 적 포즈가 고정 시트 용량을 넘는다.")
                             seconds = (start + end) / 2
-                            left, top, width, height = frame_state(clip, clip, seconds)["bounds"]
-                            ratio = min(1, (cell - 2) / max(width, height))
+                            left, top, body_width, body_height = frame_state(clip, clip, seconds)["bounds"]
+                            ratio = min(1, (cell - 2) / max(body_width, body_height))
                             x, y = (index % columns) * cell + 1, (index // columns) * cell + 1
                             destination = resource.draw(sprite.part_clip(name, direction), seconds,
                                                         x + (pivot_x - left) * ratio, y + (pivot_y - top) * ratio,
                                                         scale=ratio / pixel_scale, sample_shadow=False)
                             rows.append([destination.x, destination.y, destination.w, destination.h,
                                          (left - pivot_x) * pixel_scale, (top - pivot_y) * pixel_scale,
-                                         width * pixel_scale, height * pixel_scale])
+                                         body_width * pixel_scale, body_height * pixel_scale])
                             index += 1
                 resource.release_pages()
             shadows = capture_shadows(sprites, body_slots, columns, cell)

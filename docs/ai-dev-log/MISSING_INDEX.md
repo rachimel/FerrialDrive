@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [Shock Bot 파츠 보간·그림자·거리별 최적화](2026-11-22-shock-bot-pbr.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-shock-bot-pbr:U1]]`은 보간·그림자·최적화 규칙 요청의 정확한 시각이다. 검색 단서는 `인간형 적도 보간 추가`, `최적화 규칙`이다.
+
 - [격파한 적의 레이더 표식 제거](2026-11-22-radar-live-enemies.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-radar-live-enemies:U1]]`은 표식 제거 요청의 정확한 시각이다. 검색 단서는 `적 죽으면 Radar에서 사라지게 하자`다.
 
 - [1,000기 독립 교전의 플레이어 HP 10만](2026-11-22-combat-1000-player-hp.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-combat-1000-player-hp:U1-U3]]`는 HP 변경과 기존 프리셋 제거 요청의 정확한 시각이다. 검색 단서는 `HP 10만 모드 적용가능`, `기존 1000기 프리셋은 제거`, `hardware_benchmark`다.
