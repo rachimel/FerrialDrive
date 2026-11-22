@@ -14,7 +14,7 @@ from .geometry import (PerspectivePlane, body_diamond, counter_plaque, hatched_s
                        resource_geometry, segmented_stroke_mesh, slanted_meter, tapered_stroke_mesh)
 from .panels import (PanelGeometry, build_panel_geometry, merge_panel_y_ranges,
                      panel_bright_band_top, scale_panel_geometry)
-from .panel_probe import PanelProbeRenderer
+from .panel_probe import PanelProbeRenderer, cached_counter_font_metrics
 from .effects import (DialoguePanelVisual, HealthHitVisual, OverdriveVisual, ScanlineVisual,
                       UltimateReadyVisual, breathing_opacity, subtle_flicker)
 from .lock_on import LockOnVisual, accent_position, outline_segment
@@ -1001,11 +1001,17 @@ class UiV2View(UiView):
             old = new
         slots = max(len(old), len(new))
         old, new = old.rjust(slots), new.rjust(slots)
-        digit_width = max(r.text_size(str(digit), role)[0] for digit in range(10))
-        comma_width = r.text_size(",", role)[0]
+        metrics = cached_counter_font_metrics(r, role)
+        if metrics is None:
+            digit_width = max(r.text_size(str(digit), role)[0] for digit in range(10))
+            comma_width = r.text_size(",", role)[0]
+            font_height = r.text_size("0", role)[1]
+            ink_height = r.digit_ink_bottom(role)
+        else:
+            digit_width, comma_width, font_height, ink_height = metrics
         widths = [comma_width if char == "," else digit_width for char in new]
         scale = settings["text_scale"]
-        width, height = sum(widths) * scale, r.text_size("0", role)[1] * scale
+        width, height = sum(widths) * scale, font_height * scale
         right = self.config.window["width"] - settings["right_margin_pixels"]
         reference_width = settings["perspective_width_pixels"]
         origin = right - reference_width - height * settings["lean"] / 2 - 2
@@ -1013,7 +1019,7 @@ class UiV2View(UiView):
                                  settings["depth"], settings["lean"], settings["slope"])
         project = lambda px, py: plane.point(reference_width - width + px, py)
         shadow = lambda px, py: (project(px, py)[0] + 2, project(px, py)[1] + 3)
-        ink_bottom = r.digit_ink_bottom(role) * scale
+        ink_bottom = ink_height * scale
         viewport = Rect(0, 0, width, ink_bottom)
         self.counter_base(project, width, ink_bottom, opacity)
         text_alpha = opacity * self.text_flicker()

@@ -7,6 +7,14 @@ from math import ceil, floor
 from .panels import visible_panel_y_range
 
 
+def cached_counter_font_metrics(renderer, role):
+    source = renderer.source if isinstance(renderer, PanelProbeRenderer) else renderer
+    read_metrics = getattr(type(source), "counter_font_metrics", None)
+    if read_metrics is not None:
+        return read_metrics(source, role)
+    return None
+
+
 class PanelProbeRenderer:
     def __init__(self, renderer):
         self.source = renderer
@@ -53,6 +61,9 @@ class PanelProbeRenderer:
 
     @contextmanager
     def scaled(self, amount, anchor):
+        if amount == 1:
+            yield
+            return
         previous = self.scale, self.viewport
         sx, sy = self.scale
         x, y, width, height = self.viewport

@@ -38,6 +38,7 @@ def _filtered_geometry(polygons):
 class PicoV2Renderer(PicoRenderer):
     def __init__(self, font_paths, font_sizes):
         self.ink_bottoms = {}
+        self.counter_metrics = {}
         self.filtered_textures = OrderedDict()
         self.filtered_polygons_batch_enabled = True
         self._filtered_geometry_cache = lru_cache(maxsize=128)(_filtered_geometry)
@@ -876,13 +877,17 @@ class PicoV2Renderer(PicoRenderer):
     @contextmanager
     def scaled(self, amount, anchor):
         """HUD 묶음의 앵커를 유지하며 크기만 조절하고 SDL 상태를 복원한다."""
-        self.flush_batch()
         if not isfinite(amount) or amount <= 0:
             raise ValueError("HUD 크기 배율은 양수여야 한다.")
         p = self.pico
         sx, sy = c_float(), c_float()
-        viewport = p.SDL_Rect()
         p.SDL_RenderGetScale(p.renderer, byref(sx), byref(sy))
+        # 분수 배율에서는 viewport의 정수 왕복이 기존 클립 위치에 영향을 줄 수 있다.
+        if amount == 1 and sx.value == sy.value == 1:
+            yield
+            return
+        self.flush_batch()
+        viewport = p.SDL_Rect()
         p.SDL_RenderGetViewport(p.renderer, byref(viewport))
         # SDL의 viewport 원점도 배율을 받으므로 보상값은 새 배율로 나눈다.
         offset_x = round((viewport.x + (1 - amount) * anchor[0]) / amount)
@@ -904,6 +909,17 @@ class PicoV2Renderer(PicoRenderer):
         if opacity <= 0:
             return
         self._geometry_polygon((first, second, third), self.rgba(color, opacity))
+
+    def counter_font_metrics(self, role):
+        """같은 글꼴의 숫자 폭과 기준선을 패널 조사와 실제 그리기에서 공유한다."""
+        metrics = self.counter_metrics.get(role)
+        if metrics is None:
+            digit_width = max(self.text_size(str(digit), role)[0] for digit in range(10))
+            height = self.text_size("0", role)[1]
+            comma_width = self.text_size(",", role)[0]
+            metrics = digit_width, comma_width, height, self.digit_ink_bottom(role)
+            self.counter_metrics[role] = metrics
+        return metrics
 
     def radar_geometry(self, x, y, radius, thickness, color, opacity, arrows):
         """원형 띠와 적 표식을 하나의 SDL 메시로 제출한다."""
