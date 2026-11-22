@@ -1,5 +1,6 @@
 # 대화 기록의 누락 인덱스
 
+- [HUD 필터 마스크 타깃 재사용](2026-11-23-hud-mask-pool.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-hud-mask-pool:U1]]`은 정확한 요청 시각이다. 검색 단서는 `텍스쳐 배열과 HUD 마스크 재사용`이다.
 - [중형 시트 SMAA 중간 타깃의 배열 저장](2026-11-23-smaa-sheet-array.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-smaa-sheet-array:U1]]`은 정확한 요청 시각이다. 검색 단서는 `완료하면 텍스쳐 배열과 HUD 마스크`다.
 - [근거리 중형 적 파츠·SMAA GL 구간](2026-11-23-enemy-gl-sheet.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-enemy-gl-sheet:U1]]`과 `[[FDLOG_MISSING_TIME:FDLOG-20261123-enemy-gl-sheet:U2]]`는 요청 시각이다. 검색 단서는 `파츠 합성~SMAA를 하나의 GL 구간`과 `OpenGL Best Practices들을 위반하는 파일`이다.
 - [공개 도형 데모의 미준비 음원 처리](2026-11-22-demo-audio-missing.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-demo-audio-missing:U1]]`은 정확한 요청 시각이다. 검색 단서는 `데모에서 음원 파일 없을 땐 경고도`다.

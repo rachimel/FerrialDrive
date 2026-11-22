@@ -122,6 +122,31 @@ class UiV2FilteringTests(unittest.TestCase):
         self.renderer.filtered_polygons(self.shape, "#FFFFFF")
         self.assertTrue(any(0 < value < 255 for value in self.red_values()))
 
+    def test_filtered_target_reuse_resets_modulation_and_preserves_pixels(self):
+        p, r = self.pico, self.renderer
+        shape = (((2, 2), (45, 2), (2, 45)),)
+
+        def capture(texture):
+            r.clear("#172334")
+            self.assertEqual(p.SDL_RenderCopy(p.renderer, texture, None, None), 0)
+            pixels = (c_ubyte * (96 * 96 * 4))()
+            self.assertEqual(p.SDL_RenderReadPixels(p.renderer, None, p.SDL_PIXELFORMAT_RGBA32, pixels, 96 * 4), 0)
+            return bytes(pixels)
+
+        texture = r._filtered_texture(shape, "#59C7E0", 48, 48, 2)
+        expected = capture(texture)
+        p.SDL_SetTextureColorMod(texture, 221, 35, 27)
+        p.SDL_SetTextureAlphaMod(texture, 37)
+        p.SDL_SetTextureBlendMode(texture, p.SDL_BLENDMODE_ADD)
+        r.mask_pool.store(texture)
+        reused = r._filtered_texture(shape, "#59C7E0", 48, 48, 2)
+        try:
+            self.assertIs(reused, texture)
+            self.assertEqual(r.mask_pool.reuses, 1)
+            self.assertEqual(capture(reused), expected)
+        finally:
+            p.SDL_DestroyTexture(reused)
+
     def test_cache_reuses_translation_and_opacity_and_releases_textures(self):
         self.renderer.filtered_polygons(self.shape, "#FFFFFF")
         shifted = tuple(tuple((x + 4, y + 4) for x, y in polygon) for polygon in self.shape)

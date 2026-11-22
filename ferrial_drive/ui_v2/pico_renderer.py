@@ -11,6 +11,7 @@ from struct import Struct
 from ferrial_drive.ui.pico_renderer import PicoRenderer
 from .panels import clip_panel_band, clip_panel_rect, visible_panel_y_range
 from ferrial_drive.rendering.hud_batch import HudBatchQueue, batch_barrier
+from ferrial_drive.rendering.hud_mask_pool import HudMaskPool
 from ferrial_drive.rendering.hud_text_atlas import HudTextAtlas
 
 
@@ -58,6 +59,7 @@ class PicoV2Renderer(PicoRenderer):
         self.particle_instancing_supported = None
         super().__init__(font_paths, font_sizes)
         self.batch_queue = HudBatchQueue(self.pico)
+        self.mask_pool = HudMaskPool(self.pico)
         self.text_atlas = HudTextAtlas(self.pico, self.flush_batch)
 
     def _geometry_polygon(self, points, rgba, *, texture=None, uv=None, colors=None, separate_triangles=False):
@@ -521,7 +523,7 @@ class PicoV2Renderer(PicoRenderer):
                 self.flush_batch()
                 _, old = self.filtered_textures.popitem(last=False)
                 for texture in old if isinstance(old, tuple) else (old,):
-                    p.SDL_DestroyTexture(texture)
+                    self.mask_pool.store(texture)
         self.filtered_textures.move_to_end(key)
         entry = self.filtered_textures[key]
         texture = entry[0] if paired else entry
@@ -551,8 +553,7 @@ class PicoV2Renderer(PicoRenderer):
     @batch_barrier
     def _filtered_texture(self, polygons, color, width, height, samples, *, grain=None, grain_color="#FFFFFF"):
         p = self.pico
-        texture = p.SDL_CreateTexture(p.renderer, p.SDL_PIXELFORMAT_RGBA8888,
-                                      p.SDL_TEXTUREACCESS_TARGET, width * samples, height * samples)
+        texture = self.mask_pool.take(width * samples, height * samples)
         if not texture:
             raise RuntimeError("필터 도형 텍스처 생성 실패")
         target = p.SDL_GetRenderTarget(p.renderer)
@@ -839,6 +840,7 @@ class PicoV2Renderer(PicoRenderer):
             for texture in entry if isinstance(entry, tuple) else (entry,):
                 self.pico.SDL_DestroyTexture(texture)
         self.filtered_textures.clear()
+        self.mask_pool.close()
         self._filtered_geometry_cache.cache_clear()
         self.ink_bottoms.clear()
         super().close()
