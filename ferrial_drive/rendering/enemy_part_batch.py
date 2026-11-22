@@ -47,7 +47,7 @@ class SheetTarget:
         self.texture = None
         self.size = (0, 0)
 
-    def reserve(self, layout):
+    def reserve(self, layout, gl_sheet=None):
         size = tuple(max(old, max(64, 1 << (required - 1).bit_length()))
                      for old, required in zip(self.size, (layout.width, layout.height), strict=True))
         if size == self.size:
@@ -62,23 +62,27 @@ class SheetTarget:
         if p.SDL_SetTextureBlendMode(texture, blend) or p.SDL_SetTextureScaleMode(texture, p.SDL_ScaleModeNearest):
             p.SDL_DestroyTexture(texture)
             raise RuntimeError("적 기체 묶음 합성 설정 실패")
-        self.close()
+        self.close(gl_sheet)
         self.texture, self.size = texture, size
 
-    def close(self):
+    def close(self, gl_sheet=None):
         if self.texture:
+            if gl_sheet is not None:
+                gl_sheet.forget(self.texture)
             self.pico.SDL_DestroyTexture(self.texture)
             self.texture = None
             self.size = (0, 0)
 
 
 class EnemyUpscaleScratch:
-    """현재 기종의 시트 처리에만 쓰는 렌더 타깃과 필터를 공유한다."""
+    """한 교전의 시트 합성용 상태, 렌더 타깃과 필터를 공유한다."""
 
     def __init__(self, pico):
         self.native = SheetTarget(pico)
         self.upscaler = None
         self.unavailable = None
+        self.gl_sheet = None
+        self.gl_sheet_unavailable = False
 
     def get_upscaler(self):
         if self.upscaler is None and self.unavailable is None:
@@ -88,7 +92,18 @@ class EnemyUpscaleScratch:
                 self.unavailable = str(exc)
         return self.upscaler
 
+    def get_gl_sheet(self):
+        if self.gl_sheet is None and not self.gl_sheet_unavailable:
+            try:
+                self.gl_sheet = EnemyGlSheet(self.native.pico)
+            except RuntimeError:
+                self.gl_sheet_unavailable = True
+        return self.gl_sheet
+
     def close(self):
+        if self.gl_sheet is not None:
+            self.gl_sheet.close()
+            self.gl_sheet = None
         self.native.close()
         if self.upscaler is not None:
             self.upscaler.close()
@@ -107,8 +122,6 @@ class EnemyPartBatch:
         self.unavailable = None
         self.tables = OrderedDict()
         self.table_bytes = 0
-        self.gl_sheet = None
-        self.gl_sheet_unavailable = False
 
     @property
     def texture(self):
@@ -221,19 +234,20 @@ class EnemyPartBatch:
         if not copies:
             return {}
         target = self.scratch.native if upscale else self.output
-        target.reserve(native_layout)
+        target.reserve(native_layout, self.scratch.gl_sheet)
         sampler = self.painter.sampler
         before = sampler.submits
-        direct = self._direct_sheet() if upscale and direct_sheet and r.stream_budget is not None else None
+        direct = self.scratch.get_gl_sheet() if direct_sheet and r.stream_budget is not None else None
         if direct:
-            self.output.reserve(output_layout)
-            if direct.smaa_layers is None:
-                sheet_upscaler.aa.ensure_size(*self.output.size)
-                intermediate = sheet_upscaler.aa.targets
-            else:
-                intermediate = ()
-            textures = (target.texture, *intermediate, self.texture)
-            with direct.frame(sampler, textures, smaa_size=self.output.size):
+            textures, intermediate, smaa_size = (target.texture,), (), None
+            if upscale:
+                self.output.reserve(output_layout, direct)
+                textures += (self.texture,)
+                smaa_size = self.output.size
+                if direct.smaa_layers is None:
+                    sheet_upscaler.aa.ensure_size(*smaa_size)
+                    intermediate = tuple(sheet_upscaler.aa.targets)
+            with direct.frame(sampler, textures, smaa_size=smaa_size, intermediate=intermediate):
                 with direct.target(target.texture, target.size), direct.batch(sampler):
                     regions = self._paint_groups(groups, copies, direct.bindings)
                 if regions:
@@ -245,18 +259,10 @@ class EnemyPartBatch:
             with render_target(p, target.texture), scope, textures as bindings:
                 regions = self._paint_groups(groups, copies, bindings)
             if regions:
-                self.output.reserve(output_layout)
+                self.output.reserve(output_layout, self.scratch.gl_sheet)
                 sheet_upscaler.draw(target.texture, target.size, self.texture, self.output.size, regions)
         self.submits = sampler.submits - before
         return copies
-
-    def _direct_sheet(self):
-        if self.gl_sheet is None and not self.gl_sheet_unavailable:
-            try:
-                self.gl_sheet = EnemyGlSheet(self.resource.pico)
-            except RuntimeError:
-                self.gl_sheet_unavailable = True
-        return self.gl_sheet
 
     def _paint_groups(self, groups, copies, bindings):
         r = self.resource
@@ -285,9 +291,7 @@ class EnemyPartBatch:
         return destination.y + self.pad
 
     def close(self):
-        if self.gl_sheet is not None:
-            self.gl_sheet.close()
-        self.output.close()
+        self.output.close(self.scratch.gl_sheet)
         if self.owns_scratch:
             self.scratch.close()
         if self.painter is not None:

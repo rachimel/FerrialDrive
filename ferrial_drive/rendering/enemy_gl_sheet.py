@@ -1,4 +1,4 @@
-"""근거리 적 시트의 합성·확대를 SDL 사이의 한 OpenGL 구간에서 실행한다."""
+"""한 교전의 근거리 적 시트가 공유하는 OpenGL 상태와 타깃."""
 
 from contextlib import contextmanager
 import ctypes as ct
@@ -19,9 +19,8 @@ class EnemyGlSheet:
 
     def __init__(self, pico):
         self.pico = pico
-        self.textures = ()
         self.targets = {}
-        self.size = None
+        self.intermediate = ()
         self.clear_color = (ct.c_float * 4)()
         self.smaa_layers = None
         u, i, ptr = ct.c_uint, ct.c_int, ct.c_void_p
@@ -39,79 +38,104 @@ class EnemyGlSheet:
             except RuntimeError:
                 pass
 
-    def _prepare_targets(self, sampler, textures, smaa_size):
-        layer_names = {}
-        if self.smaa_layers is not None and smaa_size:
-            self.smaa_layers.reserve(sampler, smaa_size)
-            layer_names = {id(key): name for key, name in zip(self.smaa_layers.keys, self.smaa_layers.names[1:])}
-            textures = (*textures, *self.smaa_layers.keys)
-        if len(textures) == len(self.textures) and all(new is old for new, old in zip(textures, self.textures)):
+    def _prepare_targets(self, textures, smaa_size, intermediate):
+        sampler = self.sampler
+        layers = self.smaa_layers
+        if layers is not None and smaa_size is not None:
+            layers.reserve(sampler, smaa_size)
+            intermediate = layers.keys
+        if intermediate and intermediate != self.intermediate:
+            for texture in self.intermediate:
+                self.forget(texture)
+            self.intermediate = intermediate
+        targets = (*textures, *intermediate)
+        if all(id(texture) in self.targets for texture in targets):
             return
-        self._release_targets()
+        layer_names = {id(key): name for key, name in zip(layers.keys, layers.names[1:])} if layers else {}
         old = sampler.integer(0x8069)
         try:
-            for texture in textures:
+            for texture in targets:
+                if id(texture) in self.targets:
+                    continue
                 name = layer_names.get(id(texture))
                 if name is None:
                     if self.pico.SDL_GL_BindTexture(texture, None, None):
                         raise RuntimeError("적 시트 SDL 텍스처를 연결할 수 없다.")
                     name = sampler.integer(0x8069)
-                framebuffer = ct.c_uint()
-                self.glGenFramebuffers(1, ct.byref(framebuffer))
-                if not framebuffer.value:
-                    raise RuntimeError("적 시트 OpenGL 프레임버퍼를 만들 수 없다.")
-                self.targets[id(texture)] = name, framebuffer
-            for name, framebuffer in self.targets.values():
-                self.glBindFramebuffer(DRAW_FRAMEBUFFER, framebuffer.value)
-                self.glFramebufferTexture2D(DRAW_FRAMEBUFFER, COLOR_ATTACHMENT, TEXTURE_2D, name, 0)
-                if self.glCheckFramebufferStatus(DRAW_FRAMEBUFFER) != 0x8CD5:
-                    raise RuntimeError("적 시트 OpenGL 프레임버퍼가 완전하지 않다.")
-        except BaseException:
-            self._release_targets()
-            raise
+                self._attach(texture, name)
         finally:
             sampler.glBindTexture(TEXTURE_2D, old)
-        self.textures = textures
+
+    def _attach(self, texture, name):
+        framebuffer = ct.c_uint()
+        self.glGenFramebuffers(1, ct.byref(framebuffer))
+        if not framebuffer.value:
+            raise RuntimeError("적 시트 OpenGL 프레임버퍼를 만들 수 없다.")
+        try:
+            self._bind_target(framebuffer.value)
+            self.glFramebufferTexture2D(DRAW_FRAMEBUFFER, COLOR_ATTACHMENT, TEXTURE_2D, name, 0)
+            if self.glCheckFramebufferStatus(DRAW_FRAMEBUFFER) != 0x8CD5:
+                raise RuntimeError("적 시트 OpenGL 프레임버퍼가 완전하지 않다.")
+        except BaseException:
+            self.glDeleteFramebuffers(1, ct.byref(framebuffer))
+            raise
+        self.targets[id(texture)] = texture, name, framebuffer
+
+    def _bind_target(self, framebuffer):
+        if self.framebuffer != framebuffer:
+            self.glBindFramebuffer(DRAW_FRAMEBUFFER, framebuffer)
+            self.framebuffer = framebuffer
 
     @contextmanager
-    def frame(self, sampler, textures, *, smaa_size=None):
+    def frame(self, sampler, textures, *, smaa_size=None, intermediate=()):
         p = self.pico
         p.SDL_RenderFlush(p.renderer)
-        framebuffer = sampler.integer(0x8CA6)
-        program, active = sampler.integer(0x8B8D), sampler.integer(0x84E0)
+        self.framebuffer = framebuffer = sampler.integer(0x8CA6)
+        self.program = program = sampler.integer(0x8B8D)
+        active = sampler.integer(0x84E0)
+        self.sampler = sampler
+        self.size = self.blend = None
         with sampler._preserve_raster_attributes(RASTER_STATE):
-            sampler.glActiveTexture(0x84C0)
+            if active != 0x84C0:
+                sampler.glActiveTexture(0x84C0)
             try:
-                self._prepare_targets(sampler, textures, smaa_size)
-                self.sampler = sampler
+                self._prepare_targets(textures, smaa_size, intermediate)
+                sampler.glDisable(0x0C11)
+                self.glColorMask(1, 1, 1, 1)
                 with AtlasTextureBindings(sampler) as bindings:
                     self.bindings = bindings
                     yield
             finally:
-                self.glBindFramebuffer(DRAW_FRAMEBUFFER, framebuffer)
-                sampler.glUseProgram(program)
-                sampler.glActiveTexture(active)
+                self._bind_target(framebuffer)
+                if self.program != program:
+                    sampler.glUseProgram(program)
+                if active != 0x84C0:
+                    sampler.glActiveTexture(active)
+                self.sampler = self.bindings = None
 
     @contextmanager
     def target(self, texture, size):
-        sampler = self.sampler
-        self.size = size
-        self.glBindFramebuffer(DRAW_FRAMEBUFFER, self.targets[id(texture)][1].value)
-        sampler.glViewport(0, 0, *size)
-        sampler.glDisable(0x0C11)
-        self.glColorMask(1, 1, 1, 1)
+        self._bind_target(self.targets[id(texture)][2].value)
+        if self.size != size:
+            self.sampler.glViewport(0, 0, *size)
+            self.size = size
         self.glClearBufferfv(0x1800, 0, self.clear_color)
         yield
 
     @contextmanager
-    def batch(self, sampler):
+    def batch(self, sampler, *, blend=True):
         width, height = self.size
         sampler.output_size = self.size
         sampler.target_flip = -1
-        sampler.glUseProgram(sampler.program)
-        sampler.glEnable(0x0BE2)
-        sampler.glBlendEquationSeparate(0x8006, 0x8006)
-        sampler.glBlendFuncSeparate(0x0302, 0x0303, 1, 0x0303)
+        if sampler.program != self.program:
+            sampler.glUseProgram(sampler.program)
+            self.program = sampler.program
+        if self.blend is None:
+            sampler.glBlendEquationSeparate(0x8006, 0x8006)
+            sampler.glBlendFuncSeparate(0x0302, 0x0303, 1, 0x0303)
+        if blend != self.blend:
+            (sampler.glEnable if blend else sampler.glDisable)(0x0BE2)
+            self.blend = blend
         sampler.glUniform2f(sampler.uniforms["outputSize"], width, height)
         sampler.glUniform1f(sampler.uniforms["targetFlip"], -1)
         sampler.depth = 1
@@ -124,17 +148,20 @@ class EnemyGlSheet:
 
     @contextmanager
     def bind_input(self, sampler, unit, texture, *, sdl=False):
-        name = self.targets[id(texture)][0] if sdl else texture
+        name = self.targets[id(texture)][1] if sdl else texture
         self.bindings.apply(({},), (name,), first_unit=unit)
         yield
 
-    def _release_targets(self):
-        for _, framebuffer in self.targets.values():
+    def forget(self, texture):
+        target = self.targets.pop(id(texture), None)
+        if target is not None:
+            _, _, framebuffer = target
             self.glDeleteFramebuffers(1, ct.byref(framebuffer))
-        self.targets.clear()
-        self.textures = ()
 
     def close(self):
-        self._release_targets()
+        for _, _, framebuffer in self.targets.values():
+            self.glDeleteFramebuffers(1, ct.byref(framebuffer))
+        self.targets.clear()
+        self.intermediate = ()
         if self.smaa_layers is not None:
             self.smaa_layers.close()

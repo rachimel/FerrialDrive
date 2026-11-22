@@ -204,18 +204,20 @@ class Smaa1x:
         edge, weight, blend = self.programs
         regions = [(rect, rect) for rect in rects]
         target = gl_sheet.target if gl_sheet else lambda texture, size: render_target(self.pico, texture)
-        batch = gl_sheet.batch if gl_sheet else lambda sampler: sampler.batch()
+        batch = gl_sheet.batch if gl_sheet else lambda sampler, **_: sampler.batch()
         bind = gl_sheet.bind_input if gl_sheet else self.bind_input
         with target(color, size):
             paint_color()
-        with (target(edges, size), batch(edge), bind(edge, 0, color, sdl=True)):
-            edge.glDisable(0x0BE2)
+        with (target(edges, size), batch(edge, blend=False), bind(edge, 0, color, sdl=True)):
+            if gl_sheet is None:
+                edge.glDisable(0x0BE2)
             self._upload_metrics(edge, size)
             edge.glUniform1i(edge.uniforms["artwork"], 0)
             edge.draw_rectangles(regions)
-        with (target(weights, size), batch(weight), bind(weight, 0, edges, sdl=True),
+        with (target(weights, size), batch(weight, blend=False), bind(weight, 0, edges, sdl=True),
               bind(weight, 1, self.lookups[0]), bind(weight, 2, self.lookups[1])):
-            weight.glDisable(0x0BE2)
+            if gl_sheet is None:
+                weight.glDisable(0x0BE2)
             self._upload_metrics(weight, size)
             weight.glUniform1i(weight.uniforms["artwork"], 0)
             weight.glUniform1i(weight.uniforms["areaLookup"], 1)

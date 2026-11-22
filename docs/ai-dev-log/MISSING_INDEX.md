@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [근거리 적 GL 상태 공통화](2026-11-23-enemy-gl-shared-state.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-enemy-gl-shared-state:U1]]`과 `[[FDLOG_MISSING_TIME:FDLOG-20261123-enemy-gl-shared-state:U2]]`는 정확한 요청 시각이다. 검색 단서는 `렌더링 상태는 중앙에서 관리`와 `무조건 지킬 가이드라인`이다.
+
 - [HUD 필터 마스크 타깃 재사용](2026-11-23-hud-mask-pool.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-hud-mask-pool:U1]]`은 정확한 요청 시각이다. 검색 단서는 `텍스쳐 배열과 HUD 마스크 재사용`이다.
 - [중형 시트 SMAA 중간 타깃의 배열 저장](2026-11-23-smaa-sheet-array.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-smaa-sheet-array:U1]]`은 정확한 요청 시각이다. 검색 단서는 `완료하면 텍스쳐 배열과 HUD 마스크`다.
 - [근거리 중형 적 파츠·SMAA GL 구간](2026-11-23-enemy-gl-sheet.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-enemy-gl-sheet:U1]]`과 `[[FDLOG_MISSING_TIME:FDLOG-20261123-enemy-gl-sheet:U2]]`는 요청 시각이다. 검색 단서는 `파츠 합성~SMAA를 하나의 GL 구간`과 `OpenGL Best Practices들을 위반하는 파일`이다.

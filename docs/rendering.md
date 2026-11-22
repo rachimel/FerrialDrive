@@ -57,6 +57,12 @@ OpenGL 요청을 위해 바꾼 SDL 드라이버 힌트는 초기화 후 원래 �
 
 이전 `ferrial_drive.ui.standalone.run_preview`와 `ferrial_drive.assets.bicubic` import는 호환 어댑터다. 새 실행부는 `runtime`, 새 렌더링 구현은 `rendering`을 사용한다.
 
+## 근거리 적 시트의 GL 상태
+
+교전 뷰의 `EnemyUpscaleScratch`는 기종 간에 `EnemyGlSheet`, 네이티브 확대 입력, SMAA 중간 타깃과 필터를 공유한다. 준비된 페이지를 사용하는 근거리 PBR 배치는 기종에 관계없이 이 경로를 쓴다. 확대가 필요한 시트는 합성부터 Bicubic·SMAA까지 같은 GL 구간에서 그린다.
+
+상태 관리자는 각 시트의 SDL 경계에서 상태를 확보하고 복구한다. 한 구간에서는 프로그램, FBO, 뷰포트, 블렌드와 텍스처 유닛의 바인딩을 기억한다. 크기가 바뀐 타깃의 FBO만 교체한다. 최종 출력 시트는 기종별로 보관해서 SDL의 발 위치 순 합성에 사용한다. [그래픽스 작업 가이드라인](graphics_guidelines.md)
+
 ## 독립 실행·검증
 
 ### 지면 효과 배치

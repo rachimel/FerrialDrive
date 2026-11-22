@@ -24,8 +24,6 @@ def use_shared_frame(enemy, player_position_m, locked_id, distance_m):
 
 
 class EncounterView:
-    direct_sheet_kind = "medium"
-
     def __init__(self, renderer, camera, projection, *, backend="auto"):
         self.renderer, self.camera, self.projection = renderer, camera, projection
         self.primitives = PrimitiveBatch(renderer, backend=backend)
@@ -259,7 +257,7 @@ class EncounterView:
                 if self.upscale_scratch is None:
                     self.upscale_scratch = EnemyUpscaleScratch(sprite.resource.pico)
                 prepared.update(sprite.prepare_bodies(requests, zoom, scratch=self.upscale_scratch,
-                                                      direct_sheet=kind == self.direct_sheet_kind))
+                                                      direct_sheet=True))
                 r.stats["body_batch_submits"] += sprite.body_batch.submits
         r.stats["batched_bodies"] = len(prepared)
         self._draw_bodies(placed, encounter, flashes, zoom, prepared, labels, break_labels, deferred)
