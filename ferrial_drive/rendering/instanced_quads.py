@@ -138,6 +138,7 @@ class InstancedQuads(SdlOpenGLPass):
         self.echo_tints = (ct.c_float * (QUAD_LIMIT * 4))() if echo_instances else None
         self.screen_placements = (ct.c_float * (QUAD_LIMIT * 4))() if screen_depth and not instance_table else None
         self.submits = 0
+        self.direct_target = False
         self.instance_uploads = self.instance_upload_bytes = 0
 
     def _bind_functions(self):
@@ -183,6 +184,9 @@ class InstancedQuads(SdlOpenGLPass):
             self.glBindBuffer(0x88EC, buffer)
 
     def _set_screen_transform(self):
+        if self.direct_target:
+            self.glUniform4f(self.uniforms["screenTransform"], 0, 0, 1, 1)
+            return
         p = self.pico
         vx, vy, vw, vh = self.viewport
         sx, sy = ct.c_float(), ct.c_float()

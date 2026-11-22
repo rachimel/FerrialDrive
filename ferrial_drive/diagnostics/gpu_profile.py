@@ -10,6 +10,7 @@ _ACTIVE = ContextVar("fdrive_gpu_profile", default=None)
 
 # 현재 프로젝트가 사용하는 OpenGL <= 4.5 기능만 허용한다. 새 함수는 검토 후 추가한다.
 PROJECT_GL_FUNCTIONS = frozenset("""glActiveTexture glAttachShader glBegin glBeginQuery glBindBuffer glBindBufferBase glBindTexture
+glGenFramebuffers glDeleteFramebuffers glBindFramebuffer glFramebufferTexture2D glCheckFramebufferStatus glClearBufferfv glColorMask
 glBlendEquationSeparate glBlendFuncSeparate glBufferData glBufferSubData glClearBufferData
 glClientWaitSync glCompileShader glCompressedTexImage2D glCompressedTexSubImage2D glCopyBufferSubData glCreateProgram
 glCreateShader glDeleteBuffers glDeleteProgram glDeleteQueries glDeleteShader glDeleteSync

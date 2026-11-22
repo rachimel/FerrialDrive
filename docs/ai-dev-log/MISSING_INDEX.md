@@ -1,5 +1,6 @@
 # 대화 기록의 누락 인덱스
 
+- [근거리 중형 적 파츠·SMAA GL 구간](2026-11-23-enemy-gl-sheet.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-enemy-gl-sheet:U1]]`과 `[[FDLOG_MISSING_TIME:FDLOG-20261123-enemy-gl-sheet:U2]]`는 요청 시각이다. 검색 단서는 `파츠 합성~SMAA를 하나의 GL 구간`과 `OpenGL Best Practices들을 위반하는 파일`이다.
 - [공개 도형 데모의 미준비 음원 처리](2026-11-22-demo-audio-missing.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-demo-audio-missing:U1]]`은 정확한 요청 시각이다. 검색 단서는 `데모에서 음원 파일 없을 땐 경고도`다.
 - [클린 체크아웃 공개 도형 시연 복구](2026-11-22-clean-checkout-demo.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-clean-checkout-demo:U1]]`은 정확한 요청 시각이다. 검색 단서는 `클린 체크아웃에서 pause_motion.py 빠져서`다.
 - [명중 카메라 충격과 대시 시작 킥](2026-11-22-camera-dash-kick.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-camera-dash-kick:U1]]`은 정확한 요청 시각이다. 검색 단서는 `대시 처음에 카메라에 킥을 많이`다.

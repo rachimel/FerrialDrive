@@ -345,11 +345,11 @@ class AtlasTextureBindings:
     def __exit__(self, *exc):
         self.restore()
 
-    def apply(self, entries, names):
+    def apply(self, entries, names, *, first_unit=0):
         s = self.sampler
         active = 0
         try:
-            for unit, (entry, name) in enumerate(zip(entries, names, strict=True)):
+            for unit, (entry, name) in enumerate(zip(entries, names, strict=True), first_unit):
                 target = entry.get("gl_target", 0x0DE1)
                 key = unit, target
                 if key in self.current and self.current[key] == name:

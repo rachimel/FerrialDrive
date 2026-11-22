@@ -5,6 +5,7 @@ from collections import OrderedDict
 from contextlib import nullcontext
 
 from .atlas_texture_cache import AtlasTextureBindings
+from .enemy_gl_sheet import EnemyGlSheet
 from .part_motion_atlas import frame_phase, frame_state
 from .part_painter import PartPainter
 from .part_upscale import PART_UPSCALE_BORDER, PartSheetUpscaler, render_target
@@ -106,6 +107,8 @@ class EnemyPartBatch:
         self.unavailable = None
         self.tables = OrderedDict()
         self.table_bytes = 0
+        self.gl_sheet = None
+        self.gl_sheet_unavailable = False
 
     @property
     def texture(self):
@@ -144,7 +147,7 @@ class EnemyPartBatch:
             resident.update(missing)
         return table.value
 
-    def prepare(self, requests, scale):
+    def prepare(self, requests, scale, *, direct_sheet=False):
         """보간 위상을 보존하고 Bicubic·SMAA는 기종별 시트에 적용한다."""
         self.submits = 0
         r = self.resource
@@ -221,30 +224,54 @@ class EnemyPartBatch:
         target.reserve(native_layout)
         sampler = self.painter.sampler
         before = sampler.submits
-        upscale_regions = []
-        # 필요할 때 페이지를 올리는 경로는 SDL이 관리하는 GL 상태를 그룹마다 돌려준다.
-        scope = sampler.batch() if r.stream_budget is not None else nullcontext()
-        textures = AtlasTextureBindings(sampler) if r.stream_budget is not None else nullcontext()
-        with render_target(p, target.texture), scope, textures as bindings:
-            for key, (_, state, _, instances, samples, ids, regions) in groups.items():
-                if not instances:
-                    continue
-                bank = r.get(*key)
-                table = self._table(key, bank, samples, bindings=bindings)
-                if table is None:
-                    for enemy_id in ids:
-                        del copies[enemy_id]
-                    continue
-                self.painter.paint(r.cache, (bank,), state, None, energy_color=r.energy_color,
-                    energy_gain=r.energy_mask_gain, rim=r.rim_light, realtime_light=r.realtime_light,
-                    shadow_map=r.shadow_map, pbr_lighting=r.pbr_lighting, sample_shadow=False,
-                    instances=instances, pose_table=table, texture_bindings=bindings)
-                upscale_regions.extend(regions)
-        if upscale_regions:
+        direct = self._direct_sheet() if upscale and direct_sheet and r.stream_budget is not None else None
+        if direct:
             self.output.reserve(output_layout)
-            sheet_upscaler.draw(target.texture, target.size, self.texture, self.output.size, upscale_regions)
+            sheet_upscaler.aa.ensure_size(*self.output.size)
+            textures = (target.texture, *sheet_upscaler.aa.targets, self.texture)
+            with direct.frame(sampler, textures):
+                with direct.target(target.texture, target.size), direct.batch(sampler):
+                    regions = self._paint_groups(groups, copies, direct.bindings)
+                if regions:
+                    sheet_upscaler.draw(target.texture, target.size, self.texture, self.output.size, regions,
+                                        gl_sheet=direct)
+        else:
+            scope = sampler.batch() if r.stream_budget is not None else nullcontext()
+            textures = AtlasTextureBindings(sampler) if r.stream_budget is not None else nullcontext()
+            with render_target(p, target.texture), scope, textures as bindings:
+                regions = self._paint_groups(groups, copies, bindings)
+            if regions:
+                self.output.reserve(output_layout)
+                sheet_upscaler.draw(target.texture, target.size, self.texture, self.output.size, regions)
         self.submits = sampler.submits - before
         return copies
+
+    def _direct_sheet(self):
+        if self.gl_sheet is None and not self.gl_sheet_unavailable:
+            try:
+                self.gl_sheet = EnemyGlSheet(self.resource.pico)
+            except RuntimeError:
+                self.gl_sheet_unavailable = True
+        return self.gl_sheet
+
+    def _paint_groups(self, groups, copies, bindings):
+        r = self.resource
+        upscale_regions = []
+        for key, (_, state, _, instances, samples, ids, regions) in groups.items():
+            if not instances:
+                continue
+            bank = r.get(*key)
+            table = self._table(key, bank, samples, bindings=bindings)
+            if table is None:
+                for enemy_id in ids:
+                    del copies[enemy_id]
+                continue
+            self.painter.paint(r.cache, (bank,), state, None, energy_color=r.energy_color,
+                energy_gain=r.energy_mask_gain, rim=r.rim_light, realtime_light=r.realtime_light,
+                shadow_map=r.shadow_map, pbr_lighting=r.pbr_lighting, sample_shadow=False,
+                instances=instances, pose_table=table, texture_bindings=bindings)
+            upscale_regions.extend(regions)
+        return upscale_regions
 
     def copy(self, record):
         source, destination = record
@@ -254,6 +281,8 @@ class EnemyPartBatch:
         return destination.y + self.pad
 
     def close(self):
+        if self.gl_sheet is not None:
+            self.gl_sheet.close()
         self.output.close()
         if self.owns_scratch:
             self.scratch.close()

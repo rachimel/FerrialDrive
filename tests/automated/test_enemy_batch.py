@@ -155,6 +155,32 @@ class EnemyBatchGpuTests(unittest.TestCase):
             if apply:
                 apply()
 
+    def test_direct_smaa_sheet_matches_sdl_pixels_and_returns_to_sdl(self):
+        from ferrial_drive.rendering.enemy_part_batch import EnemyPartBatch
+
+        resource = self.sprites["medium"].resource
+        previous_mode = resource.upscaler.aa_mode
+        self.addCleanup(self.set_upscale_mode, resource, previous_mode)
+        self.set_upscale_mode(resource, "smaa")
+        resource.residency.require((("move", "0"), ("attack", "2")))
+        batch = EnemyPartBatch(resource)
+        self.addCleanup(batch.close)
+        requests = [(1, "move", "0", .08, 180, 230), (2, "attack", "2", .15, 194, 240)]
+
+        def paint(direct):
+            with patch.object(resource, "stream_budget", AtlasFrameBudget()):
+                copies = batch.prepare(requests, 1.4 / resource.data["pixel_scale"], direct_sheet=direct)
+            self.assertEqual(len(copies), 2)
+            for enemy, *_ in requests:
+                batch.copy(copies[enemy])
+            p = self.pico
+            p.SDL_SetRenderDrawColor(p.renderer, 10, 70, 180, 255)
+            p.SDL_RenderDrawLine(p.renderer, 10, 12, 300, 163)
+
+        self.compare(lambda: paint(False), lambda: paint(True), 0)
+        self.assertIsNotNone(batch.gl_sheet)
+        self.assertEqual(len(batch.gl_sheet.targets), 5)
+
     def test_shadow_geometry_cache_respects_rig_size_and_recent_use(self):
         for kind, sprite in self.sprites.items():
             with self.subTest(kind=kind):

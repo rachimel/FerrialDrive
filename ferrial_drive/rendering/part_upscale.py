@@ -1,6 +1,6 @@
 """네이티브 크기로 합성한 파츠를 알파 보존 Bicubic으로 확대한다."""
 
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 import ctypes as ct
 from math import ceil
 
@@ -190,12 +190,14 @@ class PartSheetUpscaler:
             self.sampler.close()
             raise
 
-    def draw(self, source, source_size, output, output_size, regions):
+    def draw(self, source, source_size, output, output_size, regions, *, gl_sheet=None):
         sampler = self.sampler
 
         def paint_color():
-            with sampler.batch():
-                if self.pico.SDL_GL_BindTexture(source, None, None):
+            batch = gl_sheet.batch(sampler) if gl_sheet else sampler.batch()
+            source_binding = gl_sheet.bind_input(sampler, 0, source, sdl=True) if gl_sheet else nullcontext()
+            with batch, source_binding:
+                if not gl_sheet and self.pico.SDL_GL_BindTexture(source, None, None):
                     raise RuntimeError("적 확대 시트 OpenGL 연결 실패")
                 sampler.glUniform1i(sampler.uniforms["artwork"], 0)
                 sampler.glUniform2f(sampler.uniforms["atlasSize"], *source_size)
@@ -203,7 +205,8 @@ class PartSheetUpscaler:
                 sampler.glUniform1f(sampler.uniforms["premultipliedSource"], 1)
                 sampler.draw_rectangles(regions)
 
-        self.aa.draw_sheet(paint_color, output, [destination for _, destination in regions], output_size, render_target)
+        self.aa.draw_sheet(paint_color, output, [destination for _, destination in regions], output_size,
+                           render_target, gl_sheet=gl_sheet)
 
     def close(self):
         self.aa.close()

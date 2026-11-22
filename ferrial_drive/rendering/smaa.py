@@ -192,28 +192,31 @@ class Smaa1x:
             blend.glUniform1i(blend.uniforms["blendWeights"], 1)
             blend.draw(color, self.size, rect, destination)
 
-    def draw_sheet(self, paint_color, output, rects, pixels, render_target):
+    def draw_sheet(self, paint_color, output, rects, pixels, render_target, *, gl_sheet=None):
         self.ensure_size(*pixels)
         color, edges, weights = self.targets
         edge, weight, blend = self.programs
         regions = [(rect, rect) for rect in rects]
-        with render_target(self.pico, color):
+        target = gl_sheet.target if gl_sheet else lambda texture, size: render_target(self.pico, texture)
+        batch = gl_sheet.batch if gl_sheet else lambda sampler: sampler.batch()
+        bind = gl_sheet.bind_input if gl_sheet else self.bind_input
+        with target(color, self.size):
             paint_color()
-        with (render_target(self.pico, edges), edge.batch(), self.bind_input(edge, 0, color, sdl=True)):
+        with (target(edges, self.size), batch(edge), bind(edge, 0, color, sdl=True)):
             edge.glDisable(0x0BE2)
             self._upload_metrics(edge)
             edge.glUniform1i(edge.uniforms["artwork"], 0)
             edge.draw_rectangles(regions)
-        with (render_target(self.pico, weights), weight.batch(), self.bind_input(weight, 0, edges, sdl=True),
-              self.bind_input(weight, 1, self.lookups[0]), self.bind_input(weight, 2, self.lookups[1])):
+        with (target(weights, self.size), batch(weight), bind(weight, 0, edges, sdl=True),
+              bind(weight, 1, self.lookups[0]), bind(weight, 2, self.lookups[1])):
             weight.glDisable(0x0BE2)
             self._upload_metrics(weight)
             weight.glUniform1i(weight.uniforms["artwork"], 0)
             weight.glUniform1i(weight.uniforms["areaLookup"], 1)
             weight.glUniform1i(weight.uniforms["searchLookup"], 2)
             weight.draw_rectangles(regions)
-        with (render_target(self.pico, output), blend.batch(), self.bind_input(blend, 0, color, sdl=True),
-              self.bind_input(blend, 1, weights, sdl=True)):
+        with (target(output, pixels), batch(blend), bind(blend, 0, color, sdl=True),
+              bind(blend, 1, weights, sdl=True)):
             self._upload_metrics(blend)
             blend.glUniform1i(blend.uniforms["artwork"], 0)
             blend.glUniform1i(blend.uniforms["blendWeights"], 1)
