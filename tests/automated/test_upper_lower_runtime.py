@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from ferrial_drive.combat.aim_follow import AimFollow, AimFollowSettings
 from ferrial_drive.combat.movement_application import MovementApplication
@@ -99,6 +99,32 @@ class UpperLowerRuntimeTest(unittest.TestCase):
 
 
 class PoseCacheTest(unittest.TestCase):
+    def test_swap_pins_keep_direction_resident_without_becoming_fallback_poses(self):
+        from ferrial_drive.rendering.pico_part_motion import PicoPartMotion
+
+        sprite = PicoPartMotion.__new__(PicoPartMotion)
+        sprite.data = {"quality": "high", "motions": {"idle_loop": "0", "sword_sheath": "01", "unwarmed": "2"}}
+        sprite.enabled, sprite.paged, sprite.mixed_directions = True, False, True
+        resources = {}
+
+        def require(keys, **options):
+            resources.update(dict.fromkeys(keys))
+
+        sprite.cache = Mock()
+        sprite.residency = SimpleNamespace(resources=resources, max_directions=2, cache_budget_bytes=160,
+                                           require=Mock(side_effect=require), stream=Mock())
+        budget = object()
+        sprite.enable_streaming(budget, "idle_loop")
+        sprite.pin_streaming_motions(("sword_sheath",))
+        self.assertEqual(sprite.residency.max_directions, 4)
+        sprite.residency.require.assert_called_with((("sword_sheath", "0"), ("sword_sheath", "1")),
+                                                   preload_limit_bytes=120)
+        sprite.prepare_frame(["unwarmed/u2l2"])
+        sprite.residency.stream.assert_called_once_with((("unwarmed", "2"),),
+            (("idle_loop", "0"), ("sword_sheath", "0"), ("sword_sheath", "1")), budget, lookahead=None)
+        self.assertEqual(sprite.display_pose("sword_sheath/u1l0", .1), ("sword_sheath/u1l0", .1, None))
+        self.assertEqual(sprite.display_pose("unwarmed/u2l2", .1), ("idle_loop/u0l0", 0, None))
+
     def test_live_echo_and_body_stay_resident_while_old_motion_is_released(self):
         from ferrial_drive.rendering.pico_pose_table import PicoPoseTable
         class Sprite:

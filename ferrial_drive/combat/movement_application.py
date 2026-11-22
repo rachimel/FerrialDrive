@@ -43,6 +43,13 @@ from ferrial_drive.ui.pico_renderer import PicoRenderer
 from ferrial_drive.ui_v2.movement_hud import MovementHud
 
 
+WEAPON_SWAP_RENDER_MOTIONS = ("sword_sheath", "gun_draw", "gun_holster", "sword_draw")
+WEAPON_SWAP_EXIT_MOTIONS = (
+    "idle_loop", "dash_loop", "boost_loop", "gun_ready", "gun_hip_dash", "gun_aim_dash",
+    "gun_aim_enter", "gun_aim_hold",
+)
+
+
 class MovementApplication:
     parts_only = False
     pbr_enabled = False
@@ -391,6 +398,9 @@ class MovementApplication:
         self.ground = TrainingGroundView(self.renderer, self.projection, self.style,
                                         None if self.demo else self.path("ground"),
                                         sample_colors=self.ground_effects is not None or bool(self.sword_effects))
+        if self.pbr_enabled and self.weapons_enabled:
+            self.loading_progress(0.96, "무기 전환 준비")
+            self.prepare_swap_rendering(self.part_sprite)
         audio = self.config.get("audio", {})
         if audio.get("enabled", False) and not self.mute:
             from ferrial_drive.audio.effects import PicoSoundEffects
@@ -479,6 +489,14 @@ class MovementApplication:
             raise
         return sprite
 
+    @staticmethod
+    def prepare_swap_rendering(parts, live_assets=()):
+        motions = [name for name in WEAPON_SWAP_RENDER_MOTIONS if name not in live_assets]
+        motions.extend(WEAPON_SWAP_EXIT_MOTIONS)
+        if any(name in live_assets and live_assets[name][1] for name in WEAPON_SWAP_RENDER_MOTIONS):
+            motions.extend(("idle_to_dash", "dash_to_idle"))
+        parts.pin_streaming_motions(motions)
+
     @contextmanager
     def prepare_settings(self, settings):
         """기체·그림자를 준비하고 저장 성공 때 함께 교체한다. 게임 진행 상태는 보존한다."""
@@ -499,6 +517,8 @@ class MovementApplication:
                         candidate_surface = self.load_surface_profile(settings)
                         candidate_parts = self.load_part_profile(settings, surface=candidate_surface)
                         candidate_parts.direction_enabled = self.part_sprite.direction_enabled
+                        if self.pbr_enabled and self.weapons_enabled:
+                            self.prepare_swap_rendering(candidate_parts)
                     candidate_pose = PicoPoseTable(self.pico,self.pose_catalog,settings.texture_quality,
                         progress=lambda value:self.draw_settings_progress(),timings=self.timings,
                         parts=candidate_parts or self.part_sprite, surface_parts=candidate_surface, parts_only=self.parts_only)

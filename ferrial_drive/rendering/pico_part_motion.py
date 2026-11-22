@@ -100,6 +100,7 @@ class PicoPartMotion:
         self.draws = self.angular_draws = 0
         self.stream_budget = None
         self.stream_fallbacks = ()
+        self.stream_pins = ()
         self.fallback_draws = 0
         self.draws_by_motion = Counter()
         self.paged_lookahead = None
@@ -144,7 +145,25 @@ class PicoPartMotion:
         if not self.paged:
             self.cache.configure_pool(self.cache_budget_bytes)
         self.residency.require(self.stream_fallbacks)
+        self.stream_pins = self.stream_fallbacks
         self.stream_budget = budget
+
+    def pin_streaming_motions(self, names):
+        if self.stream_budget is None or self.paged:
+            return
+        motions = self.data["motions"]
+        pins = tuple((motion, direction) for motion in dict.fromkeys(names)
+                     for direction in sorted(motions.get(motion, ()))
+                     if (motion, direction) not in self.stream_pins)
+        previous_limit = self.residency.max_directions
+        budget_bytes = self.cache_budget_bytes
+        # 다른 동작에도 기존 캐시 예산의 4분의 1을 남긴다.
+        preload_limit = budget_bytes * 3 // 4 if budget_bytes is not None else None
+        self.residency.max_directions += len(pins)
+        self.residency.require(pins, preload_limit_bytes=preload_limit)
+        loaded = tuple(key for key in pins if key in self.residency.resources)
+        self.stream_pins += loaded
+        self.residency.max_directions = previous_limit + len(loaded)
 
     def display_pose(self, clip_name, seconds, angular_span=None, *, allow_fallback=True):
         if self.stream_budget is None:
@@ -186,6 +205,8 @@ class PicoPartMotion:
                 motion, pair = name.rsplit("/", 1)
                 needed.update(dict.fromkeys(((motion, pair[1]), (motion, pair[3]))))
         if self.stream_budget is not None:
+            if self.stream_pins and not self.residency.resources:
+                self.residency.require(self.stream_pins)
             lookahead = None
             if yaw_pose is not None:
                 motion = yaw_pose[0].rsplit("/", 1)[0]
@@ -193,7 +214,7 @@ class PicoPartMotion:
                     candidates = self.residency.adjacent_candidates(motion, yaw_pose[1])
                     if candidates:
                         _, lookahead = min(candidates)
-            self.residency.stream(tuple(needed), self.stream_fallbacks, self.stream_budget, lookahead=lookahead)
+            self.residency.stream(tuple(needed), self.stream_pins, self.stream_budget, lookahead=lookahead)
             return
         needed = set(needed)
         ordered = sorted(needed)
@@ -392,6 +413,7 @@ class PicoPartMotion:
                 "prefetch_uploads": self.residency.prefetch_uploads, "prefetch_completed": self.residency.prefetch_completed,
                 "coroutine_pages": self.residency.coroutine_pages, "threaded_pages": self.residency.threaded_pages,
                 "fallback_draws": self.fallback_draws,
+                "pinned_directions": len(self.stream_pins),
                 "cache_budget_bytes": self.cache_budget_bytes,
                 "direction_sample_fps": self.direction_sample_fps,
                 "capture_sample_fps": next(iter(self.residency.resources.values()))["data"]["clip"]["fps"] if self.residency.resources else None,

@@ -873,3 +873,7 @@
 ## FDLOG-20261122-benchmark-runner-mute
 
 - [벤치마크 실행 복구와 무음 선택](2026-11-22-benchmark-runner-mute.md)의 사용자 발언 시각은 [[FDLOG_MISSING_TIME:FDLOG-20261122-benchmark-runner-mute:U1-U2]]다. 검색 단서는 `hardware_benchmark.py에 오류`다.
+
+## FDLOG-20261122-weapon-swap-pose-residency
+
+- [검·총 스왑 방향 적재와 대체 포즈](2026-11-22-weapon-swap-pose-residency.md)의 사용자 발언 시각은 [[FDLOG_MISSING_TIME:FDLOG-20261122-weapon-swap-pose-residency:U1]]이다. 검색 단서는 `총기 / 검 스왑 간의 모션`이다.
