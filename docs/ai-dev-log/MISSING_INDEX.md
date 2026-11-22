@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [방향 메타데이터 워커와 GC 지연 확인](2026-11-22-atlas-metadata-worker.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-atlas-metadata-worker:U1]]`은 요청의 정확한 시각이다. 검색 단서는 `방향 메타데이터 준비를 렌더 스레드 밖에서`다.
+
 - [검 잔상 PBR 인스턴싱](2026-11-22-echo-instancing.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-echo-instancing:U1]]`은 요청의 정확한 시각이다. 검색 단서는 `잔상쪽을 instancing으로`다.
 
 - [각도 보간 준비·재투영 단축](2026-11-22-direction-frame.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-direction-frame:U1]]`은 요청의 정확한 시각이다. 검색 단서는 `direction_frame부터 최적화`다.

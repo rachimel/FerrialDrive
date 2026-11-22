@@ -49,11 +49,19 @@ class PartMotionCatalog:
         if self.surface and self.paged:
             raise ValueError("표면 시험본은 방향별 페이지를 사용한다.")
 
-    def direction(self, motion, direction):
+    def has_direction(self, motion, direction):
+        return self.data["motions"][motion][direction] in self.records
+
+    def read_direction(self, motion, direction):
+        """방향 원본을 준비한다. 카탈로그의 LRU는 호출 스레드가 갱신한다."""
+        relative = self.data["motions"][motion][direction]
+        return self._read_direction(relative, self.source.parent / relative)
+
+    def direction(self, motion, direction, *, prepared=None):
         relative = self.data["motions"][motion][direction]
         path = self.source.parent / relative
         if relative not in self.records:
-            self.records[relative] = self._read_direction(relative, path)
+            self.records[relative] = self._read_direction(relative, path) if prepared is None else prepared
             if len(self.records) > self.max_records:
                 self.records.popitem(last=False)
         self.records.move_to_end(relative)

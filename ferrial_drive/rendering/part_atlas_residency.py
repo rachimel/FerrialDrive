@@ -1,7 +1,7 @@
 """프레임에서 사용할 파츠 방향과 GPU 페이지의 수명."""
 
 from collections import OrderedDict
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import closing
 from dataclasses import dataclass, field
 import os
@@ -35,12 +35,14 @@ class AtlasFrameBudget:
 @dataclass
 class DirectionPrefetch:
     key: tuple
-    resource: dict
-    requests: dict
+    resource: dict = field(default_factory=dict)
+    requests: dict = field(default_factory=dict)
     jobs: dict = field(default_factory=dict)
     retained: list = field(default_factory=list)
     small_jobs: dict = field(default_factory=dict)
     sizes: dict = field(default_factory=dict)
+    metadata: Future | None = None
+    streamed: bool = False
 
 
 class PartAtlasResidency:
@@ -53,6 +55,7 @@ class PartAtlasResidency:
         self.loads = self.prefetch_uploads = self.prefetch_completed = 0
         self.coroutine_pages = self.threaded_pages = 0
         self.prefetch = self.executor = self.last_yaw_pose = None
+        self.metadata_jobs = {}
 
     def _worker_pool(self):
         if self.executor is None:
@@ -70,9 +73,9 @@ class PartAtlasResidency:
         size = getattr(self.cache, "storage_bytes_for", None)
         return size(page) if size else texture_payload_size(page["codec"], page["width"], page["height"])
 
-    def _describe_direction(self, key):
+    def _describe_direction(self, key, *, prepared=None):
         motion, direction = key
-        path, data = self.catalog.direction(motion, direction)
+        path, data = self.catalog.direction(motion, direction, prepared=prepared)
         fields, requests = {}, {}
         if self.paged:
             for kind, pages in data["pages"].items():
@@ -98,7 +101,9 @@ class PartAtlasResidency:
         for key in keys:
             if key in self.resources or key in resources:
                 continue
-            resource, pages = self._describe_direction(key)
+            metadata = self.metadata_jobs.pop(key, None)
+            prepared = metadata.result() if metadata is not None else None
+            resource, pages = self._describe_direction(key, prepared=prepared)
             if remaining is not None:
                 cost = sum(self._page_storage_bytes(page) for page_key, page in pages.items()
                            if page_key not in requests and page_key not in self.cache.entries)
@@ -139,6 +144,8 @@ class PartAtlasResidency:
         stage, self.prefetch = self.prefetch, None
         if stage is None:
             return
+        if stage.metadata is not None:
+            stage.metadata.cancel()
         for _, future in stage.jobs.values():
             future.cancel()
         for _, steps in stage.small_jobs.values():
@@ -147,7 +154,41 @@ class PartAtlasResidency:
             self.cache.release(page_key)
 
     def _start_prefetch(self, key, needed, *, streamed=False):
-        resource, requests = self._describe_direction(key)
+        stage = self.prefetch = DirectionPrefetch(key, streamed=streamed)
+        planned = self.metadata_jobs.pop(key, None)
+        if self.catalog.has_direction(*key):
+            if planned is not None:
+                planned.cancel()
+            self._prepare_prefetch(stage, needed)
+        else:
+            stage.metadata = planned if planned is not None else self._worker_pool().submit(self.catalog.read_direction, *key)
+
+    def _queue_metadata(self, keys, lookahead):
+        requested = dict.fromkeys((*keys, lookahead) if lookahead is not None else keys)
+        for key, future in tuple(self.metadata_jobs.items()):
+            if key not in requested and (future.done() or future.cancel()):
+                del self.metadata_jobs[key]
+        active = self.prefetch.key if self.prefetch is not None else None
+        for key in requested:
+            if len(self.metadata_jobs) >= DEFAULT_DECODE_WORKERS - 1:
+                break
+            if (key != active and key not in self.resources and key not in self.metadata_jobs
+                    and not self.catalog.has_direction(*key)):
+                self.metadata_jobs[key] = self._worker_pool().submit(self.catalog.read_direction, *key)
+
+    def _ready_prefetch(self, needed, *, required=False):
+        stage = self.prefetch
+        if stage is None or stage.metadata is None:
+            return stage
+        if not required and not stage.metadata.done():
+            return None
+        prepared = stage.metadata.result()
+        stage.metadata = None
+        self._prepare_prefetch(stage, needed, prepared=prepared)
+        return self.prefetch
+
+    def _prepare_prefetch(self, stage, needed, *, prepared=None):
+        resource, requests = self._describe_direction(stage.key, prepared=prepared)
         sizes = {page_key: texture_payload_size(page["codec"], page["width"], page["height"])
                  for page_key, page in requests.items()}
         if self.cache_budget_bytes is not None:
@@ -155,8 +196,9 @@ class PartAtlasResidency:
             required_bytes = sum(map(self._page_storage_bytes, requests.values())) + sum(
                 self.cache.entries[page_key]["gpu"]["storage_bytes"] for page_key in protected - requests.keys())
             if required_bytes > self.cache_budget_bytes:
+                self.cancel_prefetch()
                 return
-        stage = self.prefetch = DirectionPrefetch(key, resource, requests, sizes=sizes)
+        stage.resource, stage.requests, stage.sizes = resource, requests, sizes
         for page_key in sorted(requests, key=sizes.__getitem__, reverse=True):
             page = requests[page_key]
             if page_key in self.cache.entries:
@@ -164,22 +206,39 @@ class PartAtlasResidency:
                 stage.retained.append(page_key)
             else:
                 work = TexturePageWork(page, self.source.parent, timings=self.timings, ktx_library=self.cache.ktx_library)
-                if streamed and sizes[page_key] <= SMALL_PAGE_BYTES and page["codec"] != "ktx2_uastc":
+                if stage.streamed and sizes[page_key] <= SMALL_PAGE_BYTES and page["codec"] != "ktx2_uastc":
                     stage.small_jobs[page_key] = work, work.steps()
                     self.coroutine_pages += 1
                 else:
                     stage.jobs[page_key] = work, self._worker_pool().submit(work.run)
-                    if streamed:
+                    if stage.streamed:
                         self.threaded_pages += 1
 
     def _advance_prefetch(self, needed, *, required=False):
-        stage = self.prefetch
-        for page_key, (work, future) in tuple(stage.jobs.items()):
-            new_texture = page_key not in self.cache.entries
-            if new_texture and not required and not future.done():
-                continue
-            page = stage.requests[page_key]
-            try:
+        try:
+            stage = self._ready_prefetch(needed, required=required)
+            if stage is None:
+                return
+            if required:
+                for page_key, (work, steps) in tuple(stage.small_jobs.items()):
+                    prepared = None
+                    if page_key not in self.cache.entries:
+                        for _ in steps:
+                            pass
+                        incoming = self._page_storage_bytes(stage.requests[page_key])
+                        if self.cache_budget_bytes is not None:
+                            self.evict(needed, incoming, stage.requests.keys())
+                        prepared = work.take_result()
+                    else:
+                        steps.close()
+                    self.cache.acquire(stage.requests[page_key], self.source.parent, prepared=prepared)
+                    stage.retained.append(page_key)
+                    del stage.small_jobs[page_key]
+            for page_key, (work, future) in tuple(stage.jobs.items()):
+                new_texture = page_key not in self.cache.entries
+                if new_texture and not required and not future.done():
+                    continue
+                page = stage.requests[page_key]
                 prepared = None
                 if new_texture:
                     future.result()
@@ -193,20 +252,20 @@ class PartAtlasResidency:
                 else:
                     future.cancel()
                 self.cache.acquire(page, self.source.parent, prepared=prepared)
-            except (OSError, ValueError, RuntimeError):
-                self.cancel_prefetch()
-                if required:
-                    raise
-                return
-            stage.retained.append(page_key)
-            del stage.jobs[page_key]
-            if not required and new_texture:
-                self.prefetch_uploads += 1
-                break
+                stage.retained.append(page_key)
+                del stage.jobs[page_key]
+                if not required and new_texture:
+                    self.prefetch_uploads += 1
+                    break
+        except (OSError, ValueError, RuntimeError):
+            self.cancel_prefetch()
+            if required:
+                raise
+            return
         self._publish_prefetch(stage, required=required)
 
     def _publish_prefetch(self, stage, *, required=False):
-        if stage.jobs or stage.small_jobs:
+        if stage.metadata is not None or stage.jobs or stage.small_jobs:
             return
         resource = stage.resource
         resource["keys"] = tuple(stage.retained)
@@ -224,14 +283,15 @@ class PartAtlasResidency:
         for key in keys:
             if key in self.resources:
                 self.resources.move_to_end(key)
-        if self.prefetch is None:
-            missing = next((key for key in keys if key not in self.resources), lookahead)
-            if missing is not None:
-                self._start_prefetch(missing, protected, streamed=True)
-        stage = self.prefetch
-        if stage is None:
-            return
         try:
+            if self.prefetch is None:
+                missing = next((key for key in keys if key not in self.resources), lookahead)
+                if missing is not None:
+                    self._start_prefetch(missing, protected, streamed=True)
+            stage = self._ready_prefetch(protected)
+            self._queue_metadata(keys, lookahead)
+            if stage is None:
+                return
             for page_key, (work, steps) in stage.small_jobs.items():
                 if budget.steps >= FRAME_COROUTINE_STEPS:
                     break
@@ -334,6 +394,9 @@ class PartAtlasResidency:
             self.last_yaw_pose = None
             return
         self.cancel_prefetch()
+        for future in self.metadata_jobs.values():
+            future.cancel()
+        self.metadata_jobs.clear()
         self.last_yaw_pose = None
         for resource in self.resources.values():
             for key in resource["keys"]:
