@@ -31,7 +31,8 @@ class LoadingScreen:
         if self.logo is not None:
             r.image(self.logo, box)
         else:
-            r.text("FERRIAL DRIVE", width / 2, height * 0.38, "body", settings["text"], align="center", scale=2)
+            r.text("FERRIAL DRIVE", width / 2, height * 0.38, "body", settings["text"],
+                   align="center", scale_x=2, scale_y=2)
         bar_width = min(settings["bar_width"], width * 0.65)
         left, top = (width - bar_width) / 2, height * 0.64
         r.rect(Rect(left, top, bar_width, settings["bar_height"]), settings["track"])

@@ -23,13 +23,14 @@ def body_wind_tint(settings, ground_color=None):
 
 
 class PicoSwordEffects:
-    def __init__(self, renderer, *, trail_backend="cpu", flow_directory=None):
+    def __init__(self, renderer, *, trail_backend="cpu", flow_directory=None, generate_missing_flow=False):
         if trail_backend not in ("cpu", "compute"):
             raise ValueError("Trail 백엔드는 cpu 또는 compute다.")
         self.renderer = renderer
         self.flow_texture = None
         self.flow_key = None
         self.flow_directory = flow_directory
+        self.generate_missing_flow = generate_missing_flow
         self.trail_backend = trail_backend
         self.last_trail_backend = None
         self.compute_trail = None
@@ -43,7 +44,8 @@ class PicoSwordEffects:
         if self.flow_key == key:
             return
         p = self.renderer.pico
-        recipe,pixels = load_flow_texture(settings,self.flow_directory)
+        recipe, pixels = load_flow_texture(settings, self.flow_directory,
+                                           generate_if_missing=self.generate_missing_flow)
         width,height = recipe['width'],recipe['height']
         texture = p.SDL_CreateTexture(p.renderer, p.SDL_PIXELFORMAT_RGBA32, p.SDL_TEXTUREACCESS_STATIC, width, height)
         if not texture:

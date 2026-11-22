@@ -1,4 +1,4 @@
-"""절차적 Trail 결을 미리 저장하고, 실행 중에는 검증한 RGBA만 읽는다."""
+"""검 Trail 결의 사전 준비와 공개 도형 시연용 픽셀을 관리한다."""
 
 import hashlib
 import json
@@ -30,14 +30,21 @@ def flow_texture_path(settings, directory=None, *, width=FLOW_WIDTH, height=FLOW
     return Path(directory if directory is not None else DEFAULT_FLOW_DIRECTORY) / f'flow_{key}.trailflow'
 
 
-def load_flow_texture(settings, directory=None, *, width=FLOW_WIDTH, height=FLOW_HEIGHT):
-    """미준비·변경된 파일은 오류로 알린다. 게임 실행 중 생성하지 않는다."""
+def _generate_flow_pixels(recipe):
+    from ferrial_drive.rendering.sword_trail_texture import trail_flow_pixels
+
+    return trail_flow_pixels(recipe['width'], recipe['height'], strands=recipe['strands'], softness=recipe['softness'])
+
+
+def load_flow_texture(settings, directory=None, *, width=FLOW_WIDTH, height=FLOW_HEIGHT, generate_if_missing=False):
+    """준비 파일을 검증하고, 공개 도형 시연은 파일이 없을 때 메모리에서 준비할 수 있다."""
     expected = flow_recipe(settings, width=width, height=height)
     path = flow_texture_path(settings, directory, width=width, height=height)
     if not path.is_file():
+        if generate_if_missing:
+            return expected, _generate_flow_pixels(expected)
         raise FileNotFoundError(f'Trail 결 준비 파일이 없다: {path}. '
-                                'python automate/run.py trail-texture --config 설정.json으로 먼저 준비한다. '
-                                '기본 도형 시연은 --demo를 추가한다.')
+                                'python automate/run.py trail-texture --config 설정.json으로 먼저 준비한다.')
     try:
         with ZipFile(path) as archive:
             if archive.getinfo('manifest.json').file_size > 4096:
@@ -63,8 +70,7 @@ def prepare_flow_texture(settings, directory=None, *, width=FLOW_WIDTH, height=F
     if reused:
         _, pixels = load_flow_texture(settings, directory, width=width, height=height)
     else:
-        from ferrial_drive.rendering.sword_trail_texture import trail_flow_pixels
-        pixels = trail_flow_pixels(width, height, strands=recipe['strands'], softness=recipe['softness'])
+        pixels = _generate_flow_pixels(recipe)
         manifest = dict(recipe=recipe, rgba_sha256=hashlib.sha256(pixels).hexdigest())
         path.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.NamedTemporaryFile(dir=path.parent, prefix='.trail-', suffix='.tmp', delete=False) as temporary:

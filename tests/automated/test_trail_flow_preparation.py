@@ -53,6 +53,15 @@ class TrailFlowPreparationTests(unittest.TestCase):
             load_flow_texture(changed,self.directory,width=32,height=16)
         self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(),before)
 
+    def test_demo_generates_missing_pixels_in_memory_and_reuses_prepared_file(self):
+        recipe, pixels = load_flow_texture(self.settings, self.directory, width=32, height=16, generate_if_missing=True)
+        self.assertEqual(pixels, trail_flow_pixels(32, 16, strands=3, softness=.018))
+        self.assertEqual(list(self.directory.iterdir()), [])
+        self.prepare()
+        with patch('ferrial_drive.rendering.sword_trail_texture.trail_flow_pixels', side_effect=AssertionError('재생성')):
+            self.assertEqual(load_flow_texture(self.settings, self.directory, width=32, height=16,
+                                               generate_if_missing=True), (recipe, pixels))
+
     def test_corrupted_payload_hash_and_recipe_are_rejected(self):
         result = self.prepare()
         path = Path(result['path'])

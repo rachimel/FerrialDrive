@@ -15,7 +15,7 @@
 
 - 효과음: `sound-sources --download`로 CC0 원본·출처를 보존하고 `sound-effects`로 공통 음원을 가공한다. `sound-import`는 사용자 선택 파일을 원본 보존 후 가져오며 `sound-preview`는 실제 혼합 청취 파일을 기록한다. 모두 `python automate/run.py` 뒤에 경로를 붙인다. [실행·출처 안내](../samples/sound_effects/README.md)를 따른다.
 
-- Trail 결 준비: `python automate/run.py trail-texture`. `--demo`는 공개 도형 시연 폴더에 별도 준비한다. 실행 중에는 준비 파일만 읽으며 [준비·로딩 안내](../docs/tool-usage/trail_texture_preparation.md)를 따른다.
+- Trail 결 준비는 `python automate/run.py trail-texture`를 사용한다. `--demo`로 공개 도형 시연용 파일을 미리 만들 수 있다. 데모에서 파일이 없으면 로딩 중에 메모리에서 준비한다. [준비·로딩 안내](../docs/tool-usage/trail_texture_preparation.md)
 
 - 그림자 알파 전용 데이터 준비: `python automate/run.py alpha-textures --catalog 카탈로그.json`. 원본 PNG를 보존하며 [준비·오류·시연 안내](../docs/tool-usage/alpha_textures.md)를 따른다.
 

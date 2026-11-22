@@ -2,7 +2,7 @@
 
 효과음은 [사운드 준비·출처 안내](../sound_effects/README.md)를 따른다. `python automate/run.py sound-effects`로 공통 음원을 준비하며 `--demo` 음원은 같은 명령에 `--demo`를 붙여 따로 준비한다. `--mute`로 효과음을 끈다. 사용자 선택 음원은 별도 교체 bank가 있을 때 적용한다.
 
-첫 실행 전에 `python automate/run.py trail-texture`로 Trail 결 파일을 준비한다. 실제 게임 에셋 없는 `--demo`는 `python automate/run.py trail-texture --demo`로 이 샘플의 `generated/trail_flow/`에 별도 준비한다. 두 명령은 게임 이미지·모델 없이 기존 절차적 생성기만 사용한다. 설정의 결 가닥 수·부드러움을 바꾸면 준비 명령을 다시 실행한다. [준비 파일과 로딩](../../docs/tool-usage/trail_texture_preparation.md)을 따른다.
+실제 에셋 실행 전에는 `python automate/run.py trail-texture`로 Trail 결 파일을 준비한다. 공개 도형 `--demo`는 파일이 없으면 로딩 중에 메모리에서 준비한다. `python automate/run.py trail-texture --demo`로 준비 파일을 미리 만들 수도 있다. [준비 파일과 로딩](../../docs/tool-usage/trail_texture_preparation.md)
 
 Pico2D가 설치된 환경에서 프로젝트 루트 기준으로 실행한다.
 

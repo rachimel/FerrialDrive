@@ -1,5 +1,6 @@
 # 대화 기록의 누락 인덱스
 
+- [클린 체크아웃 공개 도형 시연 복구](2026-11-22-clean-checkout-demo.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-clean-checkout-demo:U1]]`은 정확한 요청 시각이다. 검색 단서는 `클린 체크아웃에서 pause_motion.py 빠져서`다.
 - [명중 카메라 충격과 대시 시작 킥](2026-11-22-camera-dash-kick.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-camera-dash-kick:U1]]`은 정확한 요청 시각이다. 검색 단서는 `대시 처음에 카메라에 킥을 많이`다.
 - [교전·이동·벤치마크 JSON 로딩](2026-11-22-config-orjson.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-config-orjson:U1]]`은 정확한 요청 시각이다. 검색 단서는 `교전·이동 설정이랑 벤치마크 프로필도 orjson`이다.
 - [전체 훈련장 Shock Bot 아틀라스 연결](2026-11-22-shock-bot-training.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-shock-bot-training:U1]]`은 요청의 정확한 시각이다. 검색 단서는 `모든 훈련장에 새로운 인간형 적 아틀라스`다.

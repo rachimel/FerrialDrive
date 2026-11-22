@@ -1,6 +1,6 @@
 # 하한 사양 벤치마크 시연
 
-첫 실행 전 `python automate/run.py trail-texture --demo`로 공개 도형용 Trail 결을 준비한다. 실제 에셋 시나리오는 `--demo` 없이 준비한다. [준비 파일 안내](../../docs/tool-usage/trail_texture_preparation.md)를 따른다.
+공개 도형 시연은 별도 리소스 준비 없이 실행한다. Trail 결 파일이 없으면 로딩 중에 메모리에서 준비한다. 실제 에셋 시나리오를 실행하려면 `python automate/run.py trail-texture`로 Trail 결을 미리 준비한다. [준비 파일 안내](../../docs/tool-usage/trail_texture_preparation.md)
 
 Windows·Pico2D·OpenGL 환경에서 프로젝트 루트의 `python tests/hardware_profile_benchmark.py --scenario demo`를 실행한다. 프로필은 이 폴더의 `profile.json`이며 기본 도형 훈련장을 직접 조작한다. 실제 게임 이미지·모델 없이 같은 벤치마크 경로를 확인한다. 공개 글꼴은 저장소의 `data/fonts/`를 사용한다. `--scenario demo`를 생략하면 실제 에셋 훈련장이 기본이다.
 

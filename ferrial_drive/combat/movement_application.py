@@ -358,7 +358,7 @@ class MovementApplication:
             flow_field = 'demo_flow_texture_directory' if self.demo else 'flow_texture_directory'
             flow_directory = (self.relative_path(sword_settings[flow_field]) if flow_field in sword_settings else None)
             self.sword_renderer = PicoSwordEffects(self.renderer, trail_backend=sword_settings.get("trail_renderer", "compute"),
-                                                  flow_directory=flow_directory)
+                                                  flow_directory=flow_directory, generate_missing_flow=self.demo)
             self.loading_progress(0.90,"Trail 준비")
             with self.timings.scope('loading.sword_trail.prepare'):
                 self.sword_renderer.prepare(sword_settings)
