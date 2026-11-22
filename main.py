@@ -1,6 +1,7 @@
 """Ferrial Drive 실행 진입점."""
 
 from argparse import ArgumentParser
+from functools import partial
 
 from ferrial_drive.runtime import run_application
 from game.application import GameApplication
@@ -14,10 +15,8 @@ def main():
     args = parser.parse_args()
     if args.frames is not None and args.frames < 1:
         parser.error("--frames는 양수 정수여야 한다.")
-    game = GameApplication(demo=args.demo, mute=args.mute)
-    width, height = game.window_size
-    run_application(game, width=width, height=height, title="Ferrial Drive",
-                    frame_limit=args.frames, timings=game.timings)
+    create_game = partial(GameApplication, demo=args.demo, mute=args.mute)
+    run_application(create_game, title="Ferrial Drive", frame_limit=args.frames)
 
 
 if __name__ == "__main__":

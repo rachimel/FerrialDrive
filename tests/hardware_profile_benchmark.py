@@ -136,6 +136,7 @@ def run_worker(args, applied, profile):
 
                 started = perf_counter()
                 probe = call_profile = None
+                collection = app.prepare_combat_collection() if args.scenario == "combat" else None
                 try:
                     app.enter()
                     width, height = ct.c_int(), ct.c_int()
@@ -286,7 +287,16 @@ def run_worker(args, applied, profile):
                         probe.active = False
                         result["draw_breakdown"] = probe.report()
                         probe.close()
-                    app.exit()
+                    try:
+                        try:
+                            app.exit()
+                        finally:
+                            app = surface = None
+                        if collection:
+                            collection.finish()
+                    finally:
+                        if collection:
+                            collection.restore()
                     if guard:
                         result["gpu_profile"] = guard.report()
                         if guard.violations:

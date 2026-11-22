@@ -1,6 +1,7 @@
 """이동·전투 독립 테스트의 공통 실행 옵션. import만으로 창을 열지 않는다."""
 
 import argparse
+from functools import partial
 from pathlib import Path
 
 
@@ -51,7 +52,7 @@ def launch_movement_test(*, description, movement_speed_multiplier=1,
     part_options = {"part_catalog": args.part_catalog, "part_mixed": args.part_mixed,
                     "part_step_directions": args.part_step_directions, "part_color_codec": args.part_color_codec,
                     "player_pipeline": args.player_pipeline}
-    program = program_type(args.config, demo=args.demo, capture=args.capture, capture_frame=args.capture_frame,
+    create_program = partial(program_type, args.config, demo=args.demo, capture=args.capture, capture_frame=args.capture_frame,
                                   report=args.report, script=args.script, profile=args.profile,
                                   record_directory=args.record_directory, record_step=args.record_step,
                                   settings_file=args.settings_file, movement_speed_multiplier=movement_speed_multiplier,
@@ -63,5 +64,4 @@ def launch_movement_test(*, description, movement_speed_multiplier=1,
         title += " | Rainbow Overdrive"
     if movement_speed_multiplier != 1:
         title += f" | {movement_speed_multiplier:g}x Speed"
-    run_application(program, width=program.window_size[0], height=program.window_size[1],
-                    title=title, frame_limit=args.frames, timings=program.timings)
+    run_application(create_program, title=title, frame_limit=args.frames)

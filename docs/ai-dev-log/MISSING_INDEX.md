@@ -1,5 +1,6 @@
 # 대화 기록의 누락 인덱스
 
+- [전투 종료 로딩의 전체 GC](2026-11-22-combat-session-gc.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-combat-session-gc:U1]]`은 요청의 정확한 시각이다. 검색 단서는 `전투 중에는 자동 GC 끄고`다.
 - [자동 GC와 기존 메모리 풀 재사용 계측](2026-11-22-gc-memory-reuse.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-gc-memory-reuse:U1]]`은 요청의 정확한 시각이다. 검색 단서는 `자동 GC 끄면 메모리 얼마나 누수`다.
 
 - [방향 메타데이터 워커와 GC 지연 확인](2026-11-22-atlas-metadata-worker.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-atlas-metadata-worker:U1]]`은 요청의 정확한 시각이다. 검색 단서는 `방향 메타데이터 준비를 렌더 스레드 밖에서`다.

@@ -35,6 +35,7 @@ class GameHud(MovementHud):
 class GameApplication(EncounterApplication):
     hud_type = GameHud
     debug_controls = False
+    reload_on_exit = False
 
     def __init__(self, **options):
         super().__init__(TRAINING_MOVEMENT_CONFIG,
@@ -52,6 +53,13 @@ class GameApplication(EncounterApplication):
         self.reset()
         self.paused = False
         self.hud.scene = "combat"
+
+    def handle_event(self, event):
+        was_in_combat = self.hud.scene == "combat"
+        super().handle_event(event)
+        if self.combat_collection and was_in_combat and self.hud.scene == "menu":
+            self.reload_on_exit = True
+            self.running = False
 
     def draw_scene(self, *, preview_due=False):
         if self.hud.scene == "menu" and not self.hud.transition.active:

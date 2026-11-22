@@ -1,6 +1,7 @@
 """기존 이동 훈련장에 다수 적 교전과 실제 HP를 연결한다."""
 
 from contextlib import contextmanager
+from functools import partial
 from dataclasses import replace
 import json
 from math import isfinite
@@ -11,8 +12,10 @@ from .enemy_sprites import load_enemy_part_sprites, load_enemy_sprites
 from .encounter_view import EncounterView
 from .geometry import Vec2
 from .movement_application import MovementApplication
+from .session_gc import CombatCollection
 from .sword_effects import SwordTarget
 from ferrial_drive.rendering.enemy_crowd_atlas import EnemyCrowdAtlas
+from ferrial_drive.ui.loading import LoadingScreen
 from ferrial_drive.ui.state import Health
 
 
@@ -46,6 +49,24 @@ class EncounterApplication(MovementApplication):
         self.crowd_atlas_enabled = crowd_atlas_enabled
         self.encounter_trace = []
         self.targets_by_id = {}
+        self.combat_collection = None
+
+    def prepare_combat_collection(self):
+        import pico2d.pico2d as pico
+
+        settings = self.config.get("loading")
+        make_screen = None
+        if settings:
+            logo = self.relative_path(settings["logo"])
+            make_screen = partial(LoadingScreen, pico, self.window_size, self.path("font"), settings,
+                                  logo if logo.is_file() else None)
+        self.combat_collection = CombatCollection(make_screen)
+        return self.combat_collection
+
+    def enter(self):
+        super().enter()
+        if self.combat_collection and self.running:
+            self.combat_collection.set_combat(self.hud.scene == "combat")
 
     def _enter_resources(self):
         super()._enter_resources()
@@ -240,6 +261,8 @@ class EncounterApplication(MovementApplication):
         self.encounter.knock_back(target_id, direction, source="gun")
 
     def update(self, delta_seconds):
+        if self.combat_collection:
+            self.combat_collection.set_combat(self.hud.scene == "combat")
         was_finished = self.encounter_finished()
         super().update(delta_seconds)
         if was_finished and self.encounter_finished() and not self.paused and not (self.hud and self.hud.blocking):
