@@ -1,5 +1,6 @@
 # 대화 기록의 누락 인덱스
 
+- [등 무기 방향 캐시 재적재 병목](2026-11-22-back-weapon-residency-diagnosis.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-back-weapon-residency-diagnosis:U1]]`은 요청의 정확한 시각이다. 검색 단서는 `다른 병목을 찾아야겠네`다.
 - [전투 종료 로딩의 전체 GC](2026-11-22-combat-session-gc.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-combat-session-gc:U1]]`은 요청의 정확한 시각이다. 검색 단서는 `전투 중에는 자동 GC 끄고`다.
 - [자동 GC와 기존 메모리 풀 재사용 계측](2026-11-22-gc-memory-reuse.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-gc-memory-reuse:U1]]`은 요청의 정확한 시각이다. 검색 단서는 `자동 GC 끄면 메모리 얼마나 누수`다.
 
