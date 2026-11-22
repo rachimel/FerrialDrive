@@ -329,6 +329,7 @@ def main():
     sys.path.insert(0, str(ROOT))
     from ferrial_drive.diagnostics.resource_limits import ResourceLimits, run_gated_child, wait_for_limits
     from ferrial_drive.diagnostics.render_breakdown import VARIANTS
+    from ferrial_drive.json_io import read_json
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--profile", type=Path, default=ROOT / "samples/hardware_profile_benchmark/profile.json")
@@ -381,7 +382,7 @@ def main():
     applied = wait_for_limits() if args.worker else None
     if args.auto and args.frames is None:
         args.frames = 600
-    profile = json.loads(args.profile.read_text(encoding="utf-8-sig"))
+    profile = read_json(args.profile)
     args.target_fps = profile["target_fps"] if args.target_fps is None else args.target_fps
     args.gpu_profile = profile["gpu_profile"] if args.gpu_profile is None else args.gpu_profile
     if args.gpu_profile not in ("none", "uhd630_gl45_conservative"):

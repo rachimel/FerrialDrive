@@ -14,6 +14,7 @@ from .geometry import Vec2
 from .movement_application import MovementApplication
 from .session_gc import CombatCollection
 from .sword_effects import SwordTarget
+from ferrial_drive.json_io import read_json
 from ferrial_drive.rendering.enemy_crowd_atlas import EnemyCrowdAtlas
 from ferrial_drive.ui.loading import LoadingScreen
 from ferrial_drive.ui.state import Health
@@ -29,7 +30,7 @@ class EncounterApplication(MovementApplication):
         super().__init__(config_path, **options)
         self.config.get("sword_effects", {})["targets"] = []
         self.encounter_path = Path(encounter_path).resolve()
-        settings = json.loads(self.encounter_path.read_text(encoding="utf-8-sig"))
+        settings = read_json(self.encounter_path)
         if enemy_count is not None:
             settings["spawns"] = crowd_spawns(settings["spawns"], enemy_count, enemy_spacing_m,
                                                self.controller.position_m, self.controller.settings.map_size_m)

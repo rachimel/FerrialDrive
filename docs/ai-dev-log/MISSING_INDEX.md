@@ -1,5 +1,6 @@
 # 대화 기록의 누락 인덱스
 
+- [교전·이동·벤치마크 JSON 로딩](2026-11-22-config-orjson.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-config-orjson:U1]]`은 정확한 요청 시각이다. 검색 단서는 `교전·이동 설정이랑 벤치마크 프로필도 orjson`이다.
 - [전체 훈련장 Shock Bot 아틀라스 연결](2026-11-22-shock-bot-training.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-shock-bot-training:U1]]`은 요청의 정확한 시각이다. 검색 단서는 `모든 훈련장에 새로운 인간형 적 아틀라스`다.
 - [전투 HUD·월드 CPU의 반복 작업 단축](2026-11-22-hud-world-cpu.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-hud-world-cpu:U1]]`은 요청의 정확한 시각이다. 검색 단서는 `HUD의 병목을 줄이고`다.
 - [등 무기 선적재 재검과 느린 프레임 추적](2026-11-22-back-deploy-recheck.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-back-deploy-recheck:U1]]`은 요청의 정확한 시각이다. 검색 단서는 `전체 FPS는 왜 39.79에서 34.75로`다.

@@ -35,6 +35,7 @@ from ferrial_drive.rendering.pico_gun_effects import PicoGunEffects
 from ferrial_drive.rendering.rim_light import standby_rim
 from ferrial_drive.rendering.overdrive_palette import rainbow_color
 from ferrial_drive.diagnostics import TimingRecorder
+from ferrial_drive.json_io import read_json
 from ferrial_drive.rendering.motion_vectors import target_phase
 from ferrial_drive.rendering.part_atlas_residency import AtlasFrameBudget
 from ferrial_drive.settings import GameSettingsStore
@@ -63,7 +64,7 @@ class MovementApplication:
                  part_catalog=None, part_mixed=False, part_step_directions=False, part_color_codec=None,
                  player_pipeline=None):
         self.config_path = Path(config_path).resolve()
-        self.config = json.loads(self.config_path.read_text(encoding="utf-8-sig"))
+        self.config = read_json(self.config_path)
         self.part_stream_budget = AtlasFrameBudget()
         self.overdrive_settings = OverdriveSettings(**self.config.get("overdrive", {}))
         self.energy_settings = EnergySettings(**self.config.get("energy", {}))
