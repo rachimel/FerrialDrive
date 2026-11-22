@@ -135,10 +135,14 @@ class PicoPoseTable:
         sprite.draw_frame(("shadow/" if shadow else "")+clip_name,frame_index,x,y,
                           scale=scale,opacity=opacity,**options)
 
-    def draw_echo(self,clip_name,seconds,x,y,*,easing="linear",**options):
+    def _echo_phase(self, clip_name, seconds, easing):
         name = clip_name.split("/")[0]
         spec = self.catalog.motions[name]
         phase = target_phase(min(1,seconds/(spec["source_frame_count"]/12)),easing=easing)
+        return spec, phase
+
+    def draw_echo(self,clip_name,seconds,x,y,*,easing="linear",**options):
+        spec, phase = self._echo_phase(clip_name, seconds, easing)
         echo_options = options
         if getattr(self.parts, "pbr_lighting", None):
             echo_options = dict(options, sample_shadow=False, allow_fallback=False, half_resolution_echo=True)
@@ -146,6 +150,20 @@ class PicoPoseTable:
             return
         frame = min(spec["frames"]-1,int(phase*spec["source_frame_count"]))
         self.draw_frame(clip_name,frame,x,y,**options)
+
+    def draw_echo_batch(self, requests, *, scale, easing):
+        parts = self.parts
+        if len(requests) < 2 or parts is None or not parts.pbr_lighting or parts.paged:
+            return False
+        prepared = []
+        for name, seconds, x, y, opacity, tint, tint_mix, brightness in requests:
+            if not parts.supports(name, self.quality):
+                return False
+            spec, phase = self._echo_phase(name, seconds, easing)
+            prepared.append((name, phase * spec["source_frame_count"] / 12, x, y, opacity, (*tint, tint_mix), brightness))
+        parts.energy_color, parts.energy_mask_gain = self.energy_color, self.energy_mask_gain
+        parts.rim_light = self.rim_light
+        return parts.draw_echo_batch(prepared, scale)
 
     def select_parts(self, clip_name, yaw_degrees=None, *, use_surface=True):
         surface = getattr(self, "surface_parts", None)

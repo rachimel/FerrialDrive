@@ -137,13 +137,10 @@ class PartEchoTarget:
         self.texture = None
         self.size = (0, 0)
 
-    def draw(self, width, height, destination, paint):
+    def reserve(self, width, height):
         p = self.pico
-        border = PART_UPSCALE_BORDER // 2
-        inner = p.SDL_Rect(border, border, (width + 1) // 2, (height + 1) // 2)
-        source = p.SDL_Rect(0, 0, inner.w + 2 * border, inner.h + 2 * border)
         size = tuple(max(old, (required + 31) // 32 * 32)
-                     for old, required in zip(self.size, (source.w, source.h), strict=True))
+                     for old, required in zip(self.size, (width, height), strict=True))
         if size != self.size:
             texture = p.SDL_CreateTexture(p.renderer, p.SDL_PIXELFORMAT_RGBA32, p.SDL_TEXTUREACCESS_TARGET, *size)
             if not texture:
@@ -156,6 +153,13 @@ class PartEchoTarget:
                 raise RuntimeError("잔상 합성 타깃 필터를 설정할 수 없다.")
             self.close()
             self.texture, self.size = texture, size
+
+    def draw(self, width, height, destination, paint):
+        p = self.pico
+        border = PART_UPSCALE_BORDER // 2
+        inner = p.SDL_Rect(border, border, (width + 1) // 2, (height + 1) // 2)
+        source = p.SDL_Rect(0, 0, inner.w + 2 * border, inner.h + 2 * border)
+        self.reserve(source.w, source.h)
         with render_target(p, self.texture):
             paint(inner)
         if p.SDL_RenderCopy(p.renderer, self.texture, source, destination):

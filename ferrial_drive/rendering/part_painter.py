@@ -62,8 +62,17 @@ in float localPhase;
 #else
 uniform float localPhase;
 #endif
-uniform float partCount, effectOpacity, brightness, realtimeLight;
+uniform float partCount, realtimeLight;
+#ifdef ECHO_INSTANCES
+flat in vec4 echoTint;
+flat in vec2 echoFade;
+#define colorMix echoTint
+#define brightness echoFade.x
+#define effectOpacity echoFade.y
+#else
 uniform vec4 colorMix;
+uniform float effectOpacity, brightness;
+#endif
 varying vec2 texel;
 #ifdef CACHE_KEYPOSE_SAMPLES
 flat in ivec4 sampleTile;
@@ -525,7 +534,8 @@ class PartPainter:
     def __init__(self, pico, *, angular=False, part_count=MAX_PARTS, paged=False, frame_crop=False, surface=False,
                  pbr=False, coat=False, instanced=False, hermite_flow=False, compact_depth=False,
                  deferred=False, depth_coverage=False, screen_depth=False, instance_table=False,
-                 cache_keypose_samples=False, keypose_samples_fp16=False, keypose_samples_offsets=False):
+                 cache_keypose_samples=False, keypose_samples_fp16=False, keypose_samples_offsets=False,
+                 echo_instances=False):
         self.pico = pico
         self.paged = paged
         self.frame_crop = frame_crop
@@ -573,6 +583,8 @@ class PartPainter:
             defines += "\n#define HERMITE_FLOW"
         if compact_depth:
             defines += "\n#define COMPACT_DEPTH"
+        if echo_instances:
+            defines += "\n#define ECHO_INSTANCES"
         if deferred:
             defines += "\n#define DEFERRED_SURFACE"
             uniforms.append("deferredProfile")
@@ -619,6 +631,8 @@ class PartPainter:
             sampler_options.update(instance_table=True, coverage_instances=depth_coverage)
         if cache_keypose_samples:
             sampler_options["cache_keypose_samples"] = True
+        if echo_instances:
+            sampler_options.update(per_instance_source=True, echo_instances=True)
         self.sampler = sampler_type(pico, fragment_shader=shader, **sampler_options,
             extra_uniforms=tuple(name + "[0]" for name in self.arrays) +
             tuple(uniforms) + ("bankData[0]", "energyTint", "rimLight", "localPhase", "partCount", "effectOpacity",
@@ -675,7 +689,7 @@ class PartPainter:
               opacity=1, tint=(1, 1, 1), tint_mix=0, brightness=1, realtime_light=0, shadow_map=None, pbr_lighting=None,
               sample_shadow=True, depth_output=False, instances=None, pose_table=None,
               screen_depth=None, screen_placements=None, instance_texture=None, instance_range=None, depth_origin=(0, 0),
-              texture_bindings=None, pose_key=None):
+              texture_bindings=None, pose_key=None, instance_sources=None, echo_styles=None):
         entries = (cache.bindings(self.page_kinds) if self.paged else
                    [resource["pages"][kind] for kind in self.texture_names for resource in resources])
         if pbr_lighting:
@@ -763,7 +777,8 @@ class PartPainter:
                     sampler.draw(entries[0].get("texture"), entries[0]["size"], self.pico.SDL_Rect(*state["bounds"]), destination)
                 else:
                     sampler.glUniform4f(sampler.uniforms["modulation"], 1, 1, 1, 1)
-                    sampler.draw_instances(state["bounds"], instances, screen_placements=screen_placements)
+                    sampler.draw_instances(state["bounds"], instances, sources=instance_sources,
+                                           screen_placements=screen_placements, echo_styles=echo_styles)
 
     def close(self):
         self.sampler.close()

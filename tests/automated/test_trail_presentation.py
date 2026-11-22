@@ -81,3 +81,26 @@ class TrailPresentationTests(unittest.TestCase):
         for earlier, later in zip(calls, calls[1:]):
             self.assertGreater(earlier['brightness'], later['brightness'])
             self.assertGreater(earlier['opacity'], later['opacity'])
+
+    def test_echo_batches_preserve_order_across_sprite_and_pose_fallbacks(self):
+        order = []
+        echoes = [SimpleNamespace(position_m=(i, 0), clip_name="attack", elapsed_seconds=.2,
+                    pose_clip_name=name, opacity=.5, tint=(.2, .5, 1), tint_mix=.7)
+                  for i, name in enumerate(("a", "b", None, "c", "d"))]
+
+        def draw_batch(requests, **options):
+            names = tuple(request[0] for request in requests)
+            if names == ("a", "b"):
+                order.append(names)
+                return True
+            return False
+
+        pose = SimpleNamespace(parts_only=False, draw_echo_batch=draw_batch,
+                               draw_echo=lambda name, *args, **kw: order.append(name))
+        sprite = SimpleNamespace(draw=lambda *args, **kw: order.append("sprite"))
+        effects = SimpleNamespace(echoes=echoes, opacity=lambda echo: 1)
+        camera = SimpleNamespace(world_to_screen=lambda point: point)
+        projection = SimpleNamespace(project=lambda point: point)
+        PicoSwordEffects(Mock()).draw_echoes(effects, camera, projection, sprite, {"attack": None},
+            scale=1, interpolate=True, easing="linear", pose_sprite=pose)
+        self.assertEqual(order, [("a", "b"), "sprite", "c", "d"])

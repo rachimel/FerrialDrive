@@ -272,6 +272,16 @@ class PicoSwordEffects:
                 p.SDL_SetRenderDrawBlendMode(p.renderer, previous.value)
 
     def draw_echoes(self, effects, camera, projection, sprite, resources, *, scale, interpolate, easing, pose_sprite=None):
+        pending = []
+        draw_batch = getattr(pose_sprite, "draw_echo_batch", None)
+
+        def draw_pending():
+            if pending and (draw_batch is None or not draw_batch(pending, scale=scale, easing=easing)):
+                for name, seconds, x, y, opacity, tint, mix, brightness in pending:
+                    pose_sprite.draw_echo(name, seconds, x, y, scale=scale, easing=easing,
+                                          opacity=opacity, tint=tint, tint_mix=mix, brightness=brightness)
+            pending.clear()
+
         for echo in effects.echoes:
             remaining = effects.opacity(echo)
             opacity = echo.opacity * remaining ** 1.1
@@ -280,9 +290,10 @@ class PicoSwordEffects:
                 continue
             x, y = camera.world_to_screen(projection.project(echo.position_m))
             if pose_sprite is not None and echo.pose_clip_name is not None:
-                pose_sprite.draw_echo(echo.pose_clip_name,echo.elapsed_seconds,x,y,scale=scale,easing=easing,
-                                      opacity=opacity,tint=echo.tint,tint_mix=echo.tint_mix,brightness=brightness)
+                pending.append((echo.pose_clip_name, echo.elapsed_seconds, x, y, opacity,
+                                echo.tint, echo.tint_mix, brightness))
                 continue
+            draw_pending()
             resource = resources[echo.clip_name]
             if sprite is not None and interpolate:
                 sprite.draw(echo.clip_name, echo.elapsed_seconds, x, y, scale=scale,
@@ -300,6 +311,7 @@ class PicoSwordEffects:
                                                                echo.tint, echo.tint_mix, brightness):
                         resource.draw(echo.clip_name, frame, x, self.renderer.pico.get_canvas_height() - y,
                                       scale=scale, part_visibility={"shadow": False})
+        draw_pending()
 
     def draw_body_wind(self, effects, camera, *, ground_color=None):
         """몸을 감아 도는 고정 반경의 짧은 궤적. 방사형 채움이나 팽창은 사용하지 않는다."""

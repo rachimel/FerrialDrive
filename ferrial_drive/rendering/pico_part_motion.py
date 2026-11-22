@@ -63,6 +63,8 @@ class PicoPartMotion:
         self.angular_painter = None
         self.upscaler = None
         self.echo_target = None
+        self.echo_instances = None
+        self.echo_instancing_unavailable = None
         self.shadow_map = None
         try:
             if surface:
@@ -416,6 +418,24 @@ class PicoPartMotion:
         self.draws_by_motion[motion] += 1
         return destination
 
+    def draw_echo_batch(self, requests, scale):
+        if self.paged or not self.pbr_lighting or self.echo_instancing_unavailable:
+            return False
+        from .part_echo_batch import PartEchoBatch, QUAD_LIMIT
+
+        if not 2 <= len(requests) <= QUAD_LIMIT:
+            return False
+        if self.echo_instances is None:
+            try:
+                self.echo_instances = PartEchoBatch(self)
+            except RuntimeError as exc:
+                self.echo_instancing_unavailable = str(exc)
+                return False
+        with self.timings.scope("parts.echo_instanced"):
+            return self.echo_instances.draw(requests, scale,
+                energy_color=self.energy_color, energy_gain=self.energy_mask_gain, rim=self.rim_light,
+                realtime_light=self.realtime_light, shadow_map=self.shadow_map, pbr_lighting=self.pbr_lighting)
+
     def report(self):
         return {**self.cache.report(), "draws": self.draws, "angular_draws": self.angular_draws, "direction_loads": self.residency.loads,
                 "draws_by_motion": dict(self.draws_by_motion),
@@ -447,7 +467,8 @@ class PicoPartMotion:
                 "upscale_aa_draws": self.upscaler.aa_draws if self.upscaler else 0,
                 "upscale_aa_storage_bytes": self.upscaler.aa_storage_bytes if self.upscaler else 0,
                 "upscale_storage_bytes": 4 * self.upscaler.size[0] * self.upscaler.size[1] if self.upscaler else 0,
-                "echo_storage_bytes": 4 * self.echo_target.size[0] * self.echo_target.size[1] if self.echo_target else 0}
+                "echo_storage_bytes": (4 * self.echo_target.size[0] * self.echo_target.size[1] if self.echo_target else 0)
+                    + (self.echo_instances.storage_bytes if self.echo_instances else 0)}
 
     def close(self):
         self.residency.close()
@@ -459,6 +480,8 @@ class PicoPartMotion:
             self.angular_painter.close()
         if self.echo_target is not None:
             self.echo_target.close()
+        if self.echo_instances is not None:
+            self.echo_instances.close()
         if self.upscaler is not None:
             self.upscaler.close()
         if self.shadow_map is not None:

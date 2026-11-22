@@ -19,6 +19,11 @@ flat out vec4 sourceBounds;
 uniform vec4 anchorScale;
 #endif
 uniform vec4 poseTimes[QUAD_LIMIT];
+#ifdef ECHO_INSTANCES
+uniform vec4 echoTints[QUAD_LIMIT];
+flat out vec4 echoTint;
+flat out vec2 echoFade;
+#endif
 #ifdef INSTANCE_TABLE
 uniform samplerBuffer instanceTable;
 uniform int instanceStart, screenDepthReady;
@@ -77,6 +82,10 @@ void main() {
 #endif
     localPhase=poseTimes[gl_InstanceID].x;
     pairIndex=int(poseTimes[gl_InstanceID].y);
+#ifdef ECHO_INSTANCES
+    echoTint=echoTints[gl_InstanceID];
+    echoFade=poseTimes[gl_InstanceID].zw;
+#endif
 #endif
 #ifdef SCREEN_DEPTH
     screenPlacement=screenPlacements[gl_InstanceID].xyz;
@@ -97,7 +106,8 @@ void main() {
 
 class InstancedQuads(SdlOpenGLPass):
     def __init__(self, pico, *, fragment_shader, extra_uniforms, per_instance_source=False, tile_placements=False,
-                 screen_depth=False, instance_table=False, coverage_instances=False, cache_keypose_samples=False):
+                 screen_depth=False, instance_table=False, coverage_instances=False, cache_keypose_samples=False,
+                 echo_instances=False):
         version = b"#version 430 compatibility" if cache_keypose_samples else b"#version 140"
         fragment = fragment_shader.replace(b"#version 120", version, 1)
         defines = b""
@@ -115,6 +125,9 @@ class InstancedQuads(SdlOpenGLPass):
             extra_uniforms = (*extra_uniforms, "instanceTable", "instanceStart", "depthOrigin", "screenDepthReady")
         if cache_keypose_samples:
             defines += b"\n#define CACHE_KEYPOSE_SAMPLES"
+        if echo_instances:
+            defines += b"\n#define ECHO_INSTANCES"
+            extra_uniforms = (*extra_uniforms, "echoTints[0]")
         vertex = VERTEX.replace(b"#version 140", version + defines, 1)
         super().__init__(pico, vertex_shader=vertex, fragment_shader=fragment,
                          extra_uniforms=(*extra_uniforms, "destinations[0]", "poseTimes[0]", "sources[0]",
@@ -122,6 +135,7 @@ class InstancedQuads(SdlOpenGLPass):
         self.rects = (ct.c_float * (QUAD_LIMIT * 4))()
         self.sources = (ct.c_float * (QUAD_LIMIT * 4))() if per_instance_source or tile_placements else None
         self.times = (ct.c_float * (QUAD_LIMIT * 4))()
+        self.echo_tints = (ct.c_float * (QUAD_LIMIT * 4))() if echo_instances else None
         self.screen_placements = (ct.c_float * (QUAD_LIMIT * 4))() if screen_depth and not instance_table else None
         self.submits = 0
         self.instance_uploads = self.instance_upload_bytes = 0
@@ -219,7 +233,7 @@ class InstancedQuads(SdlOpenGLPass):
             self.uniform_rects(self.uniforms["sources[0]"], len(chunk), self.sources)
             self._submit_rects(len(chunk))
 
-    def draw_instances(self, bounds, instances, *, sources=None, screen_placements=None):
+    def draw_instances(self, bounds, instances, *, sources=None, screen_placements=None, echo_styles=None):
         self._set_screen_transform()
         self.glUniform4f(self.uniforms["sourceRect"], *bounds)
         for first in range(0, len(instances), QUAD_LIMIT):
@@ -228,6 +242,10 @@ class InstancedQuads(SdlOpenGLPass):
                 offset = 4 * i
                 self.rects[offset:offset + 4] = rect
                 self.times[offset:offset + 2] = phase, first_sample
+                if echo_styles is not None:
+                    tint, brightness, opacity = echo_styles[first + i]
+                    self.times[offset + 2:offset + 4] = brightness, opacity
+                    self.echo_tints[offset:offset + 4] = tint
                 if sources is not None:
                     self.sources[offset:offset + 4] = sources[first + i]
                 if self.screen_placements is not None:
@@ -237,9 +255,11 @@ class InstancedQuads(SdlOpenGLPass):
                 self.uniform_rects(self.uniforms["sources[0]"], len(batch), self.sources)
             if self.screen_placements is not None:
                 self.uniform_rects(self.uniforms["screenPlacements[0]"], len(batch), self.screen_placements)
+            if echo_styles is not None:
+                self.uniform_rects(self.uniforms["echoTints[0]"], len(batch), self.echo_tints)
             self.uniform_rects(self.uniforms["poseTimes[0]"], len(batch), self.times)
             self._submit_rects(len(batch))
-            arrays = 2 + int(self.screen_placements is not None) + int(sources is not None)
+            arrays = 2 + int(self.screen_placements is not None) + int(sources is not None) + int(echo_styles is not None)
             self.instance_uploads += arrays
             self.instance_upload_bytes += arrays * len(batch) * 16
 
