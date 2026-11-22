@@ -163,7 +163,8 @@ class EnemyPartBatch:
         if self.painter is None:
             try:
                 self.painter = PartPainter(p, part_count=r.catalog.part_count, frame_crop=r.catalog.frame_crop,
-                    surface=True, pbr=True, coat=r.catalog.coat_members is not None, instanced=True)
+                    surface=True, pbr=True, coat=r.catalog.coat_members is not None, instanced=True,
+                    hermite_flow=r.hermite_flow, compact_depth=r.compact_depth)
             except RuntimeError as exc:
                 self.unavailable = str(exc)
                 return {}

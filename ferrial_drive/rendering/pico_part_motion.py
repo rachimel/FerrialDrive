@@ -13,7 +13,7 @@ from ferrial_drive.diagnostics.texture_metrics import bind_gl
 from .atlas_texture_cache import AtlasTextureCache
 from .direction_reprojection import direction_banks, direction_frame, direction_span
 from .part_atlas_residency import PartAtlasResidency
-from .part_motion_atlas import frame_state
+from .part_motion_atlas import COMPACT_DEPTH_ENCODING, frame_state
 from .part_motion_catalog import PartMotionCatalog
 from .part_pbr import COAT_CHANNELS
 from .part_painter import PART_SAMPLE_FIELDS, PartPainter
@@ -48,8 +48,11 @@ class PicoPartMotion:
             self.pbr_lighting = json.loads(lighting_path.read_text(encoding="utf-8"))
         else:
             self.pbr_lighting = None
+        self.hermite_flow = self.data.get("hermite_flow", False)
+        self.compact_depth = self.data.get("depth_encoding") == COMPACT_DEPTH_ENCODING
         self.painter = PartPainter(pico, part_count=self.catalog.part_count, paged=self.paged, frame_crop=self.catalog.frame_crop,
-                                   surface=surface, pbr=pbr, coat=coat)
+                                   surface=surface, pbr=pbr, coat=coat, hermite_flow=self.hermite_flow,
+                                   compact_depth=self.compact_depth)
         self.correspondence = {}
         if direction_warp:
             self.correspondence = self.data.get("direction_correspondence_by_motion", {})
@@ -70,7 +73,7 @@ class PicoPartMotion:
             if self.correspondence:
                 self.angular_painter = PartPainter(pico, angular=True, part_count=self.catalog.part_count,
                                                    paged=self.paged, frame_crop=self.catalog.frame_crop, surface=surface, pbr=pbr,
-                                                   coat=coat)
+                                                   coat=coat, hermite_flow=self.hermite_flow, compact_depth=self.compact_depth)
             if pbr or self.data.get("upscale_filter") == "bounded_bicubic":
                 aa_mode = upscale_aa if self.data.get("upscale_filter") == "bounded_bicubic" else "off"
                 self.upscaler = PartUpscaler(pico, aa_mode)

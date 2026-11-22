@@ -11,6 +11,7 @@ import zlib
 from .motion_atlas import UniqueFrames, pack_items, resize_color, resize_vectors
 
 DEPTH_MAX = 16777215
+COMPACT_DEPTH_ENCODING = "rg16_normalized_valid_blue"
 ENERGY_CHANNEL_TOLERANCE = 2
 MAX_PARTS = 13
 

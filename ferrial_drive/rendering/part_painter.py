@@ -39,6 +39,9 @@ uniform float depthOutput;
 uniform vec4 coatA[VIEWS], coatB[VIEWS];
 #endif
 uniform vec4 flowSteps[VIEWS];
+#ifdef HERMITE_FLOW
+uniform vec4 flowCurves[VIEWS];
+#endif
 #ifdef PART_PAGES
 uniform vec4 energyPlacementA[VIEWS], energyPlacementB[VIEWS];
 #endif
@@ -166,8 +169,13 @@ float depthAt(vec2 p,vec4 rect,float bank,vec2 size,int part,bool second) {
     if(any(lessThan(point,vec2(0.0)))||any(greaterThan(point,rect.zw))) return 0.0;
 #endif
     vec4 v=read_depth(point,rect,bank);
+#ifdef COMPACT_DEPTH
+    if(v.b<0.000001) return 0.0;
+    float encoded=dot(v.rg,vec2(256.0,1.0))*255.0/65535.0/v.b;
+#else
     if(v.a<0.000001) return 0.0;
     float encoded=dot(v.rgb,vec3(65536.0,256.0,1.0))*255.0/16777215.0/v.a;
+#endif
     vec2 range=bankData[int(bank)].xy;
     return range.x+encoded*range.y;
 }
@@ -231,15 +239,27 @@ vec4 shadeSurface(vec4 c,vec4 field,vec3 properties,vec2 coat,vec2 pixel,float d
 #endif
     return c;
 }
+#ifdef HERMITE_FLOW
+float flowPhase(float time,vec2 slopes) {
+    float inverse=1.0-time;
+    return time*time*(3.0-2.0*time)+time*inverse*(inverse*slopes.x-time*slopes.y);
+}
+#endif
 bool outsideSample(vec2 p,vec2 size) {
     return p.x<0.0||p.y<0.0||p.x>size.x||p.y>size.y;
 }
 vec4 keyposeSamplePoints(int i,vec2 p,vec2 size,float bank,float t) {
     vec2 a=p,b=p;
     if(t>0.0&&t<1.0) {
+        float forwardPhase=t,backwardPhase=1.0-t;
+#ifdef HERMITE_FLOW
+        vec4 slopes=PART_FIELD(flowCurves,i);
+        forwardPhase=flowPhase(t,slopes.xy);
+        backwardPhase=flowPhase(1.0-t,slopes.zw);
+#endif
         for(int step=0;step<16;++step) {
-            a=(a+p-t*flowAt(a,PART_FIELD(forwardRects,i),bank,size,PART_FIELD(flowSteps,i).xy))*0.5;
-            b=(b+p-(1.0-t)*flowAt(b,PART_FIELD(backwardRects,i),bank,size,PART_FIELD(flowSteps,i).zw))*0.5;
+            a=(a+p-forwardPhase*flowAt(a,PART_FIELD(forwardRects,i),bank,size,PART_FIELD(flowSteps,i).xy))*0.5;
+            b=(b+p-backwardPhase*flowAt(b,PART_FIELD(backwardRects,i),bank,size,PART_FIELD(flowSteps,i).zw))*0.5;
         }
     }
     return vec4(a,b);
@@ -501,13 +521,16 @@ class PartPainter:
               "crops", "shifts", "flowSteps")
 
     def __init__(self, pico, *, angular=False, part_count=MAX_PARTS, paged=False, frame_crop=False, surface=False,
-                 pbr=False, coat=False, instanced=False, deferred=False, depth_coverage=False,
-                 screen_depth=False, instance_table=False, cache_keypose_samples=False, keypose_samples_fp16=False,
-                 keypose_samples_offsets=False):
+                 pbr=False, coat=False, instanced=False, hermite_flow=False, compact_depth=False,
+                 deferred=False, depth_coverage=False, screen_depth=False, instance_table=False,
+                 cache_keypose_samples=False, keypose_samples_fp16=False, keypose_samples_offsets=False):
         self.pico = pico
         self.paged = paged
         self.frame_crop = frame_crop
+        self.hermite_flow = hermite_flow
         self.arrays = self.ARRAYS + (("energyPlacementA", "energyPlacementB") if paged else ())
+        if hermite_flow:
+            self.arrays += ("flowCurves",)
         self.page_kinds = self.PAGE_KINDS
         self.sample_fields = PART_SAMPLE_FIELDS
         if pbr:
@@ -544,6 +567,10 @@ class PartPainter:
             defines += "\n#define PBR"
         if coat:
             defines += "\n#define COAT"
+        if hermite_flow:
+            defines += "\n#define HERMITE_FLOW"
+        if compact_depth:
+            defines += "\n#define COMPACT_DEPTH"
         if deferred:
             defines += "\n#define DEFERRED_SURFACE"
             uniforms.append("deferredProfile")
@@ -615,8 +642,11 @@ class PartPainter:
                     x, y, w, h = tile.get("frame_crop", (0, 0, 0, 0))
                     arrays[kind + "Placement" + end.upper()].extend((x, y, w / part["crop"][2], h / part["crop"][3]))
             vectors = frames["vector"]
-            arrays["flowSteps"].extend(vectors[part["a"]["forward"]].get("flow_step", (0, 0)))
-            arrays["flowSteps"].extend(vectors[part["b"]["backward"]].get("flow_step", (0, 0)))
+            for key, end in (("forward", "a"), ("backward", "b")):
+                vector = vectors[part[end][key]]
+                arrays["flowSteps"].extend(vector.get("flow_step", (0, 0)))
+                if self.hermite_flow:
+                    arrays["flowCurves"].extend(vector.get("flow_curve", (1, 1)))
             arrays["crops"].extend(part["crop"])
             arrays["shifts"].extend((*part["shift"], bank))
         return arrays
