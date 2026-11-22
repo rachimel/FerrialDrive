@@ -147,10 +147,23 @@ def run_worker(args, applied, profile):
                     result["process_after_load"] = process_memory()
                     sample_enemy_textures(None, "after_load")
                     result["settings"] = asdict(app.game_settings)
+                    result["baked_shadow_texture_bytes"] = sum(
+                        width * height for resource in app.sprites if "shadow" in resource.alpha_layers
+                        for width, height in (resource.texture_sizes["shadow"],))
+                    player_sheets = set(app.clip_resources.values()) | set(app.attack_resources.values())
+                    result["player_sheet_texture_bytes"] = sum(resource.estimated_bytes for resource in player_sheets)
+                    result["player_auxiliary_sheet_texture_bytes"] = sum(
+                        resource.estimated_bytes for resource in app.sprites if resource not in player_sheets)
+                    if app.pbr_enabled and any("body" in resource.texture_sizes for resource in player_sheets):
+                        raise RuntimeError("PBR 시험에서 기존 플레이어 시트가 적재됐다.")
                     result["config_snapshot"] = json.loads(json.dumps({"movement": app.config, "hud": app.hud.config.data}))
                     if args.scenario == "combat":
                         result["player_health_initial"] = asdict(app.controller.health)
                         result["config_snapshot"]["encounter"] = app.encounter.settings
+                        result["enemy_atlas_sources"] = {
+                            kind: str(sprite.resource.source) for kind, sprite in app.encounter_view.sprites.items()
+                            if sprite.part_counts
+                        }
                     result["atlas_divisor_after_load"] = (app.motion_sprite.resource.data.get("divisor")
                         if app.motion_sprite is not None and hasattr(app.motion_sprite, "resource") else None)
                     if not app.demo and app.part_sprite is None:
