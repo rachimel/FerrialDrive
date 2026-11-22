@@ -25,45 +25,63 @@ def pose_intervals(sprite, name):
     if name in attacks:
         edges = [0, *(frame / 12 for frame in attacks[name]), duration]
     else:
-        count = {"move": 6, "hit": 2, "break": 4}[name]
+        count = 4 if name == sprite.break_action_motion else {"move": 6, "hit": 2, "break": 4}[name]
         edges = [duration * index / count for index in range(count + 1)]
     return list(zip(edges, edges[1:]))
 
 
-def capture_shadows(sprites, first_slot, columns, cell):
-    shadows = {}
+def capture_shadow(sprite, motion, direction, seconds, slot, columns, cell):
+    resource = sprite.resource
+    shadow = resource.shadow_map
+    if not resource.prepare_shadow(sprite.part_clip(motion, direction), seconds) or not shadow.ground_bounds:
+        raise ValueError(f"{motion}/{direction}의 Box 바닥 그림자가 없다.")
+    pivot_x, pivot_y = shadow.pivot
+    softness = 5 / shadow.pixel_scale
+    (left, top, width, height), _ = shadow.ground_region(1, softness)
+    ratio = min(1, (cell - 2) / max(width, height))
+    x, y = (slot % columns) * cell + 1, (slot // columns) * cell + 1
+    shadow.draw_ground(x + (pivot_x - left) * ratio, y + (pivot_y - top) * ratio,
+                       ratio / shadow.pixel_scale, 1, softness_pixels=softness * ratio)
+    return [x, y, ceil(width * ratio), ceil(height * ratio),
+            (left - pivot_x) * shadow.pixel_scale, (top - pivot_y) * shadow.pixel_scale,
+            width * shadow.pixel_scale, height * shadow.pixel_scale]
+
+
+def capture_shadows(sprites, action_intervals, first_slot, columns, cell):
+    shadows, shadow_clips = {}, {}
     for kind, sprite in sprites.items():
-        resource = sprite.resource
-        shadow = resource.shadow_map
-        pivot_x, pivot_y = shadow.pivot
         directions = shadows[kind] = {}
         for direction in PART_DIRECTIONS:
-            # 방향별 걷기 대표 자세의 Box 투영을 군집 전체가 사용한다.
-            seconds = sprite.duration("move") * .25
-            if not resource.prepare_shadow(sprite.part_clip("move", direction), seconds) or not shadow.ground_bounds:
-                raise ValueError(f"{kind}/{direction}의 Box 바닥 그림자가 없다.")
-            softness = 5 / shadow.pixel_scale
-            (left, top, width, height), _ = shadow.ground_region(1, softness)
-            ratio = min(1, (cell - 2) / max(width, height))
-            x, y = (first_slot % columns) * cell + 1, (first_slot // columns) * cell + 1
-            shadow.draw_ground(x + (pivot_x - left) * ratio, y + (pivot_y - top) * ratio,
-                               ratio / shadow.pixel_scale, 1, softness_pixels=softness * ratio)
-            directions[direction] = [x, y, ceil(width * ratio), ceil(height * ratio),
-                                     (left - pivot_x) * shadow.pixel_scale, (top - pivot_y) * shadow.pixel_scale,
-                                     width * shadow.pixel_scale, height * shadow.pixel_scale]
+            directions[direction] = capture_shadow(sprite, "move", direction, sprite.duration("move") * .25,
+                                                   first_slot, columns, cell)
             first_slot += 1
-    return shadows
+    for kind, intervals in action_intervals.items():
+        sprite = sprites[kind]
+        motion = sprite.break_action_motion
+        directions = {}
+        shadow_clips[kind] = {motion: {"starts": [start for start, _ in intervals], "directions": directions}}
+        for direction in PART_DIRECTIONS:
+            pose_tiles = directions[direction] = []
+            for start, end in intervals:
+                pose_tiles.append(capture_shadow(sprite, motion, direction, (start + end) / 2,
+                                                 first_slot, columns, cell))
+                first_slot += 1
+    return shadows, shadow_clips
 
 
 def capture(pico, sprites):
     width, cell = CROWD_ATLAS_SIZE, CROWD_CELL_SIZE
     columns = width // cell
-    intervals_by_kind = {}
+    intervals_by_kind, action_intervals = {}, {}
     for kind, sprite in sprites.items():
         names = dict.fromkeys(("move", "attack", "hit", sprite.break_motion,
                                *(spec["motion"] for spec in sprite.attack_motions.values())))
+        if sprite.break_action_motion is not None:
+            names[sprite.break_action_motion] = None
         intervals_by_kind[kind] = {name: pose_intervals(sprite, name) for name in names}
-    shadow_slots = len(sprites) * len(PART_DIRECTIONS)
+        if sprite.break_action_motion is not None:
+            action_intervals[kind] = intervals_by_kind[kind][sprite.break_action_motion]
+    shadow_slots = (len(sprites) + sum(map(len, action_intervals.values()))) * len(PART_DIRECTIONS)
     body_count = sum(len(intervals) for motions in intervals_by_kind.values() for intervals in motions.values())
     rows = max(columns, ceil((body_count * len(PART_DIRECTIONS) + shadow_slots) / columns))
     height = rows * cell
@@ -104,12 +122,13 @@ def capture(pico, sprites):
                                          body_width * pixel_scale, body_height * pixel_scale])
                             index += 1
                 resource.release_pages()
-            shadows = capture_shadows(sprites, body_slots, columns, cell)
+            shadows, shadow_clips = capture_shadows(sprites, action_intervals, body_slots, columns, cell)
             if pico.SDL_RenderReadPixels(pico.renderer, None, pico.SDL_PIXELFORMAT_RGBA32, pixels, width * 4):
                 raise RuntimeError("군집 아틀라스 픽셀 읽기 실패")
     finally:
         pico.SDL_DestroyTexture(atlas)
-    return {"version": 3, "size": [width, height], "profiles": profiles, "shadows": shadows}, pixels
+    return {"version": 3, "size": [width, height], "profiles": profiles, "shadows": shadows,
+            "shadow_clips": shadow_clips}, pixels
 
 
 def main():

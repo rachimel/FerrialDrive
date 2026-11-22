@@ -8,8 +8,8 @@ from .entity_storage import DenseStorage, integer_field, scalar_field, vector_fi
 from .geometry import Vec2
 
 
-PHASES = ("move", "windup", "active", "recovery", "stagger")
-MOVE, WINDUP, ACTIVE, RECOVERY, STAGGER = range(len(PHASES))
+PHASES = ("move", "windup", "active", "recovery", "stagger", "break")
+MOVE, WINDUP, ACTIVE, RECOVERY, STAGGER, BREAK = range(len(PHASES))
 ATTACK_KINDS = ("melee", "ranged")
 MELEE, RANGED = range(len(ATTACK_KINDS))
 
@@ -21,7 +21,7 @@ class EnemyRecord(Structure):
         ("fire_distance", c_double), ("preferred", c_double),
         ("travel", c_double), ("walk", c_double), ("walk_x", c_double), ("walk_y", c_double),
         ("push_x", c_double), ("push_y", c_double), ("push_remaining", c_double), ("push_duration", c_double),
-        ("death_remaining", c_double), ("remaining", c_double),
+        ("death_remaining", c_double), ("remaining", c_double), ("break_duration", c_double),
         ("health", c_int64), ("interrupts", c_bool), ("hit_player", c_bool),
         ("phase", c_byte), ("attack_kind", c_byte),
     ]
@@ -46,6 +46,7 @@ class EncounterEnemy:
     knockback_duration_seconds: float = .12
     knockback_interrupts: bool = False
     death_remaining_seconds: float = 0
+    break_duration_seconds: float = 0
 
     @property
     def alive(self):
@@ -76,6 +77,7 @@ class EnemyView(EncounterEnemy):
     knockback_duration_seconds = scalar_field("push_duration")
     knockback_interrupts = scalar_field("interrupts")
     death_remaining_seconds = scalar_field("death_remaining")
+    break_duration_seconds = scalar_field("break_duration")
     health = integer_field("health")
 
     @property

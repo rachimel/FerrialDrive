@@ -27,6 +27,7 @@ class EnemySprite:
     part_counts: dict | None = None
     attack_motions: dict = field(default_factory=dict)
     part_body_bounds: tuple | None = None
+    break_action_motion: str | None = None
     pose_cache: object = field(default=None, init=False, repr=False)
     body_batch: object = field(default=None, init=False, repr=False)
     shadow_batch: object = field(default=None, init=False, repr=False)
@@ -88,7 +89,12 @@ class EnemySprite:
                 raise ValueError("적 공격 모션에는 이름과 공격·회수 시작 프레임이 필요하다.")
             attacks.append((spec["motion"], spec["attack_frames"]))
         attack_names = {motion for motion, _ in attacks}
-        for motion in {*MOTIONS, self.break_motion, *attack_names}:
+        required_motions = {*MOTIONS, self.break_motion, *attack_names}
+        if self.break_action_motion is not None:
+            if not isinstance(self.break_action_motion, str) or not self.break_action_motion:
+                raise ValueError("Break 전용 모션 이름이 필요하다.")
+            required_motions.add(self.break_action_motion)
+        for motion in required_motions:
             if self.part_counts:
                 if self.part_counts.get(motion, 0) < 1 or set(self.resource.data["motions"].get(motion, ())) != set("01234567"):
                     raise ValueError(f"적 파츠의 {motion}에 8방향과 재생 길이가 필요하다.")
@@ -135,6 +141,12 @@ class EnemySprite:
         direction = direction_name((enemy.facing.x, enemy.facing.y))
         if not enemy.alive:
             return self.break_motion, direction, max(0, self.death_seconds - enemy.death_remaining_seconds)
+        if enemy.phase == "break":
+            motion = self.break_action_motion or self.break_motion
+            duration = self.duration(motion)
+            break_seconds = getattr(enemy, "break_duration_seconds", 0) or duration
+            phase = 1 - enemy.remaining_seconds / max(.001, break_seconds)
+            return motion, direction, max(0, phase) * duration
         if enemy.knockback_remaining_seconds > 0:
             fraction = 1 - enemy.knockback_remaining_seconds / enemy.knockback_duration_seconds
             return "hit", direction, max(0, fraction) * self.duration("hit")
@@ -293,7 +305,7 @@ def load_enemy_part_sprites(path, pico, lighting, settings, timings, stream_budg
                                       pbr_lighting=lighting, upscale_aa=settings.upscale_aa)
             sprite = EnemySprite(resource, 1, row["stride_m"], tuple(row["attack_frames"]),
                                 row.get("muzzle_offsets", {}), row["frames"], row.get("attack_motions", {}),
-                                part_body_bounds=bounds)
+                                part_body_bounds=bounds, break_action_motion=row.get("break_action_motion"))
             sprites[kind] = sprite
             if "energy_color" in row:
                 color = tuple(row["energy_color"])

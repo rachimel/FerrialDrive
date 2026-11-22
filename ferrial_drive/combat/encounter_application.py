@@ -88,10 +88,14 @@ class EncounterApplication(MovementApplication):
         folder = self.encounter_path.parent
         candidates = ("enemy_primary_part_sprites", "enemy_repacked_sprites", "enemy_sparse_sprites",
                       "enemy_part_sprites")
-        selected = next((key for key in candidates if rendering.get(key) and (folder / rendering[key]).is_file()), None)
-        if selected is None:
+        for selected in candidates:
+            entries = rendering.get(selected)
+            paths = entries if isinstance(entries, list) else (entries,)
+            path = next((folder / entry for entry in paths if entry and (folder / entry).is_file()), None)
+            if path is not None:
+                break
+        else:
             return {}
-        path = folder / rendering[selected]
         atlas_path = path.with_name("crowd_atlas.json")
         atlas = self.encounter_view.crowd_atlas
         if atlas is None and self.crowd_atlas_enabled and atlas_path.is_file():

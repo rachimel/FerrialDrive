@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [Shock Bot Break 전용 눕기 동작](2026-11-22-shock-bot-prone.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-shock-bot-prone:U1]]`은 동작 수정과 Break 정정의 정확한 시각이다. 검색 단서는 `쓰러질 때, 완전히 눕게`, `Break임`이다.
+
 - [Shock Bot 파츠 보간·그림자·거리별 최적화](2026-11-22-shock-bot-pbr.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-shock-bot-pbr:U1]]`은 보간·그림자·최적화 규칙 요청의 정확한 시각이다. 검색 단서는 `인간형 적도 보간 추가`, `최적화 규칙`이다.
 
 - [격파한 적의 레이더 표식 제거](2026-11-22-radar-live-enemies.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-radar-live-enemies:U1]]`은 표식 제거 요청의 정확한 시각이다. 검색 단서는 `적 죽으면 Radar에서 사라지게 하자`다.

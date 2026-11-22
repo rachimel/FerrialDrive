@@ -7,7 +7,7 @@ from numba import njit, types
 from numba.extending import intrinsic, overload, register_jitable
 
 from .enemy_steering import MELEE_ATTACK, NO_ATTACK, movement_length, pursuit, ranged_recovery
-from .enemy_storage import EnemyRecord, MOVE, RANGED, RECOVERY
+from .enemy_storage import EnemyRecord, BREAK, MOVE, RANGED, RECOVERY
 
 
 register_jitable(pursuit)
@@ -134,12 +134,19 @@ def _step(bodies, pending, heads, links, seconds, player_x, player_y, player_rad
             body.push_remaining = max(0., remaining - elapsed)
             if body.push_remaining < 1e-9:
                 body.push_remaining = 0.
-                if body.health > 0 and body.interrupts:
+                if body.health > 0 and body.interrupts and body.phase != BREAK:
                     body.phase = MOVE
             _move(bodies, heads, links, i, body.push_x * amount, body.push_y * amount, map_size, cell_size)
         if body.health <= 0:
             body.death_remaining = max(0., body.death_remaining - seconds)
-        if reactions_only or body.health <= 0 or (remaining > 0 and body.interrupts):
+        if reactions_only or body.health <= 0:
+            continue
+        if body.phase == BREAK:
+            body.remaining = max(0., body.remaining - seconds)
+            if body.remaining <= 1e-9:
+                body.phase = MOVE
+            continue
+        if remaining > 0 and body.interrupts:
             continue
         attack = NO_ATTACK
         pursues = body.phase == MOVE

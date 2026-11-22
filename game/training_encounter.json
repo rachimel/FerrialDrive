@@ -2,7 +2,10 @@
   "rendering": {
     "sprite_scale": 1.25,
     "shared_frame_distance_m": 16,
-    "enemy_primary_part_sprites": "../data/runtime/part_motion/enemy_shock_bot_r01/enemy_parts.json",
+    "enemy_primary_part_sprites": [
+      "../data/runtime/part_motion/enemy_shock_bot_r03/enemy_parts.json",
+      "../data/runtime/part_motion/enemy_shock_bot_r01/enemy_parts.json"
+    ],
     "enemy_sprites": "../data/runtime/catalog/prerender/enemy_humanoid_shock_bot_r02/enemy_sprites.json"
   },
   "knockback": {

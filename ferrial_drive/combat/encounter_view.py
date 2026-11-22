@@ -126,7 +126,8 @@ class EncounterView:
               player_position_m, locked_id):
         r, zoom = self.primitives, self.camera.zoom
         width, height = window_size
-        phase_names = {"move": "이동", "windup": "준비", "active": "공격", "recovery": "회수", "stagger": "피격"}
+        phase_names = {"move": "이동", "windup": "준비", "active": "공격", "recovery": "회수",
+                       "stagger": "피격", "break": "Break"}
         labels = []
         break_labels = []
         placed = []
@@ -166,7 +167,7 @@ class EncounterView:
                 if shared == CROWD_ATLAS:
                     if enemy.alive:
                         crowd_shadows.append((enemy.profile.kind, playback[1], x, foot, sprite.scale * zoom,
-                                              max(4, enemy.profile.hit_radius_pixels * .45 * zoom)))
+                                              max(4, enemy.profile.hit_radius_pixels * .45 * zoom), playback))
                 elif sprite is not None and sprite.part_counts:
                     pose = sprite.ground_shadow_pose(playback)
                     kind = enemy.profile.kind

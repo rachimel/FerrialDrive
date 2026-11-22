@@ -229,8 +229,16 @@ class EnemyEncounter:
         enemy.knockback_velocity_mps = direction.normalized() * (2 * distance / duration)
         enemy.knockback_remaining_seconds = enemy.knockback_duration_seconds = duration
         enemy.knockback_interrupts = interrupts
-        if interrupts:
+        if interrupts and enemy.phase != "break":
             enemy.phase, enemy.remaining_seconds = "stagger", 0
+
+    def counter_break(self, enemy_id, direction, duration_seconds):
+        enemy = self.enemies.get(enemy_id)
+        if enemy is None or not enemy.alive:
+            return
+        self.knock_back(enemy_id, direction)
+        enemy.phase = "break"
+        enemy.remaining_seconds = enemy.break_duration_seconds = duration_seconds
 
     def _take_reaction_movement(self, enemy, seconds):
         remaining = enemy.knockback_remaining_seconds
@@ -243,7 +251,7 @@ class EnemyEncounter:
             enemy.knockback_remaining_seconds = max(0, remaining - elapsed)
             if enemy.knockback_remaining_seconds < 1e-9:
                 enemy.knockback_remaining_seconds = 0
-                if enemy.alive and enemy.knockback_interrupts:
+                if enemy.alive and enemy.knockback_interrupts and enemy.phase != "break":
                     enemy.phase = "move"
         if not enemy.alive:
             enemy.death_remaining_seconds = max(0, enemy.death_remaining_seconds - seconds)
@@ -307,8 +315,13 @@ class EnemyEncounter:
         interrupts = enemy.knockback_interrupts and enemy.knockback_remaining_seconds > 0
         if enemy.knockback_remaining_seconds > 0 or not enemy.alive:
             self._advance_reaction(enemy, seconds)
-            if interrupts or not enemy.alive:
+            if (interrupts and enemy.phase != "break") or not enemy.alive:
                 return
+        if enemy.phase == "break":
+            enemy.remaining_seconds = max(0, enemy.remaining_seconds - seconds)
+            if enemy.remaining_seconds <= 1e-9:
+                enemy.phase = "move"
+            return
         profile = enemy.profile
         if enemy.phase == "move":
             self._think(enemy, seconds, end)

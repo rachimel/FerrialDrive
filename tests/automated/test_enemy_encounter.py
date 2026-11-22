@@ -30,6 +30,35 @@ def world(kind="small", position=(510, 500)):
 
 
 class EnemyRulesTests(unittest.TestCase):
+    def test_alive_break_uses_its_own_motion_and_death_keeps_the_original(self):
+        encounter = world("humanoid")
+        enemy = encounter.enemies["test"]
+        encounter.counter_break("test", Vec2(1, 0), .7)
+        self.assertTrue(enemy.alive)
+        enemy.remaining_seconds = .175
+        sprite = EnemySprite(None, 1, 18, (5, 7), {}, {"break": 12, "knockdown": 8},
+                            break_action_motion="knockdown")
+        motion, direction, seconds = sprite.playback(enemy)
+        self.assertEqual((motion, direction), ("knockdown", "w"))
+        self.assertAlmostEqual(seconds, .5)
+        enemy.health, enemy.death_remaining_seconds = 0, .25
+        self.assertEqual(sprite.playback(enemy), ("break", "w", .75))
+
+    def test_reaction_only_keeps_break_time_for_single_and_batched_enemies(self):
+        for count in (1, 8):
+            with self.subTest(count=count):
+                settings = json.loads(ENCOUNTER.read_text(encoding="utf-8"))
+                settings["spawns"] = [{"id": str(i), "profile": "humanoid", "position_m": (510, 500 + i * 8)}
+                                      for i in range(count)]
+                encounter = EnemyEncounter(settings, map_size_m=1000, player_radius_m=2.5)
+                encounter.counter_break("0", Vec2(1, 0), .7)
+                enemy = encounter.enemies["0"]
+                encounter.advance_reactions(.2)
+                self.assertEqual((enemy.phase, enemy.remaining_seconds), ("break", .7))
+                encounter.advance(.1, (500, 500), (500, 500))
+                self.assertEqual(enemy.phase, "break")
+                self.assertAlmostEqual(enemy.remaining_seconds, .6)
+
     def test_view_culling_preserves_edges_shake_and_dying_enemies(self):
         camera = LookAheadCamera(640, 480)
         projection = GroundProjection(25.6, .3209)

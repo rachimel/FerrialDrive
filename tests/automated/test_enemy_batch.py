@@ -389,9 +389,12 @@ class EnemyBatchGpuTests(unittest.TestCase):
             pixels[start:start + 128] = bytes((70, 22, 14, 255) if y < 1066 else (0, 0, 0, 255)) * 32
         body = [8, 1050, 32, 16, -16, -32, 32, 16]
         shadow = [8, 1066, 32, 16, -16, -8, 32, 16]
+        fallen_shadow = [8, 1066, 32, 16, -24, -8, 48, 16]
         document = {"version": 3, "size": [width, height],
                     "profiles": {"humanoid": {"move": {"starts": [0], "directions": {"s": [body]}}}},
-                    "shadows": {"humanoid": {"s": shadow}}}
+                    "shadows": {"humanoid": {"s": shadow}},
+                    "shadow_clips": {"humanoid": {"knockdown": {"starts": [0, .5],
+                                      "directions": {"s": [shadow, fallen_shadow]}}}}}
         with TemporaryDirectory() as directory:
             path = Path(directory) / "crowd_atlas.json"
             path.write_text(json.dumps(document), encoding="utf-8")
@@ -399,7 +402,10 @@ class EnemyBatchGpuTests(unittest.TestCase):
             atlas = EnemyCrowdAtlas(self.pico, path)
         self.addCleanup(atlas.close)
         placement = ("humanoid", ("move", "s", 0), 100, 120, 1)
-        shadows = [("humanoid", "s", 100, 120, 1, 16)]
+        ground = ("humanoid", "s", 100, 120, 1, 16)
+        self.assertEqual(atlas._shadow_rect(*ground, ("knockdown", "s", .2))[1], (84, 112, 32, 16))
+        self.assertEqual(atlas._shadow_rect(*ground, ("knockdown", "s", .6))[1], (76, 112, 48, 16))
+        shadows = [(*ground, ("knockdown", "s", .6))]
         self.assertTrue(atlas.supports(*placement[:2]))
 
         def draw(batched):

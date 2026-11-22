@@ -28,12 +28,13 @@ class EnemyCrowdAtlas:
             raise ValueError("지원하지 않는 군집 아틀라스 형식이다.")
         self.width, self.height = width, height
         self.profiles = document["profiles"]
+        self.shadow_clips = document.get("shadow_clips", {})
         self.bytes = width * height * 4
         data = zlib.decompress(source.with_suffix(".rgba.zlib").read_bytes())
         if len(data) != self.bytes:
             raise ValueError("군집 아틀라스의 픽셀 크기가 맞지 않는다.")
         p = self.pico
-        for motions in self.profiles.values():
+        for motions in (*self.profiles.values(), *self.shadow_clips.values()):
             for motion in motions.values():
                 for direction, rows in motion["directions"].items():
                     motion["directions"][direction] = tuple((p.SDL_Rect(*row[:4]), row[4:]) for row in rows)
@@ -69,14 +70,21 @@ class EnemyCrowdAtlas:
         return (round(x + left * scale), round(foot + top * scale),
                 max(1, round(width * scale)), max(1, round(height * scale)))
 
-    def _body_rect(self, kind, playback, x, foot, scale):
-        motion, direction, seconds = playback
-        clip = self.profiles[kind][motion]
+    def _pose_rect(self, clip, direction, seconds, x, foot, scale):
         index = bisect_right(clip["starts"], seconds, lo=1) - 1
         source, bounds = clip["directions"][direction][index]
         return source, self._scaled_rect(x, foot, bounds, scale)
 
-    def _shadow_rect(self, kind, direction, x, foot, scale, radius):
+    def _body_rect(self, kind, playback, x, foot, scale):
+        motion, direction, seconds = playback
+        return self._pose_rect(self.profiles[kind][motion], direction, seconds, x, foot, scale)
+
+    def _shadow_rect(self, kind, direction, x, foot, scale, radius, playback=None):
+        if playback is not None:
+            motion, _, seconds = playback
+            clip = self.shadow_clips.get(kind, {}).get(motion)
+            if clip is not None and direction in clip["directions"]:
+                return self._pose_rect(clip, direction, seconds, x, foot, scale)
         tile = self.shadows.get((kind, direction))
         if tile is None:
             return self.shadow_source, (round(x - radius), round(foot - radius * .5), round(radius * 2), round(radius))

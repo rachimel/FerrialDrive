@@ -72,7 +72,7 @@ python automate/run.py part-sparse-atlas --catalog 원본_품질폴더/catalog.j
 
 ## 적의 방향별 아틀라스 제한
 
-본편과 교전 테스트는 먼저 `rendering.enemy_primary_part_sprites`를 찾는다. 이 카탈로그 옆에 `crowd_atlas.json`과 `enemy_compact_parts.json`이 있으면 압축 적 카탈로그를 선택한다. 기존 카탈로그에서는 `rendering.enemy_compact_sprites.catalog` 설정을 계속 사용한다. 원거리 군집 시트는 가로 1,024px에 64px 셀을 배치한다. 적 기종·동작·그림자가 들어갈 만큼 행을 늘려 본체와 그림자를 같은 텍스처에서 배치 제출한다.
+본편과 교전 테스트는 `rendering.enemy_primary_part_sprites`의 첫 사용 가능한 카탈로그를 읽는다. 단일 경로나 우선순위 배열을 사용한다. 이 카탈로그 옆에 `crowd_atlas.json`과 `enemy_compact_parts.json`이 있으면 압축 적 카탈로그를 선택한다. 기존 카탈로그에서는 `rendering.enemy_compact_sprites.catalog` 설정을 계속 사용한다. 원거리 군집 시트는 가로 1,024px에 64px 셀을 배치한다. 적 기종·동작·그림자가 들어갈 만큼 행을 늘려 본체와 그림자를 같은 텍스처에서 배치 제출한다. Shock Bot Break의 그림자는 같은 시트에서 포즈 구간에 맞춰 선택한다.
 
 근거리와 록온은 `(모션, 방향)`에 필요한 PBR 페이지의 주소와 적재 상태를 조회한다. 페이지가 준비되는 동안 같은 기종·동작·방향의 군집 포즈를 표시한다. Shock Bot도 24fps 파츠 표본을 High·Medium·Low로 패킹하며, BC7 색상·축소 RG8 벡터·희소 키포즈·박스 그림자를 사용한다.
 
