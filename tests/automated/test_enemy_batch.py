@@ -4,9 +4,11 @@ import ctypes as ct
 import json
 import os
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
+import zlib
 
 from ferrial_drive.combat.camera import LookAheadCamera
 from ferrial_drive.combat.encounter_view import EncounterView
@@ -378,6 +380,36 @@ class EnemyBatchGpuTests(unittest.TestCase):
             split = self.capture(draw)
         self.assertEqual(submits.call_count, 9)
         np.testing.assert_array_equal(split, batched)
+
+    def test_tall_crowd_atlas_draws_body_and_shadow_below_square_extent(self):
+        width, height = 1024, 1088
+        pixels = bytearray(width * height * 4)
+        for y in range(1050, 1082):
+            start = (width * y + 8) * 4
+            pixels[start:start + 128] = bytes((70, 22, 14, 255) if y < 1066 else (0, 0, 0, 255)) * 32
+        body = [8, 1050, 32, 16, -16, -32, 32, 16]
+        shadow = [8, 1066, 32, 16, -16, -8, 32, 16]
+        document = {"version": 3, "size": [width, height],
+                    "profiles": {"humanoid": {"move": {"starts": [0], "directions": {"s": [body]}}}},
+                    "shadows": {"humanoid": {"s": shadow}}}
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "crowd_atlas.json"
+            path.write_text(json.dumps(document), encoding="utf-8")
+            path.with_suffix(".rgba.zlib").write_bytes(zlib.compress(pixels))
+            atlas = EnemyCrowdAtlas(self.pico, path)
+        self.addCleanup(atlas.close)
+        placement = ("humanoid", ("move", "s", 0), 100, 120, 1)
+        shadows = [("humanoid", "s", 100, 120, 1, 16)]
+        self.assertTrue(atlas.supports(*placement[:2]))
+
+        def draw(batched):
+            atlas.draw_shadows(shadows, .6, batched=batched)
+            if batched:
+                atlas.draw_bodies([placement])
+            else:
+                atlas.draw(*placement)
+
+        self.compare(lambda: draw(False), lambda: draw(True), 1)
 
     def test_deferred_shades_both_profiles_once_and_keeps_body_placement(self):
         from ferrial_drive.rendering.enemy_deferred_pbr import EnemyDeferredPbr

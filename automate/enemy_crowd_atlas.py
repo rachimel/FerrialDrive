@@ -56,15 +56,24 @@ def capture_shadows(sprites, first_slot, columns, cell):
 
 
 def capture(pico, sprites):
-    size, cell = CROWD_ATLAS_SIZE, CROWD_CELL_SIZE
-    columns = size // cell
-    body_slots = columns ** 2 - len(sprites) * len(PART_DIRECTIONS)
+    width, cell = CROWD_ATLAS_SIZE, CROWD_CELL_SIZE
+    columns = width // cell
+    intervals_by_kind = {}
+    for kind, sprite in sprites.items():
+        names = dict.fromkeys(("move", "attack", "hit", sprite.break_motion,
+                               *(spec["motion"] for spec in sprite.attack_motions.values())))
+        intervals_by_kind[kind] = {name: pose_intervals(sprite, name) for name in names}
+    shadow_slots = len(sprites) * len(PART_DIRECTIONS)
+    body_count = sum(len(intervals) for motions in intervals_by_kind.values() for intervals in motions.values())
+    rows = max(columns, ceil((body_count * len(PART_DIRECTIONS) + shadow_slots) / columns))
+    height = rows * cell
+    body_slots = columns * rows - shadow_slots
     atlas = pico.SDL_CreateTexture(pico.renderer, pico.SDL_PIXELFORMAT_RGBA32, pico.SDL_TEXTUREACCESS_TARGET,
-                                   size, size)
+                                   width, height)
     if not atlas:
         raise RuntimeError("군집 아틀라스 렌더 타깃 생성 실패")
     profiles, index = {}, 0
-    pixels = (ct.c_ubyte * (size * size * 4))()
+    pixels = (ct.c_ubyte * (width * height * 4))()
     try:
         with render_target(pico, atlas):
             pico.SDL_SetRenderDrawColor(pico.renderer, 0, 0, 0, 0)
@@ -74,10 +83,7 @@ def capture(pico, sprites):
                 pixel_scale = resource.data["pixel_scale"]
                 pivot_x, pivot_y = resource.data["pivot_top_left"]
                 motions = profiles[kind] = {}
-                names = dict.fromkeys(("move", "attack", "hit", sprite.break_motion,
-                                       *(spec["motion"] for spec in sprite.attack_motions.values())))
-                for name in names:
-                    intervals = pose_intervals(sprite, name)
+                for name, intervals in intervals_by_kind[kind].items():
                     directions = {}
                     motions[name] = {"starts": [start for start, _ in intervals], "directions": directions}
                     for bank, direction in enumerate(PART_DIRECTIONS):
@@ -99,11 +105,11 @@ def capture(pico, sprites):
                             index += 1
                 resource.release_pages()
             shadows = capture_shadows(sprites, body_slots, columns, cell)
-            if pico.SDL_RenderReadPixels(pico.renderer, None, pico.SDL_PIXELFORMAT_RGBA32, pixels, size * 4):
+            if pico.SDL_RenderReadPixels(pico.renderer, None, pico.SDL_PIXELFORMAT_RGBA32, pixels, width * 4):
                 raise RuntimeError("군집 아틀라스 픽셀 읽기 실패")
     finally:
         pico.SDL_DestroyTexture(atlas)
-    return {"version": 2, "size": size, "profiles": profiles, "shadows": shadows}, pixels
+    return {"version": 3, "size": [width, height], "profiles": profiles, "shadows": shadows}, pixels
 
 
 def main():
