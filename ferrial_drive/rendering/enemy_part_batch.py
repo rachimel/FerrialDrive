@@ -184,13 +184,15 @@ class EnemyPartBatch:
             if group is None:
                 clip = r.get(*key)["data"]["clip"]
                 state = frame_state(clip, clip, seconds)
-                group = groups[key] = clip, state, [], {}, [], []
-            clip, state, instances, samples, ids, regions = group
+                bx, by, bw, bh = state["bounds"]
+                geometry = ((px - bx) * factor, (py - by) * factor,
+                            max(1, round(bw * factor)) + 2 * pad,
+                            max(1, round(bh * factor)) + 2 * pad, bw, bh)
+                group = groups[key] = clip, state, geometry, [], {}, [], []
+            clip, _, geometry, instances, samples, ids, regions = group
             first, phase = frame_phase(clip, seconds)
-            bx, by, bw, bh = state["bounds"]
-            width, height = max(1, round(bw * factor)), max(1, round(bh * factor))
-            destination = p.SDL_Rect(round(x - (px - bx) * factor) - pad,
-                                     round(foot - (py - by) * factor) - pad, width + 2 * pad, height + 2 * pad)
+            offset_x, offset_y, width, height, bw, bh = geometry
+            destination = p.SDL_Rect(round(x - offset_x) - pad, round(foot - offset_y) - pad, width, height)
             pose = motion, direction, first, phase
             source = pose_slots.get(pose)
             if source is not None:
@@ -224,7 +226,7 @@ class EnemyPartBatch:
         scope = sampler.batch() if r.stream_budget is not None else nullcontext()
         textures = AtlasTextureBindings(sampler) if r.stream_budget is not None else nullcontext()
         with render_target(p, target.texture), scope, textures as bindings:
-            for key, (_, state, instances, samples, ids, regions) in groups.items():
+            for key, (_, state, _, instances, samples, ids, regions) in groups.items():
                 if not instances:
                     continue
                 bank = r.get(*key)

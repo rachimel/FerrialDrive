@@ -31,13 +31,21 @@ class LookAheadCamera:
     def world_to_screen(self, point, *, include_feedback=True):
         """월드 표현은 충격을 포함한다. 고정 HUD 기준점에는 포함하지 않을 수 있다."""
         offset = self.feedback_offset_pixels if include_feedback else (0, 0)
-        return tuple((value - camera) * self.zoom + center + shift
+        zoom = self.zoom
+        if type(point) is tuple and len(point) == len(self.position) == 2:
+            return ((point[0] - self.position[0]) * zoom + self.screen_center[0] + offset[0],
+                    (point[1] - self.position[1]) * zoom + self.screen_center[1] + offset[1])
+        return tuple((value - camera) * zoom + center + shift
                      for value, camera, center, shift in zip(point, self.position, self.screen_center, offset))
 
     def screen_to_world(self, point, *, include_feedback=True):
         """표시 좌표의 역변환. 조준·표적 선택은 include_feedback=False를 사용한다."""
         offset = self.feedback_offset_pixels if include_feedback else (0, 0)
-        return tuple((value - center - shift) / self.zoom + camera
+        zoom = self.zoom
+        if type(point) is tuple and len(point) == len(self.position) == 2:
+            return ((point[0] - self.screen_center[0] - offset[0]) / zoom + self.position[0],
+                    (point[1] - self.screen_center[1] - offset[1]) / zoom + self.position[1])
+        return tuple((value - center - shift) / zoom + camera
                      for value, camera, center, shift in zip(point, self.position, self.screen_center, offset))
 
     def update(self, player_world, mouse_screen, delta_seconds, *, target_zoom=1, focus_world=None):

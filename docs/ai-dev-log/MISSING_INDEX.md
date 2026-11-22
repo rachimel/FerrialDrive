@@ -1,5 +1,6 @@
 # 대화 기록의 누락 인덱스
 
+- [전투 HUD·월드 CPU의 반복 작업 단축](2026-11-22-hud-world-cpu.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-hud-world-cpu:U1]]`은 요청의 정확한 시각이다. 검색 단서는 `HUD의 병목을 줄이고`다.
 - [등 무기 선적재 재검과 느린 프레임 추적](2026-11-22-back-deploy-recheck.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-back-deploy-recheck:U1]]`은 요청의 정확한 시각이다. 검색 단서는 `전체 FPS는 왜 39.79에서 34.75로`다.
 - [등 무기 8방향 선적재](2026-11-22-back-deploy-preload.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-back-deploy-preload:U1]]`은 요청의 정확한 시각이다. 검색 단서는 `back_deploy 8방향만 전투 로딩`이다.
 - [등 무기 방향 캐시 재적재 병목](2026-11-22-back-weapon-residency-diagnosis.md) `[[FDLOG_MISSING_TIME:FDLOG-20261122-back-weapon-residency-diagnosis:U1]]`은 요청의 정확한 시각이다. 검색 단서는 `다른 병목을 찾아야겠네`다.

@@ -385,7 +385,6 @@ class EncounterView:
         r = self.primitives
         profile = enemy.profile
         y = foot - profile.height_pixels * zoom
-        facing = Vec2(*self.projection.project((enemy.facing.x, enemy.facing.y))).normalized(Vec2(-1, 0))
         sprite_top = None
         muzzles = ()
         motion = None
@@ -422,10 +421,12 @@ class EncounterView:
                             size * .85, size), profile.color, opacity)
             return
         color = "#FFFFFF" if flashes.get(enemy.enemy_id, 0) else profile.color
-        # 준비 시 무기를 뒤로 당기고 공격 시 뻗어 별도 바닥 경고 없이 읽게 한다.
-        extension = -12 if enemy.phase == "windup" else 30 if enemy.phase == "active" else 8
-        muzzle_x, muzzle_y = x + facing.x * (35 + extension) * zoom, y + facing.y * (35 + extension) * zoom
         if sprite is None:
+            facing = Vec2(*self.projection.project((enemy.facing.x, enemy.facing.y))).normalized(Vec2(-1, 0))
+            # 준비 시 무기를 뒤로 당기고 공격 시 뻗어 별도 바닥 경고 없이 읽게 한다.
+            extension = -12 if enemy.phase == "windup" else 30 if enemy.phase == "active" else 8
+            muzzle_x = x + facing.x * (35 + extension) * zoom
+            muzzle_y = y + facing.y * (35 + extension) * zoom
             self.draw_placeholder(enemy, facing, x, foot, y, zoom, color)
             r.line(x, y, muzzle_x, muzzle_y, "#FFF0CE")
         if enemy.phase == "active":
