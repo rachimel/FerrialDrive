@@ -137,6 +137,28 @@ class CameraImpactIntegrationTests(unittest.TestCase):
         self.app.sword_effects = SimpleNamespace(hits=[], sections=[section], update=Mock(), reset=Mock())
         self.app.bind_hud_world()
 
+    def test_dash_kicks_at_launch_and_shift_transition_without_repeating(self):
+        app = self.app
+        app.keys.add("d")
+        app.update(1 / 60)
+        weak_kick = app.camera.feedback_offset_pixels[0]
+        self.assertAlmostEqual(weak_kick, -app.dash_camera_kick.amplitude_pixels * .65)
+        self.assertEqual(app.camera.feedback_offset_pixels[1], 0)
+        app.update(1 / 60)
+        self.assertGreater(app.camera.feedback_offset_pixels[0], weak_kick)
+
+        app.keys.add("left_shift")
+        app.update(1 / 60)
+        strong_kick = -app.dash_camera_kick.amplitude_pixels
+        self.assertAlmostEqual(app.camera.feedback_offset_pixels[0], strong_kick)
+        app.trigger_camera_hit(1, "A")
+        self.assertAlmostEqual(app.camera.feedback_offset_pixels[0], strong_kick + app.camera_impact.amplitude_pixels)
+        app.keys.remove("left_shift")
+        app.update(1 / 60)
+        self.assertAlmostEqual(app.dash_camera_kick.elapsed_seconds, 1 / 60)
+        app.reset()
+        self.assertEqual(app.dash_camera_kick.offset_pixels, (0, 0))
+
     def test_only_live_actual_hits_trigger_once_and_pause_reset_work(self):
         self.app.update(1 / 60)
         self.assertEqual(self.app.camera.feedback_offset_pixels, (0, 0))

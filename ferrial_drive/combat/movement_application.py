@@ -160,6 +160,8 @@ class MovementApplication:
                                       zoom_transition_seconds=self.config.get("camera_zoom", {}).get("transition_seconds", 0.2))
         self.camera.reset(self.projection.project(self.controller.position_m))
         self.camera_impact = CameraImpact(**self.config.get("camera_impact", {}))
+        self.dash_camera_kick = CameraImpact(**{"enabled": self.camera_impact.enabled, "amplitude_pixels": 0,
+                                              **self.config.get("camera_dash_kick", {})})
         self.timings = TimingRecorder(enabled=profile is not None)
         self.profile_path = Path(profile) if profile else None
         self.demo, self.running, self.paused, self.grid = demo, True, False, True
@@ -581,6 +583,7 @@ class MovementApplication:
             self.combat.combo.reset()
         self.camera.reset(self.projection.project(self.controller.position_m))
         self.camera_impact.reset()
+        self.dash_camera_kick.reset()
         self.keys.clear()
         self.release_attack()
         if self.ground_effects:
@@ -640,6 +643,12 @@ class MovementApplication:
     def find_sword_target(self, target_id):
         return next((target for target in self.sword_targets if target.target_id == target_id), None)
 
+    def sync_camera_feedback(self):
+        hit_x, hit_y = self.camera_impact.offset_pixels
+        recoil_x, recoil_y = self.gun_recoil.offset_pixels
+        dash_x, dash_y = self.dash_camera_kick.offset_pixels
+        self.camera.feedback_offset_pixels = hit_x + recoil_x + dash_x, hit_y + recoil_y + dash_y
+
     def trigger_camera_hit(self, strike_id, target_id):
         """표적 가까이의 실제 검끝 이동 방향을 화면 충격으로 전달한다."""
         target = self.find_sword_target(target_id)
@@ -656,7 +665,7 @@ class MovementApplication:
             if movement.length > 1e-6:
                 direction = (movement.x, movement.y)
         self.camera_impact.trigger(strike_id, direction, overdrive=bool(self.hud and self.hud.state.overdrive))
-        self.camera.feedback_offset_pixels = self.camera_impact.offset_pixels
+        self.sync_camera_feedback()
 
     def on_sword_hit(self, strike_id, target_id):
         """검 명중 사건을 표현·교전에 전달한다. 피해 적용은 기존 흐름에서 수행한다."""
@@ -1058,15 +1067,17 @@ class MovementApplication:
         overdrive = bool(self.hud and self.hud.state.overdrive)
         animation_speed = self.sync_overdrive_modifiers()
         prepare_before_seconds = self.controller.boost_prepare_remaining_seconds
+        previous_movement_state = self.controller.presentation_state
+        movement = self.movement()
         options = {"dash": bool({"left_shift", "right_shift"} & self.keys)}
         if self.combat:
             options["auto_swing"] = self.attack_held
         if self.weapons_enabled and (self.weapon_animation.kind == "ranged" or self.weapon_animation.switching):
             if self.combat:
                 self.combat.attack_steps = []
-            self.controller.update(dt, self.movement(), self.aim(), dash=options["dash"], face_movement=False)
+            self.controller.update(dt, movement, self.aim(), dash=options["dash"], face_movement=False)
         else:
-            (self.combat or self.controller).update(dt, self.movement(), self.aim(), **options)
+            (self.combat or self.controller).update(dt, movement, self.aim(), **options)
         if self.aim_follow:
             target = self.aim()
             yaw = degrees(atan2(target[1],target[0])) if any(target) else self.aim_follow.upper_yaw_degrees
@@ -1083,14 +1094,21 @@ class MovementApplication:
             self.weapon_animation.update(dt, self.weapon_durations, aiming=bool(self.hud and self.hud.aiming),
                                          state=self.controller.state, animation_speed=animation_speed)
             self.update_guns(dt, previous_position)
-        zoom = self.config.get("camera_zoom", {}).get("scale_by_state", {}).get(self.controller.presentation_state, 1)
+        movement_state = self.controller.presentation_state
+        zoom = self.config.get("camera_zoom", {}).get("scale_by_state", {}).get(movement_state, 1)
         focus = self.locked_target_position()
         self.camera.update(self.projection.project(self.controller.position_m), self.mouse, dt, target_zoom=zoom,
                            focus_world=(focus.x, focus.y) if focus is not None else None)
         self.camera_impact.update(dt)
         self.gun_recoil.update(dt)
-        self.camera.feedback_offset_pixels = tuple(a + b for a, b in
-            zip(self.camera_impact.offset_pixels, self.gun_recoil.offset_pixels))
+        self.dash_camera_kick.update(dt)
+        dash_started = ((previous_movement_state == "idle" and movement_state in ("run", "dash"))
+                        or (previous_movement_state == "run" and movement_state == "dash"))
+        if dash_started:
+            dx, dy = self.projection.project(movement)
+            amplitude = self.dash_camera_kick.amplitude_pixels * (0.65 if movement_state == "run" else 1)
+            self.dash_camera_kick.trigger(self.frame, (-dx, -dy), amplitude_pixels=amplitude)
+        self.sync_camera_feedback()
         if self.sword_effects:
             steps = self.combat.attack_steps if self.combat else []
             # 공격 위상은 가속된 steps를 따르고, 효과의 생성 시각·수명은 실제 초를 쓴다.

@@ -128,12 +128,17 @@
   },
   "camera_impact": {
     "enabled": true,
-    "amplitude_pixels": 16,
-    "overdrive_amplitude_pixels": 24,
+    "amplitude_pixels": 24,
+    "overdrive_amplitude_pixels": 34,
     "duration_seconds": 0.2,
     "frequency_hz": 12,
     "damping": 1.8
   },
+  "camera_dash_kick": {
+    "amplitude_pixels": 38,
+    "duration_seconds": 0.18
+  },
+  "ultimate_impact_shake_pixels": 14,
   "loading": {
     "logo": "../../data/runtime/images/ui/logo.png",
     "background": "#0A1016",
@@ -498,8 +503,8 @@
                          "size_scale_range": [0.8, 1.2]},
       "length_pixels": 108,
       "length_scales_by_energy_level": [1.0, 1.25, 1.5],
-      "hit_camera_pixels": 10,
-      "overdrive_hit_camera_pixels": 16,
+      "hit_camera_pixels": 16,
+      "overdrive_hit_camera_pixels": 24,
       "width_pixels": 6,
       "tail_color": "#FFB843",
       "core_color": "#FFF5D9"
