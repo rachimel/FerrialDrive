@@ -63,6 +63,21 @@ class InteractiveBenchmarkTests(unittest.TestCase):
 
 
 class ProbeRestorationTests(unittest.TestCase):
+    def test_flamegraph_keeps_same_scope_separate_under_each_caller(self):
+        probe = RenderBreakdown(None)
+        ticks = [0, 10, 40, 100, 200, 220, 270, 300]
+        with patch("ferrial_drive.diagnostics.render_breakdown.perf_counter_ns", side_effect=ticks):
+            with probe.scope("warmup"):
+                pass
+            probe.step(True)
+            for caller in ("update", "draw"):
+                with probe.scope(caller), probe.scope("shared"):
+                    pass
+
+        paths = {tuple(row["stack"]): row["self_wall_ns"] for row in probe.report()["flamegraph_stacks"]}
+        self.assertEqual(paths, {("update",): 70, ("update", "shared"): 30,
+                                 ("draw",): 50, ("draw", "shared"): 50})
+
     def test_inherited_method_restored_without_instance_override(self):
         class Target:
             def draw(self):

@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [벤치마크 Flamegraph 저장](2026-11-23-benchmark-flamegraph.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-benchmark-flamegraph:U1]]`은 정확한 요청 시각이다. 검색 단서는 `진단에서 ms만 보지 말고 Flamegraph를 저장`이다.
+
 - [직접 조작 보고서의 느린 프레임과 전투 이벤트](2026-11-23-interactive-benchmark-report.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-interactive-benchmark-report:U1]]`은 요청 시각이다. 검색 단서는 `직접 조작 보고서에서 느린 프레임마다`다.
 
 - [180기 첫 프레임 커밋과 OpenBLAS 초기화](2026-11-23-combat-openblas-commit.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-combat-openblas-commit:U1]]`은 요청 시각이다. 검색 단서는 `첫 프레임에서 커밋 메모리가 어디서 늘어나는지`다.

@@ -49,7 +49,9 @@ python tests/hardware_profile_benchmark.py --mute --scenario combat --enemy-coun
 
 - 직접 조작은 창을 닫으면 저장한다. `--auto`는 레벨 3으로 2초마다 전투·HP·무장을 초기화하고 가장 가까운 생존 적을 조준한다. 기본 무장은 검이며 `--auto-weapon smg`로 기관단총을 선택한다. 전환 애니메이션과 재초기화 비용도 측정에 포함한다. `--auto-overdrive`는 매 반복 시작에 기존 강제 발동 경로를 사용한다. 실제 충전 구간을 측정하는 옵션은 아니다. 두 옵션은 `--auto`와 함께 사용한다.
 - `--movement-speed-multiplier 3`은 3배속 combat test의 같은 배율 옵션이다. `--demo`는 게임 이미지·모델 없이 플레이어 도형을 사용하며 실제 에셋 결과와 구분한다.
-- 매 실행의 `report.json`에 원자료, `report.md`에 한국어 표 보고서를 저장한다. 실패한 실행도 원인이 있는 범위에서 보고서를 생성하며 미측정값을 0으로 채우지 않는다. `limits_final.json`을 읽어 최대 프로세스 커밋을 보고한다. JSON을 보존하고 `python -m ferrial_drive.diagnostics.benchmark_report output/performance/<실행폴더>/report.json`으로 Markdown만 다시 생성할 수 있다.
+- 매 실행의 `report.json`에 원자료, `<시각>.md`에 한국어 표 보고서를 저장한다. 실패한 실행도 원인이 있는 범위에서 보고서를 생성하며 미측정값을 0으로 채우지 않는다. `limits_final.json`을 읽어 최대 프로세스 커밋을 보고한다. `python -m ferrial_drive.diagnostics.benchmark_report <실행폴더>/report.json`으로 보고서와 계측 데이터가 있는 Flamegraph를 다시 생성할 수 있다.
+- 측정한 계측 구간이 있으면 보고서 옆에 `flamegraph.svg`를 저장한다. 직접 조작은 `report/interactive/<시각>/`에서 보고서의 링크로 연다. 아래 블록이 호출자이며, 폭은 측정 구간 전체에서 누적한 wall 시간 비중이다. 마우스를 올리면 경로와 포함·자체 시간을 확인할 수 있다. 자동 대조는 조건·회차마다 폭을 따로 정규화하므로 절대 시간은 각 합계나 블록의 ms 값을 확인한다.
+- Flamegraph는 벤치마크에서 실제로 계측된 함수·구간만 표시한다. 준비 프레임은 제외하며 대기와 계측 오버헤드는 포함할 수 있다. 전체 Python 스택 샘플링은 [FDrive Profiler](../../Tools/profiler/README.md)를 사용한다.
 - `draw_breakdown.combat_activity`는 **측정 구간 update 직후**의 생존 적 수·양측 투사체 수 평균/최대, 전투 진행·Overdrive 프레임 수와 마지막 적 렌더링 통계를 기록한다. 마지막 렌더링 통계는 전체 평균이 아니다. 적 사망·전투 종료로 부하가 낮아진 구간을 확인한다.
 - 기본 계측에 `update.total`을 추가한다. `--detail`에서 `update.targets`, `update.guns`, `update.hud`, `update.encounter`, `update.enemies.*`, `world.enemies`, `world.gun_effects`를 구분한다. `update.enemies._move`는 다수 적 이동·밀어내기 호출을 포함한다. 중첩 구간은 합산하지 않는다. 준비 프레임과 반복 초기화 내부 호출은 이 구간 집계에서 제외하지만 프레임 작업 시간에는 반복 초기화를 포함한다.
 - 보고서는 p50/p95/p99·최대 프레임 시간, 예산 초과율, 처리 구간, 조건별 각 회차를 표시한다. 병목 확정이나 자동 최적화를 수행하지 않는다. cProfile·상세 계측 결과로 FPS 목표 달성을 확정하지 않고 같은 조건의 기본 계측 실행과 함께 검토한다.

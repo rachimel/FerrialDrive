@@ -1,8 +1,10 @@
-"""저장된 벤치마크 JSON으로 한국어 Markdown 보고서를 생성한다. 창을 열지 않는다."""
+"""저장된 벤치마크 JSON으로 Markdown과 Flamegraph를 생성한다. 창을 열지 않는다."""
 
 import argparse
 import json
 from pathlib import Path
+
+from .benchmark_flamegraph import write_flamegraph
 
 
 def number(value, digits=2):
@@ -57,7 +59,7 @@ def slow_frame_details(benchmark):
     return lines
 
 
-def render_report(result, limits=None):
+def render_report(result, limits=None, *, flamegraph=False):
     """누락·실패 결과는 미측정으로 표시하고 실제 측정값만 표로 만든다."""
     lines = ["# 전투 성능 측정 보고서", "", "## 실행 조건", "",
              "| 항목 | 값 |", "| --- | --- |"]
@@ -114,6 +116,10 @@ def render_report(result, limits=None):
         lines += ["", "프레임 측정값 없음. 실행 실패를 성능 통과로 판정하지 않는다."]
 
     probe = result.get("draw_breakdown", {})
+    if flamegraph:
+        lines += ["", "## Flamegraph", "",
+                  "[Flamegraph 열기](flamegraph.svg). 계측 구간의 호출 경로와 누적 wall 시간을 표시한다. "
+                  "블록에 마우스를 올리면 경로 전체와 포함·자체 시간을 볼 수 있다."]
     combat = probe.get("combat_activity")
     if combat:
         lines += ["", "## 교전 부하", "",
@@ -192,7 +198,9 @@ def write_report(source, *, destination=None):
     limits_path = source.with_name("limits_final.json")
     limits = json.loads(limits_path.read_text(encoding="utf-8")) if limits_path.is_file() else None
     destination = Path(destination) if destination is not None else source.with_suffix(".md")
-    destination.write_text(render_report(json.loads(source.read_text(encoding="utf-8")), limits), encoding="utf-8")
+    result = json.loads(source.read_text(encoding="utf-8"))
+    flamegraph = write_flamegraph(result, destination.with_name("flamegraph.svg"))
+    destination.write_text(render_report(result, limits, flamegraph=flamegraph), encoding="utf-8")
     return destination
 
 

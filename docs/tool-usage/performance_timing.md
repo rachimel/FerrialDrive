@@ -70,7 +70,7 @@ python tests/sword_movement_test.py --profile output/performance/ui-comparison.j
 
 ## 로그와 해석
 
-CPU·메모리 제한과 GPU 기능 가드를 함께 사용하는 독립 테스트는 [하한 사양 벤치마크](hardware_profile_benchmark.md)를 따른다. 공통 `TimingRecorder`와 실제 OpenGL 시간 질의를 연결하며 일반 실행의 기본 프레임 제한은 유지한다.
+CPU·메모리 제한과 GPU 기능 가드를 함께 사용하는 독립 테스트는 [하한 사양 벤치마크](hardware_profile_benchmark.md)를 따른다. 공통 `TimingRecorder`와 실제 OpenGL 시간 질의를 연결하며 일반 실행의 기본 프레임 제한은 유지한다. 하드웨어 벤치마크는 기존 시간 보고서에 계측 구간의 호출 경로를 보여 주는 `flamegraph.svg`를 함께 저장한다.
 
 JSON의 `schema_version`은 1이다. `session`·UTC 시작/저장 시각·Python 버전·시계 구현/해상도·`measurements`·`benchmarks`를 포함한다. 구간 행은 누적 시간이 큰 순으로 정렬한다. 값은 ns 단위이며, 나노초 단위 기록이 실제 1ns 정확도를 뜻하지 않는다. 시계 해상도도 함께 확인한다.
 

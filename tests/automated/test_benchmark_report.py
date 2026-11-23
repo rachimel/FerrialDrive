@@ -7,6 +7,7 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock
+from xml.etree import ElementTree as ET
 
 from ferrial_drive.diagnostics.benchmark_report import render_report, write_report
 from ferrial_drive.diagnostics.render_breakdown import RenderBreakdown
@@ -41,6 +42,26 @@ class ReportTests(unittest.TestCase):
             report = write_report(source).read_text(encoding="utf-8")
             self.assertIn("128.00MiB", report)
             self.assertEqual(source.read_text(encoding="utf-8"), text)
+            self.assertNotIn("flamegraph.svg", report)
+            self.assertFalse(source.with_name("flamegraph.svg").exists())
+
+    def test_report_saves_flamegraph_with_nested_widths(self):
+        result = {"draw_breakdown": {"flamegraph_stacks": [
+            {"stack": ["update"], "self_wall_ns": 3_000_000},
+            {"stack": ["update", "A<&>"], "self_wall_ns": 2_000_000},
+            {"stack": ["draw"], "self_wall_ns": 5_000_000},
+        ]}}
+        with TemporaryDirectory() as directory:
+            source = Path(directory) / "report.json"
+            source.write_text(json.dumps(result), encoding="utf-8")
+            report = write_report(source).read_text(encoding="utf-8")
+            self.assertIn("[Flamegraph 열기](flamegraph.svg)", report)
+            svg = ET.parse(source.with_name("flamegraph.svg"))
+            rects = svg.findall(".//{*}g/{*}rect")
+            self.assertEqual([float(rect.attrib["width"]) for rect in rects], [580, 580, 232])
+            self.assertLess(int(rects[2].attrib["y"]), int(rects[1].attrib["y"]))
+            titles = [element.text for element in svg.findall(".//{*}g/{*}title")]
+            self.assertIn("update → A<&>\n포함 2.000 ms (20.00%)\n자체 2.000 ms", titles)
 
 
 class CombatInputTests(unittest.TestCase):

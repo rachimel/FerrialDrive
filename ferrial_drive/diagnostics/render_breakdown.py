@@ -29,6 +29,7 @@ class RenderBreakdown:
         self.calls = defaultdict(Counter)
         self.hud_submit_triggers = defaultdict(Counter)
         self.self_ns = Counter()
+        self.stack_self_ns = Counter()
         self.blur_requests = Counter()
         self.latest_ms = {}
         self.hooked = set()
@@ -46,14 +47,16 @@ class RenderBreakdown:
 
     @contextmanager
     def scope(self, name):
+        parent_path = self.stack[-1][3] if self.stack else ()
         if not self.active:
-            self.stack.append([name, 0, 0])
+            self.stack.append([name, 0, 0, parent_path])
             try:
                 yield
             finally:
                 self.stack.pop()
             return
-        entry = [name, perf_counter_ns(), 0]
+        path = parent_path + (name,)
+        entry = [name, perf_counter_ns(), 0, path]
         self.stack.append(entry)
         try:
             with self.recorder.scope(name):
@@ -64,6 +67,7 @@ class RenderBreakdown:
             self.latest_ms[name] = elapsed/1e6
             own = max(0, elapsed-entry[2])
             self.self_ns[name] += own
+            self.stack_self_ns[path] += own
             if self.stack:
                 self.stack[-1][2] += elapsed
             if self.frame_trace is not None:
@@ -351,6 +355,8 @@ class RenderBreakdown:
                 "hud_batch_enabled": queue.enabled if queue is not None else False,
                 "hud_batch_last": dict(queue.stats) if queue is not None and queue.enabled else None,
                 "timings": snapshot,
+                "flamegraph_stacks": [{"stack": list(path), "self_wall_ns": own}
+                                      for path, own in sorted(self.stack_self_ns.items()) if own],
                 "self_ms_per_frame": {k: v / max(1, self.frames) / 1e6 for k, v in self.self_ns.items()},
                 "sdl_calls_per_frame": {k: {api: count/max(1, self.frames) for api, count in counts.items()}
                                         for k, counts in self.calls.items()},
