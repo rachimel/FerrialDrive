@@ -9,6 +9,7 @@ def launch_movement_test(*, description, movement_speed_multiplier=1,
                          application_type=None, encounter_path=None, window_title=None, part_catalog=None,
                          settings_file=None):
     from ferrial_drive.combat.movement_application import MovementApplication
+    from ferrial_drive.rendering.canvas import default_game_render_driver
     from ferrial_drive.runtime import run_application
 
     root = Path(__file__).resolve().parents[2]
@@ -24,7 +25,7 @@ def launch_movement_test(*, description, movement_speed_multiplier=1,
                         help="오버드라이브 기체 림·검 Trail·HUD의 무지개 팔레트 시험")
     parser.add_argument("--mute", action="store_true", help="효과음 없이 실행")
     parser.add_argument("--frames", type=int)
-    parser.add_argument("--render-driver", choices=("opengl", "native_gl"), default="opengl")
+    parser.add_argument("--render-driver", choices=("opengl", "native_gl"), default=default_game_render_driver())
     parser.add_argument("--capture", type=Path)
     parser.add_argument("--capture-frame", type=int, default=1)
     parser.add_argument("--report", type=Path)

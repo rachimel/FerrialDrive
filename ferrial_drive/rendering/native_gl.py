@@ -76,6 +76,7 @@ class NativeGlRenderer:
         self._actual_blend = None
         self._texture_enabled = False
         self._actual_texture = None
+        self._quad_data = bytearray()
         self._blend = {
             0: None,
             1: (0x0302, 0x0303, 1, 0x0303),
@@ -93,6 +94,7 @@ class NativeGlRenderer:
             pico.SDL_GL_SetSwapInterval(int(vsync))
             self.vsync = pico.SDL_GL_GetSwapInterval() != 0
             self._bind()
+            self.max_texture_size = self.integer(0x0D33)
             self._target_state()
         except BaseException:
             self.close()
@@ -144,13 +146,9 @@ class NativeGlRenderer:
     def _target_state(self):
         self.external_draw()
         self.BindFramebuffer(FRAMEBUFFER, self.target.framebuffer if self.target else 0)
-        _, height = self.target_size()
-        x, y, width, viewport_height = self.viewport()
-        sx, sy = self.state.scale
-        px, py, pw, ph = int(x * sx), int(y * sy), int(width * sx), int(viewport_height * sy)
-        output_y = height - py - ph if self.target is None else py
-        self.Viewport(px, output_y, pw, ph)
+        self.Viewport(*self._pixel_viewport())
         self._apply_clip()
+        _, _, width, viewport_height = self.viewport()
         if width > 0 and viewport_height > 0:
             self.MatrixMode(0x1701)
             self.LoadIdentity()
@@ -158,6 +156,20 @@ class NativeGlRenderer:
             self.Ortho(0, width, bottom, top, -1, 1)
             self.MatrixMode(0x1700)
             self.LoadIdentity()
+
+    def _pixel_viewport(self):
+        _, height = self.target_size()
+        x, y, width, viewport_height = self.viewport()
+        sx, sy = self.state.scale
+        px, py, pw, ph = int(x * sx), int(y * sy), int(width * sx), int(viewport_height * sy)
+        output_y = height - py - ph if self.target is None else py
+        return px, output_y, pw, ph
+
+    def leave_canvas_draw(self):
+        """직접 경로가 설정한 상태는 재조회 없이 셰이더 패스에 넘긴다."""
+        known = (self._pixel_viewport(), self._actual_texture) if self._draw_ready else None
+        self.external_draw()
+        return known
 
     def _apply_clip(self):
         if self.state.clip is None:
@@ -284,7 +296,7 @@ class NativeGlRenderer:
         result.num_texture_formats = 2
         result.texture_formats[0] = self.pico.SDL_PIXELFORMAT_RGBA32
         result.texture_formats[1] = self.pico.SDL_PIXELFORMAT_RGBA8888
-        result.max_texture_width = result.max_texture_height = self.integer(0x0D33)
+        result.max_texture_width = result.max_texture_height = self.max_texture_size
         return 0
 
     def _format(self, pixel_format):
@@ -329,23 +341,41 @@ class NativeGlRenderer:
             self.BindBuffer(buffer_target, buffer)
 
     def create_texture(self, renderer, pixel_format, access, width, height):
-        if width <= 0 or height <= 0 or max(width, height) > self.integer(0x0D33):
-            return None
         gl_format, gl_type = self._format(pixel_format)
+
+        def allocate():
+            with self._pixel_transfer(pack=False, row_length=0):
+                self.TexImage2D(TEXTURE_2D, 0, RGBA8, width, height, 0, gl_format, gl_type, None)
+
+        return self._create_texture(pixel_format, access, width, height, allocate)
+
+    def create_atlas_texture(self, width, height, upload):
+        p = self.pico
+        return self._create_texture(p.SDL_PIXELFORMAT_RGBA32, p.SDL_TEXTUREACCESS_STATIC,
+                                    width, height, upload, scale=p.SDL_ScaleModeLinear)
+
+    def _create_texture(self, pixel_format, access, width, height, allocate, *, scale=0):
+        if width <= 0 or height <= 0 or max(width, height) > self.max_texture_size:
+            return None
         name, framebuffer = ct.c_uint(), ct.c_uint()
         self.GenTextures(1, ct.byref(name))
-        previous_draw, previous_read = self.integer(0x8CA6), self.integer(0x8CAA)
+        gl_filter = 0x2600 if scale == self.pico.SDL_ScaleModeNearest else 0x2601
         try:
-            with self._bind_texture(name.value), self._pixel_transfer(pack=False, row_length=0):
-                for option, value in ((0x2800, 0x2600), (0x2801, 0x2600), (0x2802, 0x812F), (0x2803, 0x812F)):
+            with self._bind_texture(name.value):
+                for option, value in ((0x2800, gl_filter), (0x2801, gl_filter), (0x2802, 0x812F), (0x2803, 0x812F)):
                     self.TexParameteri(TEXTURE_2D, option, value)
-                self.TexImage2D(TEXTURE_2D, 0, RGBA8, width, height, 0, gl_format, gl_type, None)
+                allocate()
                 if access == self.pico.SDL_TEXTUREACCESS_TARGET:
+                    draw_framebuffer = 0x8CA9
+                    previous_draw = self.integer(0x8CA6)
                     self.GenFramebuffers(1, ct.byref(framebuffer))
-                    self.BindFramebuffer(FRAMEBUFFER, framebuffer.value)
-                    self.FramebufferTexture2D(FRAMEBUFFER, 0x8CE0, TEXTURE_2D, name.value, 0)
-                    if self.CheckFramebufferStatus(FRAMEBUFFER) != 0x8CD5:
-                        raise RuntimeError("직접 OpenGL 렌더 타깃이 불완전하다.")
+                    self.BindFramebuffer(draw_framebuffer, framebuffer.value)
+                    try:
+                        self.FramebufferTexture2D(draw_framebuffer, 0x8CE0, TEXTURE_2D, name.value, 0)
+                        if self.CheckFramebufferStatus(draw_framebuffer) != 0x8CD5:
+                            raise RuntimeError("직접 OpenGL 렌더 타깃이 불완전하다.")
+                    finally:
+                        self.BindFramebuffer(draw_framebuffer, previous_draw)
             error = self.GetError()
             if error:
                 raise RuntimeError(f"직접 OpenGL 텍스처 초기화 실패: GL {error:#x}")
@@ -354,12 +384,9 @@ class NativeGlRenderer:
                 self.DeleteFramebuffers(1, ct.byref(framebuffer))
             self.DeleteTextures(1, ct.byref(name))
             raise
-        finally:
-            self.BindFramebuffer(0x8CA9, previous_draw)
-            self.BindFramebuffer(0x8CA8, previous_read)
         handle = ct.pointer(self.pico.SDL_Texture())
         self.textures[address(handle)] = GlTexture(handle, name.value, pixel_format, access, width, height,
-                                                   framebuffer.value)
+                                                   framebuffer=framebuffer.value, scale=scale)
         return handle
 
     def destroy_texture(self, handle):
@@ -511,12 +538,12 @@ class NativeGlRenderer:
         self.BlendEquationSeparate(*operations)
 
     def clear(self, renderer):
-        self._target_state()
+        self.external_draw()
         self.Disable(0x0C11)
         self.ColorMask(1, 1, 1, 1)
         self.ClearColor(*(value / 255 for value in self.draw_color))
         self.Clear(COLOR_BUFFER)
-        self._target_state()
+        self._apply_clip()
         return 0
 
     def _draw(self, vertices, count, mode, texture=None, indices=None, index_count=0):
@@ -621,6 +648,26 @@ class NativeGlRenderer:
 
     def copy(self, renderer, handle, source, destination):
         return self._copy(handle, source, destination, self.pico.SDL_Rect)
+
+    def copy_tiles(self, handle, rectangles):
+        """같은 텍스처의 전체 영역을 호출자가 정한 순서로 제출한다."""
+        if not rectangles:
+            return 0
+        texture = self.texture_for(handle)
+        size = SDL_VERTEX.size * 4 * len(rectangles)
+        if len(self._quad_data) < size:
+            self._quad_data = bytearray(max(size, len(self._quad_data) * 2))
+        data = self._quad_data
+        pack, stride = SDL_VERTEX.pack_into, SDL_VERTEX.size
+        red, green, blue, alpha = texture.modulation
+        for index, (left, top, right, bottom) in enumerate(rectangles):
+            offset = 4 * index * stride
+            pack(data, offset, left, top, red, green, blue, alpha, 0, 0)
+            pack(data, offset + stride, right, top, red, green, blue, alpha, 1, 0)
+            pack(data, offset + 2 * stride, right, bottom, red, green, blue, alpha, 1, 1)
+            pack(data, offset + 3 * stride, left, bottom, red, green, blue, alpha, 0, 1)
+        vertices = (ct.c_ubyte * size).from_buffer(data)
+        return self._draw(vertices, 4 * len(rectangles), QUADS, texture)
 
     def copy_float(self, renderer, handle, source, destination):
         return self._copy(handle, source, destination, self.pico.SDL_FRect)

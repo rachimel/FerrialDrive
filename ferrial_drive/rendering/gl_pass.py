@@ -139,37 +139,51 @@ class SdlOpenGLPass:
             return
         p = self.pico
         native = getattr(p, "fdrive_native_gl", None)
+        owned = None
         if native is None:
             # SDL의 지연된 viewport/clip 상태를 화면 밖 점으로 먼저 확정한다.
             p.SDL_RenderDrawPoint(p.renderer, -1000000, -1000000)
             p.SDL_RenderFlush(p.renderer)
         else:
-            native.external_draw()
-        program, active = self.integer(0x8B8D), self.integer(0x84E0)
-        viewport = self.integer(0x0BA2, 4)
-        width, height = ct.c_int(), ct.c_int()
-        target = p.SDL_GetRenderTarget(p.renderer)
-        if target:
-            p.SDL_QueryTexture(target, None, None, ct.byref(width), ct.byref(height))
+            owned = native.leave_canvas_draw()
+            # 직접 경로에서는 SDL과 분리된 동일 컨텍스트의 래스터 상태를 복구한다.
+            raster_attributes = raster_attributes or COLOR_AND_SCISSOR_STATE
+        if owned is not None:
+            viewport, texture = owned
+            program, active = 0, 0x84C0
         else:
-            p.SDL_GetRendererOutputSize(p.renderer, ct.byref(width), ct.byref(height))
-        self.output_size = width.value, height.value
+            program, active = self.integer(0x8B8D), self.integer(0x84E0)
+            viewport, texture = self.integer(0x0BA2, 4), None
+        if native is not None:
+            width, height = native.target_size()
+            target = native.target is not None
+        else:
+            out_w, out_h = ct.c_int(), ct.c_int()
+            target = p.SDL_GetRenderTarget(p.renderer)
+            if target:
+                p.SDL_QueryTexture(target, None, None, ct.byref(out_w), ct.byref(out_h))
+            else:
+                p.SDL_GetRendererOutputSize(p.renderer, ct.byref(out_w), ct.byref(out_h))
+            width, height = out_w.value, out_h.value
+        self.output_size = width, height
         self.target_flip = -1 if target else 1
-        self.viewport = (viewport[0], height.value - viewport[1] - viewport[3] if not target else viewport[1],
+        self.viewport = (viewport[0], height - viewport[1] - viewport[3] if not target else viewport[1],
                          viewport[2], viewport[3])
         raster = (self._preserve_raster_attributes(raster_attributes) if raster_attributes
                   else self._preserve_blend_and_clip())
         with raster:
-            self.glActiveTexture(0x84C0)
-            texture = self.integer(0x8069)
+            if active != 0x84C0:
+                self.glActiveTexture(0x84C0)
+            if texture is None:
+                texture = self.integer(0x8069)
             self.depth = 1
             try:
                 self.glUseProgram(self.program)
                 self.glEnable(0x0BE2)
                 self.glBlendEquationSeparate(0x8006, 0x8006)
                 self.glBlendFuncSeparate(0x0302, 0x0303, 1, 0x0303)
-                self.glViewport(0, 0, width.value, height.value)
-                self.glUniform2f(self.uniforms['outputSize'], width.value, height.value)
+                self.glViewport(0, 0, width, height)
+                self.glUniform2f(self.uniforms['outputSize'], width, height)
                 self.glUniform1f(self.uniforms['targetFlip'], self.target_flip)
                 yield
             finally:

@@ -56,6 +56,7 @@ class AtlasTextureCache:
 
     def __init__(self, pico, *, timings=None, ktx_library=None, synchronize_upload=True):
         self.pico = pico
+        self.native = getattr(pico, "fdrive_native_gl", None)
         self.binding = TextureUploadBinding(pico)
         self.timings = timings or TimingRecorder(enabled=False)
         self.ktx_library = ktx_library
@@ -265,6 +266,19 @@ class AtlasTextureCache:
             p.SDL_DestroyTexture(texture)
             raise
 
+    def _upload_native(self, page, payload, compressed):
+        gpu = None
+
+        def upload():
+            nonlocal gpu
+            self._upload_gl(page, ct.c_char_p(payload), len(payload), compressed=compressed, subimage=False)
+            gpu = self._texture_info(page, compressed)
+
+        handle = self.native.create_atlas_texture(page["width"], page["height"], upload)
+        if not handle:
+            raise RuntimeError("직접 OpenGL 아틀라스 텍스처 생성 실패")
+        return {"texture": handle, "gl_name": self.native.texture_for(handle).name, "gpu": gpu}, False
+
     def acquire(self, page, directory, *, prepared=None, array_slot=None, exact=False):
         self._assert_owner()
         path = (Path(directory) / page["file"]).resolve()
@@ -274,7 +288,8 @@ class AtlasTextureCache:
             self.entries[key]["references"] += 1
             return key, self.entries[key]
         width, height = page["width"], page["height"]
-        if min(width, height) < 1 or max(width, height) > self.binding.integer(0x0D33):
+        max_size = self.native.max_texture_size if self.native is not None else self.binding.integer(0x0D33)
+        if min(width, height) < 1 or max(width, height) > max_size:
             raise ValueError("GPU 페이지 크기 제한을 초과했다.")
         if prepared is None:
             work = TexturePageWork(page, directory, timings=self.timings, ktx_library=self.ktx_library)
@@ -304,6 +319,8 @@ class AtlasTextureCache:
             else:
                 if self.pool_enabled:
                     entry, reused = self._upload_pooled(page, prepared.pixels, prepared.compressed, exact=exact)
+                elif self.native is not None:
+                    entry, reused = self._upload_native(page, prepared.pixels, prepared.compressed)
                 else:
                     entry, reused = self._upload_sdl(page, prepared.pixels, prepared.compressed)
                 self.gpu_storage_bytes += entry["gpu"]["storage_bytes"]

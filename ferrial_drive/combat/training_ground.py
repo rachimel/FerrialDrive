@@ -45,6 +45,7 @@ class TrainingGroundView:
     def __init__(self, renderer, projection, settings, texture_path=None, *, sample_colors=False):
         self.renderer, self.projection, self.settings = renderer, projection, settings
         self.pico = renderer.pico
+        self.native = getattr(self.pico, "fdrive_native_gl", None)
         self.texture = None
         self.colors = None
         if texture_path is not None:
@@ -75,11 +76,17 @@ class TrainingGroundView:
                 tile_m = self.settings["tile_m"]
                 tile_w, tile_h = p.project((tile_m, tile_m))
                 tile_w, tile_h = tile_w * camera.zoom, tile_h * camera.zoom
+                tiles = []
                 for row in range(max(0, floor(minimum[1] / tile_m)), min(ceil(map_size_m / tile_m), ceil(maximum[1] / tile_m))):
                     for column in range(max(0, floor(minimum[0] / tile_m)), min(ceil(map_size_m / tile_m), ceil(maximum[0] / tile_m))):
                         x, y = camera.world_to_screen(p.project((column * tile_m, row * tile_m)))
                         # 같은 경계에서 반올림해 소수점 배율의 타일 틈을 방지한다.
-                        target = self.pico.SDL_Rect(round(x), round(y), round(x + tile_w) - round(x), round(y + tile_h) - round(y))
+                        tiles.append((round(x), round(y), round(x + tile_w), round(y + tile_h)))
+                if self.native is not None:
+                    self.native.copy_tiles(self.texture, tiles)
+                else:
+                    for x, y, right, bottom in tiles:
+                        target = self.pico.SDL_Rect(x, y, right - x, bottom - y)
                         self.pico.SDL_RenderCopy(self.pico.renderer, self.texture, None, byref(target))
             else:
                 r.rect(visible, "#554A37")

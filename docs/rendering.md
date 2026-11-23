@@ -45,7 +45,9 @@ SDL 종료 입력은 루프가 처리한다. 시작·입력·갱신·그리기�
 
 자체 게임 루프가 필요하면 `with PicoCanvas(width, height, title) as canvas:`를 사용한다. `canvas.pico`에서 기존 Pico2D/SDL API를 사용하고 `canvas.present()`로 표시한다. `canvas.info`는 실제 드라이버 이름과 SDL이 보고한 가속·VSync 플래그·렌더 타깃 지원 정보다.
 
-`python main.py --render-driver native_gl`로 직접 OpenGL 후보를 실행할 수 있다. 창·입력·이미지 해석·오디오는 Pico2D와 SDL을 계속 사용한다. 텍스처·렌더 타깃·뷰포트·클립·블렌드와 화면 표시는 OpenGL 경로에서 관리한다. SDL 렌더러는 생성하지 않는다. OpenGL 4.3 호환 프로필이 필요하다. 기본값 `opengl`은 SDL OpenGL 렌더러를 사용한다. [그림자·성능 비교](ai-dev-log/2026-11-23-native-gl-shadow-validation.md)
+본편·이동 훈련·전투 테스트와 하드웨어 벤치마크의 기본 렌더러는 `native_gl`이다. 창·입력·이미지 해석·오디오는 Pico2D와 SDL을 사용한다. 텍스처·렌더 타깃·뷰포트·클립·블렌드와 화면 표시는 FDrive의 OpenGL 코드가 관리하며 SDL 렌더러 생성과 큐 제출은 생략한다. OpenGL 4.3 호환 프로필이 필요하다. 비교용 `--render-driver opengl`과 SDL dummy 자동 검사 경로를 지원한다. 독립 도구의 `PicoCanvas()` 기본 드라이버는 `opengl`이다. [그림자·성능 비교](ai-dev-log/2026-11-23-native-gl-direct-optimization.md)
+
+직접 경로에서 연속 바닥 타일은 순서를 유지한 채 한 번 제출한다. 공통 셰이더 패스는 직접 경로가 설정한 상태를 재사용하고, 별도 GL 패스에서 이어지는 경계는 실제 상태를 확인한다. 아틀라스 텍스처는 빈 RGBA 저장소를 만들지 않고 원래 채널 및 압축 형식으로 올린다.
 
 생성 순서는 **캔버스 → 에셋 관리자·UI → 장면**이다. 종료는 **장면·에셋 관리자·폰트/텍스처 → 캔버스** 순서다. 렌더러가 닫힌 뒤 GPU 자원을 그리거나 해제하지 않는다. `run_application()`의 `exit()`는 이 순서를 보장하는 연결 지점이다. 캔버스가 게임의 에셋 관리자를 대신 소유하지는 않는다.
 

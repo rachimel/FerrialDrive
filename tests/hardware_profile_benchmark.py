@@ -334,6 +334,7 @@ def main():
     from ferrial_drive.diagnostics.resource_limits import ResourceLimits, run_gated_child, wait_for_limits
     from ferrial_drive.diagnostics.render_breakdown import VARIANTS
     from ferrial_drive.json_io import read_json
+    from ferrial_drive.rendering.canvas import default_game_render_driver
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--profile", type=Path, default=ROOT / "samples/hardware_profile_benchmark/profile.json")
@@ -366,8 +367,8 @@ def main():
     parser.add_argument("--logical-cpus", type=int)
     parser.add_argument("--memory-mib", type=int)
     parser.add_argument("--gpu-profile", choices=("none", "uhd630_gl45_conservative"))
-    parser.add_argument("--render-driver", choices=("opengl", "native_gl"), default="opengl",
-                        help="비교할 SDL OpenGL 또는 직접 OpenGL 캔버스")
+    parser.add_argument("--render-driver", choices=("opengl", "native_gl"), default=default_game_render_driver(),
+                        help="기본은 직접 OpenGL이다. 비교용 SDL 렌더러는 opengl로 선택한다.")
     parser.add_argument("--no-resource-limits", action="store_true")
     parser.add_argument("--unpaced", action="store_true")
     parser.add_argument("--output", type=Path)

@@ -2,6 +2,7 @@
 
 import ctypes as ct
 from contextlib import contextmanager
+from pathlib import Path
 from unittest import TestCase
 from unittest.mock import patch
 
@@ -41,6 +42,13 @@ class NativeGlCanvasTests(TestCase):
                 p.SDL_SetRenderDrawColor(renderer, 8, 16, 40, 255)
                 self.assertEqual(p.SDL_RenderClear(renderer), 0)
                 self.assertEqual(p.SDL_RenderCopy(renderer, texture, None, ct.byref(p.SDL_Rect(14, 12, 12, 10))), 0)
+                tiles = [(26, 12, 38, 22), (38, 12, 50, 22)]
+                if driver == "native_gl":
+                    self.assertEqual(p.fdrive_native_gl.copy_tiles(texture, tiles), 0)
+                else:
+                    for x, y, right, bottom in tiles:
+                        destination = p.SDL_Rect(x, y, right - x, bottom - y)
+                        self.assertEqual(p.SDL_RenderCopy(renderer, texture, None, ct.byref(destination)), 0)
                 pixels = (ct.c_ubyte * (64 * 48 * 4))()
                 self.assertEqual(p.SDL_RenderReadPixels(renderer, None, p.SDL_PIXELFORMAT_RGBA32,
                                                         pixels, 64 * 4), 0)
@@ -64,3 +72,37 @@ class NativeGlCanvasTests(TestCase):
                 self.assertEqual(native.window_to_logical(0, 8), (0, 0))
             create.assert_not_called()
         self.assertFalse(hasattr(p, "fdrive_native_gl"))
+
+    def test_atlas_upload_preserves_storage_format_and_pixels(self):
+        from ferrial_drive.diagnostics.gpu_profile import bind_gl
+        from ferrial_drive.rendering.atlas_texture_cache import AtlasTextureCache
+        from ferrial_drive.rendering.texture_page_work import TexturePagePayload
+
+        with canvas("native_gl") as opened:
+            p = opened.pico
+            cache = AtlasTextureCache(p, synchronize_upload=False)
+            read = bind_gl(p, "glGetTexImage", None, [ct.c_uint] * 4 + [ct.c_void_p])
+            read_compressed = bind_gl(p, "glGetCompressedTexImage", None, [ct.c_uint, ct.c_int, ct.c_void_p])
+            for codec, pixel_format, pixels in (
+                ("rgba_zlib", 0x1908, bytes((34, 45, 56, 67)) * 16),
+                ("a8_zlib", 0x1903, bytes((59,)) * 16),
+                ("bc7_zlib", None, bytes((0x40,)) + bytes(15)),
+            ):
+                with self.subTest(codec=codec):
+                    page = dict(file=codec, sha256=codec, width=4, height=4, codec=codec)
+                    key = cache.page_key(page, Path.cwd())
+                    prepared = TexturePagePayload(key, (4, 4), codec, len(pixels), pixels, pixel_format is None)
+                    _, entry = cache.acquire(page, Path.cwd(), prepared=prepared)
+                    try:
+                        buffer = (ct.c_ubyte * len(pixels))()
+                        with cache.binding.bound():
+                            cache.binding.bind_texture(0x0DE1, entry["gl_name"])
+                            if pixel_format is None:
+                                read_compressed(0x0DE1, 0, buffer)
+                            else:
+                                read(0x0DE1, 0, pixel_format, 0x1401, buffer)
+                        self.assertEqual(bytes(buffer), pixels)
+                        self.assertEqual(entry["gpu"]["storage_bytes"], len(pixels))
+                    finally:
+                        cache.release(key)
+            self.assertEqual(cache.report()["gpu_allocated_bytes"], 0)

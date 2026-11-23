@@ -9,6 +9,11 @@ import os
 _active_canvas = None
 
 
+def default_game_render_driver():
+    """실제 게임 창은 직접 OpenGL로 연다. dummy 자동 검사는 SDL 소프트웨어를 사용한다."""
+    return "opengl" if os.environ.get("SDL_VIDEODRIVER") == "dummy" else "native_gl"
+
+
 @contextmanager
 def prepare_output_resolution(resolution, logical_size):
     """출력 크기를 준비하고 저장 실패 시 이전 창·논리 크기로 복귀한다."""

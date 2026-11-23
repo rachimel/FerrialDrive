@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [직접 OpenGL 제출과 아틀라스 적재 최적화](2026-11-23-native-gl-direct-optimization.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-native-gl-direct-optimization:U1]]`은 요청 시각이다. 검색 단서는 `직접 제어의 경우에는 더 깎을 여지`다.
+
 - [직접 OpenGL 전환 후보와 그림자 대조](2026-11-23-native-gl-shadow-validation.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-native-gl-shadow-validation:U1-U2]]`는 요청·발견 시각이다. 검색 단서는 `그림자가 깨지지 않고 묶을 수 있는지`와 `SDL_Renderer버리고`다.
 
 - [대화창 계측과 SDL 큐 제출 경계 검토](2026-11-23-dialogue-timing-flush-review.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-dialogue-timing-flush-review:U1-U2]]`은 요청 시각이다. 검색 단서는 `스캔라인을 따로 계측`과 `RenderFlush를 한번만`이다.
