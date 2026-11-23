@@ -50,7 +50,7 @@ python tests/hardware_profile_benchmark.py --mute --scenario combat --enemy-coun
 - 직접 조작은 창을 닫으면 저장한다. `--auto`는 레벨 3으로 2초마다 전투·HP·무장을 초기화하고 가장 가까운 생존 적을 조준한다. 기본 무장은 검이며 `--auto-weapon smg`로 기관단총을 선택한다. 전환 애니메이션과 재초기화 비용도 측정에 포함한다. `--auto-overdrive`는 매 반복 시작에 기존 강제 발동 경로를 사용한다. 실제 충전 구간을 측정하는 옵션은 아니다. 두 옵션은 `--auto`와 함께 사용한다.
 - `--movement-speed-multiplier 3`은 3배속 combat test의 같은 배율 옵션이다. `--demo`는 게임 이미지·모델 없이 플레이어 도형을 사용하며 실제 에셋 결과와 구분한다.
 - 매 실행의 `report.json`에 원자료, `report.md`에 한국어 표 보고서를 저장한다. 실패한 실행도 원인이 있는 범위에서 보고서를 생성하며 미측정값을 0으로 채우지 않는다. `limits_final.json`을 읽어 최대 프로세스 커밋을 보고한다. JSON을 보존하고 `python -m ferrial_drive.diagnostics.benchmark_report output/performance/<실행폴더>/report.json`으로 Markdown만 다시 생성할 수 있다.
-- `draw_breakdown.combat_activity`는 **측정 구간 update 직후**의 생존 적 수·양측 투사체 수 평균/최대, 전투 진행·Overdrive 프레임 수와 마지막 적 렌더링 통계를 기록한다. 프레임별 전투 trace를 만들지 않으므로 장시간 조작에서도 집계 크기는 일정하다. 마지막 렌더링 통계는 전체 평균이 아니다. 적 사망·전투 종료로 부하가 낮아진 구간을 구분해 해석한다.
+- `draw_breakdown.combat_activity`는 **측정 구간 update 직후**의 생존 적 수·양측 투사체 수 평균/최대, 전투 진행·Overdrive 프레임 수와 마지막 적 렌더링 통계를 기록한다. 마지막 렌더링 통계는 전체 평균이 아니다. 적 사망·전투 종료로 부하가 낮아진 구간을 확인한다.
 - 기본 계측에 `update.total`을 추가한다. `--detail`에서 `update.targets`, `update.guns`, `update.hud`, `update.encounter`, `update.enemies.*`, `world.enemies`, `world.gun_effects`를 구분한다. `update.enemies._move`는 다수 적 이동·밀어내기 호출을 포함한다. 중첩 구간은 합산하지 않는다. 준비 프레임과 반복 초기화 내부 호출은 이 구간 집계에서 제외하지만 프레임 작업 시간에는 반복 초기화를 포함한다.
 - 보고서는 p50/p95/p99·최대 프레임 시간, 예산 초과율, 처리 구간, 조건별 각 회차를 표시한다. 병목 확정이나 자동 최적화를 수행하지 않는다. cProfile·상세 계측 결과로 FPS 목표 달성을 확정하지 않고 같은 조건의 기본 계측 실행과 함께 검토한다.
 
@@ -92,6 +92,8 @@ python tests/hardware_profile_benchmark.py --mute --scenario combat --enemy-coun
 - 직접 조작은 WASD·마우스 조준·좌클릭 공격·Shift 대시·Space 부스트 등 기존 입력을 그대로 받는다. Esc는 일시정지이며 **창 닫기로 종료·결과 저장**한다. F3/F4 에너지 조절·E/F 무장/로드아웃 등 기존 HUD 입력도 전달한다. 자동 공격·자동 초기화는 하지 않는다.
 - 직접 조작은 `--frames`를 생략하면 시간 제한 없이 실행한다. 직접 조작과 자동 측정 모두 창 제목에 최근 약 1초 FPS, 직전 프레임의 HUD·월드 ms, 최신 프로세스 RAM Working Set과 GPU 메모리를 표시한다. GPU는 WDDM 전용·공유 값 또는 DXGI 로컬 값을 보여 준다. 현재 저장 설정을 결과 폴더로 복사해 사용하며 사용자 설정 파일은 건드리지 않는다. 품질을 고정하려면 `--quality`로 등급을 지정한다. 이름별 해상도는 현행 설정을 따르고 실제 아틀라스 `divisor`를 함께 기록한다.
 - 장시간 조작 시 프레임·GPU 표본은 최근 최대 3,600개만 보관한다. `observed_fps`·분포·목표 판정은 그 표본 구간, `session_observed_fps`와 `total_measured_frames`는 전체 측정 세션이다. HUD/월드 구간 집계는 측정 시작부터 전체 세션을 포함한다.
+- 직접 조작에서는 `--detail`과 관계없이 보존 표본 중 작업 예산을 넘긴 각 프레임에 실제 발사 수·총기 슬롯, 백웨폰 미사일 발사 수, 로드아웃 전환 시작·적용과 현재 상태를 붙인다. 예열 이후부터 기록하며 입력이 거절되거나 공발이면 발사 기록을 남기지 않는다.
+- Markdown의 **느린 프레임과 전투 이벤트** 표는 프레임 번호, 측정 시작 이후 초, 작업 시간, 실제 이벤트와 함수별 포함·자체 wall 시간 및 호출 수를 함께 표시한다. 자체 시간 기준 상위 5개와 이벤트에 해당하는 함수를 보여 준다. `benchmark.frames[].function_timings_ns`에 계측한 모든 함수가 있고 각 값은 `[호출 횟수, 포함 ns, 자체 ns]`다. `function_scopes`는 구간 이름과 함수 이름을 연결한다. 자체 시간은 계측한 하위 호출을 뺀 값이며 계측 오버헤드와 드라이버의 내부 실행 시간은 따로 보정하지 않는다.
 
 - 기본은 FHD 1920×1080, 최소 목표 60FPS 제한, VSync 꺼짐이다. 권장 목표의 시간 예산은 `--target-fps 165`로 선택한다. `--unpaced`면 프레임 대기를 없앤다. `--target-fps`는 자동 갱신 시간과 프레임 예산을 같이 바꾼다. 일반 게임 실행의 60FPS 기본값은 유지한다.
 - 직접 조작은 실제 프레임 경과 시간으로 갱신한다. `--auto`만 고정 `1 / target_fps`초로 레벨 3 공격을 유지하고, **측정 시작을 기준으로** 시뮬레이션 2초마다 초기화한다. 기본은 `1/60`초이며 권장 목표는 `1/165`초다. 자동 시험은 종료 이벤트만 반영하며 렌더가 느리면 시뮬레이션도 실제 시간보다 느리다. catch-up 테스트는 아니다.
@@ -99,7 +101,7 @@ python tests/hardware_profile_benchmark.py --mute --scenario combat --enemy-coun
 - `work_ms`는 이벤트·갱신·그리기 제출·present의 wall 시간이다. 대기는 `interval_ms`에 포함한다. `observed_fps`는 샘플링 비용을 포함한 측정 구간 전체 시간으로 계산한다. 계측 오버헤드는 별도 보정하지 않는다.
 - p50/p95/p99, 선택한 프레임 예산(최소 약 16.67ms·권장 약 6.06ms)의 초과 횟수·비율, 전체 완료 여부를 함께 기록한다. `target_met`은 측정 완료·work 초과 0회·실측 FPS가 목표의 99% 이상일 때만 참이다. 기능 위반이 있으면 `status=feature_violation`이므로 성공한 실행으로 해석하지 않는다.
 - `GL_TIME_ELAPSED`는 draw와 SDL flush 구간이며 제출 간격도 포함할 수 있다. CPU wall 시간이나 GPU 전용 실행 시간과 같지 않다. HUD와 월드는 공통 `TimingRecorder`로 측정 구간만 분리한다.
-- 결과는 `output/performance/hardware_profile/<시각>/report.json`, `limits_final.json`, `timings.json`에 저장한다. `--output`으로 새 폴더를 지정할 수 있다. 기존 결과 폴더를 덮어쓰지 않는다. 과거 50% 고정 결과와 현행 저장 등급의 배율을 혼동하지 않는다.
+- 직접 조작 결과는 `report/interactive/<시각>/`에 저장하고, `report/직접조작.md`는 기존 폴더를 포함해 `input_mode=interactive` 보고서만 모아 링크한다. 기본 자동 결과는 `output/performance/hardware_profile/<시각>/`에 저장한다. `--output`으로 새 폴더를 지정할 수 있다. 각 실행 폴더에 `report.json`, 시각을 붙인 Markdown, `limits_final.json`, `timings.json`을 함께 남긴다.
 
 ## HUD·월드 병목 분석
 

@@ -64,6 +64,7 @@ def run_worker(args, applied, profile):
     from ferrial_drive.combat.encounter_application import EncounterApplication
     from ferrial_drive.diagnostics.render_breakdown import RenderBreakdown
     from ferrial_drive.diagnostics.frame_benchmark import benchmark_program
+    from ferrial_drive.diagnostics.interactive_frame_trace import InteractiveFrameTrace
     from ferrial_drive.diagnostics.gpu_profile import Uhd630Profile
     from ferrial_drive.diagnostics.texture_metrics import ProcessGpuMemory, bind_gl, process_memory
     from ferrial_drive.rendering import PicoCanvas
@@ -231,13 +232,14 @@ def run_worker(args, applied, profile):
                             probe = RenderBreakdown(app, detailed=args.detail, variant=variant)
                             try:
                                 probe.install()
+                                frame_trace = None if args.auto else InteractiveFrameTrace(probe, canvas).install()
                                 if args.auto:
                                     app.paused = False
                                     if ground_random is not None:
                                         ground_random.setstate(ground_random_state)
                                 result["benchmark"] = benchmark_program(app, canvas, target_fps=args.target_fps,
                                     frames=args.frames, warmup=args.warmup, paced=not args.unpaced, before_step=step,
-                                    interactive=not args.auto, on_status=status,
+                                    interactive=not args.auto, on_status=status, frame_trace=frame_trace,
                                     should_continue=within_commit_budget if commit_limit else None)
                                 if "memory_stop" in result:
                                     result["benchmark"].update(completed=False, target_met=False, all_work_within_budget=False)
@@ -253,7 +255,7 @@ def run_worker(args, applied, profile):
                                 probe.active = False
                                 result["draw_breakdown"] = probe.report()
                                 probe.close()
-                                probe = None
+                                probe = frame_trace = None
                             if args.compare:
                                 row = {"round": repeat+1, "variant": variant, "benchmark": result["benchmark"],
                                        "hitbox_type":result.get("hitbox_type"),
@@ -313,7 +315,8 @@ def run_worker(args, applied, profile):
         raise
     finally:
         gpu_memory.close()
-        (args.output / "report.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+        with (args.output / "report.json").open("w", encoding="utf-8") as stream:
+            json.dump(result, stream, ensure_ascii=False, indent=2)
     compact = {"status": result["status"], "report": str(args.output / "report.json"),
                **{key: result["benchmark"][key] for key in
                   ("observed_fps", "work_ms", "deadline_miss_percent", "target_met")}}
@@ -403,7 +406,9 @@ def main():
         return run_worker(args, applied, profile)
     if (args.frames is not None and args.frames < 1) or args.warmup < 0 or not 0 < args.target_fps <= 10000:
         parser.error("프레임 수·목표 FPS 범위 오류")
-    args.output = (args.output or ROOT / "output/performance/hardware_profile" / datetime.now().strftime("%Y%m%d_%H%M%S_%f")).resolve()
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    from ferrial_drive.diagnostics.benchmark_archive import default_benchmark_output, write_interactive_index
+    args.output = (args.output or default_benchmark_output(ROOT, stamp, interactive=not args.auto)).resolve()
     # 기존 결과가 있으면 덮어쓰지 않는다.
     args.output.mkdir(parents=True, exist_ok=False)
     command = [sys.executable, str(Path(__file__).resolve()), *sys.argv[1:], "--worker", "--output", str(args.output)]
@@ -413,7 +418,9 @@ def main():
         (args.output / "report.json").write_text(json.dumps({"status": "error", "child_exit_code": code,
             "error": "측정을 시작하기 전에 자식 실행이 실패했다. 콘솔 오류를 확인한다."}, ensure_ascii=False, indent=2), encoding="utf-8")
     from ferrial_drive.diagnostics.benchmark_report import write_report
-    write_report(args.output / "report.json")
+    write_report(args.output / "report.json", destination=args.output / f"{stamp}.md")
+    if not args.auto and args.output.is_relative_to(ROOT / "report"):
+        write_interactive_index(ROOT)
     return code
 
 

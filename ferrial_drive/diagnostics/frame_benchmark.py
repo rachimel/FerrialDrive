@@ -36,7 +36,8 @@ def summarize_frames(rows, *, target_fps, expected_frames, elapsed_seconds):
 
 
 def benchmark_program(program, canvas, *, target_fps=165, frames=600, warmup=120, paced=True,
-                      before_step=None, interactive=False, sample_capacity=3600, on_status=None, should_continue=None):
+                      before_step=None, interactive=False, sample_capacity=3600, on_status=None,
+                      should_continue=None, frame_trace=None):
     """직접 조작은 실제 경과 시간·전체 입력을 사용한다. 창·enter/exit는 호출자가 소유한다."""
     from ferrial_drive.runtime import poll_events
 
@@ -52,6 +53,7 @@ def benchmark_program(program, canvas, *, target_fps=165, frames=600, warmup=120
     total_measured = 0
     peak_private = 0
     measured_start = None
+    budget_ms = 1000 / target_fps
     finish()
     previous_start = perf_counter()
     status_start, status_frames = previous_start, 0
@@ -65,6 +67,9 @@ def benchmark_program(program, canvas, *, target_fps=165, frames=600, warmup=120
                 finish()
                 measured_start = perf_counter()
             started = perf_counter()
+            measured = index >= warmup
+            if measured and frame_trace is not None:
+                frame_trace.begin()
             delta_seconds = started - previous_start
             previous_start = started
             for event in poll_events(pico, accept_text=getattr(program, "accept_text", False)):
@@ -83,7 +88,6 @@ def benchmark_program(program, canvas, *, target_fps=165, frames=600, warmup=120
             if not program.running:
                 break
             updated = perf_counter()
-            measured = index >= warmup
             if measured:
                 timer.begin()
             program.draw()
@@ -102,9 +106,13 @@ def benchmark_program(program, canvas, *, target_fps=165, frames=600, warmup=120
             ended = perf_counter()
             if measured:
                 total_measured += 1
-                rows.append({"events_ms": (events_done-started)*1000, "update_ms": (updated-events_done)*1000,
-                             "draw_submit_ms": (drawn-updated)*1000, "present_ms": (presented-drawn)*1000,
-                             "work_ms": (presented-started)*1000, "interval_ms": (ended-started)*1000})
+                row = {"events_ms": (events_done-started)*1000, "update_ms": (updated-events_done)*1000,
+                       "draw_submit_ms": (drawn-updated)*1000, "present_ms": (presented-drawn)*1000,
+                       "work_ms": (presented-started)*1000, "interval_ms": (ended-started)*1000}
+                if frame_trace is not None:
+                    row.update(frame=total_measured, session_ms=(started - measured_start)*1000)
+                    frame_trace.finish(row, budget_ms)
+                rows.append(row)
             if index % 30 == 0:
                 peak_private = max(peak_private, process_memory().get("private_bytes", 0))
             if interactive:
@@ -135,6 +143,11 @@ def benchmark_program(program, canvas, *, target_fps=165, frames=600, warmup=120
                        "gpu_semantics": "draw+SDL flush의 GL_TIME_ELAPSED. GPU 전용 실행 시간과 다르며 제출 간격을 포함한다.",
                        "process_memory_after": process_memory(), "sampled_peak_private_bytes": peak_private,
                        "frames": list(rows)})
+        if frame_trace is not None:
+            result["function_scopes"] = dict(frame_trace.probe.scope_functions)
+            result["function_timing_columns"] = ["calls", "wall_ns", "self_wall_ns"]
         return result
     finally:
+        if frame_trace is not None:
+            frame_trace.stop()
         timer.close()

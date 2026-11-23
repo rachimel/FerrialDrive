@@ -13,6 +13,50 @@ def cell(value):
     return str(value).replace("|", "\\|").replace("\n", " ").replace("\r", " ")
 
 
+def slow_frame_details(benchmark):
+    if "function_timing_columns" not in benchmark:
+        return []
+    rows = sorted((row for row in benchmark.get("frames", ()) if "combat_events" in row),
+                  key=lambda row: (-row["work_ms"], row["frame"]))
+    lines = ["", "## 느린 프레임과 전투 이벤트", "",
+             f"보존한 표본에서 작업 예산 {number(benchmark.get('budget_ms'))}ms를 넘긴 {len(rows)}프레임이다. "
+             "시간은 첫 측정 프레임 기준이며, 함수별 wall 시간에는 대기와 하위 호출이 포함된다. "
+             "자체 시간은 계측된 하위 호출을 뺀 값이다."]
+    if not rows:
+        return lines
+    lines += ["", "| 프레임 / 시간 | 작업 ms | 전투 이벤트 / 상태 | 함수별 시간 (포함 / 자체 ms · 호출 수) |",
+              "| --- | ---: | --- | --- |"]
+    labels = benchmark.get("function_scopes", {})
+    for row in rows:
+        event_lines, relevant = [], set()
+        for event in row["combat_events"]:
+            kind = event["type"]
+            if kind == "gun_fire":
+                followup = " · 후속" if event["followup"] else ""
+                event_lines.append(f"총격 {event['count']}회 · 총기 슬롯 {event['gun_slot']}{followup}")
+                relevant.add("RangedCombat.fire_followup" if event["followup"] else "RangedCombat.update")
+            elif kind == "back_weapon_fire":
+                event_lines.append(f"백웨폰 미사일 {event['count']}발")
+                relevant.add("SwapActions.launch")
+            elif kind == "loadout_transition_start":
+                event_lines.append("로드아웃 전환 시작")
+                relevant.add("MovementApplication.perform_hud_action")
+            elif kind == "loadout_changed":
+                event_lines.append(f"로드아웃 {event['from']} → {event['to']}")
+                relevant.add("MovementHud.perform(loadout)")
+        state = row["combat_state"]
+        weapon = {"ranged": "원거리", "melee": "근접"}.get(state["weapon_kind"], state["weapon_kind"])
+        transition = " · 전환 중" if state["loadout_transition"] else ""
+        event_lines.append(f"로드아웃 {state['loadout']} · {weapon}{transition}")
+        timings = sorted(row["function_timings_ns"].items(), key=lambda item: -item[1][2])
+        functions = [f"`{labels.get(scope, scope)}` {number(wall / 1e6)} / {number(own / 1e6)} · {calls}회"
+                     for index, (scope, (calls, wall, own)) in enumerate(timings) if index < 5 or scope in relevant]
+        lines.append(f"| {row['frame']} / {number(row['session_ms'] / 1000)}초 | {number(row['work_ms'])} | "
+                     f"{cell('<br>'.join(event_lines))} | {cell('<br>'.join(functions))} |")
+    lines += ["", "표에 자체 시간 상위 5개와 이벤트에 해당하는 함수를 표시한다. 해당 프레임의 전체 함수는 원자료에 있다."]
+    return lines
+
+
 def render_report(result, limits=None):
     """누락·실패 결과는 미측정으로 표시하고 실제 측정값만 표로 만든다."""
     lines = ["# 전투 성능 측정 보고서", "", "## 실행 조건", "",
@@ -65,6 +109,7 @@ def render_report(result, limits=None):
         for label, values in rows:
             values = values or {}
             lines.append("| " + label + " | " + " | ".join(number(values.get(key)) for key in ("mean", "p50", "p95", "p99", "max")) + " |")
+        lines += slow_frame_details(benchmark)
     else:
         lines += ["", "프레임 측정값 없음. 실행 실패를 성능 통과로 판정하지 않는다."]
 
@@ -142,11 +187,11 @@ def render_report(result, limits=None):
     return "\n".join(lines)
 
 
-def write_report(source):
+def write_report(source, *, destination=None):
     source = Path(source)
     limits_path = source.with_name("limits_final.json")
     limits = json.loads(limits_path.read_text(encoding="utf-8")) if limits_path.is_file() else None
-    destination = source.with_suffix(".md")
+    destination = Path(destination) if destination is not None else source.with_suffix(".md")
     destination.write_text(render_report(json.loads(source.read_text(encoding="utf-8")), limits), encoding="utf-8")
     return destination
 

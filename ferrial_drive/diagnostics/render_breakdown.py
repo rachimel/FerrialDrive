@@ -32,6 +32,8 @@ class RenderBreakdown:
         self.blur_requests = Counter()
         self.latest_ms = {}
         self.hooked = set()
+        self.frame_trace = None
+        self.scope_functions = {}
         self.collision_checks = self.collision_hits = 0
         self.combat_samples = Counter()
         self.combat_peaks = Counter()
@@ -60,9 +62,12 @@ class RenderBreakdown:
             elapsed = perf_counter_ns() - entry[1]
             self.stack.pop()
             self.latest_ms[name] = elapsed/1e6
-            self.self_ns[name] += max(0, elapsed-entry[2])
+            own = max(0, elapsed-entry[2])
+            self.self_ns[name] += own
             if self.stack:
                 self.stack[-1][2] += elapsed
+            if self.frame_trace is not None:
+                self.frame_trace.timing(name, elapsed, own)
 
     def replace(self, target, name, function):
         original = getattr(target, name)
@@ -76,6 +81,9 @@ class RenderBreakdown:
             return
         self.hooked.add(key)
         def wrap(original):
+            function = getattr(getattr(type(target), name, None), "__qualname__", label)
+            for scope in (("hud.probe." + label, "hud.draw." + label) if hud_phase else (label,)):
+                self.scope_functions[scope] = function
             def measured(*args, **kwargs):
                 if self.variant == skip:
                     return None
@@ -83,7 +91,7 @@ class RenderBreakdown:
                 if hud_phase:
                     phase = "probe" if self.app.hud.view._panel_probe is not None else "draw"
                     actual = "hud." + phase + "." + label
-                if self.detailed or label in ("world.total", "hud.total", "update.total"):
+                if self.detailed or self.frame_trace is not None or label in ("world.total", "hud.total", "update.total"):
                     with self.scope(actual):
                         result = original(*args, **kwargs)
                 else:
@@ -355,6 +363,7 @@ class RenderBreakdown:
                 "semantics": "중첩 wall 시간. 부모/자식·호출 수는 중복되어 합산하지 않는다. 상세 계측 오버헤드 미보정."}
 
     def close(self):
+        self.frame_trace = None
         for target, name, original, own in reversed(self.originals):
             if own:
                 setattr(target, name, original)

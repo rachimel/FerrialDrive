@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [직접 조작 보고서의 느린 프레임과 전투 이벤트](2026-11-23-interactive-benchmark-report.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-interactive-benchmark-report:U1]]`은 요청 시각이다. 검색 단서는 `직접 조작 보고서에서 느린 프레임마다`다.
+
 - [180기 첫 프레임 커밋과 OpenBLAS 초기화](2026-11-23-combat-openblas-commit.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-combat-openblas-commit:U1]]`은 요청 시각이다. 검색 단서는 `첫 프레임에서 커밋 메모리가 어디서 늘어나는지`다.
 
 - [Intel 교전 RAM 증가와 PBR 액션 시트 중복](2026-11-23-intel-pbr-action-memory.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-intel-pbr-action-memory:U1]]`·`[[FDLOG_MISSING_TIME:FDLOG-20261123-intel-pbr-action-memory:U2]]`는 정확한 요청 시각이다. 검색 단서는 `600MiB에서 1.9GiB`와 `성능을 최대한 살리면서도 메모리를 줄여야`다.
