@@ -1,6 +1,9 @@
 """총탄 선분과 표적 원의 교차 계산. 명중 순서와 피해 처리는 호출자가 소유한다."""
 
 from .geometry import _segment_circle_fraction, segment_circle
+from .numeric_runtime import configure_combat_blas
+
+configure_combat_blas()
 
 try:
     from numba import njit

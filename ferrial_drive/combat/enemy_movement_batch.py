@@ -2,6 +2,10 @@
 
 from math import floor, frexp, isfinite, ldexp, sqrt
 
+from .numeric_runtime import configure_combat_blas
+
+configure_combat_blas()
+
 import numpy as np
 from numba import njit, types
 from numba.extending import intrinsic, overload, register_jitable

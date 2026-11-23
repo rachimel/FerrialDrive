@@ -9,6 +9,7 @@ from .enemy_storage import EncounterEnemy, EnemyActors
 from .entity_storage import EntityRegistry
 from .projectile_storage import EnemyProjectile, EnemyProjectileView, ProjectileGroup, projectile_storage
 from .enemy_steering import MELEE_ATTACK, pursuit, ranged_recovery
+from .numeric_runtime import configure_combat_blas
 
 
 ENEMY_KINDS = ("small", "medium", "humanoid")
@@ -18,6 +19,7 @@ MIN_BATCH_ENEMIES = 8
 def _movement_batch(count):
     if count < MIN_BATCH_ENEMIES:
         return None
+    configure_combat_blas()
     try:
         from numba import config
     except ModuleNotFoundError as error:
