@@ -3,11 +3,13 @@
 from collections import OrderedDict
 from contextlib import nullcontext
 import ctypes as ct
+import os
 
 from ferrial_drive.diagnostics.texture_metrics import bind_gl
 
 from .atlas_texture_cache import bind_atlas_textures
 from .gl_pass import COLOR_AND_SCISSOR_STATE, QUAD_VERTEX_SHADER, TexturedQuadPass
+from .part_depth_order import CPU_ORDER_DECLARATION, CpuDepthOrderQuadPass, depth_order_shader
 from .part_motion_atlas import MAX_PARTS
 from .part_pbr import PBR_FUNCTIONS, PBR_UNIFORMS
 
@@ -23,6 +25,7 @@ POSE_UNIFORM_CACHE_SIZE = 64
 
 PART_SHADER = '''#version 120
 #define PARTS PART_LIMIT
+PART_DEPTH_ORDER_DECLARATION
 #ifdef ANGULAR
 #define VIEWS (PARTS*2)
 uniform vec4 angleMatrices[12], angleRects[PARTS], angleOrigin, angleWeights;
@@ -454,25 +457,15 @@ void main() {
         return;
     }
 #endif
-    for(int pass=0;pass<PARTS-1;++pass) {
-        for(int j=0;j<PARTS-1;++j) {
-            if(j>=PARTS-1-pass) continue;
-            if(depths[j]>depths[j+1]) {
-                float z=depths[j];depths[j]=depths[j+1];depths[j+1]=z;
-                vec4 c=colors[j];colors[j]=colors[j+1];colors[j+1]=c;
-#ifdef PBR
-                vec4 n=normalEnergy[j];normalEnergy[j]=normalEnergy[j+1];normalEnergy[j+1]=n;
-                vec3 p=materialProperties[j];materialProperties[j]=materialProperties[j+1];materialProperties[j+1]=p;
-                vec2 k=coatProperties[j];coatProperties[j]=coatProperties[j+1];coatProperties[j+1]=k;
-#endif
-            }
-        }
-    }
+    int order[PARTS];
+    for(int i=0;i<PARTS;++i) order[i]=i;
+PART_DEPTH_ORDER
 #ifdef DEFERRED_SURFACE
     // 한 표면으로 표현할 수 없는 반투명 파츠 겹침은 기존 합성을 쓴다.
     int first=-1;
     bool overlaps=false;
-    for(int i=0;i<PARTS;++i) {
+    for(int rank=0;rank<PARTS;++rank) {
+        int i=order[rank];
         if(colors[i].a<=0.000001) continue;
         if(first<0) first=i;
         else { overlaps=true; break; }
@@ -491,7 +484,8 @@ void main() {
     }
 #endif
     vec4 c=vec4(0.0);
-    for(int i=0;i<PARTS;++i) {
+    for(int rank=0;rank<PARTS;++rank) {
+        int i=order[rank];
 #ifdef PBR
         if(colors[i].a<=0.000001) continue;
         if(c.a>=0.99999) break;
@@ -502,7 +496,7 @@ void main() {
     }
     vec3 rgb=c.a>0.00001?c.rgb/c.a:vec3(0.0);
     if(realtimeLight>0.0) {
-        float z=c.a>0.00001?depths[0]:0.0;
+        float z=c.a>0.00001?depths[order[0]]:0.0;
         vec2 slope=clamp(vec2(dFdx(z),dFdy(z)),vec2(-2.0),vec2(2.0));
         vec3 normal=normalize(vec3(-slope,1.0));
         float diffuse=max(0.0,dot(normal,vec3(-0.48,0.36,0.8)));
@@ -541,6 +535,8 @@ class PartPainter:
         self.frame_crop = frame_crop
         self.hermite_flow = hermite_flow
         self.array_pages = array_pages
+        self.cpu_depth_order = (os.environ.get("FDRIVE_PART_DEPTH_ORDER") == "cpu"
+                                and not (instanced or depth_coverage or screen_depth))
         self.arrays = self.ARRAYS + (("energyPlacementA", "energyPlacementB") if paged else ())
         if hermite_flow:
             self.arrays += ("flowCurves",)
@@ -612,6 +608,8 @@ class PartPainter:
                     defines += "\n#define KEYPOSE_SAMPLES_OFFSETS"
         shader = PART_SHADER.replace(b"#version 120", defines.encode(), 1)
         shader = shader.replace(b"PART_LIMIT", str(part_count).encode())
+        shader = shader.replace(b"PART_DEPTH_ORDER_DECLARATION", CPU_ORDER_DECLARATION if self.cpu_depth_order else b"")
+        shader = shader.replace(b"PART_DEPTH_ORDER", depth_order_shader(part_count, cpu=self.cpu_depth_order))
         shader = shader.replace(b"PAGE_SAMPLERS", "\n".join(declarations).encode())
         shadow_uniforms = ()
         if surface and not depth_coverage:
@@ -648,6 +646,11 @@ class PartPainter:
             sampler_options["cache_keypose_samples"] = True
         if echo_instances:
             sampler_options.update(per_instance_source=True, echo_instances=True)
+        if self.cpu_depth_order:
+            version = b"#version 130" if array_pages else b"#version 120"
+            shader = shader.replace(version, b"#version 430 compatibility", 1)
+            sampler_type = CpuDepthOrderQuadPass
+            sampler_options = {"part_count": part_count}
         self.sampler = sampler_type(pico, fragment_shader=shader, **sampler_options,
             extra_uniforms=tuple(name + "[0]" for name in self.arrays) +
             tuple(uniforms) + ("bankData[0]", "energyTint", "rimLight", "localPhase", "partCount", "effectOpacity",
@@ -797,6 +800,8 @@ class PartPainter:
                     sampler.glUniform4f(sampler.uniforms["modulation"], 1, 1, 1, 1)
                     sampler.draw_instance_range(state["bounds"], *instance_range, depth_origin, screen_depth is not None)
                 elif instances is None:
+                    if self.cpu_depth_order:
+                        sampler.use_cpu_order = not depth_output
                     sampler.draw(entries[0].get("texture"), entries[0]["size"], self.pico.SDL_Rect(*state["bounds"]), destination)
                 else:
                     sampler.glUniform4f(sampler.uniforms["modulation"], 1, 1, 1, 1)

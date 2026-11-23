@@ -257,9 +257,14 @@ class TexturedQuadPass(SdlOpenGLPass):
             self.glUniform1f(self.uniforms['premultipliedSource'], float(premultiplied))
         self.glUniform2f(self.uniforms['atlasSize'], *size)
         self.glUniform4f(self.uniforms['frameBounds'], source.x, source.y, source.x + source.w, source.y + source.h)
+        vertices = ((left, top, source.x, source.y), (left, bottom, source.x, source.y + source.h),
+                    (right, top, source.x + source.w, source.y),
+                    (right, bottom, source.x + source.w, source.y + source.h))
+        self.submit_quad(vertices, (clip.x, cy, clip.w, clip.h))
+
+    def submit_quad(self, vertices, clip):
         self.glBegin(0x0005)
-        for x, y, u, v in ((left, top, source.x, source.y), (left, bottom, source.x, source.y + source.h),
-                           (right, top, source.x + source.w, source.y), (right, bottom, source.x + source.w, source.y + source.h)):
+        for x, y, u, v in vertices:
             self.glTexCoord2f(u, v)
             self.glVertex2f(x, y)
         self.glEnd()

@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [파츠 깊이 정렬과 CPU 업로드 대조](2026-11-23-part-depth-order.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-part-depth-order:U1]]`은 요청 시각이다. 검색 단서는 `Insertion sort로 바꾸고`와 `CPU에서 빠르게 계산하고 업로드`다.
+
 - [직접 OpenGL 제출과 아틀라스 적재 최적화](2026-11-23-native-gl-direct-optimization.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-native-gl-direct-optimization:U1]]`은 요청 시각이다. 검색 단서는 `직접 제어의 경우에는 더 깎을 여지`다.
 
 - [직접 OpenGL 전환 후보와 그림자 대조](2026-11-23-native-gl-shadow-validation.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-native-gl-shadow-validation:U1-U2]]`는 요청·발견 시각이다. 검색 단서는 `그림자가 깨지지 않고 묶을 수 있는지`와 `SDL_Renderer버리고`다.

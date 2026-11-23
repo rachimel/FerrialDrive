@@ -61,6 +61,12 @@ OpenGL 요청을 위해 바꾼 SDL 드라이버 힌트는 초기화 후 원래 �
 
 이전 `ferrial_drive.ui.standalone.run_preview`와 `ferrial_drive.assets.bicubic` import는 호환 어댑터다. 새 실행부는 `runtime`, 새 렌더링 구현은 `rendering`을 사용한다.
 
+## 파츠 픽셀별 깊이 순서
+
+색 합성은 픽셀별 파츠 번호를 깊이 오름차순으로 정렬한다. 16개까지 삽입 정렬, 그보다 많으면 반복형 퀵소트를 사용한다. 깊이가 같으면 입력 파츠 순서를 유지한다. 현행 카탈로그는 최대 13파츠다.
+
+CPU 대조는 PowerShell에서 `$env:FDRIVE_PART_DEPTH_ORDER = 'cpu'`를 지정한 뒤 게임이나 벤치마크를 실행한다. OpenGL 4.3 호환 프로필에서 일반 파츠 사각형의 실제 깊이 샘플을 읽고 CPU가 정렬한 인덱스를 다시 올린다. 인스턴스 배치, 깊이 출력 전용 패스, 읽기 범위가 16MiB를 넘는 사각형은 기존 GPU 패스로 처리한다. GPU 읽기 대기 비용 때문에 기본은 GPU 정렬이다. [성능·그림자 비교](ai-dev-log/2026-11-23-part-depth-order.md)
+
 ## 근거리 적 시트의 GL 상태
 
 교전 뷰의 `EnemyUpscaleScratch`는 기종 간에 `EnemyGlSheet`, 네이티브 확대 입력, SMAA 중간 타깃과 필터를 공유한다. 준비된 페이지를 사용하는 근거리 PBR 배치는 기종에 관계없이 이 경로를 쓴다. 확대가 필요한 시트는 합성부터 Bicubic·SMAA까지 같은 GL 구간에서 그린다.
