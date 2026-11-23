@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [Intel 교전 RAM 증가와 PBR 액션 시트 중복](2026-11-23-intel-pbr-action-memory.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-intel-pbr-action-memory:U1]]`·`[[FDLOG_MISSING_TIME:FDLOG-20261123-intel-pbr-action-memory:U2]]`는 정확한 요청 시각이다. 검색 단서는 `600MiB에서 1.9GiB`와 `성능을 최대한 살리면서도 메모리를 줄여야`다.
+
 - [Intel 180기 배열 복원 CPU와 느린 프레임 추적](2026-11-23-intel-array-cpu-tail.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-intel-array-cpu-tail:U1]]`은 정확한 요청 시각이다. 검색 단서는 `Binding이 줄었는데 CPU time은 다시늘어나`다.
 
 - [PBR 배열 바인딩 일괄 복원과 Intel 내장 GPU 비교](2026-11-23-pbr-array-bulk-restore-intel.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-pbr-array-bulk-restore-intel:U1]]`은 정확한 요청 시각이다. 검색 단서는 `배열 바인딩 일괄 복원부터 연결해`다.
