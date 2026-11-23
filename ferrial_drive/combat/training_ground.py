@@ -1,8 +1,11 @@
 """흙바닥 반복·미터 눈금과 평면 투영. 이동 규칙과 독립인 훈련장 표현이다."""
 
+from contextlib import nullcontext
 from ctypes import byref
 from math import ceil, floor
+import os
 
+from ferrial_drive.rendering.hud_text_atlas import HudTextAtlas
 from ferrial_drive.ui.components import Rect
 
 
@@ -46,6 +49,10 @@ class TrainingGroundView:
         self.renderer, self.projection, self.settings = renderer, projection, settings
         self.pico = renderer.pico
         self.native = getattr(self.pico, "fdrive_native_gl", None)
+        self.grid_atlas = None
+        if (self.native is not None and getattr(renderer, "batch_queue", None) is not None
+                and os.environ.get("FDRIVE_GROUND_GRID_SUBMISSION") != "legacy"):
+            self.grid_atlas = HudTextAtlas(self.pico, renderer.flush_batch, size=512, solid_texel=True)
         self.texture = None
         self.colors = None
         if texture_path is not None:
@@ -91,24 +98,53 @@ class TrainingGroundView:
             else:
                 r.rect(visible, "#554A37")
             if grid:
-                spacing, major = self.settings["grid_m"], self.settings["major_grid_m"]
-                for axis in range(2):
-                    for index in range(max(0, ceil(minimum[axis] / spacing)), min(floor(map_size_m / spacing), floor(maximum[axis] / spacing)) + 1):
-                        meters = index * spacing
-                        strong = abs(meters / major - round(meters / major)) < 1e-7
-                        position = p.project((meters, 0) if axis == 0 else (0, meters))
-                        x, y = camera.world_to_screen(position)
-                        color, opacity = ("#D7C39C", 0.55) if strong else ("#CABEA4", 0.2)
-                        if axis == 0:
-                            r.line(x, max(0, top), x, min(height, bottom), color, opacity)
-                            r.text(f"{meters:g}m", x + 4, height - 26, "small", color, 0.85)
-                        else:
-                            r.line(max(0, left), y, min(width, right), y, color, opacity)
-                            r.text(f"{meters:g}m", 6, y + 3, "small", color, 0.85)
+                self.draw_grid(camera, window_size, map_size_m, (left, top, right, bottom), minimum, maximum)
         r.rect(Rect(left, top, right - left, bottom - top), "#E8CC8F", filled=False)
+
+    def draw_grid(self, camera, window_size, map_size_m, bounds, minimum, maximum):
+        r, projection = self.renderer, self.projection
+        width, height = window_size
+        left, top, right, bottom = bounds
+        spacing, major = self.settings["grid_m"], self.settings["major_grid_m"]
+        atlas = self.grid_atlas
+        queue = getattr(r, "batch_queue", None)
+        use_batch = (atlas is not None and queue is not None and queue.enabled and queue.unit_scale()
+                     and self.native.draw_blend == self.pico.SDL_BLENDMODE_BLEND)
+        with r.hud_batch(text_atlas=atlas) if use_batch else nullcontext():
+            solid = (atlas.solid_uv(),) * 4 if use_batch else None
+            for axis in range(2):
+                first = max(0, ceil(minimum[axis] / spacing))
+                last = min(floor(map_size_m / spacing), floor(maximum[axis] / spacing))
+                for index in range(first, last + 1):
+                    meters = index * spacing
+                    strong = abs(meters / major - round(meters / major)) < 1e-7
+                    position = projection.project((meters, 0) if axis == 0 else (0, meters))
+                    x, y = camera.world_to_screen(position)
+                    color, opacity = ("#D7C39C", 0.55) if strong else ("#CABEA4", 0.2)
+                    if axis == 0:
+                        line = x, max(0, top), x, min(height, bottom)
+                        label = x + 4, height - 26
+                    else:
+                        line = max(0, left), y, min(width, right), y
+                        label = 6, y + 3
+                    if use_batch:
+                        x1, y1, x2, y2 = map(round, line)
+                        # 단위 배율에서 축 정렬 선이 덮는 1픽셀 폭을 사각형으로 옮긴다.
+                        if axis == 0:
+                            x2 += 1
+                        else:
+                            y2 += 1
+                        if x2 > x1 and y2 > y1:
+                            points = ((x1, y1), (x2, y1), (x2, y2), (x1, y2))
+                            queue.texture_quad(points, r.rgba(color, opacity), atlas.texture, solid)
+                    else:
+                        r.line(*line, color, opacity)
+                    r.text(f"{meters:g}m", *label, "small", color, 0.85)
 
     def close(self):
         self.colors = None
+        if self.grid_atlas is not None:
+            self.grid_atlas.close()
         if self.texture:
             self.pico.SDL_DestroyTexture(self.texture)
             self.texture = None

@@ -4,8 +4,10 @@ from ctypes import byref, c_char_p, string_at
 
 
 class HudTextAtlas:
-    def __init__(self, pico, flush, size=1024):
+    """같은 배치에 단색 도형이 필요하면 마지막 행의 텍셀을 예약한다."""
+    def __init__(self, pico, flush, size=1024, *, solid_texel=False):
         self.pico, self.flush, self.size = pico, flush, size
+        self.content_height = size - int(solid_texel)
         self.texture = None
         self.entries = {}
         self.x = self.y = self.row_height = 0
@@ -20,7 +22,7 @@ class HudTextAtlas:
         surface = render_surface()
         try:
             width, height = surface.contents.w, surface.contents.h
-            if min(width, height) < 1 or max(width, height) + 2 > self.size:
+            if min(width, height) < 1 or width + 2 > self.size or height + 2 > self.content_height:
                 return None
             packed = self._padded_pixels(surface, width, height)
         finally:
@@ -30,7 +32,7 @@ class HudTextAtlas:
         span, rows = width + 2, height + 2
         if self.x + span > self.size:
             self.x, self.y, self.row_height = 0, self.y + self.row_height, 0
-        if self.y + rows > self.size:
+        if self.y + rows > self.content_height:
             self.flush()
             self.entries.clear()
             self.x = self.y = self.row_height = 0
@@ -55,7 +57,19 @@ class HudTextAtlas:
                 or p.SDL_SetTextureScaleMode(texture, p.SDL_ScaleModeLinear)):
             p.SDL_DestroyTexture(texture)
             raise RuntimeError("HUD 텍스트 아틀라스 필터 설정 실패")
+        if self.content_height < self.size:
+            texel = p.SDL_Rect(0, self.content_height, 1, 1)
+            if p.SDL_UpdateTexture(texture, byref(texel), c_char_p(b"\xff" * 4), 4):
+                p.SDL_DestroyTexture(texture)
+                raise RuntimeError("아틀라스 단색 텍셀 업로드 실패")
         self.texture = texture
+
+    def solid_uv(self):
+        if self.content_height == self.size:
+            raise RuntimeError("단색 텍셀을 예약한 아틀라스가 필요하다.")
+        if self.texture is None:
+            self._allocate()
+        return (0.5 / self.size, (self.content_height + 0.5) / self.size)
 
     def _padded_pixels(self, surface, width, height):
         p = self.pico

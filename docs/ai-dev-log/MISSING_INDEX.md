@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [훈련장 격자선과 미터 눈금 일괄 제출](2026-11-23-ground-grid-batch.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-ground-grid-batch:U1]]`은 요청 시각이다. 검색 단서는 `드로우 콜 더 줄여볼래`다.
+
 - [전투 CPU 메타데이터 패킹과 캐시 조사](2026-11-23-combat-metadata-packing.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-combat-metadata-packing:U1]]`·`[[FDLOG_MISSING_TIME:FDLOG-20261123-combat-metadata-packing:U2]]`·`[[FDLOG_MISSING_TIME:FDLOG-20261123-combat-metadata-packing:A1]]`은 요청·제안 시각이다. 검색 단서는 `GPU에서 아틀라스는 일단 배제`, `모든 항목을 다 보여줘`, `같은 포맷을 미리 저장`이다.
 
 - [직접 OpenGL 정점 스트리밍 대조](2026-11-23-native-vbo-stream.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-native-vbo-stream:U1]]`은 요청 시각이다. 검색 단서는 `VBO에 한꺼번에 올리는`과 `Flame Graph를 다시 확인`이다.
