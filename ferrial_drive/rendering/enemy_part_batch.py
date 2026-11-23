@@ -79,18 +79,17 @@ class EnemyUpscaleScratch:
 
     def __init__(self, pico):
         self.native = SheetTarget(pico)
-        self.upscaler = None
-        self.unavailable = None
+        self.upscalers = {}
         self.gl_sheet = None
         self.gl_sheet_unavailable = False
 
-    def get_upscaler(self):
-        if self.upscaler is None and self.unavailable is None:
+    def get_upscaler(self, aa_mode="smaa"):
+        if aa_mode not in self.upscalers:
             try:
-                self.upscaler = PartSheetUpscaler(self.native.pico)
-            except RuntimeError as exc:
-                self.unavailable = str(exc)
-        return self.upscaler
+                self.upscalers[aa_mode] = PartSheetUpscaler(self.native.pico, aa_mode)
+            except RuntimeError:
+                self.upscalers[aa_mode] = None
+        return self.upscalers[aa_mode]
 
     def get_gl_sheet(self):
         if self.gl_sheet is None and not self.gl_sheet_unavailable:
@@ -105,9 +104,10 @@ class EnemyUpscaleScratch:
             self.gl_sheet.close()
             self.gl_sheet = None
         self.native.close()
-        if self.upscaler is not None:
-            self.upscaler.close()
-            self.upscaler = None
+        for upscaler in self.upscalers.values():
+            if upscaler is not None:
+                upscaler.close()
+        self.upscalers.clear()
 
 
 class EnemyPartBatch:
@@ -168,9 +168,6 @@ class EnemyPartBatch:
         if len(requests) < 2 or self.unavailable or r.paged or not r.pbr_lighting:
             return {}
         upscale = factor > 1 and r.upscaler is not None and r.data.get("upscale_filter") == "bounded_bicubic"
-        if upscale and r.upscaler.aa_mode != "smaa":
-            # Bicubic 단독 경로는 개별 프레임의 블렌딩을 유지한다.
-            return {}
         p = r.pico
         sx, sy = ct.c_float(), ct.c_float()
         p.SDL_RenderGetScale(p.renderer, ct.byref(sx), ct.byref(sy))
@@ -184,7 +181,7 @@ class EnemyPartBatch:
             except RuntimeError as exc:
                 self.unavailable = str(exc)
                 return {}
-        sheet_upscaler = self.scratch.get_upscaler() if upscale else None
+        sheet_upscaler = self.scratch.get_upscaler(r.upscaler.aa_mode) if upscale else None
         if upscale and sheet_upscaler is None:
             return {}
         border = PART_UPSCALE_BORDER if upscale else 0
@@ -237,16 +234,19 @@ class EnemyPartBatch:
         target.reserve(native_layout, self.scratch.gl_sheet)
         sampler = self.painter.sampler
         before = sampler.submits
-        direct = self.scratch.get_gl_sheet() if direct_sheet and r.stream_budget is not None else None
+        direct_supported = (not upscale or sheet_upscaler.aa is not None
+                            or getattr(p, "fdrive_native_gl", None) is not None)
+        direct = self.scratch.get_gl_sheet() if direct_sheet and r.stream_budget is not None and direct_supported else None
         if direct:
             textures, intermediate, smaa_size = (target.texture,), (), None
             if upscale:
                 self.output.reserve(output_layout, direct)
                 textures += (self.texture,)
-                smaa_size = self.output.size
-                if direct.smaa_layers is None:
-                    sheet_upscaler.aa.ensure_size(*smaa_size)
-                    intermediate = tuple(sheet_upscaler.aa.targets)
+                if sheet_upscaler.aa is not None:
+                    smaa_size = self.output.size
+                    if direct.smaa_layers is None:
+                        sheet_upscaler.aa.ensure_size(*smaa_size)
+                        intermediate = tuple(sheet_upscaler.aa.targets)
             with direct.frame(sampler, textures, smaa_size=smaa_size, intermediate=intermediate):
                 with direct.target(target.texture, target.size), direct.batch(sampler):
                     regions = self._paint_groups(groups, copies, direct.bindings)

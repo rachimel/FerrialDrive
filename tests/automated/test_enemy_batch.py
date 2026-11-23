@@ -35,7 +35,9 @@ class EnemyBatchGpuTests(unittest.TestCase):
         combat = ROOT / "samples/combat_test_v1_5/encounter.json"
         movement = ROOT / "samples/sword_movement/movement_config.json"
         catalog = combat.parent / json.loads(combat.read_text(encoding="utf8"))["rendering"]["enemy_part_sprites"]
-        light = movement.parent / json.loads(movement.read_text(encoding="utf8"))["upper_lower"]["pbr_lighting"]
+        upper_lower = json.loads(movement.read_text(encoding="utf8"))["upper_lower"]
+        light = movement.parent / (Path(upper_lower["mesh_gameplay"]) / "lighting.json"
+                                   if "mesh_gameplay" in upper_lower else upper_lower["pbr_lighting"])
         if not catalog.is_file() or not light.is_file():
             raise unittest.SkipTest("로컬 적 파츠와 조명 에셋이 필요하다.")
         cls.catalog, cls.light = catalog, light
@@ -114,8 +116,9 @@ class EnemyBatchGpuTests(unittest.TestCase):
 
                     self.compare(reference, batched, 4)
 
-    def test_upscaled_smaa_sheet_preserves_individual_filters_and_order(self):
+    def test_upscaled_sheet_preserves_individual_filters_and_order(self):
         from ferrial_drive.rendering.enemy_part_batch import EnemyPartBatch, EnemyUpscaleScratch
+        from ferrial_drive.rendering.part_upscale import PartUpscaler
 
         scratch = EnemyUpscaleScratch(self.pico)
         self.addCleanup(scratch.close)
@@ -129,25 +132,35 @@ class EnemyBatchGpuTests(unittest.TestCase):
                     for i, (motion, direction) in enumerate(
                         (("move", "0"), ("attack", "2"), ("move", "0"), ("move", "4"),
                          ("attack", "2"), ("move", "4"), ("move", "0"), ("attack", "2")))]
-            self.set_upscale_mode(resource, "off")
-            self.assertEqual(batch.prepare(rows, 1.2 / resource.data["pixel_scale"]), {})
-            self.set_upscale_mode(resource, "smaa")
-            for factor in (1.2, 1.85):
-                with self.subTest(kind=kind, factor=factor):
+            for mode, factor in (("off", 1.2), ("off", 1.85), ("smaa", 1.2), ("smaa", 1.85)):
+                self.set_upscale_mode(resource, mode)
+                with self.subTest(kind=kind, mode=mode, factor=factor):
                     scale = factor / resource.data["pixel_scale"]
 
                     def reference():
-                        for _, motion, d, seconds, x, y in rows:
-                            resource.draw(f"{motion}/u{d}l{d}", seconds, x, y, scale=scale, sample_shadow=False)
+                        # 개별 확대 타깃의 이전 포즈 잔상을 픽셀 기준 이미지에 섞지 않는다.
+                        original = resource.upscaler
+                        try:
+                            for _, motion, d, seconds, x, y in rows:
+                                resource.upscaler = PartUpscaler(self.pico, mode)
+                                try:
+                                    resource.draw(f"{motion}/u{d}l{d}", seconds, x, y, scale=scale, sample_shadow=False)
+                                finally:
+                                    resource.upscaler.close()
+                        finally:
+                            resource.upscaler = original
 
-                    def batched():
-                        copies = batch.prepare(rows, scale)
-                        self.assertEqual(len(copies), len(rows), scratch.unavailable)
+                    def batched(direct_sheet=False):
+                        copies = batch.prepare(rows, scale, direct_sheet=direct_sheet)
+                        self.assertEqual(len(copies), len(rows))
                         self.assertEqual(batch.submits, 3)
                         for enemy_id, *_ in rows:
                             batch.copy(copies[enemy_id])
 
                     self.compare(reference, batched, 8)
+                    if mode == "off":
+                        with patch.object(resource, "stream_budget", AtlasFrameBudget()):
+                            self.compare(reference, lambda: batched(direct_sheet=True), 8)
 
     @staticmethod
     def set_upscale_mode(resource, mode):

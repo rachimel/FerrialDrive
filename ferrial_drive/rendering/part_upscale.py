@@ -173,22 +173,24 @@ class PartEchoTarget:
 
 
 class PartSheetUpscaler:
-    """네이티브 시트의 파츠를 영역별로 확대하고 시트 단위로 AA를 적용한다."""
+    """네이티브 시트의 파츠를 영역별로 Bicubic 확대한다."""
 
-    def __init__(self, pico):
-        from .smaa import Smaa1x
-
+    def __init__(self, pico, aa_mode):
         self.pico = pico
         fragment = FRAGMENT_SHADER.replace(b"uniform vec4 frameBounds;",
                                            b"flat in vec4 sourceBounds;\n#define frameBounds sourceBounds", 1)
         fragment = fragment.replace(b"varying vec2 texel;", b"in vec2 texel;", 1)
         self.sampler = InstancedQuads(pico, fragment_shader=fragment, per_instance_source=True,
                                       extra_uniforms=("artwork", "atlasSize", "modulation", "premultipliedSource"))
-        try:
-            self.aa = Smaa1x(pico, sheet=True)
-        except BaseException:
-            self.sampler.close()
-            raise
+        self.aa = None
+        if aa_mode == "smaa":
+            from .smaa import Smaa1x
+
+            try:
+                self.aa = Smaa1x(pico, sheet=True)
+            except BaseException:
+                self.sampler.close()
+                raise
 
     def draw(self, source, source_size, output, output_size, regions, *, gl_sheet=None):
         sampler = self.sampler
@@ -205,9 +207,15 @@ class PartSheetUpscaler:
                 sampler.glUniform1f(sampler.uniforms["premultipliedSource"], 1)
                 sampler.draw_rectangles(regions)
 
-        self.aa.draw_sheet(paint_color, output, [destination for _, destination in regions], output_size,
-                           render_target, gl_sheet=gl_sheet)
+        if self.aa is None:
+            target = gl_sheet.target(output, output_size) if gl_sheet else render_target(self.pico, output)
+            with target:
+                paint_color()
+        else:
+            self.aa.draw_sheet(paint_color, output, [destination for _, destination in regions], output_size,
+                               render_target, gl_sheet=gl_sheet)
 
     def close(self):
-        self.aa.close()
+        if self.aa is not None:
+            self.aa.close()
         self.sampler.close()
