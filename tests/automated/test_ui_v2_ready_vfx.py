@@ -273,15 +273,20 @@ class ReadyVfxTests(unittest.TestCase):
         geometry = resource_geometry(view.layout, view.style['level_bevel_pixels'])
         state = replace(self.program.state, ultimate_cooldown_seconds=2.5, ultimate_cooldown_duration_seconds=5)
         drawn = []
-        def stroke(points, color, opacity=1, width=1):
-            drawn.append((bool(active), opacity, width))
-        with patch.object(view, 'stroke', side_effect=stroke):
-            view.ultimate_icon(state, geometry, '#FFFFFF', 1)
+        renderer.filtered_polygons.side_effect = lambda shapes, color, opacity: drawn.append(
+            (bool(active), shapes, color, opacity))
+        view.ultimate_icon(state, geometry, '#FFFFFF', 1)
         rect = renderer.clip.call_args.args[0]
         self.assertEqual(rect.y, geometry.icon_center[1])
         self.assertEqual(rect.height, geometry.icon_radius + view.style['ultimate_border_width_pixels'])
-        self.assertTrue(any(not clipped and alpha < 0.3 for clipped, alpha, _ in drawn))
-        self.assertTrue(any(clipped and alpha == 0.9 for clipped, alpha, _ in drawn))
+        self.assertEqual([clipped for clipped, *_ in drawn], [False, False, False, True, True])
+        dim = view.style['ultimate_cooldown_dim_opacity']
+        for dimmed, bright, opacity in zip(drawn[1:3], drawn[3:], (.75, .9)):
+            self.assertIs(dimmed[1], bright[1])
+            self.assertEqual(dimmed[2], bright[2])
+            self.assertAlmostEqual(dimmed[3], opacity * dim)
+            self.assertEqual(bright[3], opacity)
+        renderer.filled_triangle.assert_not_called()
         self.assertFalse(active)
         self.assertEqual(replace(state, ultimate_cooldown_seconds=5).ultimate_recovery_ratio, 0)
         self.assertEqual(replace(state, ultimate_cooldown_seconds=0).ultimate_recovery_ratio, 1)

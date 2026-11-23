@@ -11,7 +11,8 @@ from ferrial_drive.ui.energy import energy_color
 from ferrial_drive.ui.theme import WIDGET_LABELS, resolve_widget_colors, themed_widget, widget_colors
 from ferrial_drive.ui.view import UiView
 from .geometry import (PerspectivePlane, body_diamond, counter_plaque, hatched_stroke_mesh, quad_fill,
-                       resource_geometry, segmented_stroke_mesh, slanted_meter, tapered_stroke_mesh)
+                       resource_geometry, segmented_stroke_mesh, slanted_meter, stroke_quads, tapered_stroke_mesh,
+                       ultimate_icon_shapes)
 from .panels import (PanelGeometry, build_panel_geometry, merge_panel_y_ranges,
                      panel_bright_band_top, scale_panel_geometry)
 from .panel_probe import PanelProbeRenderer, cached_counter_font_metrics
@@ -223,17 +224,12 @@ class UiV2View(UiView):
             displacement, 1.0, settings["samples"], forward_bias=settings.get("forward_bias", 0))
 
     def stroke(self, points, color, opacity=1, width=1):
-        for a, b in zip(points, points[1:]):
-            if width <= 1:
+        if width <= 1:
+            for a, b in zip(points, points[1:]):
                 self.renderer.line(*a, *b, color, opacity)
-                continue
-            distance = hypot(b[0] - a[0], b[1] - a[1])
-            if not distance:
-                continue
-            nx, ny = -(b[1] - a[1]) / distance * width / 2, (b[0] - a[0]) / distance * width / 2
-            self.polygon(((a[0] + nx, a[1] + ny), (b[0] + nx, b[1] + ny),
-                          (b[0] - nx, b[1] - ny), (a[0] - nx, a[1] - ny)),
-                         color, opacity, filled=True)
+            return
+        for quad in stroke_quads(points, width):
+            self.polygon(quad, color, opacity, filled=True)
 
     def accent_stroke(self, points, color, opacity):
         width = self.style['lock_accent_pixels']
@@ -727,26 +723,21 @@ class UiV2View(UiView):
                             c["muted"], opacity, scale=0.85, slant_right=True)
 
     def ultimate_icon(self, state, geometry, color, opacity, visual=None):
-        """쿨다운 동안 어두운 아이콘 위로 아래쪽부터 밝은 영역을 드러낸다."""
+        """텍스처 마스크를 칠하고 쿨다운 동안 아래부터 원래 밝기를 드러낸다."""
         r, c = self.renderer, self.config.colors
         cx, cy = geometry.icon_center
         radius = geometry.icon_radius
         border_width = self.style['ultimate_border_width_pixels']
-        diamond = ((cx, cy - radius), (cx + radius, cy), (cx, cy + radius), (cx - radius, cy))
-        self.polygon(diamond, c["panel"], opacity * self.style["surface_opacity"], filled=True)
+        panel, blades, outline = ultimate_icon_shapes(geometry.icon_center, radius,
+                                                       self.style['ultimate_icon_scale'], border_width)
+        r.filtered_polygons(panel, c['panel'], opacity * self.style['surface_opacity'])
         visual = visual or UltimateReadyVisual()
         if state.ultimate_ready and visual.flash > 0:
-            self.polygon(diamond, c['text'], opacity * visual.flash * 0.45, filled=True)
+            r.filtered_polygons(panel, c['text'], opacity * visual.flash * 0.45)
 
         def face(alpha):
-            self.stroke(diamond + diamond[:1], c['text'], alpha * 0.9, border_width)
-            for angle in (-0.3, pi / 2 - 0.3, pi - 0.3, 3 * pi / 2 - 0.3):
-                def blade_point(dx, dy):
-                    return cx + cos(angle) * dx - sin(angle) * dy, cy + sin(angle) * dx + cos(angle) * dy
-                scale = self.style['ultimate_icon_scale']
-                blade = tuple(blade_point(x * scale, y * scale) for x, y in ((-5, -5), (radius + 5, -10), (12, 4), (1, 18)))
-                self.polygon(blade, c['energy_fill'], alpha * 0.75, filled=True)
-                self.stroke(blade + blade[:1], c['text'], alpha * 0.9, 1.5)
+            r.filtered_polygons(blades, c['energy_fill'], alpha * 0.75)
+            r.filtered_polygons(outline, c['text'], alpha * 0.9)
 
         cooling = state.ultimate_cooldown_seconds > 0
         face(opacity * (self.style['ultimate_cooldown_dim_opacity'] if cooling else 1))
@@ -757,6 +748,7 @@ class UiV2View(UiView):
                              (radius + border_width) * 2, reveal_height + border_width)):
                 face(opacity)
         if state.ultimate_ready:
+            diamond, = panel
             settings = self.style['lock_motion']
             position = accent_position(visual.age, settings['move_seconds'], settings['hold_seconds'],
                                        settings.get('minimum_speed_ratio', 0))

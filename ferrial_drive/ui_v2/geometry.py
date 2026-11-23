@@ -1,7 +1,37 @@
 """UI의 가벼운 원근·기울기 투영. 렌더러와 게임 상태에 의존하지 않는다."""
 
 from dataclasses import dataclass
-from math import hypot, isfinite
+from functools import lru_cache
+from math import cos, hypot, isfinite, pi, sin
+
+
+def stroke_quads(points, width):
+    """연속 선분마다 중심선과 같은 길이의 사각형을 만든다."""
+    for a, b in zip(points, points[1:]):
+        distance = hypot(b[0] - a[0], b[1] - a[1])
+        if not distance:
+            continue
+        nx = -(b[1] - a[1]) / distance * width / 2
+        ny = (b[0] - a[0]) / distance * width / 2
+        yield ((a[0] + nx, a[1] + ny), (b[0] + nx, b[1] + ny),
+               (b[0] - nx, b[1] - ny), (a[0] - nx, a[1] - ny))
+
+
+@lru_cache(maxsize=16)
+def ultimate_icon_shapes(center, radius, scale, border_width):
+    """마름모 배경·문양·외곽을 색과 독립적인 텍스처 형상으로 준비한다."""
+    cx, cy = center
+    diamond = ((cx, cy - radius), (cx + radius, cy), (cx, cy + radius), (cx - radius, cy))
+    blades = []
+    outline = list(stroke_quads(diamond + diamond[:1], max(1, border_width)))
+    for index in range(4):
+        angle = index * pi / 2 - .3
+        u, v = cos(angle) * scale, sin(angle) * scale
+        blade = tuple((cx + u * x - v * y, cy + v * x + u * y)
+                      for x, y in ((-5, -5), (radius + 5, -10), (12, 4), (1, 18)))
+        blades.append(blade)
+        outline.extend(stroke_quads(blade + blade[:1], 1.5))
+    return (diamond,), tuple(blades), tuple(outline)
 
 
 def segmented_stroke_mesh(points, width, sections):
