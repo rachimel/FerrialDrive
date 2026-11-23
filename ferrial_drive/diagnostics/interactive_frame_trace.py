@@ -98,6 +98,8 @@ class InteractiveFrameTrace:
                 if callable(getattr(target, name, None)):
                     owner = target if isinstance(target, type) else type(target)
                     label = name if target is self.canvas.pico else f"{owner.__name__}.{name}"
+                    if label == "SDL_RenderFlush" and getattr(self.canvas.pico, "fdrive_native_gl", None) is not None:
+                        label = "NativeGlRenderer.flush"
                     probe.method(target, name, label)
         if callable(getattr(app, "draw_live_combat_motion", None)):
             phases = (

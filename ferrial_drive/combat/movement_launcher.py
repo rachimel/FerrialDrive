@@ -24,6 +24,7 @@ def launch_movement_test(*, description, movement_speed_multiplier=1,
                         help="오버드라이브 기체 림·검 Trail·HUD의 무지개 팔레트 시험")
     parser.add_argument("--mute", action="store_true", help="효과음 없이 실행")
     parser.add_argument("--frames", type=int)
+    parser.add_argument("--render-driver", choices=("opengl", "native_gl"), default="opengl")
     parser.add_argument("--capture", type=Path)
     parser.add_argument("--capture-frame", type=int, default=1)
     parser.add_argument("--report", type=Path)
@@ -69,4 +70,4 @@ def launch_movement_test(*, description, movement_speed_multiplier=1,
         title += " | Rainbow Overdrive"
     if movement_speed_multiplier != 1:
         title += f" | {movement_speed_multiplier:g}x Speed"
-    run_application(create_program, title=title, frame_limit=args.frames)
+    run_application(create_program, title=title, frame_limit=args.frames, render_driver=args.render_driver)

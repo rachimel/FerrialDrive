@@ -11,6 +11,7 @@ from ferrial_drive.diagnostics.texture_metrics import bind_gl
 from .direction_texture_arrays import (
     TEXTURE_ARRAY, DirectionArrayStorage, DirectionArrayUploadError, plan_direction_arrays,
 )
+from .gl_pass import flush_sdl_renderer
 from .texture_codecs import bc7_size, texture_payload_size
 from .texture_page_work import TexturePageWork
 
@@ -31,7 +32,7 @@ class TextureUploadBinding:
 
     @contextmanager
     def bound(self):
-        self.pico.SDL_RenderFlush(self.pico.renderer)
+        flush_sdl_renderer(self.pico)
         active = self.integer(0x84E0)
         self.active_texture(0x84C0)
         previous = self.integer(0x8069)

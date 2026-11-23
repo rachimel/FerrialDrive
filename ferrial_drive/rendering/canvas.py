@@ -73,6 +73,7 @@ class PicoCanvas:
         self.logical_size = width, height
         self.driver, self.vsync = driver, vsync
         self.pico = self.info = None
+        self._native_gl = None
         self.opened = False
 
     def open(self):
@@ -84,18 +85,27 @@ class PicoCanvas:
         import pico2d.pico2d as pico
 
         self.pico = pico
-        driver = None if os.environ.get('SDL_VIDEODRIVER') == 'dummy' else self.driver
+        driver = self.driver
+        if os.environ.get('SDL_VIDEODRIVER') == 'dummy':
+            if driver == "native_gl":
+                raise RuntimeError("직접 OpenGL 캔버스에는 OpenGL 창 드라이버가 필요하다.")
+            driver = None
         previous = pico.SDL_GetHint(pico.SDL_HINT_RENDER_DRIVER)
         try:
             if os.name == 'nt':
                 # 비디오 초기화 전에 지정한다. SDL 좌표를 물리 픽셀로 유지한다.
                 pico.SDL_SetHint(pico.SDL_HINT_WINDOWS_DPI_AWARENESS, b'permonitorv2')
                 pico.SDL_SetHint(pico.SDL_HINT_WINDOWS_DPI_SCALING, b'0')
-            if driver:
+            if driver == "native_gl":
+                from .native_gl import PicoNativeGl
+
+                pico.window = pico.renderer = None
+                self._native_gl = PicoNativeGl(pico)
+            elif driver:
                 pico.SDL_SetHint(pico.SDL_HINT_RENDER_DRIVER, driver.encode('utf-8'))
             pico.open_canvas(self.width, self.height, sync=self.vsync)
             # Pico2D의 일부 버전은 null 포인터의 None 검사로 fallback을 놓친다.
-            if not pico.renderer and pico.window:
+            if self._native_gl is None and not pico.renderer and pico.window:
                 pico.SDL_ResetHint(pico.SDL_HINT_RENDER_DRIVER)
                 pico.renderer = pico.SDL_CreateRenderer(pico.window, -1, pico.SDL_RENDERER_SOFTWARE)
             if not pico.window or not pico.renderer:
@@ -108,6 +118,9 @@ class PicoCanvas:
                 pico.close_canvas()
             finally:
                 pico.renderer = pico.window = None
+                if self._native_gl:
+                    self._native_gl.restore()
+                    self._native_gl = None
             raise
         finally:
             if previous is None:
@@ -152,6 +165,9 @@ class PicoCanvas:
                 self.pico.renderer = self.pico.window = None
                 self.opened = False
                 _active_canvas = None
+                if self._native_gl:
+                    self._native_gl.restore()
+                    self._native_gl = None
 
     def __enter__(self):
         return self.open()

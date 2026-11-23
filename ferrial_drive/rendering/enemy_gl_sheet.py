@@ -5,6 +5,7 @@ import ctypes as ct
 
 from ferrial_drive.diagnostics.gpu_profile import bind_gl
 from .atlas_texture_cache import AtlasTextureBindings
+from .gl_pass import flush_sdl_renderer
 from .smaa_sheet_layers import SmaaSheetLayers
 
 
@@ -89,7 +90,7 @@ class EnemyGlSheet:
     @contextmanager
     def frame(self, sampler, textures, *, smaa_size=None, intermediate=()):
         p = self.pico
-        p.SDL_RenderFlush(p.renderer)
+        flush_sdl_renderer(p)
         self.framebuffer = framebuffer = sampler.integer(0x8CA6)
         self.program = program = sampler.integer(0x8B8D)
         active = sampler.integer(0x84E0)

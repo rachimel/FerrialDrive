@@ -7,7 +7,7 @@ from math import ceil, cos, floor, hypot, radians, sin
 from struct import Struct
 
 from ferrial_drive.diagnostics.texture_metrics import bind_gl
-from .gl_pass import SdlOpenGLPass, TexturedQuadPass
+from .gl_pass import SdlOpenGLPass, TexturedQuadPass, flush_sdl_renderer
 from .direction_reprojection import dot
 
 
@@ -325,7 +325,7 @@ class PartShadowMap:
         if key == self.pose_key:
             return
         vertices, self.ground_bounds = self.pose_geometry(key, cache_geometry)
-        self.pico.SDL_RenderFlush(self.pico.renderer)
+        flush_sdl_renderer(self.pico)
         self.render_depth(vertices)
         self.pose_key = key
 
@@ -436,7 +436,7 @@ class PartShadowMap:
     def render_surface(self, texture, bounds, border):
         s, p = self.surface_sampler, self.pico
         x, y, width, height = bounds
-        p.SDL_RenderFlush(p.renderer)
+        flush_sdl_renderer(p)
         active = s.integer(0x84E0)
         s.glActiveTexture(0x84C0)
         previous = s.integer(0x8069)

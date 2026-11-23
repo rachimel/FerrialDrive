@@ -12,6 +12,8 @@ python tests/hardware_profile_benchmark.py --auto --target-fps 165 --warmup 165 
 
 ## Combat Test 연결과 보고서
 
+직접 OpenGL 후보를 비교할 때는 `--render-driver native_gl`을 추가한다. 기본 `--render-driver opengl`은 SDL OpenGL 경로다. 보고서의 `render_driver`에 요청한 경로를 기록한다. 직접 경로에서 `NativeGlRenderer.flush`는 호환 호출이 정점 상태를 정리한 비용이다. SDL 큐 제출 시간은 `SDL_RenderFlush`로 따로 기록한다.
+
 화면 해상도는 게임 설정의 저장값을 적용한다. `resolution_initial`·`resolution`에 시작·종료 시 실제 출력 픽셀 수를, `logical_resolution`에 UI·월드의 논리 크기를 기록한다. `resolution_changed=true`이면 한 실행 중 서로 다른 출력 조건이 섞였으므로 고정 해상도 성능으로 해석하지 않는다. 텍스처 품질과 출력 해상도는 별도 설정이다.
 
 Unit Test Runner에서 이 파일을 더블클릭·Enter·드롭하면 `Combat` / `Movement`를 선택한다. 둘 다 직접 조작·상세 계측이며 정상 창 종료 시 보고서를 저장한다. 자동 공격·프레임 제한은 추가하지 않는다. `Movement`는 CLI의 `--scenario sword`와 같다. Esc는 실행 선택 취소이며 기존 테스트를 유지한다. 파일 인자 실행은 `python Tools/unit_test_runner/run.py tests/hardware_profile_benchmark.py --preset combat` 또는 `--preset movement`를 사용한다.

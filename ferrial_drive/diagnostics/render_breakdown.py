@@ -260,13 +260,16 @@ class RenderBreakdown:
         return self
 
     def _install_sdl_counts(self, pico):
+        native = getattr(pico, "fdrive_native_gl", None) is not None
         for name in ("SDL_RenderGeometry", "SDL_RenderCopy", "SDL_RenderCopyEx", "SDL_RenderCopyF",
                      "SDL_RenderCopyExF", "SDL_RenderDrawLine", "SDL_RenderDrawLines", "SDL_RenderFillRect", "SDL_RenderFillRects",
                      "SDL_SetRenderTarget", "SDL_RenderFlush", "SDL_CreateTexture", "SDL_CreateTextureFromSurface"):
             if not hasattr(pico, name):
                 continue
 
-            def wrapper(original, api=name):
+            label = "NativeGlRenderer.flush" if native and name == "SDL_RenderFlush" else name
+
+            def wrapper(original, api=label):
                 def counted(*args):
                     if self.active:
                         owner = self.stack[-1][0] if self.stack else "outside"

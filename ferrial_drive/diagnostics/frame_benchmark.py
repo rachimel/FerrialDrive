@@ -6,6 +6,8 @@ from math import ceil, isfinite
 from statistics import mean
 from time import perf_counter, sleep
 
+from ferrial_drive.rendering.gl_pass import flush_sdl_renderer
+
 from .texture_metrics import GpuFrameTimer, bind_gl, process_memory
 
 
@@ -91,7 +93,7 @@ def benchmark_program(program, canvas, *, target_fps=165, frames=600, warmup=120
             if measured:
                 timer.begin()
             program.draw()
-            pico.SDL_RenderFlush(pico.renderer)
+            flush_sdl_renderer(pico)
             if measured:
                 timer.end()
             drawn = perf_counter()

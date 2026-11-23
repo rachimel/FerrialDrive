@@ -96,7 +96,7 @@ def run_worker(args, applied, profile):
               "python": sys.version, "resolution": app.window_size, "input_mode": "auto" if args.auto else "interactive",
               "measured_at": datetime.now().astimezone().isoformat(),
               "audio_muted": args.mute, "player_pipeline": app.player_pipeline, "command": sys.argv[1:], "movement_speed_multiplier": args.movement_speed_multiplier,
-              "demo": app.demo,
+              "demo": app.demo, "render_driver": args.render_driver,
               "instrumentation": {"detailed": args.detail, "call_profile": args.call_profile},
               "auto_input": {"weapon": args.auto_weapon, "overdrive": args.auto_overdrive, "dash": args.auto_dash,
                              "reset_seconds": 2, "aim": "nearest_alive" if use_encounter else "fixed"}
@@ -108,7 +108,8 @@ def run_worker(args, applied, profile):
         with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\CentralProcessor\0") as key:
             result["host"]["processor_name"] = winreg.QueryValueEx(key, "ProcessorNameString")[0].strip()
     try:
-        with PicoCanvas(*app.window_size, "Ferrial Drive | Hardware benchmark", vsync=False) as canvas:
+        with PicoCanvas(*app.window_size, "Ferrial Drive | Hardware benchmark",
+                        driver=args.render_driver, vsync=False) as canvas:
             guard = None if args.gpu_profile == "none" else Uhd630Profile(canvas.pico)
             with guard if guard else nullcontext():
                 query = bind_gl(canvas.pico, "glGetString", ct.c_char_p, [ct.c_uint])
@@ -365,6 +366,8 @@ def main():
     parser.add_argument("--logical-cpus", type=int)
     parser.add_argument("--memory-mib", type=int)
     parser.add_argument("--gpu-profile", choices=("none", "uhd630_gl45_conservative"))
+    parser.add_argument("--render-driver", choices=("opengl", "native_gl"), default="opengl",
+                        help="비교할 SDL OpenGL 또는 직접 OpenGL 캔버스")
     parser.add_argument("--no-resource-limits", action="store_true")
     parser.add_argument("--unpaced", action="store_true")
     parser.add_argument("--output", type=Path)

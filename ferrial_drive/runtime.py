@@ -10,12 +10,15 @@ from .rendering import PicoCanvas
 def poll_events(pico, *, accept_text=False):
     """Pico2D 이벤트를 전달하되 FPS 제목 덮어쓰기와 실행기 의존은 피한다."""
     raw = pico.SDL_Event()
+    native = getattr(pico, "fdrive_native_gl", None)
     while pico.SDL_PollEvent(byref(raw)):
         event = pico.Event(raw.type)
         if raw.type == pico.SDL_QUIT:
             yield event
         elif raw.type == pico.SDL_WINDOWEVENT:
             event.window_event = raw.window.event
+            if native is not None and raw.window.event == pico.SDL_WINDOWEVENT_SIZE_CHANGED:
+                native.resize_window()
             yield event
         elif raw.type in (pico.SDL_KEYDOWN, pico.SDL_KEYUP):
             if not raw.key.repeat or accept_text:
@@ -28,9 +31,13 @@ def poll_events(pico, *, accept_text=False):
             yield event
         elif raw.type == pico.SDL_MOUSEMOTION:
             event.x, event.y = raw.motion.x, raw.motion.y
+            if native is not None:
+                event.x, event.y = native.window_to_logical(event.x, event.y)
             yield event
         elif raw.type in (pico.SDL_MOUSEBUTTONDOWN, pico.SDL_MOUSEBUTTONUP):
             event.button, event.x, event.y = raw.button.button, raw.button.x, raw.button.y
+            if native is not None:
+                event.x, event.y = native.window_to_logical(event.x, event.y)
             event.clicks = raw.button.clicks
             yield event
         elif raw.type == pico.SDL_MOUSEWHEEL:
@@ -39,7 +46,7 @@ def poll_events(pico, *, accept_text=False):
 
 
 def run_application(program, *, width=None, height=None, title, frames_per_second=60, frame_limit=None,
-                    timings=None, vsync=False):
+                    timings=None, vsync=False, render_driver=None):
     """앱 팩터리를 받으면 종료 로딩 전에 앱을 놓고 같은 창에서 새 앱을 만들 수 있다."""
     if not isfinite(frames_per_second) or frames_per_second <= 0:
         raise ValueError("초당 프레임 수는 양수여야 한다.")
@@ -52,7 +59,8 @@ def run_application(program, *, width=None, height=None, title, frames_per_secon
         program = factory()
         width = program.window_size[0] if width is None else width
         height = program.window_size[1] if height is None else height
-    with PicoCanvas(width, height, title, driver=getattr(program, 'render_driver', 'opengl'), vsync=vsync) as canvas:
+    driver = render_driver if render_driver is not None else getattr(program, 'render_driver', 'opengl')
+    with PicoCanvas(width, height, title, driver=driver, vsync=vsync) as canvas:
         if getattr(program, "preview_hidden", False):
             pico.SDL_HideWindow(pico.window)
         for event_type in (pico.SDL_DROPBEGIN, pico.SDL_DROPFILE,

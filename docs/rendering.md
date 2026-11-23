@@ -45,6 +45,8 @@ SDL 종료 입력은 루프가 처리한다. 시작·입력·갱신·그리기�
 
 자체 게임 루프가 필요하면 `with PicoCanvas(width, height, title) as canvas:`를 사용한다. `canvas.pico`에서 기존 Pico2D/SDL API를 사용하고 `canvas.present()`로 표시한다. `canvas.info`는 실제 드라이버 이름과 SDL이 보고한 가속·VSync 플래그·렌더 타깃 지원 정보다.
 
+`python main.py --render-driver native_gl`로 직접 OpenGL 후보를 실행할 수 있다. 창·입력·이미지 해석·오디오는 Pico2D와 SDL을 계속 사용한다. 텍스처·렌더 타깃·뷰포트·클립·블렌드와 화면 표시는 OpenGL 경로에서 관리한다. SDL 렌더러는 생성하지 않는다. OpenGL 4.3 호환 프로필이 필요하다. 기본값 `opengl`은 SDL OpenGL 렌더러를 사용한다. [그림자·성능 비교](ai-dev-log/2026-11-23-native-gl-shadow-validation.md)
+
 생성 순서는 **캔버스 → 에셋 관리자·UI → 장면**이다. 종료는 **장면·에셋 관리자·폰트/텍스처 → 캔버스** 순서다. 렌더러가 닫힌 뒤 GPU 자원을 그리거나 해제하지 않는다. `run_application()`의 `exit()`는 이 순서를 보장하는 연결 지점이다. 캔버스가 게임의 에셋 관리자를 대신 소유하지는 않는다.
 
 OpenGL 요청을 위해 바꾼 SDL 드라이버 힌트는 초기화 후 원래 값으로 돌린다. 생성에 실패한 경우 소프트웨어 렌더러를 시도하며 SDL dummy는 OpenGL을 요청하지 않는다. 적용 여부는 요청값 대신 실제 드라이버와 `resource.filtering`으로 확인한다. Pico2D 라이브러리 원본은 수정하지 않는다.

@@ -6,6 +6,7 @@ from math import ceil, floor
 from struct import iter_unpack
 
 from .enemy_part_batch import SheetLayout, SheetTarget
+from .gl_pass import flush_sdl_renderer
 from .hud_batch import HudBatchQueue
 from .instanced_quads import InstancedQuads, QUAD_LIMIT
 from .part_shadow_map import GROUND_FRAGMENT, SHADOW_UNIFORMS
@@ -96,7 +97,7 @@ class EnemyShadowBatch:
         before = sampler.submits
         capacity = min(self.tiles_per_side ** 2, QUAD_LIMIT)
         count = 0
-        self.resource.pico.SDL_RenderFlush(self.resource.pico.renderer)
+        flush_sdl_renderer(self.resource.pico)
         for start in range(0, len(groups), capacity):
             chunk = groups[start:start + capacity]
             pinned = {pose for pose, _ in chunk}

@@ -13,6 +13,14 @@ COLOR_AND_SCISSOR_STATE = COLOR_BUFFER_STATE | 0x00080000
 TEXTURE_STATE = 0x00040000
 
 
+def flush_sdl_renderer(pico):
+    native = getattr(pico, "fdrive_native_gl", None)
+    if native is None:
+        return pico.SDL_RenderFlush(pico.renderer)
+    native.external_draw()
+    return 0
+
+
 QUAD_VERTEX_SHADER = b'''#version 120
 uniform vec2 outputSize;
 uniform float targetFlip;
@@ -130,9 +138,13 @@ class SdlOpenGLPass:
                 self.depth -= 1
             return
         p = self.pico
-        # SDL의 지연된 viewport/clip 상태를 화면 밖 점으로 먼저 확정한다.
-        p.SDL_RenderDrawPoint(p.renderer, -1000000, -1000000)
-        p.SDL_RenderFlush(p.renderer)
+        native = getattr(p, "fdrive_native_gl", None)
+        if native is None:
+            # SDL의 지연된 viewport/clip 상태를 화면 밖 점으로 먼저 확정한다.
+            p.SDL_RenderDrawPoint(p.renderer, -1000000, -1000000)
+            p.SDL_RenderFlush(p.renderer)
+        else:
+            native.external_draw()
         program, active = self.integer(0x8B8D), self.integer(0x84E0)
         viewport = self.integer(0x0BA2, 4)
         width, height = ct.c_int(), ct.c_int()
