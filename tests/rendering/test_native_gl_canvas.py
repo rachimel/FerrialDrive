@@ -2,6 +2,7 @@
 
 import ctypes as ct
 from contextlib import contextmanager
+import os
 from pathlib import Path
 from unittest import TestCase
 from unittest.mock import patch
@@ -60,6 +61,37 @@ class NativeGlCanvasTests(TestCase):
         expected = self.render_scene("opengl")
         actual = self.render_scene("native_gl")
         self.assertEqual(actual, expected)
+
+    def test_streamed_draws_match_client_arrays(self):
+        with patch.dict(os.environ, {"FDRIVE_NATIVE_VERTEX_SUBMISSION": "client"}):
+            expected = self.render_scene("native_gl")
+        with patch.dict(os.environ, {"FDRIVE_NATIVE_VERTEX_SUBMISSION": "vbo"}):
+            self.assertEqual(self.render_scene("native_gl"), expected)
+
+    def test_streamed_indices_and_texture_update_preserve_order(self):
+        with patch.dict(os.environ, {"FDRIVE_NATIVE_VERTEX_SUBMISSION": "vbo"}), canvas("native_gl") as opened:
+            p, renderer = opened.pico, opened.pico.renderer
+            texture = p.SDL_CreateTexture(renderer, p.SDL_PIXELFORMAT_RGBA32, p.SDL_TEXTUREACCESS_STATIC, 1, 1)
+            try:
+                self.assertEqual(p.SDL_UpdateTexture(texture, None, bytes((200, 0, 0, 255)), 4), 0)
+                p.SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255)
+                p.SDL_RenderClear(renderer)
+                p.SDL_RenderCopy(renderer, texture, None, ct.byref(p.SDL_Rect(0, 0, 8, 8)))
+                self.assertEqual(p.SDL_UpdateTexture(texture, None, bytes((0, 200, 0, 255)), 4), 0)
+                p.SDL_RenderCopy(renderer, texture, None, ct.byref(p.SDL_Rect(8, 0, 8, 8)))
+                vertices = (p.SDL_Vertex * 3)()
+                for vertex, (x, y) in zip(vertices, ((16, 0), (24, 0), (16, 8)), strict=True):
+                    vertex.position = p.SDL_FPoint(x, y)
+                    vertex.color = p.SDL_Color(0, 0, 200, 255)
+                indices = (ct.c_int * 3)(0, 1, 2)
+                self.assertEqual(p.SDL_RenderGeometry(renderer, None, vertices, 3, indices, 3), 0)
+                pixels = (ct.c_ubyte * (24 * 4))()
+                self.assertEqual(p.SDL_RenderReadPixels(renderer, ct.byref(p.SDL_Rect(0, 0, 24, 1)),
+                                                        p.SDL_PIXELFORMAT_RGBA32, pixels, 24 * 4), 0)
+                for x, color in ((1, (200, 0, 0, 255)), (9, (0, 200, 0, 255)), (17, (0, 0, 200, 255))):
+                    self.assertEqual(tuple(pixels[x * 4:x * 4 + 4]), color)
+            finally:
+                p.SDL_DestroyTexture(texture)
 
     def test_creates_no_sdl_renderer_and_maps_letterboxed_input(self):
         import pico2d.pico2d as p

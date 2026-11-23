@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [직접 OpenGL 정점 스트리밍 대조](2026-11-23-native-vbo-stream.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-native-vbo-stream:U1]]`은 요청 시각이다. 검색 단서는 `VBO에 한꺼번에 올리는`과 `Flame Graph를 다시 확인`이다.
+
 - [파츠 깊이 정렬과 CPU 업로드 대조](2026-11-23-part-depth-order.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-part-depth-order:U1]]`은 요청 시각이다. 검색 단서는 `Insertion sort로 바꾸고`와 `CPU에서 빠르게 계산하고 업로드`다.
 
 - [직접 OpenGL 제출과 아틀라스 적재 최적화](2026-11-23-native-gl-direct-optimization.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-native-gl-direct-optimization:U1]]`은 요청 시각이다. 검색 단서는 `직접 제어의 경우에는 더 깎을 여지`다.

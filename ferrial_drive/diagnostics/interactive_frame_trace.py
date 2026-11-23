@@ -73,7 +73,9 @@ class InteractiveFrameTrace:
         from ferrial_drive.rendering.part_atlas_residency import PartAtlasResidency
         from ferrial_drive.rendering.part_painter import PartPainter
         from ferrial_drive.rendering.part_shadow_map import PartShadowMap
+        from ferrial_drive.rendering.part_upscale import PartEchoTarget, PartUpscaler
         from ferrial_drive.rendering.pico_part_motion import PicoPartMotion
+        from ferrial_drive.rendering.smaa import Smaa1x
 
         app, probe = self.app, self.probe
         probe.frame_trace = self
@@ -83,10 +85,14 @@ class InteractiveFrameTrace:
                    "update_back_weapon", "update_loadout_fade", "draw_back_weapon", "draw_missiles",
                    "draw_missile_smoke", "draw_live_combat_motion")),
             (getattr(app, "encounter_view", None), ("draw",)),
-            (PicoPartMotion, ("prepare_frame", "draw")),
-            (PartAtlasResidency, ("stream", "_prepare_prefetch")),
-            (AtlasTextureCache, ("_upload_gl",)),
+            (PicoPartMotion, ("prepare_frame", "prepare_draw", "draw")),
+            (PartAtlasResidency, ("stream", "_prepare_prefetch", "require")),
+            (AtlasTextureCache, ("acquire", "_upload_gl")),
             (PartPainter, ("paint",)),
+            (PartShadowMap, ("render_surface",)),
+            (PartUpscaler, ("draw",)),
+            (PartEchoTarget, ("draw",)),
+            (Smaa1x, ("draw",)),
             (getattr(app, "gun_renderer", None), ("draw",)),
             (getattr(app, "sword_renderer", None), ("draw_contacts",)),
             (app.hud.view, ("weapons", "resources", "radar")),

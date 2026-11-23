@@ -4,10 +4,12 @@ from contextlib import contextmanager
 import ctypes as ct
 from dataclasses import dataclass
 from math import cos, radians, sin
+import os
 from struct import Struct
 
 from ferrial_drive.diagnostics.gpu_profile import bind_gl
 
+from .native_vertex_stream import NativeVertexStream
 
 TEXTURE_2D = 0x0DE1
 FRAMEBUFFER = 0x8D40
@@ -77,6 +79,7 @@ class NativeGlRenderer:
         self._texture_enabled = False
         self._actual_texture = None
         self._quad_data = bytearray()
+        self.vertex_stream = None
         self._blend = {
             0: None,
             1: (0x0302, 0x0303, 1, 0x0303),
@@ -94,6 +97,8 @@ class NativeGlRenderer:
             pico.SDL_GL_SetSwapInterval(int(vsync))
             self.vsync = pico.SDL_GL_GetSwapInterval() != 0
             self._bind()
+            if os.environ.get("FDRIVE_NATIVE_VERTEX_SUBMISSION") == "vbo":
+                self.vertex_stream = NativeVertexStream(self, SDL_VERTEX.size)
             self.max_texture_size = self.integer(0x0D33)
             self._target_state()
         except BaseException:
@@ -167,8 +172,9 @@ class NativeGlRenderer:
 
     def leave_canvas_draw(self):
         """직접 경로가 설정한 상태는 재조회 없이 셰이더 패스에 넘긴다."""
+        self._submit_vertices()
         known = (self._pixel_viewport(), self._actual_texture) if self._draw_ready else None
-        self.external_draw()
+        self._end_draw()
         return known
 
     def _apply_clip(self):
@@ -186,6 +192,15 @@ class NativeGlRenderer:
             self.Scissor(px + cx, clip_y, max(0, cw), max(0, ch))
 
     def external_draw(self):
+        self._submit_vertices()
+        self._end_draw()
+
+    def _submit_vertices(self):
+        stream = self.vertex_stream
+        if stream is not None and stream.used:
+            stream.submit()
+
+    def _end_draw(self):
         if self._draw_ready:
             self._set_textured(False)
             self.DisableClientState(0x8076)
@@ -230,6 +245,7 @@ class NativeGlRenderer:
             rect = pointed(rectangle, self.pico.SDL_Rect)
             clip = rect.x, rect.y, rect.w, rect.h
         if self.state.clip != clip:
+            self._submit_vertices()
             self.state.clip = clip
             self._apply_clip()
         return 0
@@ -390,6 +406,7 @@ class NativeGlRenderer:
         return handle
 
     def destroy_texture(self, handle):
+        self._submit_vertices()
         texture = self.textures.pop(address(handle), None)
         if texture is None:
             return
@@ -411,6 +428,7 @@ class NativeGlRenderer:
         if (not pixels or width <= 0 or height <= 0 or min(x, y) < 0
                 or x + width > texture.width or y + height > texture.height or pitch < width * 4 or pitch % 4):
             return -1
+        self._submit_vertices()
         gl_format, gl_type = self._format(texture.pixel_format)
         with self._bind_texture(texture.name), self._pixel_transfer(pack=False, row_length=pitch // 4):
             self.TexSubImage2D(TEXTURE_2D, 0, x, y, width, height, gl_format, gl_type, pixels)
@@ -486,6 +504,7 @@ class NativeGlRenderer:
         texture = self.texture_for(handle)
         if texture.scale == scale:
             return 0
+        self._submit_vertices()
         texture.scale = scale
         with self._bind_texture(texture.name):
             gl_filter = 0x2600 if scale == self.pico.SDL_ScaleModeNearest else 0x2601
@@ -552,6 +571,26 @@ class NativeGlRenderer:
         _, _, width, height = self.viewport()
         if width <= 0 or height <= 0:
             return 0
+        blend = texture.blend if texture else self.draw_blend
+        texture_name = texture.name if texture else 0
+        if self.vertex_stream is not None and self.vertex_stream.append(
+                vertices, count, mode, blend, texture_name, indices, index_count):
+            return 0
+        self._prepare_draw()
+        self._draw_material(blend, texture_name)
+        vertex = self.pico.SDL_Vertex
+        start, stride = address(vertices), ct.sizeof(vertex)
+        self.VertexPointer(2, 0x1406, stride, start + vertex.position.offset)
+        self.ColorPointer(4, UNSIGNED_BYTE, stride, start + vertex.color.offset)
+        if texture:
+            self.TexCoordPointer(2, 0x1406, stride, start + vertex.tex_coord.offset)
+        if indices and index_count:
+            self.DrawElements(mode, index_count, 0x1405, indices)
+        else:
+            self.DrawArrays(mode, 0, count)
+        return 0
+
+    def _prepare_draw(self):
         if not self._draw_ready:
             self.UseProgram(0)
             self.BindVertexArray(0)
@@ -569,25 +608,15 @@ class NativeGlRenderer:
             self._draw_ready = True
             self._actual_blend = None
             self._actual_texture = None
-        blend = texture.blend if texture else self.draw_blend
+
+    def _draw_material(self, blend, texture):
         if blend != self._actual_blend:
             self._apply_blend(blend)
             self._actual_blend = blend
-        self._set_textured(texture is not None)
-        if texture and self._actual_texture != texture.name:
-            self.BindTexture(TEXTURE_2D, texture.name)
-            self._actual_texture = texture.name
-        vertex = self.pico.SDL_Vertex
-        start, stride = address(vertices), ct.sizeof(vertex)
-        self.VertexPointer(2, 0x1406, stride, start + vertex.position.offset)
-        self.ColorPointer(4, UNSIGNED_BYTE, stride, start + vertex.color.offset)
-        if texture:
-            self.TexCoordPointer(2, 0x1406, stride, start + vertex.tex_coord.offset)
-        if indices and index_count:
-            self.DrawElements(mode, index_count, 0x1405, indices)
-        else:
-            self.DrawArrays(mode, 0, count)
-        return 0
+        self._set_textured(bool(texture))
+        if texture and self._actual_texture != texture:
+            self.BindTexture(TEXTURE_2D, texture)
+            self._actual_texture = texture
 
     def _set_textured(self, enabled):
         if enabled == self._texture_enabled:
@@ -731,8 +760,11 @@ class NativeGlRenderer:
 
     def close(self):
         if self.context:
+            self.external_draw()
             for texture in list(self.textures.values()):
                 self.destroy_texture(texture.handle)
+            if self.vertex_stream is not None:
+                self.vertex_stream.close()
             self.pico.SDL_GL_DeleteContext(self.context)
             self.context = None
 

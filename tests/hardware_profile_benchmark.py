@@ -110,6 +110,9 @@ def run_worker(args, applied, profile):
     try:
         with PicoCanvas(*app.window_size, "Ferrial Drive | Hardware benchmark",
                         driver=args.render_driver, vsync=False) as canvas:
+            native = getattr(canvas.pico, "fdrive_native_gl", None)
+            if native is not None:
+                result["native_vertex_submission"] = "vbo" if native.vertex_stream is not None else "client"
             guard = None if args.gpu_profile == "none" else Uhd630Profile(canvas.pico)
             with guard if guard else nullcontext():
                 query = bind_gl(canvas.pico, "glGetString", ct.c_char_p, [ct.c_uint])

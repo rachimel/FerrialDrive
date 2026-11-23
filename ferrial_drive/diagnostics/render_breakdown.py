@@ -256,6 +256,13 @@ class RenderBreakdown:
             self.install_dialogue()
             self._install_sdl_counts(app.pico)
             self._install_hud_submissions(app.hud.renderer)
+            native = getattr(app.pico, "fdrive_native_gl", None)
+            if native is not None:
+                self.method(native, "_draw", "NativeGlRenderer._draw")
+                stream = native.vertex_stream
+                if stream is not None:
+                    self.method(stream, "submit", "NativeVertexStream.submit")
+                    self.method(stream, "BufferSubData", "NativeVertexStream.upload")
         self._install_blur(app.hud.renderer)
         return self
 
