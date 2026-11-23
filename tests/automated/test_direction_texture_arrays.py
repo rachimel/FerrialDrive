@@ -4,11 +4,13 @@ import ctypes as ct
 import os
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 from ferrial_drive.diagnostics.gpu_profile import bind_gl
-from ferrial_drive.rendering.atlas_texture_cache import AtlasTextureCache
+from ferrial_drive.rendering.atlas_texture_cache import AtlasTextureCache, bind_atlas_textures
 from ferrial_drive.rendering.canvas import PicoCanvas
-from ferrial_drive.rendering.direction_texture_arrays import plan_direction_arrays
+from ferrial_drive.rendering.direction_texture_arrays import TEXTURE_ARRAY, TEXTURE_BINDING_ARRAY, plan_direction_arrays
+from ferrial_drive.rendering.gl_pass import TexturedQuadPass
 from ferrial_drive.rendering.texture_page_work import TexturePagePayload
 
 
@@ -57,3 +59,50 @@ class DirectionArrayTests(unittest.TestCase):
                 for key in tuple(cache.entries):
                     cache.release(key)
             self.assertEqual((cache.gpu_storage_bytes, cache.array_count), (0, 0))
+
+    @unittest.skipUnless(os.environ.get("FDRIVE_GPU_TESTS") == "1", "실제 GPU 검사는 선택 실행한다.")
+    def test_mixed_array_and_2d_bindings_return_to_sdl_on_error(self):
+        with PicoCanvas(128, 128, "배열 상태 복원 검사") as canvas:
+            cache = AtlasTextureCache(canvas.pico, synchronize_upload=False)
+            sampler = TexturedQuadPass(canvas.pico, fragment_shader=b"#version 120\nvoid main() { gl_FragColor=vec4(1); }")
+            names = (ct.c_uint * 4)()
+            cache.gen_texture(len(names), names)
+
+            def snapshot():
+                bindings = []
+                for unit in range(3):
+                    sampler.glActiveTexture(0x84C0 + unit)
+                    bindings.append((sampler.integer(TEXTURE_BINDING_ARRAY), sampler.integer(0x8069)))
+                sampler.glActiveTexture(0x84C0)
+                return bindings
+
+            try:
+                for unit in range(3):
+                    sampler.glActiveTexture(0x84C0 + unit)
+                    sampler.glBindTexture(TEXTURE_ARRAY, names[0])
+                    sampler.glBindTexture(0x0DE1, names[1])
+                sampler.glActiveTexture(0x84C0)
+                sampler.glBindTexture(TEXTURE_ARRAY, names[2])
+                sampler.glBindTexture(0x0DE1, names[3])
+                supports_arrays = sampler.texture_stack_covers(2, names[2], array=True)
+                supports_2d = sampler.texture_stack_covers(3, names[3])
+                array = {"gl_texture": names[2], "gl_target": TEXTURE_ARRAY, "gl_binding": TEXTURE_BINDING_ARRAY}
+                entries = (array, array, {"gl_texture": names[3]})
+                with sampler.batch():
+                    previous = snapshot()
+                    capacity = sampler._array_texture_stack_units
+                    for allowed in (True, False):
+                        with (self.subTest(allowed=allowed),
+                              patch.object(sampler, "_array_texture_stack_units", capacity if allowed else 0),
+                              patch.object(sampler, "preserve_texture_bindings",
+                                           wraps=sampler.preserve_texture_bindings) as stack):
+                            with self.assertRaisesRegex(RuntimeError, "제출 실패"):
+                                with bind_atlas_textures(sampler, cache, entries, restore_unit_zero=False):
+                                    self.assertEqual(snapshot(), [(names[2], names[3]), (names[2], names[1]),
+                                                                   (names[0], names[3])])
+                                    raise RuntimeError("제출 실패")
+                            self.assertEqual(stack.call_count, int(allowed and supports_arrays and supports_2d))
+                            self.assertEqual(snapshot(), previous)
+            finally:
+                cache.delete_texture(len(names), names)
+                sampler.close()

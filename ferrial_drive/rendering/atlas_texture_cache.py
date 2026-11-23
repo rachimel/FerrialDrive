@@ -8,7 +8,9 @@ from threading import get_ident
 from ferrial_drive.diagnostics import TimingRecorder
 from ferrial_drive.diagnostics.texture_metrics import bind_gl
 
-from .direction_texture_arrays import DirectionArrayStorage, DirectionArrayUploadError, plan_direction_arrays
+from .direction_texture_arrays import (
+    TEXTURE_ARRAY, DirectionArrayStorage, DirectionArrayUploadError, plan_direction_arrays,
+)
 from .texture_codecs import bc7_size, texture_payload_size
 from .texture_page_work import TexturePageWork
 
@@ -442,9 +444,18 @@ def bind_atlas_textures(sampler, cache, entries, bindings=None, *, restore_unit_
         bindings.restore()
     s, previous = sampler, []
     # 유닛 0에서 시작하는 독립 파츠 패스만 바인딩 전체를 한 번에 보존한다.
-    use_stack = (bindings is None and not restore_unit_zero and len(entries) > 1
-                 and all(entry.get("gl_target", 0x0DE1) == 0x0DE1 for entry in entries)
-                 and s.texture_stack_covers(len(entries), entries[0].get("gl_texture", entries[0].get("gl_name"))))
+    use_stack = False
+    if bindings is None and not restore_unit_zero and len(entries) > 1:
+        first = entries[0]
+        if first.get("gl_target") == TEXTURE_ARRAY:
+            touched = {}
+            for unit, entry in enumerate(entries, 1):
+                touched[entry.get("gl_target", 0x0DE1)] = unit, entry.get("gl_texture", entry.get("gl_name"))
+            use_stack = all(target in (0x0DE1, TEXTURE_ARRAY)
+                            and s.texture_stack_covers(unit, name, array=target == TEXTURE_ARRAY)
+                            for target, (unit, name) in touched.items())
+        elif all(entry.get("gl_target", 0x0DE1) == 0x0DE1 for entry in entries):
+            use_stack = s.texture_stack_covers(len(entries), first.get("gl_texture", first.get("gl_name")))
     with s.preserve_texture_bindings() if use_stack else nullcontext():
         try:
             for unit, entry in enumerate(entries):

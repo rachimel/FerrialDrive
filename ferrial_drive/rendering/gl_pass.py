@@ -32,6 +32,7 @@ class SdlOpenGLPass:
         self.depth = 0
         self._push_attrib = self._pop_attrib = None
         self._texture_stack_units = None
+        self._array_texture_stack_units = None
         self._bind_functions()
         self.shader = ShaderProgram(pico, ((VERTEX_STAGE, vertex_shader), (FRAGMENT_STAGE, fragment_shader)),
                                     ("outputSize", "targetFlip", *extra_uniforms))
@@ -94,8 +95,11 @@ class SdlOpenGLPass:
     def preserve_texture_bindings(self):
         return self._preserve_raster_attributes(TEXTURE_STATE)
 
-    def texture_stack_covers(self, count, probe_texture):
-        if self._texture_stack_units is None and probe_texture:
+    def texture_stack_covers(self, count, probe_texture, *, array=False):
+        target, binding = (0x8C1A, 0x8C1D) if array else (0x0DE1, 0x8069)
+        attribute = "_array_texture_stack_units" if array else "_texture_stack_units"
+        capacity = getattr(self, attribute)
+        if capacity is None and probe_texture:
             # 고정 기능 범위를 넘는 유닛도 이 드라이버에서 복원되는지 한 번 확인한다.
             capacity = self.integer(0x8872)
             original = []
@@ -103,18 +107,18 @@ class SdlOpenGLPass:
                 with self.preserve_texture_bindings():
                     for unit in range(capacity):
                         self.glActiveTexture(0x84C0 + unit)
-                        name = self.integer(0x8069)
+                        name = self.integer(binding)
                         original.append(name)
-                        self.glBindTexture(0x0DE1, 0 if name == probe_texture else probe_texture)
+                        self.glBindTexture(target, 0 if name == probe_texture else probe_texture)
             finally:
                 for unit, name in enumerate(original):
                     self.glActiveTexture(0x84C0 + unit)
-                    if self.integer(0x8069) != name:
+                    if self.integer(binding) != name:
                         capacity = min(capacity, unit)
-                        self.glBindTexture(0x0DE1, name)
+                        self.glBindTexture(target, name)
                 self.glActiveTexture(0x84C0)
-            self._texture_stack_units = capacity
-        return count <= (self._texture_stack_units or 0)
+            setattr(self, attribute, capacity)
+        return count <= (capacity or 0)
 
     @contextmanager
     def batch(self, *, raster_attributes=0):
