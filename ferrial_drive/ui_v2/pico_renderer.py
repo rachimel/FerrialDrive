@@ -4,12 +4,12 @@ from contextlib import contextmanager
 from collections import OrderedDict
 from ctypes import byref, c_float, c_int, c_ubyte, memmove, string_at
 from functools import lru_cache
-from math import ceil, cos, exp, floor, hypot, isfinite, log2, sin, tau
+from math import ceil, cos, exp, floor, hypot, isfinite, log2, pi, sin, tau
 from random import Random
 from struct import Struct
 
 from ferrial_drive.ui.pico_renderer import PicoRenderer
-from .panels import clip_panel_band, clip_panel_rect, visible_panel_y_range
+from .panels import clip_panel_band, clip_panel_rect, panel_bright_band_top, visible_panel_y_range
 from ferrial_drive.rendering.hud_batch import HudBatchQueue, batch_barrier
 from ferrial_drive.rendering.hud_mask_pool import HudMaskPool
 from ferrial_drive.rendering.hud_text_atlas import HudTextAtlas
@@ -393,16 +393,17 @@ class PicoV2Renderer(PicoRenderer):
                 self._draw_neon_glow(text, x, y, role, glow_color, opacity * glow_opacity, radius_pixels, bold=bold)
         self._draw_neon_core(text, x, y, role, color, opacity, bold=bold, gradient_bottom_ratio=gradient_bottom_ratio)
 
-    def _scanline_texture(self, height, spacing, thickness, color):
-        """위상과 무관한 세로 반복 패턴. 두 배 해상도로 만들어 선형 보간한다."""
+    def _scanline_texture(self, height, spacing, thickness, color, band_height):
+        """줄무늬와 부드러운 띠를 같은 텍스처의 두 열에 캐시한다."""
         p = self.pico
         if self.mask_tint_cache:
             color = "#FFFFFF"
-        # 높이를 64/128/256/512… 단위로 묶어 패턴 재생성을 막는다.
-        logical_height = 1 << max(6, ceil(log2(height + spacing)))
-        key = (logical_height, spacing, thickness, color)
+        span = 1 << max(6, ceil(log2(height + max(spacing, band_height) + 1)))
+        logical_height = span * 2 if band_height else span
+        key = (span, spacing, thickness, color, band_height)
         if key not in self.scanline_textures:
-            surface = p.SDL_CreateRGBSurfaceWithFormat(0, 1, logical_height * 2, 32, p.SDL_PIXELFORMAT_RGBA32)
+            rows = logical_height * 2
+            surface = p.SDL_CreateRGBSurfaceWithFormat(0, 2, rows, 32, p.SDL_PIXELFORMAT_RGBA32)
             if not surface:
                 raise RuntimeError("Scanline 패턴 surface 생성 실패")
             try:
@@ -410,11 +411,26 @@ class PicoV2Renderer(PicoRenderer):
                     raise RuntimeError("Scanline 패턴 surface 잠금 실패")
                 try:
                     rgb = self.rgba(color)[:3]
-                    for index in range(logical_height * 2):
-                        offset = ((index + 0.5) / 2) % spacing
-                        alpha = 255 if (offset - spacing / 2) % spacing < thickness else 0
-                        memmove(surface.contents.pixels + index * surface.contents.pitch,
-                                bytes((*rgb, alpha)), 4)
+                    stripe = bytes((*rgb, 255))
+                    gap = bytes((*rgb, 0))
+                    transparent = bytes((255, 255, 255, 0))
+                    pixels = bytearray()
+                    for index in range(rows):
+                        position = (index + .5) / 2
+                        offset = position % spacing
+                        pixels.extend(stripe if (offset - spacing / 2) % spacing < thickness else gap)
+                        distance = position - span
+                        if 0 < distance < band_height:
+                            alpha = round(255 * (.5 - .5 * cos(2 * pi * distance / band_height)))
+                            pixels.extend((255, 255, 255, alpha))
+                        else:
+                            pixels.extend(transparent)
+                    target, pitch = surface.contents.pixels, surface.contents.pitch
+                    if pitch == 8:
+                        memmove(target, bytes(pixels), len(pixels))
+                    else:
+                        for index in range(rows):
+                            memmove(target + index * pitch, bytes(pixels[index * 8:index * 8 + 8]), 8)
                 finally:
                     p.SDL_UnlockSurface(surface)
                 texture = p.SDL_CreateTextureFromSurface(p.renderer, surface)
@@ -432,60 +448,50 @@ class PicoV2Renderer(PicoRenderer):
                 self.flush_batch()
                 p.SDL_DestroyTexture(old)
         self.scanline_textures.move_to_end(key)
-        return self.scanline_textures[key], logical_height
+        return self.scanline_textures[key], logical_height, span
 
-    def scanline_layer(self, surface, color, opacity, spacing_pixels, thickness_pixels,
-                       offset_pixels, *, bright_band=None):
-        """화면 좌표의 반복 패턴과 밝은 띠를 패널 내부에만 그린다."""
-        if opacity <= 0:
+    def scanline_layer(self, surface, color, opacity, spacing_pixels, thickness_pixels, offset_pixels, *,
+                       bright_band=None, highlight_color=None, highlight_opacity=0, travel_ranges=None):
+        """같은 패널 외곽 위로 반복 줄무늬와 부드러운 밝기 띠를 합성한다."""
+        if bright_band is not None and highlight_color is None:
+            highlight_color, highlight_opacity, opacity = color, opacity, 0
+        if opacity <= 0 and highlight_opacity <= 0:
             return
-        p = self.pico
-        sy = c_float()
-        sx = c_float()
-        viewport = p.SDL_Rect()
-        output_width, output_height = c_int(), c_int()
-        p.SDL_RenderGetScale(p.renderer, byref(sx), byref(sy))
-        p.SDL_RenderGetViewport(p.renderer, byref(viewport))
-        p.SDL_GetRendererOutputSize(p.renderer, byref(output_width), byref(output_height))
-        scale_y, viewport_y, height = sy.value, viewport.y, output_height.value
+        transform = self.draw_transform()
+        (_, scale_y), (_, viewport_y, _, _), (_, height), _ = transform
         top, bottom = -viewport_y, height / scale_y - viewport_y
-        left, right = min(x for x, _ in surface), max(x for x, _ in surface)
-        width = right - left
         panel_top, panel_bottom = min(y for _, y in surface), max(y for _, y in surface)
-        if panel_bottom < top or panel_top > bottom:
+        if panel_bottom <= top or panel_top >= bottom:
             return
-        # 화면을 벗어난 패널만 잘라낸다. 패널 내부의 UV 위상은 화면 좌표를 유지한다.
+        # 화면 밖의 면만 공통으로 자른다. 띠의 경계는 텍스처 알파가 정의한다.
         visible = surface
         if panel_top < top or panel_bottom > bottom:
-            visible = clip_panel_band(surface, top, height / scale_y)
-        polygons = (visible,)
-        if bright_band is not None:
-            band_top, band_height = bright_band
-            half_height = band_height / 2
-            local_top = band_top / scale_y - viewport_y
-            local_height = band_height / scale_y
-            polygons = tuple(clip_panel_band(visible, local_top + index * local_height / 2, local_height / 2)
-                             for index in range(2))
-        polygons = tuple(polygon for polygon in polygons if len(polygon) >= 3)
-        if not polygons:
+            visible = clip_panel_band(surface, top, bottom - top)
+        if len(visible) < 3:
             return
-        texture, texture_height = self._scanline_texture(height, spacing_pixels, thickness_pixels, color)
-        offset = spacing_pixels - offset_pixels % spacing_pixels
-        rgba = self.rgba(color, opacity)
-        rgb = rgba[:3] if self.mask_tint_cache else (255, 255, 255)
-        base_color = (*rgb, rgba[3])
-        for polygon in polygons:
-            uv, colors = [], None
-            if bright_band is not None:
-                colors = []
-            for x, y in polygon:
-                screen_y = (y + viewport_y) * scale_y
-                uv.append(((x - left) / width, (screen_y + offset) / texture_height))
-                if colors is not None:
-                    weight = max(0, 1 - abs((screen_y - band_top - half_height) / half_height))
-                    colors.append((*rgb, round(max(0., min(1., opacity * weight)) * 255)))
-            self._geometry_polygon(polygon, base_color, texture=texture, uv=uv, colors=colors,
-                                   separate_triangles=True)
+        band_top, band_height = bright_band if bright_band is not None else (None, 0)
+        if band_height and highlight_opacity > 0 and travel_ranges is not None:
+            ranges, travel = travel_ranges
+            bounds = visible_panel_y_range(surface, transform)
+            band_top = None if bounds is None else panel_bright_band_top(ranges, travel, band_height, sum(bounds) / 2)
+        screen_top = (max(top, panel_top) + viewport_y) * scale_y
+        screen_bottom = (min(bottom, panel_bottom) + viewport_y) * scale_y
+        show_band = (band_top is not None and band_height > 0 and highlight_opacity > 0
+                     and band_top < screen_bottom and band_top + band_height > screen_top)
+        if opacity <= 0 and not show_band:
+            return
+        texture, logical_height, span = self._scanline_texture(height, spacing_pixels, thickness_pixels,
+                                                             color, band_height)
+        screen_rows = tuple((y + viewport_y) * scale_y for _, y in visible)
+        if opacity > 0:
+            offset = spacing_pixels - offset_pixels % spacing_pixels
+            rgba = self.rgba(color if self.mask_tint_cache else "#FFFFFF", opacity)
+            uv = tuple((.25, (y + offset) / logical_height) for y in screen_rows)
+            self._geometry_polygon(visible, rgba, texture=texture, uv=uv, separate_triangles=True)
+        if show_band:
+            rgba = self.rgba(highlight_color, highlight_opacity)
+            uv = tuple((.75, (y - band_top + span) / logical_height) for y in screen_rows)
+            self._geometry_polygon(visible, rgba, texture=texture, uv=uv, separate_triangles=True)
 
     def filtered_polygons(self, polygons, color, opacity=1, samples=2, *, grain=None):
         """확대 렌더를 선형 축소하고 이동·투명도와 무관한 도형 텍스처를 재사용한다."""

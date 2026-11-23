@@ -68,6 +68,8 @@ python tests/sword_movement_test.py --demo
 
 ## HUD 배치 제출
 
+- 줄무늬와 부드러운 밝기 띠는 같은 캐시 텍스처와 패널 외곽을 사용한다. 두 효과는 글자와 아이콘 전에 합성한다.
+
 - `ferrial_drive/rendering/hud_batch.py`의 `HudBatchQueue`가 메뉴·일시정지·전투 HUD의 그리기 순서를 유지한다. 같은 상태의 연속 도형만 합치며 투명 도형을 텍스처별로 전역 정렬하지 않는다.
 - 삼각형·투영 글자·패널 스캔라인·노이즈는 정점/인덱스 버퍼에 쌓고, 같은 텍스처의 연속 구간을 `SDL_RenderGeometry`로 제출한다.
 - 채운 사각형과 1:1 배율의 링 span은 같은 색의 연속 구간을 `SDL_RenderFillRects`로 제출한다. 링의 배율이 1:1이 아니면 기존 선 경로를 사용한다.

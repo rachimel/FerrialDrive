@@ -172,9 +172,9 @@ class UiV2FilteringTests(unittest.TestCase):
         images = []
         for frame in range(120):
             self.renderer.clear("#000000")
-            self.renderer.scanline_layer(self.shape[0], "#91AEBB", 0.1, 4, 1, frame / 60 * 3)
-            self.renderer.scanline_layer(self.shape[0], "#FFFFFF", 0.22, 4, 1, frame / 60 * 3,
-                                          bright_band=(frame / 60 * 120 % 84 - 24, 24))
+            self.renderer.scanline_layer(self.shape[0], "#91AEBB", 0.1, 4, 1, frame / 60 * 3,
+                                          bright_band=(frame / 60 * 120 % 84 - 24, 24),
+                                          highlight_color="#FFFFFF", highlight_opacity=0.22)
             if frame in (0, 30):
                 pixels = (c_ubyte * (96 * 96 * 4))()
                 self.assertEqual(self.pico.SDL_RenderReadPixels(self.pico.renderer, None,
@@ -206,6 +206,20 @@ class UiV2FilteringTests(unittest.TestCase):
             self.assertEqual(p.SDL_RenderReadPixels(p.renderer, None, p.SDL_PIXELFORMAT_RGBA32, pixels, 96 * 4), 0)
             for y in range(5, 90):
                 self.assertLessEqual(abs(pixels[(y * 96 + 20) * 4] - pixels[(y * 96 + 70) * 4]), 2)
+
+    def test_soft_band_is_continuous_and_respects_slanted_panel_mask(self):
+        p = self.pico
+        shape = ((12, 16), (84, 16), (84, 80), (60, 80))
+        self.renderer.clear("#000000")
+        self.renderer.scanline_layer(shape, "#FFFFFF", 1, 4, 1, 0, bright_band=(28, 24))
+        pixels = (c_ubyte * (96 * 96 * 4))()
+        self.assertEqual(p.SDL_RenderReadPixels(p.renderer, None, p.SDL_PIXELFORMAT_RGBA32, pixels, 96 * 4), 0)
+        def value(x, y):
+            return pixels[(y * 96 + x) * 4]
+        self.assertEqual((value(70, 26), value(70, 54), value(20, 40), value(85, 40)), (0, 0, 0, 0))
+        self.assertGreater(value(70, 40), 230)
+        self.assertTrue(0 < value(70, 32) < value(70, 36) < value(70, 40))
+        self.assertTrue(all(value(70, y) > 190 for y in range(37, 44)))
 
     def test_film_grain_is_subtle_masked_and_reuses_animation_frames(self):
         images = []

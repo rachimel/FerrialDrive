@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [스캔라인과 부드러운 에너지 띠 합성](2026-11-23-scanline-energy-band.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-scanline-energy-band:U1]]`은 요청 시각이다. 검색 단서는 `일단 그렇게 구현해줘`다.
+
 - [필살기 아이콘 텍스처 재사용](2026-11-23-ultimate-icon-texture.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-ultimate-icon-texture:U1]]`은 요청 시각이다. 검색 단서는 `ultimate icon은 텍스쳐로 바꿔`다.
 
 - [훈련장 격자선과 미터 눈금 일괄 제출](2026-11-23-ground-grid-batch.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-ground-grid-batch:U1]]`은 요청 시각이다. 검색 단서는 `드로우 콜 더 줄여볼래`다.

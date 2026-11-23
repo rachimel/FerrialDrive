@@ -13,8 +13,7 @@ from ferrial_drive.ui.view import UiView
 from .geometry import (PerspectivePlane, body_diamond, counter_plaque, hatched_stroke_mesh, quad_fill,
                        resource_geometry, segmented_stroke_mesh, slanted_meter, stroke_quads, tapered_stroke_mesh,
                        ultimate_icon_shapes)
-from .panels import (PanelGeometry, build_panel_geometry, merge_panel_y_ranges,
-                     panel_bright_band_top, scale_panel_geometry)
+from .panels import PanelGeometry, build_panel_geometry, merge_panel_y_ranges, scale_panel_geometry
 from .panel_probe import PanelProbeRenderer, cached_counter_font_metrics
 from .effects import (DialoguePanelVisual, HealthHitVisual, OverdriveVisual, ScanlineVisual,
                       UltimateReadyVisual, breathing_opacity, subtle_flicker)
@@ -344,23 +343,15 @@ class UiV2View(UiView):
             return
         scanline = self.style["panel_scanlines"]
         visual = visual or self._scanline_visual
-        r = self.renderer
-        r.scanline_layer(geometry.surface, self.ui_accent, alpha, scanline["spacing_pixels"],
-                         scanline["thickness_pixels"], visual.line_offset_pixels)
         motion = scanline["motion"]
         band_height = motion["highlight_height_pixels"]
         band_top = visual.highlight_travel_pixels % (self.config.window["height"] + band_height) - band_height
-        if self._panel_y_ranges is not None:
-            bounds = r.panel_y_range(geometry.surface)
-            if bounds is None:
-                return
-            band_top = panel_bright_band_top(self._panel_y_ranges, visual.highlight_travel_pixels,
-                                             band_height, sum(bounds) / 2)
-            if band_top is None:
-                return
-        r.scanline_layer(geometry.surface, self.config.colors["text"], opacity * motion["highlight_opacity"],
-                         scanline["spacing_pixels"], scanline["thickness_pixels"], visual.line_offset_pixels,
-                         bright_band=(band_top, band_height))
+        travel_ranges = ((self._panel_y_ranges, visual.highlight_travel_pixels)
+                         if self._panel_y_ranges is not None else None)
+        self.renderer.scanline_layer(
+            geometry.surface, self.ui_accent, alpha, scanline["spacing_pixels"], scanline["thickness_pixels"],
+            visual.line_offset_pixels, bright_band=(band_top, band_height), highlight_color=self.config.colors["text"],
+            highlight_opacity=opacity * motion["highlight_opacity"], travel_ranges=travel_ranges)
 
     def framed_panel(self, rect, opacity, *, fill_opacity=None, draw_border=True,
                      scanline_settings=None, scanline_visual=None):
