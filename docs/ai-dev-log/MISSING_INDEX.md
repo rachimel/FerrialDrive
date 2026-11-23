@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [Intel 180기 배열 복원 CPU와 느린 프레임 추적](2026-11-23-intel-array-cpu-tail.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-intel-array-cpu-tail:U1]]`은 정확한 요청 시각이다. 검색 단서는 `Binding이 줄었는데 CPU time은 다시늘어나`다.
+
 - [PBR 배열 바인딩 일괄 복원과 Intel 내장 GPU 비교](2026-11-23-pbr-array-bulk-restore-intel.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-pbr-array-bulk-restore-intel:U1]]`은 정확한 요청 시각이다. 검색 단서는 `배열 바인딩 일괄 복원부터 연결해`다.
 
 - [PBR 방향 페이지 텍스처 배열 실험](2026-11-23-pbr-direction-arrays.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-pbr-direction-arrays:U1]]`은 정확한 요청 시각이다. 검색 단서는 `PartPainter의 PBR 방향 페이지도 텍스처 배열로`다.
