@@ -68,11 +68,7 @@ class TexturePageWork:
             return self._state
 
     def run(self):
-        for _ in self.steps():
-            pass
-
-    def steps(self):
-        """작은 페이지의 파일 읽기와 디코드를 각각 한 번씩 진행한다."""
+        """워커에서 페이지를 읽고 검증한 뒤 디코드한다."""
         with self._lock:
             if self._state != "pending":
                 raise RuntimeError("같은 페이지 Work는 한 번만 실행한다.")
@@ -94,7 +90,6 @@ class TexturePageWork:
                             packed = stream.read(self.length)
                     if len(packed) != self.length:
                         raise ValueError(f"아틀라스 페이지 범위가 잘렸다: {self.path.name}")
-            yield
             with self.timings.scope("load.integrity"):
                 if hashlib.sha256(packed).hexdigest() != self.key[1]:
                     raise ValueError(f"아틀라스 파일 해시 불일치: {self.path.name}")

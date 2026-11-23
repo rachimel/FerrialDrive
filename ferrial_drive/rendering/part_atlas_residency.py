@@ -12,10 +12,8 @@ from .texture_page_work import DEFAULT_DECODE_WORKERS, TexturePageWork, decoded_
 
 
 DIRECTION_LOOKAHEAD_FRAMES = 8
-SMALL_PAGE_BYTES = 256 * 1024
 FRAME_UPLOAD_BYTES = 6 * 1024**2
 FRAME_UPLOADS = 4
-FRAME_COROUTINE_STEPS = 4
 
 
 class AtlasFrameBudget:
@@ -23,7 +21,7 @@ class AtlasFrameBudget:
         self.reset()
 
     def reset(self):
-        self.uploads = self.upload_bytes = self.steps = 0
+        self.uploads = self.upload_bytes = 0
 
     def can_upload(self, size):
         return self.uploads < FRAME_UPLOADS and (not self.uploads or self.upload_bytes + size <= FRAME_UPLOAD_BYTES)
@@ -40,7 +38,6 @@ class DirectionPrefetch:
     requests: dict = field(default_factory=dict)
     jobs: dict = field(default_factory=dict)
     retained: list = field(default_factory=list)
-    small_jobs: dict = field(default_factory=dict)
     sizes: dict = field(default_factory=dict)
     metadata: Future | None = None
     streamed: bool = False
@@ -54,7 +51,7 @@ class PartAtlasResidency:
         self.max_directions = max(2, max_directions)
         self.cache_budget_bytes = budget_bytes
         self.loads = self.prefetch_uploads = self.prefetch_completed = 0
-        self.coroutine_pages = self.threaded_pages = 0
+        self.threaded_pages = 0
         self.prefetch = self.executor = self.last_yaw_pose = None
         self.metadata_jobs = {}
 
@@ -157,8 +154,6 @@ class PartAtlasResidency:
             stage.metadata.cancel()
         for _, future in stage.jobs.values():
             future.cancel()
-        for _, steps in stage.small_jobs.values():
-            steps.close()
         for page_key in stage.retained:
             self.cache.release(page_key)
 
@@ -215,34 +210,15 @@ class PartAtlasResidency:
                 stage.retained.append(page_key)
             else:
                 work = TexturePageWork(page, self.source.parent, timings=self.timings, ktx_library=self.cache.ktx_library)
-                if stage.streamed and sizes[page_key] <= SMALL_PAGE_BYTES and page["codec"] != "ktx2_uastc":
-                    stage.small_jobs[page_key] = work, work.steps()
-                    self.coroutine_pages += 1
-                else:
-                    stage.jobs[page_key] = work, self._worker_pool().submit(work.run)
-                    if stage.streamed:
-                        self.threaded_pages += 1
+                stage.jobs[page_key] = work, self._worker_pool().submit(work.run)
+                if stage.streamed:
+                    self.threaded_pages += 1
 
     def _advance_prefetch(self, needed, *, required=False):
         try:
             stage = self._ready_prefetch(needed, required=required)
             if stage is None:
                 return
-            if required:
-                for page_key, (work, steps) in tuple(stage.small_jobs.items()):
-                    prepared = None
-                    if page_key not in self.cache.entries:
-                        for _ in steps:
-                            pass
-                        incoming = self._page_storage_bytes(stage.requests[page_key])
-                        if self.cache_budget_bytes is not None:
-                            self.evict(needed, incoming, stage.requests.keys())
-                        prepared = work.take_result()
-                    else:
-                        steps.close()
-                    self.cache.acquire(stage.requests[page_key], self.source.parent, prepared=prepared)
-                    stage.retained.append(page_key)
-                    del stage.small_jobs[page_key]
             for page_key, (work, future) in tuple(stage.jobs.items()):
                 new_texture = page_key not in self.cache.entries
                 if new_texture and not required and not future.done():
@@ -274,7 +250,7 @@ class PartAtlasResidency:
         self._publish_prefetch(stage, required=required)
 
     def _publish_prefetch(self, stage, *, required=False):
-        if stage.metadata is not None or stage.jobs or stage.small_jobs:
+        if stage.metadata is not None or stage.jobs:
             return
         resource = stage.resource
         resource["keys"] = tuple(stage.retained)
@@ -301,45 +277,34 @@ class PartAtlasResidency:
             self._queue_metadata(keys, lookahead)
             if stage is None:
                 return
-            for page_key, (work, steps) in stage.small_jobs.items():
-                if budget.steps >= FRAME_COROUTINE_STEPS:
-                    break
-                if page_key not in self.cache.entries and work.state != "ready":
-                    budget.steps += 1
-                    next(steps, None)
-            for jobs, threaded in ((stage.jobs, True), (stage.small_jobs, False)):
-                for page_key, (work, task) in tuple(jobs.items()):
-                    page = stage.requests[page_key]
-                    prepared = None
-                    if page_key not in self.cache.entries:
-                        if threaded:
-                            if not task.done():
-                                continue
-                            task.result()
-                        elif work.state != "ready":
-                            continue
-                        size = stage.sizes[page_key]
-                        if not budget.can_upload(size):
-                            continue
-                        storage = self._page_storage_bytes(page)
-                        self.evict(protected, storage, stage.requests.keys())
-                        if self.cache_budget_bytes is not None and self.cache.gpu_storage_bytes + storage > self.cache_budget_bytes:
-                            continue
-                        budget.consume_upload(size)
-                        prepared = work.take_result()
-                        self.prefetch_uploads += 1
-                    elif threaded:
-                        task.cancel()
-                    else:
-                        task.close()
-                    self.cache.acquire(page, self.source.parent, prepared=prepared)
-                    stage.retained.append(page_key)
-                    del jobs[page_key]
+            self._upload_stream_pages(stage, protected, budget)
         except BaseException:
             self.cancel_prefetch()
             raise
         self._publish_prefetch(stage)
         self.evict(protected | (set(keys) & self.resources.keys()))
+
+    def _upload_stream_pages(self, stage, protected, budget):
+        for page_key, (work, task) in tuple(stage.jobs.items()):
+            page = stage.requests[page_key]
+            prepared = None
+            if page_key in self.cache.entries:
+                task.cancel()
+            else:
+                size = stage.sizes[page_key]
+                if not task.done() or not budget.can_upload(size):
+                    continue
+                task.result()
+                storage = self._page_storage_bytes(page)
+                self.evict(protected, storage, stage.requests.keys())
+                if self.cache_budget_bytes is not None and self.cache.gpu_storage_bytes + storage > self.cache_budget_bytes:
+                    continue
+                budget.consume_upload(size)
+                prepared = work.take_result()
+                self.prefetch_uploads += 1
+            self.cache.acquire(page, self.source.parent, prepared=prepared)
+            stage.retained.append(page_key)
+            del stage.jobs[page_key]
 
     def adjacent_candidates(self, motion, angles):
         previous = self.last_yaw_pose

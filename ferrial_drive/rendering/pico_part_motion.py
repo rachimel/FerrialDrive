@@ -476,7 +476,7 @@ class PicoPartMotion:
                 "draws_by_motion": dict(self.draws_by_motion),
                 "resident_directions": len(self.residency.resources), "mixed_directions": self.mixed_directions,
                 "prefetch_uploads": self.residency.prefetch_uploads, "prefetch_completed": self.residency.prefetch_completed,
-                "coroutine_pages": self.residency.coroutine_pages, "threaded_pages": self.residency.threaded_pages,
+                "coroutine_pages": 0, "threaded_pages": self.residency.threaded_pages,
                 "fallback_draws": self.fallback_draws,
                 "pinned_directions": len(self.stream_pins),
                 "cache_budget_bytes": self.cache_budget_bytes,

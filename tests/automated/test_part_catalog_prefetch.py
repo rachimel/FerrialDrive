@@ -121,24 +121,19 @@ class PartCatalogPrefetchTests(unittest.TestCase):
         self.assertIn(second, r.resources)
         self.assertCountEqual(pending_reads, ["idle.json", "idle_next.json"])
 
-    def test_required_direction_finishes_small_page_without_duplicate_acquire(self):
+    def test_required_direction_uses_finished_worker_without_duplicate_acquire(self):
+        from concurrent.futures import Future
+
         r, _, _ = self.make_residency()
         r.cache.entries.clear()
         key = "idle", "0"
         page_key = ("color",)
         request = {"file": "color", "codec": "rgba_zlib", "width": 4, "height": 4}
         stage = r.prefetch = DirectionPrefetch(key, {"pages": {"color": page_key}}, {page_key: request})
-        events = []
-
-        def steps():
-            events.append("read")
-            yield
-            events.append("decode")
-
         work = SimpleNamespace(take_result=lambda: "prepared")
-        pending = steps()
-        next(pending)
-        stage.small_jobs[page_key] = work, pending
+        finished = Future()
+        finished.set_result(None)
+        stage.jobs[page_key] = work, finished
 
         def acquire(page, directory, *, prepared=None):
             self.assertEqual(prepared, "prepared")
@@ -146,7 +141,6 @@ class PartCatalogPrefetchTests(unittest.TestCase):
 
         r.cache.acquire.side_effect = acquire
         r.require((key,))
-        self.assertEqual(events, ["read", "decode"])
         self.assertEqual(r.loads, 1)
         self.assertIsNone(r.prefetch)
         self.assertIn(key, r.resources)
