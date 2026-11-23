@@ -355,8 +355,9 @@ class RenderBreakdown:
                 "hud_batch_enabled": queue.enabled if queue is not None else False,
                 "hud_batch_last": dict(queue.stats) if queue is not None and queue.enabled else None,
                 "timings": snapshot,
+                "flamegraph_order": "first_call",
                 "flamegraph_stacks": [{"stack": list(path), "self_wall_ns": own}
-                                      for path, own in sorted(self.stack_self_ns.items()) if own],
+                                      for path, own in self.stack_self_ns.items()],
                 "self_ms_per_frame": {k: v / max(1, self.frames) / 1e6 for k, v in self.self_ns.items()},
                 "sdl_calls_per_frame": {k: {api: count/max(1, self.frames) for api, count in counts.items()}
                                         for k, counts in self.calls.items()},

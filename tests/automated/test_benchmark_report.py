@@ -63,9 +63,10 @@ class ReportTests(unittest.TestCase):
             self.assertLess(int(rects[2].attrib["y"]), int(rects[1].attrib["y"]))
             titles = [element.text for element in svg.findall(".//{*}g/{*}title")]
             self.assertIn("update → A<&>\n포함 2.000 ms (20.00%)\n자체 2.000 ms", titles)
+            self.assertIn("이전 기록 · 이름순", [text.text for text in svg.findall(".//{*}text")])
 
-    def test_tiny_blocks_have_full_names_in_legend(self):
-        long_name = "SomeVeryLongClass." + "prepare_" * 10 + "surface"
+    def test_tiny_blocks_have_full_names_in_call_table(self):
+        long_name = "SomeVeryLongClass." + "prepare_" * 14 + "surface"
         result = {"draw_breakdown": {"flamegraph_stacks": [
             {"stack": ["main"], "self_wall_ns": 1_000_000},
             {"stack": ["main", long_name], "self_wall_ns": 1},
@@ -75,9 +76,35 @@ class ReportTests(unittest.TestCase):
             source.write_text(json.dumps(result), encoding="utf-8")
             write_report(source)
             svg = ET.parse(source.with_name("flamegraph.svg"))
-            legend = svg.find(".//{*}g[@aria-label='전체 함수·구간 이름']")
-            self.assertIn(long_name, [text.text for text in legend.findall("{*}text")])
+            table = svg.find(".//{*}g[@aria-label='호출 경로별 시간']")
+            self.assertIn(long_name, [text.text for text in table.findall("{*}g/{*}text")])
             self.assertGreater(int(svg.getroot().attrib["width"]), 1440)
+
+    def test_call_table_follows_block_order_and_keeps_duplicate_names_separate(self):
+        stacks = [(["root", "z_world", "shared"], 3), (["root", "z_world"], 2),
+                  (["root", "a_hud", "shared"], 1), (["root", "a_hud"], 1), (["root"], 3)]
+        result = {"draw_breakdown": {"flamegraph_order": "first_call", "flamegraph_stacks": [
+            {"stack": path, "self_wall_ns": ms * 1_000_000} for path, ms in stacks
+        ]}}
+        with TemporaryDirectory() as directory:
+            source = Path(directory) / "report.json"
+            source.write_text(json.dumps(result), encoding="utf-8")
+            write_report(source)
+            svg = ET.parse(source.with_name("flamegraph.svg"))
+            table = svg.find(".//{*}g[@aria-label='호출 경로별 시간']")
+            rows = table.findall("{*}g")
+            self.assertEqual([row.attrib["data-depth"] for row in rows], ["0", "1", "2", "1", "2"])
+            self.assertEqual([[text.text for text in row.findall("{*}text")] for row in rows], [
+                ["root", "10.000", "3.000", "100.00%"],
+                ["z_world", "5.000", "2.000", "50.00%"],
+                ["shared", "3.000", "3.000", "30.00%"],
+                ["a_hud", "2.000", "1.000", "20.00%"],
+                ["shared", "1.000", "1.000", "10.00%"],
+            ])
+            paths = [title.text.splitlines()[0] for title in svg.findall(".//{*}g/{*}title")]
+            self.assertEqual(paths, ["root", "root → z_world", "root → z_world → shared",
+                                     "root → a_hud", "root → a_hud → shared"])
+            self.assertIn("같은 부모 아래에서 처음 호출된 순서", [text.text for text in table.findall("{*}text")])
 
     def test_report_links_frame_svg_and_counts_nested_phases_once(self):
         root = ["EncounterApplication.draw_live_combat_motion"]

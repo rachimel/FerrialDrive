@@ -74,9 +74,12 @@ class ProbeRestorationTests(unittest.TestCase):
                 with probe.scope(caller), probe.scope("shared"):
                     pass
 
-        paths = {tuple(row["stack"]): row["self_wall_ns"] for row in probe.report()["flamegraph_stacks"]}
+        report = probe.report()
+        self.assertEqual(report["flamegraph_order"], "first_call")
+        paths = {tuple(row["stack"]): row["self_wall_ns"] for row in report["flamegraph_stacks"]}
         self.assertEqual(paths, {("update",): 70, ("update", "shared"): 30,
                                  ("draw",): 50, ("draw", "shared"): 50})
+        self.assertEqual(list(paths), [("update", "shared"), ("update",), ("draw", "shared"), ("draw",)])
 
     def test_inherited_method_restored_without_instance_override(self):
         class Target:

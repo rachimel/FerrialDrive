@@ -45,9 +45,10 @@ class InteractiveFrameTrace:
                 "loadout_transition": getattr(self.app, "loadout_fade_seconds", 0) > 0 or getattr(slide, "moving", False),
             }
             row["function_timings_ns"] = dict(self.times)
-            if self.live_combat_stacks:
+            if any(self.live_combat_stacks.values()):
+                row["flamegraph_order"] = "first_call"
                 row["live_combat_stacks"] = [{"stack": list(path), "self_wall_ns": own}
-                                             for path, own in sorted(self.live_combat_stacks.items()) if own]
+                                             for path, own in self.live_combat_stacks.items()]
         self.stop()
 
     def install(self):

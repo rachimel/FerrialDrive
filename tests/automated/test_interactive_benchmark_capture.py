@@ -137,6 +137,7 @@ class InteractiveCaptureTests(unittest.TestCase):
                 probe.close()
 
         self.assertNotIn("live_combat_stacks", fast)
+        self.assertEqual(slow["flamegraph_order"], "first_call")
         stacks = slow["live_combat_stacks"]
         self.assertEqual(sum(row["self_wall_ns"] for row in stacks),
                          slow["function_timings_ns"][trace.live_combat_root][1])

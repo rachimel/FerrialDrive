@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [Flamegraph 호출 순서와 시간 표](2026-11-23-flamegraph-call-order.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-flamegraph-call-order:U1]]`은 요청 시각이다. 검색 단서는 `스택의 깊이와 실행 순서에 맞게`다.
+
 - [전투 모션의 느린 프레임별 계측](2026-11-23-live-combat-frame-flamegraph.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-live-combat-frame-flamegraph:U1]]`·`[[FDLOG_MISSING_TIME:FDLOG-20261123-live-combat-frame-flamegraph:U2]]`는 요청 시각이다. 검색 단서는 `안에서 포즈 준비`와 `모든 함수 이름이 잘 보이게`다.
 
 - [벤치마크 Flamegraph 저장](2026-11-23-benchmark-flamegraph.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-benchmark-flamegraph:U1]]`은 정확한 요청 시각이다. 검색 단서는 `진단에서 ms만 보지 말고 Flamegraph를 저장`이다.
