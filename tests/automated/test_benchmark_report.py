@@ -57,11 +57,51 @@ class ReportTests(unittest.TestCase):
             report = write_report(source).read_text(encoding="utf-8")
             self.assertIn("[Flamegraph 열기](flamegraph.svg)", report)
             svg = ET.parse(source.with_name("flamegraph.svg"))
-            rects = svg.findall(".//{*}g/{*}rect")
-            self.assertEqual([float(rect.attrib["width"]) for rect in rects], [580, 580, 232])
+            rects = [rect for rect in svg.findall(".//{*}g/{*}rect") if "stroke" in rect.attrib]
+            width = float(svg.getroot().attrib["width"]) - 40
+            self.assertEqual([float(rect.attrib["width"]) for rect in rects], [width * .5, width * .5, width * .2])
             self.assertLess(int(rects[2].attrib["y"]), int(rects[1].attrib["y"]))
             titles = [element.text for element in svg.findall(".//{*}g/{*}title")]
             self.assertIn("update → A<&>\n포함 2.000 ms (20.00%)\n자체 2.000 ms", titles)
+
+    def test_tiny_blocks_have_full_names_in_legend(self):
+        long_name = "SomeVeryLongClass." + "prepare_" * 10 + "surface"
+        result = {"draw_breakdown": {"flamegraph_stacks": [
+            {"stack": ["main"], "self_wall_ns": 1_000_000},
+            {"stack": ["main", long_name], "self_wall_ns": 1},
+        ]}}
+        with TemporaryDirectory() as directory:
+            source = Path(directory) / "report.json"
+            source.write_text(json.dumps(result), encoding="utf-8")
+            write_report(source)
+            svg = ET.parse(source.with_name("flamegraph.svg"))
+            legend = svg.find(".//{*}g[@aria-label='전체 함수·구간 이름']")
+            self.assertIn(long_name, [text.text for text in legend.findall("{*}text")])
+            self.assertGreater(int(svg.getroot().attrib["width"]), 1440)
+
+    def test_report_links_frame_svg_and_counts_nested_phases_once(self):
+        root = ["EncounterApplication.draw_live_combat_motion"]
+        compose = root + ["live_combat.parts_compose.PicoPartMotion.draw"]
+        shadow = compose + ["live_combat.shadow_prepare.PicoPartMotion.prepare_shadow"]
+        stacks = [
+            (root, 1), (compose, 3), (compose + ["PartPainter.paint"], 2),
+            (compose + ["live_combat.pose_prepare.PicoPartMotion.prepare_draw"], 4),
+            (shadow, 2), (shadow + ["live_combat.shadow_submit.PartShadowMap.render_depth"], 1),
+        ]
+        result = {"benchmark": {"frames": [{"frame": 90, "work_ms": 39.3, "session_ms": 1830,
+                    "live_combat_stacks": [{"stack": path, "self_wall_ns": ms * 1_000_000}
+                                           for path, ms in stacks]}]}}
+        with TemporaryDirectory() as directory:
+            source = Path(directory) / "report.json"
+            source.write_text(json.dumps(result), encoding="utf-8")
+            report = write_report(source).read_text(encoding="utf-8")
+            name = "flamegraphs/frame-000090.svg"
+            self.assertIn(f"| 90 / 1.83초 | 39.30 | 13.00 | 4.00 | 2.00 | 1.00 | 5.00 | 1.00 | [열기]({name}) |",
+                          report)
+            svg = ET.parse(source.parent / name)
+            descriptions = [text.text for text in svg.findall(".//{*}title")]
+            self.assertTrue(any("live_combat.shadow_submit.PartShadowMap.render_depth" in text
+                                and "자체 1.000 ms" in text for text in descriptions))
 
 
 class CombatInputTests(unittest.TestCase):

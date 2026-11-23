@@ -1,5 +1,7 @@
 """직접 조작의 프레임에 실제 전투 이벤트와 함수별 경과 시간을 연결한다."""
 
+from collections import Counter
+
 
 class InteractiveFrameTrace:
     def __init__(self, probe, canvas):
@@ -7,14 +9,18 @@ class InteractiveFrameTrace:
         self.app = probe.app
         self.recording = False
         self.times, self.events = {}, []
+        self.live_combat_root = f"{type(self.app).__name__}.draw_live_combat_motion"
+        self.live_combat_stacks = Counter()
 
     def begin(self):
         self.times.clear()
         self.events.clear()
+        self.live_combat_stacks.clear()
         self.recording = self.probe.active = True
 
-    def timing(self, scope, elapsed, own):
+    def timing(self, path, elapsed, own):
         if self.recording:
+            scope = path[-1]
             row = self.times.get(scope)
             if row is None:
                 self.times[scope] = [1, elapsed, own]
@@ -22,6 +28,8 @@ class InteractiveFrameTrace:
                 row[0] += 1
                 row[1] += elapsed
                 row[2] += own
+            if self.live_combat_root in path:
+                self.live_combat_stacks[path[path.index(self.live_combat_root):]] += own
 
     def stop(self):
         self.recording = self.probe.active = False
@@ -37,12 +45,16 @@ class InteractiveFrameTrace:
                 "loadout_transition": getattr(self.app, "loadout_fade_seconds", 0) > 0 or getattr(slide, "moving", False),
             }
             row["function_timings_ns"] = dict(self.times)
+            if self.live_combat_stacks:
+                row["live_combat_stacks"] = [{"stack": list(path), "self_wall_ns": own}
+                                             for path, own in sorted(self.live_combat_stacks.items()) if own]
         self.stop()
 
     def install(self):
         from ferrial_drive.rendering.atlas_texture_cache import AtlasTextureCache
         from ferrial_drive.rendering.part_atlas_residency import PartAtlasResidency
         from ferrial_drive.rendering.part_painter import PartPainter
+        from ferrial_drive.rendering.part_shadow_map import PartShadowMap
         from ferrial_drive.rendering.pico_part_motion import PicoPartMotion
 
         app, probe = self.app, self.probe
@@ -69,6 +81,18 @@ class InteractiveFrameTrace:
                     owner = target if isinstance(target, type) else type(target)
                     label = name if target is self.canvas.pico else f"{owner.__name__}.{name}"
                     probe.method(target, name, label)
+        if callable(getattr(app, "draw_live_combat_motion", None)):
+            phases = (
+                ("pose_prepare", app, ("live_part_selection", "part_render_angles")),
+                ("pose_prepare", PicoPartMotion, ("prepare_frame", "prepare_draw", "anchor_offset")),
+                ("shadow_prepare", PicoPartMotion, ("shadow_frame", "prepare_shadow", "prepare_surface")),
+                ("shadow_submit", PartShadowMap, ("render_depth", "render_surfaces", "draw_ground_many")),
+                ("parts_compose", PicoPartMotion, ("draw",)),
+            )
+            for phase, target, names in phases:
+                for name in names:
+                    if callable(getattr(target, name, None)):
+                        self._watch_live_combat_phase(target, name, phase)
         for index, gun in enumerate(app.guns, 1):
             for method in ("update", "fire_followup"):
                 if callable(getattr(gun, method, None)):
@@ -80,6 +104,22 @@ class InteractiveFrameTrace:
             self._watch_loadout_action()
         self._watch_loadout_apply()
         return self
+
+    def _watch_live_combat_phase(self, target, name, phase):
+        owner = target if isinstance(target, type) else type(target)
+        function = f"{owner.__name__}.{name}"
+        scope = f"live_combat.{phase}.{function}"
+        probe = self.probe
+        probe.scope_functions[scope] = function
+
+        def wrap(original):
+            def call(*args, **kwargs):
+                if self.recording and probe.stack and self.live_combat_root in probe.stack[-1][3]:
+                    with probe.scope(scope):
+                        return original(*args, **kwargs)
+                return original(*args, **kwargs)
+            return call
+        probe.replace(target, name, wrap)
 
     def _watch_gun(self, gun, slot, method):
         scope = f"RangedCombat.{method}"

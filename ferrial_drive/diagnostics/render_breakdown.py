@@ -71,7 +71,7 @@ class RenderBreakdown:
             if self.stack:
                 self.stack[-1][2] += elapsed
             if self.frame_trace is not None:
-                self.frame_trace.timing(name, elapsed, own)
+                self.frame_trace.timing(path, elapsed, own)
 
     def replace(self, target, name, function):
         original = getattr(target, name)

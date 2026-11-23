@@ -94,10 +94,60 @@ class InteractiveCaptureTests(unittest.TestCase):
         probe = RenderBreakdown(None)
         trace = InteractiveFrameTrace(probe, None)
         trace.begin()
-        trace.timing("draw", 2_000_000, 2_000_000)
+        trace.timing(("draw",), 2_000_000, 2_000_000)
         row = {"work_ms": 4}
         trace.finish(row, budget_ms=16.67)
         self.assertEqual(row, {"work_ms": 4})
+
+    def test_live_combat_phases_only_save_slow_frames_and_keep_nested_paths(self):
+        from ferrial_drive.rendering.part_shadow_map import PartShadowMap
+        from ferrial_drive.rendering.pico_part_motion import PicoPartMotion
+
+        body = PicoPartMotion.__new__(PicoPartMotion)
+        shadow = PartShadowMap.__new__(PartShadowMap)
+
+        def draw(sprite):
+            sprite.prepare_draw()
+            sprite.prepare_shadow()
+
+        hud = SimpleNamespace(state=SimpleNamespace(hud=SimpleNamespace(active_loadout_index=1,
+                                                                        active_weapon_kind="ranged")),
+                              view=SimpleNamespace(), renderer=SimpleNamespace())
+        app = SimpleNamespace(hud=hud, guns=[], draw_live_combat_motion=lambda: body.draw())
+        probe = RenderBreakdown(app)
+        with patch.object(PicoPartMotion, "draw", draw), \
+             patch.object(PicoPartMotion, "prepare_draw", lambda sprite: None, create=True), \
+             patch.object(PicoPartMotion, "prepare_shadow", lambda sprite: shadow.render_depth(), create=True), \
+             patch.object(PartShadowMap, "render_depth", lambda shadow: None, create=True), \
+             patch("ferrial_drive.diagnostics.render_breakdown.perf_counter_ns",
+                   side_effect=range(0, 100_000_000, 1_000_000)):
+            trace = InteractiveFrameTrace(probe, SimpleNamespace(pico=None)).install()
+            try:
+                app.draw_live_combat_motion()
+                trace.begin()
+                app.draw_live_combat_motion()
+                fast = {"work_ms": 10}
+                trace.finish(fast, 16.67)
+                trace.begin()
+                body.draw()
+                app.draw_live_combat_motion()
+                slow = {"work_ms": 30}
+                trace.finish(slow, 16.67)
+            finally:
+                probe.close()
+
+        self.assertNotIn("live_combat_stacks", fast)
+        stacks = slow["live_combat_stacks"]
+        self.assertEqual(sum(row["self_wall_ns"] for row in stacks),
+                         slow["function_timings_ns"][trace.live_combat_root][1])
+        phases = {tuple(scope.split(".")[1] for scope in row["stack"] if scope.startswith("live_combat."))
+                  for row in stacks}
+        self.assertTrue({("parts_compose", "pose_prepare"),
+                         ("parts_compose", "shadow_prepare", "shadow_submit")} <= phases)
+        root = trace.live_combat_root
+        measurement = next(row for row in probe.report()["timings"]["measurements"] if row["name"] == root)
+        self.assertEqual(measurement["calls"], 2)
+        self.assertTrue(all(row["stack"][0] == root for row in stacks))
 
 
 class InteractiveIndexTests(unittest.TestCase):

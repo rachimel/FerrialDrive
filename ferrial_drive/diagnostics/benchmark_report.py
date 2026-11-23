@@ -1,10 +1,11 @@
 """저장된 벤치마크 JSON으로 Markdown과 Flamegraph를 생성한다. 창을 열지 않는다."""
 
 import argparse
+from collections import Counter
 import json
 from pathlib import Path
 
-from .benchmark_flamegraph import write_flamegraph
+from .benchmark_flamegraph import write_flamegraph, write_frame_flamegraph
 
 
 def number(value, digits=2):
@@ -56,6 +57,36 @@ def slow_frame_details(benchmark):
         lines.append(f"| {row['frame']} / {number(row['session_ms'] / 1000)}초 | {number(row['work_ms'])} | "
                      f"{cell('<br>'.join(event_lines))} | {cell('<br>'.join(functions))} |")
     lines += ["", "표에 자체 시간 상위 5개와 이벤트에 해당하는 함수를 표시한다. 해당 프레임의 전체 함수는 원자료에 있다."]
+    return lines
+
+
+def live_combat_frames(benchmark):
+    return sorted((row for row in benchmark.get("frames", ()) if row.get("live_combat_stacks")),
+                  key=lambda row: (-row["work_ms"], row["frame"]))
+
+
+def frame_flamegraph_path(row):
+    return f"flamegraphs/frame-{row['frame']:06d}.svg"
+
+
+def live_combat_frame_details(rows):
+    if not rows:
+        return []
+    lines = ["", "## 느린 프레임의 전투 모션", "",
+             "`draw_live_combat_motion`을 실행한 예산 초과 프레임이다. 각 호출 경로의 자체 시간을 "
+             "가장 가까운 계측 구간에 한 번만 집계했다. 그림자 준비에는 캐스터 표면 생성이 포함된다.", "",
+             "| 프레임 / 시간 | 작업 ms | 모션 합계 ms | 포즈 준비 | 그림자 준비 | 그림자 제출 | 파츠 합성 | 기타 | Flamegraph |",
+             "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |"]
+    phase_order = ("pose_prepare", "shadow_prepare", "shadow_submit", "parts_compose", "other")
+    for row in rows:
+        phase_ns = Counter()
+        for entry in row["live_combat_stacks"]:
+            phase = next((scope.split(".", 2)[1] for scope in reversed(entry["stack"])
+                          if scope.startswith("live_combat.")), "other")
+            phase_ns[phase] += entry["self_wall_ns"]
+        phases = " | ".join(number(phase_ns[key] / 1e6) if key in phase_ns else "—" for key in phase_order)
+        lines.append(f"| {row['frame']} / {number(row['session_ms'] / 1000)}초 | {number(row['work_ms'])} | "
+                     f"{number(sum(phase_ns.values()) / 1e6)} | {phases} | [열기]({frame_flamegraph_path(row)}) |")
     return lines
 
 
@@ -112,6 +143,7 @@ def render_report(result, limits=None, *, flamegraph=False):
             values = values or {}
             lines.append("| " + label + " | " + " | ".join(number(values.get(key)) for key in ("mean", "p50", "p95", "p99", "max")) + " |")
         lines += slow_frame_details(benchmark)
+        lines += live_combat_frame_details(live_combat_frames(benchmark))
     else:
         lines += ["", "프레임 측정값 없음. 실행 실패를 성능 통과로 판정하지 않는다."]
 
@@ -200,6 +232,10 @@ def write_report(source, *, destination=None):
     destination = Path(destination) if destination is not None else source.with_suffix(".md")
     result = json.loads(source.read_text(encoding="utf-8"))
     flamegraph = write_flamegraph(result, destination.with_name("flamegraph.svg"))
+    for row in live_combat_frames(result.get("benchmark") or {}):
+        graph = destination.parent / frame_flamegraph_path(row)
+        graph.parent.mkdir(exist_ok=True)
+        write_frame_flamegraph(row, graph)
     destination.write_text(render_report(result, limits, flamegraph=flamegraph), encoding="utf-8")
     return destination
 
