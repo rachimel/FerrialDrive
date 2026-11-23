@@ -1,10 +1,10 @@
 """접지 마찰의 수명·재질별 발생과 프리렌더 부착 좌표. 창을 생성하지 않는다."""
 
 from dataclasses import dataclass, replace
-import json
 from math import atan2, cos, hypot, radians, sin
-from pathlib import Path
 from random import Random
+
+from ferrial_drive.rendering.part_metadata_archive import read_track_metadata
 
 
 MATERIAL_EFFECTS = {"soil": ("scrape_gray", "dirt_debris_gray", "smoke_gray"),
@@ -51,7 +51,7 @@ class GroundEffects:
     def __init__(self, anchors, *, appearance, capacity=128, emission_seconds=0.04, seed=13, near_front_pixels=32):
         if capacity < 1 or emission_seconds <= 0:
             raise ValueError("입자 수와 발생 간격은 양수여야 한다.")
-        self.anchors = json.loads(Path(anchors).read_text(encoding="utf-8"))["clips"]
+        self.anchors = read_track_metadata(anchors)["clips"]
         self.capacity, self.emission_seconds = capacity, emission_seconds
         self.random = Random(seed)
         self.appearance = appearance

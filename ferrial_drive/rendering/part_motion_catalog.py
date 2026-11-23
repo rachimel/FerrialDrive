@@ -5,17 +5,21 @@ from math import isfinite
 from pathlib import Path
 
 from .atlas_json import read_atlas_json
+from .part_metadata import pack_direction_metadata, pack_shadow_metadata
 from .part_motion_atlas import MAX_PARTS
 from .part_pbr import COAT_CHANNELS
 
 
 class PartMotionCatalog:
-    def __init__(self, source, *, part_spaces=None, max_records=32):
+    def __init__(self, source, *, part_spaces=None, max_records=32, packed=False, metadata_archive=None):
         self.coat_folder = self.coat_members = None
         self.records = OrderedDict()
         self.max_records = max(2, max_records)
         self.source = Path(source).resolve()
-        self.data = read_atlas_json(self.source)
+        self.packed = packed
+        self.metadata_archive = metadata_archive
+        cached = metadata_archive.read(self.source) if metadata_archive else None
+        self.data = read_atlas_json(self.source) if cached is None else cached
         if part_spaces:
             spaces = self.data.setdefault("part_spaces", {})
             for name, parts in part_spaces.items():
@@ -48,6 +52,8 @@ class PartMotionCatalog:
             self.coat_members = coat_data["members"]
         if self.surface and self.paged:
             raise ValueError("표면 시험본은 방향별 페이지를 사용한다.")
+        if packed and cached is None:
+            pack_shadow_metadata(self.data)
 
     def has_direction(self, motion, direction):
         return self.data["motions"][motion][direction] in self.records
@@ -75,6 +81,13 @@ class PartMotionCatalog:
         return path, data
 
     def _read_direction(self, relative, path):
+        coat_path = self.coat_folder / self.coat_members[relative] if self.coat_members else None
+        if coat_path and not coat_path.resolve().is_relative_to(self.coat_folder):
+            raise ValueError("코팅 프레임이 코팅 폴더 밖에 있다.")
+        if self.metadata_archive is not None:
+            cached = self.metadata_archive.read(path, coat=coat_path)
+            if cached is not None:
+                return cached
         data = read_atlas_json(path)
         clip = data.get("clip", {})
         if (keys := clip.get("keyframe_seconds")) is not None:
@@ -83,10 +96,8 @@ class PartMotionCatalog:
                     or any(a >= b for a, b in zip(keys, keys[1:]))
                     or any(len(spec["frames"]) != len(keys) for spec in clip["parts"].values())):
                 raise ValueError(f"파츠 키 포즈 시각 또는 프레임이 올바르지 않다: {path}")
-        if self.coat_members:
-            coat_path = (self.coat_folder / self.coat_members[relative]).resolve()
-            if not coat_path.is_relative_to(self.coat_folder):
-                raise ValueError("코팅 프레임이 코팅 폴더 밖에 있다.")
+        if coat_path:
+            coat_path = coat_path.resolve()
             coat = read_atlas_json(coat_path)
             page = coat["page"]
             texture = (coat_path.parent / page["file"]).resolve()
@@ -97,4 +108,6 @@ class PartMotionCatalog:
             for part, spec in data["clip"]["parts"].items():
                 for frame, tile in zip(spec["frames"], coat["parts"][part], strict=True):
                     frame["coat"] = tile
+        if self.packed:
+            pack_direction_metadata(data)
         return data

@@ -1,0 +1,11 @@
+{
+    "version": 1,
+    "space": "root_relative_top_left_px",
+    "tracks": {
+        "sample": [
+            [0.0, 0.0, 0.0],
+            [0.125, 1.25, -2.5],
+            [0.25, 2.5, -5.0]
+        ]
+    }
+}

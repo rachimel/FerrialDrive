@@ -15,6 +15,7 @@ from .direction_reprojection import direction_banks, direction_frame, direction_
 from .part_atlas_residency import PartAtlasResidency
 from .part_motion_atlas import COMPACT_DEPTH_ENCODING, frame_interval, frame_state
 from .part_motion_catalog import PartMotionCatalog
+from .part_metadata_archive import metadata_mode
 from .part_pbr import COAT_CHANNELS
 from .part_painter import PART_SAMPLE_FIELDS, PartPainter
 from .part_page_cache import PartPageCache
@@ -26,7 +27,9 @@ class PicoPartMotion:
     def __init__(self, pico, source, *, timings=None, mixed_directions=False, max_directions=2, direction_warp=True,
                  cache_budget_bytes=None, pbr_lighting=None, part_spaces=None, upscale_aa="off"):
         self.pico = pico
-        self.catalog = PartMotionCatalog(source, part_spaces=part_spaces, max_records=max_directions)
+        packed, archive = metadata_mode()
+        self.catalog = PartMotionCatalog(source, part_spaces=part_spaces, max_records=max_directions,
+                                         packed=packed, metadata_archive=archive)
         self.source, self.data = self.catalog.source, self.catalog.data
         self.texture_scale, self.paged = self.catalog.texture_scale, self.catalog.paged
         surface, pbr = self.catalog.surface, self.catalog.pbr

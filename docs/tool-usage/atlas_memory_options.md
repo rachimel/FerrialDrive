@@ -85,3 +85,12 @@ python automate/run.py part-sparse-atlas --catalog 원본_품질폴더/catalog.j
 - 압축 적 카탈로그의 PBR 텍스처 캐시는 기본 기종당 32 MiB다. 군집 시트나 압축 카탈로그가 로컬에 없으면 해당 기종의 일반 PBR 카탈로그로 실행한다. Shock Bot의 PBR 카탈로그가 없으면 기존 본체 시트를 사용한다.
 - 별도 시험에서는 `rendering.enemy_atlas_cache_mib`로 기종별 캐시, `rendering.enemy_atlas_preload_mib`로 군집 시트 없이 시작할 때의 추가 일괄 선적재 예산을 지정한다. 후자를 생략하면 캐시의 3/4을 사용한다. 예산은 아틀라스 텍스처에 적용한다.
 - 하드웨어 보고서에는 실제 선택한 적 카탈로그, GPU 논리 할당, 올라온 방향·동작 수, PBR 요청과 대체 표시의 프레임 표본을 기록한다.
+
+## CPU 방향·자세 메타데이터 패킹
+
+기본 로더는 원본 JSON을 읽는다. 선택 시험에서는 플레이어·무장·적의 방향 타일과 파츠 인덱스를 16비트 정수와 필드 플래그로 저장한다. 그림자 본 자세와 접지·상하체 부착점·총구·검 궤적은 원본 배정밀도로 저장한다. 인덱스로 해당 레코드만 펼치며, 입력 규격이나 정수 범위가 다른 표는 기존 형태로 남긴다.
+
+- `python automate/run.py part-metadata-cache --catalog 품질/catalog.json --track 추적.json --output output/performance/metadata.zip`으로 검증한 방향 카탈로그와 추적 파일을 준비한다. `--catalog`와 `--track`은 반복할 수 있다. 방향별 JSON과 코팅 정보는 카탈로그를 따라 읽으며 출력은 새 파일에 둔다.
+- 같은 PowerShell 세션에서 `$env:FDRIVE_PACKED_PART_METADATA = (Resolve-Path 'output/performance/metadata.zip').Path`를 지정하고 게임 또는 교전 벤치마크를 실행한다. 로컬 경로와 원본의 크기·수정 시각을 기준으로 저장본을 찾는다. 원본이 바뀌거나 레코드를 읽을 수 없으면 해당 원본 JSON으로 읽는다.
+- `0`은 기본 JSON, `1`은 로딩 시 JSON을 읽고 패킹하는 비교용 설정이다. 환경 변수가 필요한 명령 창에만 적용하고, 비교가 끝나면 `Remove-Item Env:FDRIVE_PACKED_PART_METADATA`로 해제한다. GPU 페이지, 업로드 정책, 아틀라스 해상도는 동일하다.
+- 기본 경로 후보의 비교는 원본·패킹본에서 같은 움직임, 입력, 품질로 수행한다. 1,000기 추적으로 커밋 급증을 찾고, 상세 계측을 끈 별도 교전에서 프레임 시간을 비교한다. 저장본의 값 일치, 화면 비교, 실제 내장 GPU의 공유 메모리는 각각 검증한다. [에셋 없는 시연](../../samples/part_metadata_cache/README.md)

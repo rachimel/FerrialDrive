@@ -2,11 +2,11 @@
 
 from bisect import bisect_right
 from dataclasses import dataclass
-import json
 from math import ceil, cos, isfinite, pi, sin, sqrt
-from pathlib import Path
 
 from ferrial_drive.rendering.motion_vectors import target_phase
+from ferrial_drive.rendering.part_metadata import PackedTrackRows
+from ferrial_drive.rendering.part_metadata_archive import read_track_metadata
 from ferrial_drive.assets.directional import SCREEN_DIRECTIONS
 from .geometry import Capsule, Vec2, bounding_capsule, capsule_touches_circle, convex_hull, moving_circle_touches_polygon
 from .sword_contact import SwordContactEffects
@@ -32,16 +32,24 @@ def camera_root(camera):
 
 class BladeTrajectory:
     def __init__(self, clips):
-        if not clips or any(len(rows) < 2 or any(a[0] >= b[0] for a, b in zip(rows, rows[1:]))
-                            for rows in clips.values()):
+        if not clips or any(not self._valid_times(rows) for rows in clips.values()):
             raise ValueError("검 궤적은 클립마다 시간 순서의 표본 두 개 이상이 필요하다.")
         self.clips = clips
 
+    @staticmethod
+    def _valid_times(rows):
+        if len(rows) < 2:
+            return False
+        if isinstance(rows, PackedTrackRows):
+            return all(rows.time_at(i - 1) < rows.time_at(i) for i in range(1, len(rows)))
+        return not any(a[0] >= b[0] for a, b in zip(rows, rows[1:]))
+
     @classmethod
     def load(cls, path):
-        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        data = read_track_metadata(path)
         if data.get("type") in ("sword_trail_sample", "sword_blade_projection"):
-            return cls({name: [(row["time_seconds"], Vec2(*row["root"]), Vec2(*row["tip"]))
+            return cls({name: rows if isinstance(rows, PackedTrackRows) else
+                        [(row["time_seconds"], Vec2(*row["root"]), Vec2(*row["tip"]))
                                for row in rows] for name, rows in data["clips"].items()})
         clips = {}
         for clip in data["clips"]:
@@ -57,8 +65,14 @@ class BladeTrajectory:
 
     def pose(self, name, seconds, scale, reach_scale):
         rows = self.clips[name]
-        index = max(0, min(len(rows) - 2, bisect_right(rows, seconds, key=lambda row: row[0]) - 1))
-        a, b = rows[index:index + 2]
+        if isinstance(rows, PackedTrackRows):
+            next_index = bisect_right(range(len(rows)), seconds, key=rows.time_at)
+            index = max(0, min(len(rows) - 2, next_index - 1))
+            a, b = [(row["time_seconds"], Vec2(*row["root"]), Vec2(*row["tip"]))
+                    for row in rows[index:index + 2]]
+        else:
+            index = max(0, min(len(rows) - 2, bisect_right(rows, seconds, key=lambda row: row[0]) - 1))
+            a, b = rows[index:index + 2]
         fraction = max(0, min(1, (seconds - a[0]) / max(1e-9, b[0] - a[0])))
         root = (a[1] + (b[1] - a[1]) * fraction) * scale
         tip = (a[2] + (b[2] - a[2]) * fraction) * scale

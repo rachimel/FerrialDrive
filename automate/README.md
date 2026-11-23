@@ -2,6 +2,8 @@
 
 - 아틀라스 채널 단축: `python automate/run.py atlas-compact prepare --catalog 원본/catalog.json --output 새폴더`, 별도 검증은 `atlas-compact verify --catalog 새폴더/catalog.json`이다. 기본 BC7 아틀라스는 `--manifest 원본/atlas.json`을 사용한다. [형식·제약](../docs/tool-usage/atlas_memory_options.md)과 [독립 시연](../samples/atlas_compact/README.md)을 따른다.
 
+- CPU 방향·추적 패킹: `python automate/run.py part-metadata-cache --catalog 품질/catalog.json --track 추적.json --output 새캐시.zip`을 사용한다. 입력 옵션을 반복해 여러 품질과 추적을 한 파일로 준비한다. [런타임 연결](../docs/tool-usage/atlas_memory_options.md#cpu-방향자세-메타데이터-패킹)과 [독립 시연](../samples/part_metadata_cache/README.md)을 따른다.
+
 - 상·하체 정지 조준 후보: `python automate/run.py unreal-aim-review --request 요청.json`. 기존 자세에서 상체 선행 보간·±45° 초과 시 하체 추종의 표본과 `unreal-animation`용 요청을 준비한다. 준비와 실제 Unreal 생성·분리 렌더를 구분하며 [검토 범위](../docs/unit-tests/upper_lower_aim.md)를 따른다.
 - 상·하체 입력 표: `python automate/run.py unreal-pose-table prepare/run/pack/extend-canvas/merge --request 요청.json`. 원본 자세를 방향 조합별로 평가·분리 출력하며 [입력용 표의 연결 규약](../docs/tool-usage/unreal_runtime_catalog.md)을 따른다.
 

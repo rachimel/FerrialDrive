@@ -2,13 +2,14 @@
 
 from bisect import bisect_right
 from dataclasses import dataclass
-import json
 from math import cos, floor, isfinite, pi, sin, sqrt
 from pathlib import Path
 
 from .aim_follow import angle_delta_degrees
 from .geometry import Vec2
 from ferrial_drive.rendering.motion_vectors import target_phase
+from ferrial_drive.rendering.part_metadata import PackedTrackRows
+from ferrial_drive.rendering.part_metadata_archive import read_track_metadata
 
 
 def direction_index(yaw_degrees):
@@ -43,7 +44,7 @@ class UpperLowerCatalog:
     @classmethod
     def load(cls, path):
         path = Path(path)
-        return cls(json.loads(path.read_text(encoding="utf-8")),path.parent)
+        return cls(read_track_metadata(path), path.parent)
 
     def select(self, motion, seconds, upper_yaw, lower_yaw, *, loop=None):
         if motion not in self.motions:
@@ -91,7 +92,11 @@ class PoseAttachments:
         spec = self.tracks[motion]
         seconds = seconds % spec["duration_seconds"] if spec["loop"] else min(spec["duration_seconds"],max(0,seconds))
         rows = spec["samples"]
-        index = min(len(rows)-1,max(1,bisect_right(rows,seconds,key=lambda row:row["seconds"])))
+        if isinstance(rows, PackedTrackRows):
+            next_index = bisect_right(range(len(rows)), seconds, key=rows.time_at)
+        else:
+            next_index = bisect_right(rows, seconds, key=lambda row: row["seconds"])
+        index = min(len(rows)-1, max(1, next_index))
         a,b = rows[index-1:index+1]
         t = (seconds-a["seconds"])/(b["seconds"]-a["seconds"])
         blend = lambda x,y: tuple(v+(w-v)*t for v,w in zip(x,y))
