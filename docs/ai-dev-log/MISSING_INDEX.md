@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [PBR 방향 페이지 텍스처 배열 실험](2026-11-23-pbr-direction-arrays.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-pbr-direction-arrays:U1]]`은 정확한 요청 시각이다. 검색 단서는 `PartPainter의 PBR 방향 페이지도 텍스처 배열로`다.
+
 - [근거리 적 GL 상태 공통화](2026-11-23-enemy-gl-shared-state.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-enemy-gl-shared-state:U1]]`과 `[[FDLOG_MISSING_TIME:FDLOG-20261123-enemy-gl-shared-state:U2]]`는 정확한 요청 시각이다. 검색 단서는 `렌더링 상태는 중앙에서 관리`와 `무조건 지킬 가이드라인`이다.
 
 - [HUD 필터 마스크 타깃 재사용](2026-11-23-hud-mask-pool.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-hud-mask-pool:U1]]`은 정확한 요청 시각이다. 검색 단서는 `텍스쳐 배열과 HUD 마스크 재사용`이다.

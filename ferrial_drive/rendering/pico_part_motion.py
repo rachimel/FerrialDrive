@@ -68,6 +68,7 @@ class PicoPartMotion:
         self.direction_sample_fps = self.data.get("direction_sample_fps") if self.correspondence else None
         self.adjacent_pairs = {name: {tuple(pair) for pair in value["pairs"]} for name, value in self.correspondence.items()}
         self.angular_painter = None
+        self.array_painter = None
         self.upscaler = None
         self.echo_target = None
         self.echo_instances = None
@@ -120,7 +121,7 @@ class PicoPartMotion:
             try:
                 keys = tuple(("back_deploy", direction) for direction in sorted(back_directions))
                 with self.timings.scope("loading.back_deploy"):
-                    self.residency.require(keys, preload_limit_bytes=cache_budget_bytes)
+                    self._preload_directions(keys, cache_budget_bytes)
             except BaseException:
                 self.close()
                 raise
@@ -180,10 +181,22 @@ class PicoPartMotion:
         # 다른 동작에도 기존 캐시 예산의 4분의 1을 남긴다.
         preload_limit = budget_bytes * 3 // 4 if budget_bytes is not None else None
         self.residency.max_directions += len(pins)
-        self.residency.require(pins, preload_limit_bytes=preload_limit)
+        self._preload_directions(pins, preload_limit)
         loaded = tuple(key for key in pins if key in self.residency.resources)
         self.stream_pins += loaded
         self.residency.max_directions = previous_limit + len(loaded)
+
+    def _preload_directions(self, directions, limit_bytes):
+        use_arrays = (not self.paged and self.pbr_lighting is not None and self.angular_painter is not None
+                      and self.cache.use_direction_arrays)
+        self.residency.require(directions, preload_limit_bytes=limit_bytes, direction_arrays=use_arrays)
+        if use_arrays and self.cache.array_count and self.array_painter is None:
+            try:
+                self.array_painter = PartPainter(self.pico, angular=True, part_count=self.catalog.part_count,
+                    frame_crop=self.catalog.frame_crop, surface=True, pbr=True, coat=self.catalog.coat_members is not None,
+                    hermite_flow=self.hermite_flow, compact_depth=self.compact_depth, array_pages=True)
+            except RuntimeError:
+                self.cache.use_direction_arrays = False
 
     def display_pose(self, clip_name, seconds, angular_span=None, *, allow_fallback=True):
         if self.stream_budget is None:
@@ -383,6 +396,10 @@ class PicoPartMotion:
                               for step in (0, first != second))
                     state["normal_yaw"] = tuple(value for angle in angles for value in (cos(angle), sin(angle), 0, 0))
                 painter = self.angular_painter
+                if self.array_painter is not None:
+                    group = resources[0].get("array_group")
+                    if group is not None and all(resource.get("array_group") is group for resource in resources):
+                        painter = self.array_painter
                 self.angular_draws += 1
         left, top, width, height = state["bounds"]
         factor = scale * self.data["pixel_scale"]
@@ -493,6 +510,8 @@ class PicoPartMotion:
             self.cache.purge_pool()
         if self.angular_painter is not None:
             self.angular_painter.close()
+        if self.array_painter is not None:
+            self.array_painter.close()
         if self.echo_target is not None:
             self.echo_target.close()
         if self.echo_instances is not None:

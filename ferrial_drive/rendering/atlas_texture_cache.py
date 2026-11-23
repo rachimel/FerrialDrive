@@ -8,6 +8,7 @@ from threading import get_ident
 from ferrial_drive.diagnostics import TimingRecorder
 from ferrial_drive.diagnostics.texture_metrics import bind_gl
 
+from .direction_texture_arrays import DirectionArrayStorage, DirectionArrayUploadError, plan_direction_arrays
 from .texture_codecs import bc7_size, texture_payload_size
 from .texture_page_work import TexturePageWork
 
@@ -48,6 +49,8 @@ MAX_POOLED_TEXTURES = 32
 class AtlasTextureCache:
     """명시적인 렌더러 수명의 캐시. 같은 파일은 후보·클립·인스턴스가 함께 사용한다."""
 
+    use_direction_arrays = False
+
     def __init__(self, pico, *, timings=None, ktx_library=None, synchronize_upload=True):
         self.pico = pico
         self.binding = TextureUploadBinding(pico)
@@ -61,6 +64,8 @@ class AtlasTextureCache:
         self.pool_enabled = False
         self.storage_budget_bytes = None
         self.pooled_bytes = self.pool_hits = self.texture_allocations = self.peak_allocated_bytes = 0
+        self.direction_arrays = None
+        self.array_bytes = self.array_count = 0
         self.synchronize_upload = synchronize_upload
         self.finish = bind_gl(pico, "glFinish", None, [])
         self.compressed_upload = bind_gl(pico, "glCompressedTexImage2D", None,
@@ -166,9 +171,26 @@ class AtlasTextureCache:
     def storage_bytes_for(self, page):
         return texture_payload_size(page["codec"], *self._storage_size(page))
 
-    def _take_pooled(self, codec, size, storage):
+    def plan_arrays(self, resources, pending, limit_bytes):
+        if not self.use_direction_arrays or limit_bytes is None or not pending:
+            return {}
+        if self.storage_budget_bytes is not None:
+            limit_bytes = min(limit_bytes, self.storage_budget_bytes)
+        headroom = limit_bytes - self.gpu_storage_bytes - sum(map(self.storage_bytes_for, pending.values()))
+        if headroom < 0:
+            return {}
+        if self.direction_arrays is None:
+            try:
+                self.direction_arrays = DirectionArrayStorage(self)
+            except RuntimeError:
+                self.use_direction_arrays = False
+                return {}
+        storage = self.direction_arrays
+        return plan_direction_arrays(resources, pending, headroom, storage.max_layers, storage.max_size)
+
+    def _take_pooled(self, codec, size, storage, *, exact=False):
         # 작은 페이지로 큰 저장소를 붙잡아 두거나 활성 페이지 예산을 넘기지 않는다.
-        limit = storage + storage // 8
+        limit = storage if exact else storage + storage // 8
         if self.storage_budget_bytes is not None:
             limit = min(limit, self.storage_budget_bytes - self.gpu_storage_bytes)
         best = None
@@ -186,10 +208,10 @@ class AtlasTextureCache:
         self.pooled_bytes -= entry["gpu"]["storage_bytes"]
         return entry
 
-    def _upload_pooled(self, page, payload, compressed):
+    def _upload_pooled(self, page, payload, compressed, *, exact=False):
         codec, size = page["codec"], self._storage_size(page)
         storage = self.storage_bytes_for(page)
-        reused = self._take_pooled(codec, size, storage)
+        reused = self._take_pooled(codec, size, storage, exact=exact)
         if reused:
             size, storage = reused["storage_size"], reused["gpu"]["storage_bytes"]
         texture = ct.c_uint(reused["gl_texture"] if reused else 0)
@@ -240,7 +262,7 @@ class AtlasTextureCache:
             p.SDL_DestroyTexture(texture)
             raise
 
-    def acquire(self, page, directory, *, prepared=None):
+    def acquire(self, page, directory, *, prepared=None, array_slot=None, exact=False):
         self._assert_owner()
         path = (Path(directory) / page["file"]).resolve()
         key = (path, page["sha256"])
@@ -262,17 +284,34 @@ class AtlasTextureCache:
             self.finish()
         scope = "load.upload_complete" if self.synchronize_upload else "load.upload_submit"
         with self.timings.scope(scope):
-            upload = self._upload_pooled if self.pool_enabled else self._upload_sdl
-            entry, reused = upload(page, prepared.pixels, prepared.compressed)
+            if array_slot is not None:
+                array, layer = array_slot
+                internal = 0x8E8C if prepared.compressed else COMPACT_TEXTURE_FORMATS.get(page["codec"], (0x8058, 0))[0]
+                try:
+                    entry, allocated = self.direction_arrays.upload(
+                        array, layer, page, prepared.pixels, prepared.compressed, internal)
+                except RuntimeError as exc:
+                    raise DirectionArrayUploadError(str(exc)) from exc
+                array.live_pages += 1
+                if allocated:
+                    self.array_bytes += array.storage_bytes
+                    self.gpu_storage_bytes += array.storage_bytes
+                    self.array_count += 1
+                    self.texture_allocations += 1
+            else:
+                if self.pool_enabled:
+                    entry, reused = self._upload_pooled(page, prepared.pixels, prepared.compressed, exact=exact)
+                else:
+                    entry, reused = self._upload_sdl(page, prepared.pixels, prepared.compressed)
+                self.gpu_storage_bytes += entry["gpu"]["storage_bytes"]
+                self.pool_hits += int(reused)
+                self.texture_allocations += int(not reused)
             if self.synchronize_upload:
                 self.finish()
         entry.update(size=(width, height), references=1, disk_bytes=prepared.disk_bytes, codec=page["codec"])
         self.entries[key] = entry
-        self.gpu_storage_bytes += entry["gpu"]["storage_bytes"]
         self.peak_gpu_storage_bytes = max(self.peak_gpu_storage_bytes, self.gpu_storage_bytes)
         self.peak_allocated_bytes = max(self.peak_allocated_bytes, self.gpu_storage_bytes + self.pooled_bytes)
-        self.pool_hits += int(reused)
-        self.texture_allocations += int(not reused)
         self.uploads += 1
         self.uploaded_bytes += len(prepared.pixels)
         self.read_bytes += prepared.disk_bytes
@@ -310,6 +349,15 @@ class AtlasTextureCache:
         entry["references"] -= 1
         if not entry["references"]:
             del self.entries[key]
+            if array := entry.get("direction_array"):
+                self.delete_texture(1, ct.byref(ct.c_uint(entry["gl_texture"])))
+                array.live_pages -= 1
+                if not array.live_pages:
+                    self.direction_arrays.delete(array)
+                    self.array_bytes -= array.storage_bytes
+                    self.gpu_storage_bytes -= array.storage_bytes
+                    self.array_count -= 1
+                return
             self.gpu_storage_bytes -= entry["gpu"]["storage_bytes"]
             if "gl_texture" in entry:
                 self.pool.append(entry)
@@ -327,6 +375,7 @@ class AtlasTextureCache:
                 "pooled_textures": len(self.pool), "pooled_gpu_bytes": self.pooled_bytes,
                 "gpu_allocated_bytes": self.gpu_storage_bytes + self.pooled_bytes,
                 "peak_gpu_allocated_bytes": self.peak_allocated_bytes,
+                "direction_arrays": self.array_count, "direction_array_storage_bytes": self.array_bytes,
                 "pool_hits": self.pool_hits, "texture_allocations": self.texture_allocations,
                 "textures": [dict(path=str(key[0]), codec=row["codec"], **row["gpu"]) for key, row in self.entries.items()]}
 

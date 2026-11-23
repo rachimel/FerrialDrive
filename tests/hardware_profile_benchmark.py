@@ -345,6 +345,7 @@ def main():
     parser.add_argument("--demo", action="store_true", help="combat에서도 플레이어를 공개 도형으로 시연")
     parser.add_argument("--movement-speed-multiplier", type=float, default=1, help="3배속 combat test는 3 지정")
     parser.add_argument("--quality", choices=("low", "medium", "high"), help="생략하면 현재 저장 설정을 격리 복사")
+    parser.add_argument("--pbr-direction-arrays", action="store_true", help="선적재 PBR 방향 페이지의 배열 후보를 시험한다.")
     parser.add_argument("--auto", action="store_true", help="고정 입력 반복 공격. 생략하면 직접 조작")
     parser.add_argument("--auto-weapon", choices=("sword", "smg"), default="sword")
     parser.add_argument("--auto-overdrive", action="store_true", help="자동 반복마다 Overdrive 강제 발동")
@@ -395,6 +396,10 @@ def main():
     profile.update(resource_limits=values, resource_limits_enabled=not args.no_resource_limits,
                    target_fps=args.target_fps, gpu_profile=args.gpu_profile)
     if args.worker:
+        if args.pbr_direction_arrays:
+            from ferrial_drive.rendering.atlas_texture_cache import AtlasTextureCache
+
+            AtlasTextureCache.use_direction_arrays = True
         return run_worker(args, applied, profile)
     if (args.frames is not None and args.frames < 1) or args.warmup < 0 or not 0 < args.target_fps <= 10000:
         parser.error("프레임 수·목표 FPS 범위 오류")

@@ -6,6 +6,7 @@ from contextlib import closing
 from dataclasses import dataclass, field
 import os
 
+from .direction_texture_arrays import DirectionArrayUploadError
 from .texture_codecs import texture_payload_size
 from .texture_page_work import DEFAULT_DECODE_WORKERS, TexturePageWork, decoded_pages
 
@@ -92,7 +93,7 @@ class PartAtlasResidency:
             requests.setdefault(page_key, dict(page, file=page_key[0]))
         return {"data": data, "pages": fields, "keys": tuple(fields.values()), "pose_identity": object()}, requests
 
-    def require(self, keys, *, preload_limit_bytes=None):
+    def require(self, keys, *, preload_limit_bytes=None, direction_arrays=False):
         """선적재 때는 방향 정보를 읽되 남은 예산에 맞는 텍스처만 올린다."""
         if self.prefetch is not None and self.prefetch.key in keys:
             self._advance_prefetch(set(keys), required=True)
@@ -122,6 +123,7 @@ class PartAtlasResidency:
         if self.cache_budget_bytes is not None:
             incoming = sum(map(self._page_storage_bytes, pending.values()))
             self.evict(set(keys), incoming, requests.keys())
+        array_slots = self.cache.plan_arrays(resources, pending, preload_limit_bytes) if direction_arrays else {}
         acquired = []
         try:
             with closing(decoded_pages(tuple(pending.values()), self.source.parent, timings=self.timings,
@@ -130,12 +132,19 @@ class PartAtlasResidency:
                 for resource in resources.values():
                     for kind, page_key in resource["pages"].items():
                         prepared = next(decoded) if pending.pop(page_key, None) is not None else None
-                        _, entry = self.cache.acquire(requests[page_key], self.source.parent, prepared=prepared)
+                        options = (dict(array_slot=array_slots.get(page_key), exact=True) if array_slots else {})
+                        _, entry = self.cache.acquire(requests[page_key], self.source.parent, prepared=prepared, **options)
                         acquired.append(page_key)
                         resource["pages"][kind] = entry
-        except BaseException:
+                    if array_slots and (array := resource["pages"]["color"].get("direction_array")):
+                        resource["array_group"] = array.group
+        except BaseException as exc:
             for key in reversed(acquired):
                 self.cache.release(key)
+            if isinstance(exc, DirectionArrayUploadError):
+                self.cache.use_direction_arrays = False
+                self.require(keys, preload_limit_bytes=preload_limit_bytes)
+                return
             raise
         self.resources.update(resources)
         self.loads += len(resources)

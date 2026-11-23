@@ -7,7 +7,7 @@ import ctypes as ct
 from ferrial_drive.diagnostics.texture_metrics import bind_gl
 
 from .atlas_texture_cache import bind_atlas_textures
-from .gl_pass import COLOR_AND_SCISSOR_STATE, TexturedQuadPass
+from .gl_pass import COLOR_AND_SCISSOR_STATE, QUAD_VERTEX_SHADER, TexturedQuadPass
 from .part_motion_atlas import MAX_PARTS
 from .part_pbr import PBR_FUNCTIONS, PBR_UNIFORMS
 
@@ -535,11 +535,12 @@ class PartPainter:
                  pbr=False, coat=False, instanced=False, hermite_flow=False, compact_depth=False,
                  deferred=False, depth_coverage=False, screen_depth=False, instance_table=False,
                  cache_keypose_samples=False, keypose_samples_fp16=False, keypose_samples_offsets=False,
-                 echo_instances=False):
+                 echo_instances=False, array_pages=False):
         self.pico = pico
         self.paged = paged
         self.frame_crop = frame_crop
         self.hermite_flow = hermite_flow
+        self.array_pages = array_pages
         self.arrays = self.ARRAYS + (("energyPlacementA", "energyPlacementB") if paged else ())
         if hermite_flow:
             self.arrays += ("flowCurves",)
@@ -556,12 +557,21 @@ class PartPainter:
         if frame_crop:
             self.arrays += ("colorPlacementA", "colorPlacementB", "depthPlacementA", "depthPlacementB")
         banks = 4 if angular else 2
-        texture_banks = 1 if paged else banks
+        texture_banks = 1 if paged or array_pages else banks
         input_kinds = ("color", "vector", "depth") if depth_coverage else self.page_kinds
         self.texture_names = {kind: tuple("artwork" if kind == "color" and bank == 0 else f"{kind}Page{bank}"
                                          for bank in range(texture_banks)) for kind in input_kinds}
         declarations, uniforms = [], []
         for kind, names in self.texture_names.items():
+            if array_pages:
+                name, = names
+                size, layers = name + "Size", name + "Layers"
+                declarations.extend((f"uniform sampler2DArray {name};", f"uniform vec2 {size};",
+                                     f"uniform vec4 {layers};",
+                                     f"vec4 read_{kind}(vec2 p,vec4 rect,float bank) {{ "
+                                     f"return texture({name},vec3(coord(p,rect,{size}),{layers}[int(bank)])); }}"))
+                uniforms.extend((name, size, layers))
+                continue
             samples = []
             for index, name in enumerate(names):
                 size = name + "Size"
@@ -627,6 +637,11 @@ class PartPainter:
             access = "#define PART_FIELD(name,index) name[index]"
         shader = shader.replace(b"PART_FIELD_ACCESS", access.encode())
         sampler_options = {"screen_depth": True} if depth_coverage or screen_depth else {}
+        if array_pages:
+            if instanced or paged:
+                raise ValueError("방향 배열은 독립 PBR 파츠 사각형을 사용한다.")
+            shader = shader.replace(b"#version 120", b"#version 130", 1)
+            sampler_options["vertex_shader"] = QUAD_VERTEX_SHADER.replace(b"#version 120", b"#version 130", 1)
         if instance_table:
             sampler_options.update(instance_table=True, coverage_instances=depth_coverage)
         if cache_keypose_samples:
@@ -690,8 +705,13 @@ class PartPainter:
               sample_shadow=True, depth_output=False, instances=None, pose_table=None,
               screen_depth=None, screen_placements=None, instance_texture=None, instance_range=None, depth_origin=(0, 0),
               texture_bindings=None, pose_key=None, instance_sources=None, echo_styles=None):
-        entries = (cache.bindings(self.page_kinds) if self.paged else
-                   [resource["pages"][kind] for kind in self.texture_names for resource in resources])
+        texture_names = self.texture_names
+        if self.array_pages:
+            entries = [resources[0]["pages"][kind]["direction_array"].binding for kind in texture_names]
+        elif self.paged:
+            entries = cache.bindings(texture_names)
+        else:
+            entries = [resource["pages"][kind] for kind in texture_names for resource in resources]
         if pbr_lighting:
             entries.append(pbr_lighting["entry"])
             environment_unit = len(entries) - 1
@@ -728,12 +748,15 @@ class PartPainter:
                     sampler.glUniform4f(sampler.uniforms[uniform], *pbr_lighting[field])
                 sampler.glUniform1f(sampler.uniforms["pbrExposure"], pbr_lighting["exposure"])
                 sampler.glUniform1f(sampler.uniforms["depthOutput"], float(depth_output))
-            for index, names in enumerate(self.texture_names.values()):
-                for bank, name in enumerate(names):
-                    unit = index if self.paged else index * len(resources) + (bank if bank < len(resources) else 0)
-                    sampler.glUniform1i(sampler.uniforms[name], unit)
-                    entry = entries[unit]
-                    sampler.glUniform2f(sampler.uniforms[name + "Size"], *entry.get("storage_size", entry["size"]))
+            if self.array_pages:
+                self._upload_array_inputs(resources, entries)
+            else:
+                for index, names in enumerate(self.texture_names.values()):
+                    for bank, name in enumerate(names):
+                        unit = index if self.paged else index * len(resources) + (bank if bank < len(resources) else 0)
+                        sampler.glUniform1i(sampler.uniforms[name], unit)
+                        entry = entries[unit]
+                        sampler.glUniform2f(sampler.uniforms[name + "Size"], *entry.get("storage_size", entry["size"]))
             self.upload("bankData", [value for resource in resources for value in (
                 *resource["data"]["clip"]["depth_range"],
                 float(self.paged or resource["pages"]["energy"]["codec"] == "a8_zlib"),
@@ -779,6 +802,15 @@ class PartPainter:
                     sampler.glUniform4f(sampler.uniforms["modulation"], 1, 1, 1, 1)
                     sampler.draw_instances(state["bounds"], instances, sources=instance_sources,
                                            screen_placements=screen_placements, echo_styles=echo_styles)
+
+    def _upload_array_inputs(self, resources, entries):
+        sampler = self.sampler
+        for unit, (kind, (name,)) in enumerate(self.texture_names.items()):
+            sampler.glUniform1i(sampler.uniforms[name], unit)
+            sampler.glUniform2f(sampler.uniforms[name + "Size"], *entries[unit]["size"])
+            layers = [resource["pages"][kind]["array_layer"] for resource in resources]
+            layers.extend((0,) * (4 - len(layers)))
+            sampler.glUniform4f(sampler.uniforms[name + "Layers"], *layers)
 
     def close(self):
         self.sampler.close()
