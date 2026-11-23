@@ -54,6 +54,7 @@ python tests/hardware_profile_benchmark.py --mute --scenario combat --enemy-coun
 - Flamegraph 아래의 표는 블록과 같은 호출 경로 순서와 깊이로 전체 함수·구간 이름을 표시한다. 포함 시간·자체 시간은 ms이며, 시간 비중은 해당 그래프에서 계측한 전체 시간 대비 포함 시간이다. 같은 부모 아래에서는 첫 호출 순서로 배치하고 반복 호출은 경로별로 누적한다. 순서가 없는 이전 원자료는 이름순으로 배치하고 표에 표시한다.
 - Flamegraph는 벤치마크에서 실제로 계측된 함수·구간만 표시한다. 준비 프레임은 제외하며 대기와 계측 오버헤드는 포함할 수 있다. 전체 Python 스택 샘플링은 [FDrive Profiler](../../Tools/profiler/README.md)를 사용한다.
 - 직접 조작은 보존한 예산 초과 프레임 중 `draw_live_combat_motion`이 실행된 프레임의 포즈 준비·그림자 준비·그림자 제출·파츠 합성 시간을 별도 표에 남긴다. 호출 경로의 자체 wall 시간은 가장 가까운 계측 구간에 한 번만 집계한다. 그림자 준비에는 캐스터 표면 생성이 포함되며 그 밖의 모션 비용은 기타로 표시한다. 각 행에서 `flamegraphs/frame-<번호>.svg`를 열 수 있다. 해당 호출 경로만 보존하며 직접 조작의 기존 최근 3,600프레임 보존 범위를 따른다.
+- 직접 조작의 예산 초과 프레임은 대화창 그리기를 텍스트·필터 폴리곤·스캔라인·기타로 나눠 `dialogue_timings_ns`와 Markdown 표에 남긴다. 텍스트에는 `rich_text` 안의 글자 측정과 배치가 포함된다. 스캔라인 내부의 호출은 스캔라인에만 집계하며 HUD 레이아웃 사전 탐색과 다른 패널 비용은 제외한다.
 - `draw_breakdown.combat_activity`는 **측정 구간 update 직후**의 생존 적 수·양측 투사체 수 평균/최대, 전투 진행·Overdrive 프레임 수와 마지막 적 렌더링 통계를 기록한다. 마지막 렌더링 통계는 전체 평균이 아니다. 적 사망·전투 종료로 부하가 낮아진 구간을 확인한다.
 - 기본 계측에 `update.total`을 추가한다. `--detail`에서 `update.targets`, `update.guns`, `update.hud`, `update.encounter`, `update.enemies.*`, `world.enemies`, `world.gun_effects`를 구분한다. `update.enemies._move`는 다수 적 이동·밀어내기 호출을 포함한다. 중첩 구간은 합산하지 않는다. 준비 프레임과 반복 초기화 내부 호출은 이 구간 집계에서 제외하지만 프레임 작업 시간에는 반복 초기화를 포함한다.
 - 보고서는 p50/p95/p99·최대 프레임 시간, 예산 초과율, 처리 구간, 조건별 각 회차를 표시한다. 병목 확정이나 자동 최적화를 수행하지 않는다. cProfile·상세 계측 결과로 FPS 목표 달성을 확정하지 않고 같은 조건의 기본 계측 실행과 함께 검토한다.

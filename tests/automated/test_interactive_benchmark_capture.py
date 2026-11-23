@@ -99,6 +99,45 @@ class InteractiveCaptureTests(unittest.TestCase):
         trace.finish(row, budget_ms=16.67)
         self.assertEqual(row, {"work_ms": 4})
 
+    def test_dialogue_keeps_nested_text_and_scanline_cost_in_their_parent_phase(self):
+        renderer = SimpleNamespace(text=lambda: None, filtered_polygons=lambda: None)
+        renderer.rich_text = lambda: renderer.text()
+        view = SimpleNamespace(_panel_probe=None, panel_scanlines=lambda: renderer.filtered_polygons())
+
+        def draw_dialogue():
+            renderer.text()
+            renderer.rich_text()
+            renderer.filtered_polygons()
+            view.panel_scanlines()
+
+        view.dialogue = draw_dialogue
+        hud = SimpleNamespace(state=SimpleNamespace(hud=SimpleNamespace(active_loadout_index=0,
+                                                                        active_weapon_kind="ranged")),
+                              view=view, renderer=renderer)
+        probe = RenderBreakdown(SimpleNamespace(hud=hud, guns=[]))
+        self.addCleanup(probe.close)
+        trace = InteractiveFrameTrace(probe, SimpleNamespace(pico=None)).install()
+        with patch("ferrial_drive.diagnostics.render_breakdown.perf_counter_ns",
+                   side_effect=range(0, 100_000_000, 1_000_000)):
+            trace.begin()
+            view.dialogue()
+            fast = {"work_ms": 12}
+            trace.finish(fast, 16.67)
+            trace.begin()
+            renderer.text()
+            view._panel_probe = object()
+            view.dialogue()
+            view._panel_probe = None
+            view.dialogue()
+            slow = {"work_ms": 25}
+            trace.finish(slow, 16.67)
+
+        self.assertNotIn("dialogue_timings_ns", fast)
+        timings = slow["dialogue_timings_ns"]
+        self.assertEqual(timings, {"text": 4_000_000, "filtered_polygons": 1_000_000,
+                                   "scanlines": 3_000_000, "other": 5_000_000})
+        self.assertEqual(sum(timings.values()), slow["function_timings_ns"]["hud.draw.dialogue"][1])
+
     def test_live_combat_phases_only_save_slow_frames_and_keep_nested_paths(self):
         from ferrial_drive.rendering.part_shadow_map import PartShadowMap
         from ferrial_drive.rendering.pico_part_motion import PicoPartMotion

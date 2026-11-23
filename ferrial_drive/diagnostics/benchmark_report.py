@@ -60,6 +60,25 @@ def slow_frame_details(benchmark):
     return lines
 
 
+def dialogue_frame_details(benchmark):
+    rows = sorted((row for row in benchmark.get("frames", ()) if "dialogue_timings_ns" in row),
+                  key=lambda row: (-row["work_ms"], row["frame"]))
+    if not rows:
+        return []
+    lines = ["", "## 느린 프레임의 대화창", "",
+             "대화창 안에서 계측한 포함 시간이다. 본문 배치·글자 측정은 텍스트에 포함한다. "
+             "스캔라인 내부의 호출은 스캔라인에 집계한다.", "",
+             "| 프레임 / 시간 | 작업 ms | 대화창 합계 ms | 텍스트 ms | 필터 폴리곤 ms | 스캔라인 ms | 기타 ms |",
+             "| --- | ---: | ---: | ---: | ---: | ---: | ---: |"]
+    for row in rows:
+        timings = row["dialogue_timings_ns"]
+        phases = " | ".join(number(timings[key] / 1e6) if key in timings else "—"
+                            for key in ("text", "filtered_polygons", "scanlines", "other"))
+        lines.append(f"| {row['frame']} / {number(row['session_ms'] / 1000)}초 | {number(row['work_ms'])} | "
+                     f"{number(sum(timings.values()) / 1e6)} | {phases} |")
+    return lines
+
+
 def live_combat_frames(benchmark):
     return sorted((row for row in benchmark.get("frames", ()) if row.get("live_combat_stacks")),
                   key=lambda row: (-row["work_ms"], row["frame"]))
@@ -143,6 +162,7 @@ def render_report(result, limits=None, *, flamegraph=False):
             values = values or {}
             lines.append("| " + label + " | " + " | ".join(number(values.get(key)) for key in ("mean", "p50", "p95", "p99", "max")) + " |")
         lines += slow_frame_details(benchmark)
+        lines += dialogue_frame_details(benchmark)
         lines += live_combat_frame_details(live_combat_frames(benchmark))
     else:
         lines += ["", "프레임 측정값 없음. 실행 실패를 성능 통과로 판정하지 않는다."]

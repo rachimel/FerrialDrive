@@ -1,5 +1,7 @@
 # 대화 기록의 누락 인덱스
 
+- [대화창 계측과 SDL 큐 제출 경계 검토](2026-11-23-dialogue-timing-flush-review.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-dialogue-timing-flush-review:U1-U2]]`은 요청 시각이다. 검색 단서는 `스캔라인을 따로 계측`과 `RenderFlush를 한번만`이다.
+
 - [Flamegraph 호출 순서와 시간 표](2026-11-23-flamegraph-call-order.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-flamegraph-call-order:U1]]`은 요청 시각이다. 검색 단서는 `스택의 깊이와 실행 순서에 맞게`다.
 
 - [전투 모션의 느린 프레임별 계측](2026-11-23-live-combat-frame-flamegraph.md)의 `[[FDLOG_MISSING_TIME:FDLOG-20261123-live-combat-frame-flamegraph:U1]]`·`[[FDLOG_MISSING_TIME:FDLOG-20261123-live-combat-frame-flamegraph:U2]]`는 요청 시각이다. 검색 단서는 `안에서 포즈 준비`와 `모든 함수 이름이 잘 보이게`다.

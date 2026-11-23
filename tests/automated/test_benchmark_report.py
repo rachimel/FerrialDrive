@@ -20,6 +20,14 @@ class ReportTests(unittest.TestCase):
         self.assertIn("프레임 측정값 없음", report)
         self.assertNotIn("실측 0.00", report)
 
+    def test_dialogue_report_shows_distinct_phases_only_when_captured(self):
+        row = {"frame": 48, "session_ms": 970, "work_ms": 29.17,
+               "dialogue_timings_ns": {"text": 250_000, "filtered_polygons": 3_500_000, "other": 250_000}}
+        report = render_report({"benchmark": {"frames": [row]}})
+        self.assertIn("## 느린 프레임의 대화창", report)
+        self.assertIn("| 48 / 0.97초 | 29.17 | 4.00 | 0.25 | 3.50 | — | 0.25 |", report)
+        self.assertNotIn("## 느린 프레임의 대화창", render_report({"benchmark": {"frames": []}}))
+
     def test_comparisons_keep_each_round_and_missing_gpu(self):
         benchmark = {"observed_fps": 58.25, "completed": False, "target_met": False,
                      "work_ms": {"p95": 21}, "cpu_ms": {"update_ms": {"mean": 4}},

@@ -106,6 +106,15 @@ class RenderBreakdown:
             return measured
         self.replace(target, name, wrap)
 
+    def install_dialogue(self):
+        view, renderer = self.app.hud.view, self.app.hud.renderer
+        for name in ("dialogue", "panel_scanlines"):
+            if callable(getattr(view, name, None)):
+                self.method(view, name, name, skip="no_" + name, hud_phase=True)
+        for name in ("text", "rich_text", "filtered_polygons"):
+            if callable(getattr(renderer, name, None)):
+                self.method(renderer, name, "renderer." + name)
+
     def install(self):
         view = getattr(self.app, "encounter_view", None)
         cached_samples = self.variant in ("deferred_enemy_depth_cached_samples",
@@ -239,11 +248,12 @@ class RenderBreakdown:
         if self.detailed:
             view = app.hud.view
             self.method(view, "prepare_panel_effects", "hud.prepare")
-            for name in ("weapons", "resources", "minimap", "radar", "target", "dialogue", "absorption",
-                         "perspective_counter", "player_health", "ultimate_icon", "panel_scanlines"):
+            for name in ("weapons", "resources", "minimap", "radar", "target", "absorption",
+                         "perspective_counter", "player_health", "ultimate_icon"):
                 self.method(view, name, name, skip="no_"+name, hud_phase=True)
-            for name in ("film_grain", "scanline_layer", "filtered_polygons", "ring", "neon_text", "text"):
+            for name in ("film_grain", "scanline_layer", "ring", "neon_text"):
                 self.method(app.hud.renderer, name, "renderer." + name, skip="no_rings" if name == "ring" else None)
+            self.install_dialogue()
             self._install_sdl_counts(app.pico)
             self._install_hud_submissions(app.hud.renderer)
         self._install_blur(app.hud.renderer)

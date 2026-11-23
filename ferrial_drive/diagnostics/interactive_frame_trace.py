@@ -3,6 +3,15 @@
 from collections import Counter
 
 
+DIALOGUE_SCOPE = "hud.draw.dialogue"
+DIALOGUE_PHASES = {
+    "renderer.text": "text",
+    "renderer.rich_text": "text",
+    "renderer.filtered_polygons": "filtered_polygons",
+    "hud.draw.panel_scanlines": "scanlines",
+}
+
+
 class InteractiveFrameTrace:
     def __init__(self, probe, canvas):
         self.probe, self.canvas = probe, canvas
@@ -11,11 +20,13 @@ class InteractiveFrameTrace:
         self.times, self.events = {}, []
         self.live_combat_root = f"{type(self.app).__name__}.draw_live_combat_motion"
         self.live_combat_stacks = Counter()
+        self.dialogue_ns = Counter()
 
     def begin(self):
         self.times.clear()
         self.events.clear()
         self.live_combat_stacks.clear()
+        self.dialogue_ns.clear()
         self.recording = self.probe.active = True
 
     def timing(self, path, elapsed, own):
@@ -30,6 +41,10 @@ class InteractiveFrameTrace:
                 row[2] += own
             if self.live_combat_root in path:
                 self.live_combat_stacks[path[path.index(self.live_combat_root):]] += own
+            if DIALOGUE_SCOPE in path:
+                children = path[path.index(DIALOGUE_SCOPE) + 1:]
+                phase = next((DIALOGUE_PHASES[label] for label in children if label in DIALOGUE_PHASES), "other")
+                self.dialogue_ns[phase] += own
 
     def stop(self):
         self.recording = self.probe.active = False
@@ -45,6 +60,8 @@ class InteractiveFrameTrace:
                 "loadout_transition": getattr(self.app, "loadout_fade_seconds", 0) > 0 or getattr(slide, "moving", False),
             }
             row["function_timings_ns"] = dict(self.times)
+            if any(phase != "other" for phase in self.dialogue_ns):
+                row["dialogue_timings_ns"] = dict(self.dialogue_ns)
             if any(self.live_combat_stacks.values()):
                 row["flamegraph_order"] = "first_call"
                 row["live_combat_stacks"] = [{"stack": list(path), "self_wall_ns": own}
@@ -60,6 +77,7 @@ class InteractiveFrameTrace:
 
         app, probe = self.app, self.probe
         probe.frame_trace = self
+        probe.install_dialogue()
         groups = (
             (app, ("handle_event", "draw", "draw_scene", "draw_targets", "update_guns",
                    "update_back_weapon", "update_loadout_fade", "draw_back_weapon", "draw_missiles",
@@ -71,8 +89,7 @@ class InteractiveFrameTrace:
             (PartPainter, ("paint",)),
             (getattr(app, "gun_renderer", None), ("draw",)),
             (getattr(app, "sword_renderer", None), ("draw_contacts",)),
-            (app.hud.view, ("weapons", "resources", "radar", "dialogue")),
-            (app.hud.renderer, ("filtered_polygons",)),
+            (app.hud.view, ("weapons", "resources", "radar")),
             (self.canvas, ("present",)),
             (self.canvas.pico, ("SDL_RenderFlush", "SDL_SetRenderTarget")),
         )
