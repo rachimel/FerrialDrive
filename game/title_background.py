@@ -43,7 +43,9 @@ class TitleBackground:
         self.grid = TitleGrid()
         self.elapsed = self.travel = self.energy = 0.0
         self.wave = 1.0
+        self.wave_origin_y = 0.0
         self.hovered = None
+        self.hover_glow = 0.0
         self.bar_pulse = 1.0
         self.bar_button = None
         self.shade = None
@@ -54,16 +56,20 @@ class TitleBackground:
         self.sparks = []
         self.spawn_credit = 0.0
 
-    def update(self, dt, hovered):
+    def update(self, dt, button):
+        hovered = button.button_id if button else None
         if self.hovered and not hovered:
             for spark in self.sparks:
                 spark.fade_at = min(spark.fade_at, self.elapsed)
             self.spawn_credit = 0.0
         if hovered and hovered != self.hovered:
             self.wave = 0.0
+            self.wave_origin_y = button.rect.y + button.rect.height / 2
             self.bar_button = hovered
             self.bar_pulse = 0.0
         self.hovered = hovered
+        glow_rate = 5 if hovered else 3
+        self.hover_glow += (float(bool(hovered)) - self.hover_glow) * (1 - exp(-glow_rate * dt))
         self.wave = min(1, self.wave + dt / .46)
         self.bar_pulse = min(1, self.bar_pulse + dt / .40)
         self.elapsed += dt
@@ -113,6 +119,12 @@ class TitleBackground:
         r.clear("#222429")
         with view.draw_batch():
             self.grid.draw(r, width, height, self.elapsed)
+            if self.hover_glow > .01:
+                glow = r.rgba("#A2D8E6", .12 * self.hover_glow)
+                clear = (*glow[:3], 0)
+                top = height * .82
+                points = ((0, top), (width, top), (width, height), (0, height))
+                r._geometry_polygon(points, glow, colors=(clear, clear, glow, glow))
             surface = ((0, 0), (width, 0), (width, height), (0, height))
             for i, (x, delay, speed, phase) in enumerate(self.particles):
                 progress = self.travel * speed - delay * .36
@@ -135,11 +147,12 @@ class TitleBackground:
                                     size, 3.4, "#C3EDF6", alpha * .76)
             r.scanline_layer(surface, "#000000", .22, scan["spacing_pixels"], scan["thickness_pixels"], 0)
             if self.wave < 1:
-                spread = smooth(self.wave) * height * .53
                 (_, sy), (_, vy, _, _), _, _ = r.draw_transform()
                 band_height = max(2, round(height * sy * .009))
+                reach = max(self.wave_origin_y, height - self.wave_origin_y) + band_height / (2 * sy)
+                spread = smooth(self.wave) * reach
                 for direction in (-1, 1):
-                    top = (height / 2 + direction * spread + vy) * sy - band_height / 2
+                    top = (self.wave_origin_y + direction * spread + vy) * sy - band_height / 2
                     r.scanline_layer(surface, "#FFFFFF", .34 * (1 - self.wave),
                                      scan["spacing_pixels"], scan["thickness_pixels"], 0,
                                      bright_band=(top, band_height))

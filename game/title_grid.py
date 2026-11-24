@@ -7,6 +7,10 @@ from random import Random
 from ferrial_drive.animation import smooth_step
 from ferrial_drive.ui.components import Rect
 
+PULSE_DURATION_SECONDS = (2.8, 3.8)
+PULSE_INTERVAL_SECONDS = (1.15, 1.65)
+PULSE_RISE_END = .36
+PULSE_SHRINK_START = .45
 
 @dataclass
 class CellPulse:
@@ -29,12 +33,13 @@ class TitleGrid:
         if seconds >= self.next_pulse:
             self.pulses.append(CellPulse(floor(self.rng.uniform(.48, .94) * cols - dx),
                                          floor(self.rng.uniform(1, 18) - dy), seconds,
-                                         self.rng.uniform(1.15, 1.65)))
-            self.next_pulse = seconds + self.rng.uniform(.48, .78)
+                                         self.rng.uniform(*PULSE_DURATION_SECONDS)))
+            self.next_pulse = seconds + self.rng.uniform(*PULSE_INTERVAL_SECONDS)
         self.pulses[:] = [p for p in self.pulses if seconds < p.born + p.duration]
 
         ink = "#91B6C7"
         stroke = max(1, height / 850)
+        cross_stroke = 2 * stroke
         fade_left, fade_right = width * .30, width * .65
         def visibility(x):
             return smooth_step((x - fade_left) / (fade_right - fade_left))
@@ -46,8 +51,9 @@ class TitleGrid:
             if col % 8 == 0:
                 for row in range(ceil(-dy / 8) * 8, ceil(19 - dy), 8):
                     y = (row + dy) * cell
-                    r.rect(Rect(x - cell * .085, y, cell * .17, stroke), ink, .60 * alpha)
-                    r.rect(Rect(x, y - cell * .085, stroke, cell * .17), ink, .60 * alpha)
+                    cx, cy = x + stroke / 2, y + stroke / 2
+                    r.rect(Rect(cx - cell * .085, cy - cross_stroke / 2, cell * .17, cross_stroke), ink, .60 * alpha)
+                    r.rect(Rect(cx - cross_stroke / 2, cy - cell * .085, cross_stroke, cell * .17), ink, .60 * alpha)
         for row in range(floor(-dy), ceil(19 - dy)):
             y = (row + dy) * cell
             alpha = .24 if row % 4 == 0 else .105
@@ -57,8 +63,8 @@ class TitleGrid:
             r._geometry_polygon(points, bright, colors=(clear, bright, bright, clear))
         for pulse in self.pulses:
             phase = (seconds - pulse.born) / pulse.duration
-            shrink = smooth_step((phase - .24) / .76)
+            shrink = smooth_step((phase - PULSE_SHRINK_START) / (1 - PULSE_SHRINK_START))
             size = cell * .94 * (1 - shrink)
             x, y = (pulse.column + dx + .5) * cell, (pulse.row + dy + .5) * cell
-            alpha = .35 * smooth_step(phase / .24) * (1 - shrink) * visibility(x)
+            alpha = .35 * smooth_step(phase / PULSE_RISE_END) * (1 - shrink) * visibility(x)
             r.rect(Rect(x - size / 2, y - size / 2, size, size), "#8AC7DC", alpha)

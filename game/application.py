@@ -196,7 +196,8 @@ class GameApplication(EncounterApplication):
             if self.title_background.elapsed == 0 and self.hud.menu_audio:
                 self.title_music.start(self.hud.menu_audio.mixer)
             hovered = None if self.hud.graphics_settings.opened or self.hud.credits_open else self.hud.inputs.hovered_id
-            self.title_background.update(min(delta_seconds, .1), hovered)
+            button = next((b for b in self.hud.config.buttons["menu"] if b.button_id == hovered), None) if hovered else None
+            self.title_background.update(min(delta_seconds, .1), button)
         if self.encounter_view is None:
             self.hud.update(self.controller, min(delta_seconds, 0.1), paused=False, interpolation=False)
             return

@@ -323,7 +323,9 @@ class MenuApplication(MovementApplication):
    menu.update(1)
    self.click(next(b for b in menu.buttons(self.hud.config) if b.action=='texture_medium'))
    self.click(next(b for b in menu.buttons(self.hud.config) if b.action=='settings_save'))
-   assert not menu.opened and self.paused, menu.error
+   assert menu.motion.closing and self.paused, menu.error
+   menu.update(1)
+   assert not menu.opened
    assert self.settings_store.load().texture_quality=='medium'
    assert self.game_settings.texture_quality=='medium'
    assert all(resource.alpha_scale==0.25 for resource in self.sprites if resource.alpha_layers)
@@ -333,7 +335,9 @@ class MenuApplication(MovementApplication):
    self.click(next(b for b in menu.buttons(self.hud.config) if b.action=='upscale_aa_off'))
    assert menu.draft.upscale_aa=='off'
    self.click(next(b for b in menu.buttons(self.hud.config) if b.action=='settings_save'))
-   assert not menu.opened and self.part_sprite is self.previous_parts, menu.error
+   assert menu.motion.closing and self.part_sprite is self.previous_parts, menu.error
+   menu.update(1)
+   assert not menu.opened
    assert self.game_settings.upscale_aa=='off' and self.part_sprite.upscaler.aa_mode=='off'
 app=MenuApplication('samples/sword_movement/movement_config.json',settings_file=settings,report=report,mute=True)
 run_application(app,width=app.window_size[0],height=app.window_size[1],title='Game Settings Save Contract',frame_limit=3)

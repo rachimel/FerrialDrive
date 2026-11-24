@@ -59,6 +59,21 @@ class PopupMotionTests(unittest.TestCase):
         self.assertEqual(menu.motion.opacity, 0)
         self.assertEqual(menu.motion.scale, .97)
 
+    def test_cancel_during_entry_fades_from_current_opacity_and_blocks_repeat_input(self):
+        menu = GraphicsSettingsMenu(GameSettingsStore(ROOT / "output/ui_review/popup_settings.json"))
+        menu.open()
+        menu.update(.08)
+        menu.cancel()
+        self.assertTrue(menu.opened)
+        self.assertAlmostEqual(menu.motion.opacity, .5)
+        menu.update(.04)
+        menu.cancel()
+        self.assertAlmostEqual(menu.motion.opacity, .25)
+        self.assertIsNone(menu.perform("settings_save"))
+        menu.update(.04)
+        self.assertFalse(menu.opened)
+        self.assertEqual(menu.motion.opacity, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

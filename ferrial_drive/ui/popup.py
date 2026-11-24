@@ -20,12 +20,20 @@ class PopupMotion:
     def open(self):
         self.animation = ScalarAnimation(0, 1, self.duration_seconds)
 
+    def close(self):
+        opacity = self.opacity
+        self.animation = ScalarAnimation(opacity, 0, self.duration_seconds * opacity)
+
+    @property
+    def closing(self):
+        return self.animation.start_value > 0 and self.animation.end_value == 0
+
     def update(self, delta_seconds):
         self.animation.update(delta_seconds)
 
     @property
     def entering(self):
-        return not self.animation.finished
+        return self.animation.end_value == 1 and not self.animation.finished
 
     @property
     def opacity(self):

@@ -858,8 +858,9 @@ class HudPreview:
                                  player_screen=self.camera.world_to_screen(self.player_world, include_feedback=False),
                                  minimap_player_position=getattr(self, "map_position", (0.5, 0.5)),
                                  minimap_player_facing=self.minimap_facing())
-        if self.pause.opacity > 0 and not self.graphics_settings.opened:
-            self.view.pause(self.pause.opacity, self.inputs,
+        pause_opacity = self.pause.opacity * (1 - self.graphics_settings.motion.opacity)
+        if pause_opacity > 0:
+            self.view.pause(pause_opacity, self.inputs,
                             scanline_visual=self.scanline_motion.visual,
                             button_visuals=self.pause_hover_motion.visuals)
         if self.graphics_settings.opened:

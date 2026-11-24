@@ -41,15 +41,23 @@ class GraphicsSettingsMenu:
         self.motion.open()
 
     def cancel(self):
+        if self.motion.closing:
+            return
         self.draft = self.saved
-        self.opened = False
         self.error = None
+        self._begin_close()
+
+    def _begin_close(self):
         self.inputs.reset()
-        self.motion.reset()
+        self.motion.close()
+        self.opened = self.motion.closing
 
     def update(self, delta_seconds):
         if self.opened:
             self.motion.update(delta_seconds)
+            if self.motion.closing and self.motion.animation.finished:
+                self.opened = False
+                self.motion.reset()
 
     @property
     def requires_restart(self):
@@ -109,7 +117,7 @@ class GraphicsSettingsMenu:
                                   Rect(panel.x+panel.width-padding-footer_width, footer_y, footer_width, layout["button_height_pixels"])))
 
     def pointer(self, kind, x, y, config):
-        if self.motion.entering:
+        if self.motion.entering or self.motion.closing:
             self.inputs.reset()
             return None
         buttons = self.buttons(config)
@@ -131,6 +139,8 @@ class GraphicsSettingsMenu:
             self.draft = replace(self.draft, texture_quality=action.removeprefix("texture_"))
         elif action in {f"resolution_{w}x{h}" for w, h in SCREEN_RESOLUTIONS}:
             self.draft = replace(self.draft, screen_resolution=tuple(map(int, action.removeprefix("resolution_").split("x"))))
+        if self.motion.closing:
+            return None
         elif action in {f"upscale_aa_{mode}" for mode in UPSCALE_AA_MODES}:
             self.draft = replace(self.draft, upscale_aa=action.removeprefix("upscale_aa_"))
         elif action == "key_hints_toggle":
@@ -159,8 +169,6 @@ class GraphicsSettingsMenu:
             finally:
                 self.applying = False
             self.saved = self.draft
-            self.opened = False
-            self.inputs.reset()
-            self.motion.reset()
+            self._begin_close()
             return "settings_saved"
         return None
