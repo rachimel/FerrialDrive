@@ -1,7 +1,7 @@
 """한국공학대학교와 제작자 이름을 표시하는 본편 시작 화면."""
 
-from ctypes import byref, c_char_p
-from math import cos, pi, sin
+from ctypes import byref, c_char_p, string_at
+from math import cos, pi, sin, sqrt
 from pathlib import Path
 from time import perf_counter, sleep
 
@@ -24,6 +24,7 @@ FINAL_HOLD_SECONDS = 0.10
 FADE_OUT_SECONDS = 0.22
 # 960×540 캡처에서 측정한 기존 좌우 빈칸 27px와 69px의 평균.
 SIGNATURE_GAP = 48
+CROSS_RADIUS = 9
 
 
 def smooth(value):
@@ -38,7 +39,9 @@ class GameSplash:
         self.scale = min(self.width / 960, self.height / 540)
         self.renderer = PicoRenderer({"name": FONT}, {"name": max(1, round(34 * self.scale))})
         self.logo_texture = None
-        self.name_width, self.name_height = self.renderer.text_size("Rachimel", "name")
+        self.name_height = self.renderer.text_size("Rachimel", "name")[1]
+        self.name_inset, self.name_width = self._ink_metrics("Rachimel")
+        self.logo_inset = 0
         if LOGO.is_file():
             try:
                 self._prepare_logo()
@@ -46,8 +49,27 @@ class GameSplash:
                 self.close()
                 raise
         else:
-            self.logo_width = self.renderer.text_size("한국공학대학교", "name")[0]
+            self.logo_inset, self.logo_width = self._ink_metrics("한국공학대학교")
         self.first_present = None
+
+    def _ink_metrics(self, text):
+        """실제 글리프의 왼쪽 여백과 불투명 픽셀이 차지하는 폭을 구한다."""
+        p = self.pico
+        surface = self.renderer._text_surface(text, "name", "#FFFFFF", False, 0, 0)
+        try:
+            rgba = p.SDL_ConvertSurfaceFormat(surface, p.SDL_PIXELFORMAT_RGBA32, 0)
+            if not rgba:
+                raise RuntimeError("스플래시 글자 경계를 읽을 수 없다.")
+            try:
+                src = rgba.contents
+                pixels = string_at(src.pixels, src.pitch * src.h)
+                image = Image.frombytes("RGBA", (src.w, src.h), pixels, "raw", "RGBA", src.pitch)
+                left, _, right, _ = image.getchannel("A").getbbox()
+                return left, right - left
+            finally:
+                p.SDL_FreeSurface(rgba)
+        finally:
+            p.SDL_FreeSurface(surface)
 
     def _prepare_logo(self):
         p = self.pico
@@ -81,11 +103,17 @@ class GameSplash:
         r, s = self.renderer, self.scale
         cx, cy = self.width / 2, self.height / 2
         slide = smooth(elapsed_seconds / SLIDE_SECONDS)
-        # ×의 반폭 7px와 SUITE R의 왼쪽 글리프 여백 2px를 반영한다.
-        gap = round((SIGNATURE_GAP + 7) * s)
-        name_gap = gap - round(2 * s)
+        thickness = max(1, round(2 * s))
+        cross_half = round((CROSS_RADIUS * s + (thickness - 1) / 2) / sqrt(2))
+        gap = round(SIGNATURE_GAP * s)
+        # 조합의 바깥 경계가 화면 중심을 기준으로 대칭이 되도록 기호를 배치한다.
+        # 기호의 중심 픽셀도 한 칸을 차지한다.
+        final_cross_x = round(cx + (self.logo_width - self.name_width - 1) / 2)
+        cross_x = round(cx + slide * (final_cross_x - cx))
+        start_left = cx - self.logo_width / 2
+        end_left = final_cross_x - cross_half - gap - self.logo_width
         opacity = 1 - smooth((elapsed_seconds - SLIDE_SECONDS - FINAL_HOLD_SECONDS) / FADE_OUT_SECONDS)
-        left = cx - self.logo_width / 2 - slide * (self.logo_width / 2 + gap)
+        left = start_left + slide * (end_left - start_left)
         r.clear("#000000")
         if self.logo_texture:
             self.pico.SDL_SetTextureAlphaMod(self.logo_texture, round(255 * opacity))
@@ -93,20 +121,21 @@ class GameSplash:
                                         self.logo_width, self.logo_height)
             self.pico.SDL_RenderCopy(self.pico.renderer, self.logo_texture, None, byref(target))
         else:
-            r.text("한국공학대학교", left, cy - self.name_height / 2, "name", "#FFFFFF", opacity)
+            r.text("한국공학대학교", left - self.logo_inset, cy - self.name_height / 2, "name", "#FFFFFF", opacity)
         turn = smooth((elapsed_seconds - REVEAL_START_SECONDS) / TURN_SECONDS)
-        name_left = cx - self.name_width / 2 + slide * (self.name_width / 2 + name_gap)
+        start_name = cx - self.name_width / 2
+        end_name = final_cross_x + cross_half + 1 + gap
+        name_left = start_name + slide * (end_name - start_name) - self.name_inset
         r.text("Rachimel", name_left, cy - self.name_height / 2, "name", "#FFFFFF", slide * slide * opacity)
         if turn == 0:
             return
         for angle in (turn * pi / 4, turn * pi / 4 + pi / 2):
             dx, dy = cos(angle), sin(angle)
-            thickness = max(1, round(2 * s))
             for i in range(thickness):
                 offset = i - (thickness - 1) / 2
-                x, y = cx - dy * offset, cy + dx * offset
-                r.line(x - dx * 9 * s, y - dy * 9 * s,
-                       x + dx * 9 * s, y + dy * 9 * s, "#FFFFFF", turn * opacity)
+                x, y = cross_x - dy * offset, cy + dx * offset
+                r.line(x - dx * CROSS_RADIUS * s, y - dy * CROSS_RADIUS * s,
+                       x + dx * CROSS_RADIUS * s, y + dy * CROSS_RADIUS * s, "#FFFFFF", turn * opacity)
 
     def show(self, progress, label, *, before_present=None):
         self.poll()
