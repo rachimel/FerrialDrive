@@ -229,8 +229,14 @@ class MovementApplication:
     def path(self, name):
         return (self.config_path.parent / self.style[name]).resolve()
 
+    def create_loading_screen(self, pico, settings):
+        from ferrial_drive.ui.loading import LoadingScreen
+        logo = self.relative_path(settings["logo"])
+        return LoadingScreen(pico, self.window_size, self.path("font"), settings,
+                             logo if logo.is_file() else None)
+
     def enter(self):
-        from ferrial_drive.ui.loading import LoadingScreen, LoadingCancelled
+        from ferrial_drive.ui.loading import LoadingCancelled
         from ferrial_drive.rendering.canvas import apply_output_resolution
         import pico2d.pico2d as pico
         self.pico = pico
@@ -238,9 +244,7 @@ class MovementApplication:
         self.load_started_seconds = perf_counter()
         settings = self.config.get("loading")
         if settings:
-            logo = self.relative_path(settings["logo"])
-            self.loading = LoadingScreen(pico, self.window_size, self.path("font"), settings,
-                                         logo if logo.is_file() else None)
+            self.loading = self.create_loading_screen(pico, settings)
         try:
             self.loading_progress(0, "준비 중")
             self._enter_resources()

@@ -37,6 +37,10 @@ class GameApplication(EncounterApplication):
     debug_controls = False
     reload_on_exit = False
 
+    def create_loading_screen(self, pico, settings):
+        from .splash import GameSplash
+        return GameSplash(pico, self.window_size)
+
     def __init__(self, **options):
         super().__init__(TRAINING_MOVEMENT_CONFIG,
                          encounter_path=GAME_DIRECTORY / "training_encounter.json", **options)
