@@ -11,12 +11,14 @@ from ferrial_drive.ui.pico_renderer import PicoRenderer
 
 
 DATA = Path(__file__).resolve().parents[1] / "data"
-# 한국공학대학교 공식 홈페이지의 투명 흰색 시그니처.
-# https://www.tukorea.ac.kr/sites/tukorea/images/common/logo_w.png
-LOGO = DATA / "runtime/images/ui/tukorea_white.png"
-FONT = DATA / "fonts/SUITE-otf/SUITE-Bold.otf"
+# 공식 벡터의 한·영문 가로 시그니처에서 만든 투명 PNG.
+# https://www.tukorea.ac.kr/sites/tukorea/files/UI/signature.ai
+LOGO = DATA / "runtime/images/ui/tukorea_white_hd.png"
+FONT = DATA / "fonts/SUITE-otf/SUITE-Regular.otf"
 LOGO_HOLD_SECONDS = 0.55
-TURN_SECONDS = 1.15
+SLIDE_SECONDS = 0.70
+REVEAL_START_SECONDS = 0.43
+TURN_SECONDS = 0.28
 FINAL_HOLD_SECONDS = 0.65
 
 
@@ -31,7 +33,10 @@ class GameSplash:
         self.width, self.height = window_size
         self.scale = min(self.width / 960, self.height / 540)
         self.renderer = PicoRenderer({"name": FONT}, {"name": max(1, round(34 * self.scale))})
-        self.name_width, self.name_height = self.renderer.text_size("Rachimel", "name")
+        self.has_logo = LOGO.is_file()
+        self.logo_width = (240 * self.scale if self.has_logo else
+                           self.renderer.text_size("한국공학대학교", "name")[0])
+        self.name_height = self.renderer.text_size("Rachimel", "name")[1]
         self.first_present = None
 
     def poll(self):
@@ -45,17 +50,21 @@ class GameSplash:
                 if native:
                     native.resize_window()
 
-    def draw(self, phase):
+    def draw(self, elapsed_seconds):
         r, s = self.renderer, self.scale
-        cy = self.height / 2
-        left = (self.width - 263 * s - self.name_width) / 2
+        cx, cy = self.width / 2, self.height / 2
+        slide = smooth(elapsed_seconds / SLIDE_SECONDS)
+        gap = 34 * s
+        left = cx - self.logo_width / 2 - slide * (self.logo_width / 2 + gap)
         r.clear("#000000")
-        if LOGO.is_file():
-            r.image(LOGO, Rect(left, cy - 21.5 * s, 195 * s, 43 * s))
+        if self.has_logo:
+            height = self.logo_width * 312 / 1472
+            r.image(LOGO, Rect(left, cy - height / 2, self.logo_width, height))
         else:
             r.text("한국공학대학교", left, cy - self.name_height / 2, "name", "#FFFFFF")
-        turn = smooth(phase)
-        cx = left + 229 * s
+        turn = smooth((elapsed_seconds - REVEAL_START_SECONDS) / TURN_SECONDS)
+        if turn == 0:
+            return
         for angle in (turn * pi / 4, turn * pi / 4 + pi / 2):
             dx, dy = cos(angle), sin(angle)
             thickness = max(1, round(2 * s))
@@ -64,8 +73,7 @@ class GameSplash:
                 x, y = cx - dy * offset, cy + dx * offset
                 r.line(x - dx * 9 * s, y - dy * 9 * s,
                        x + dx * 9 * s, y + dy * 9 * s, "#FFFFFF", turn)
-        r.text("Rachimel", left + 263 * s, cy - self.name_height / 2,
-               "name", "#FFFFFF", smooth((phase - 0.25) / 0.75))
+        r.text("Rachimel", cx + gap, cy - self.name_height / 2, "name", "#FFFFFF", turn)
 
     def show(self, progress, label, *, before_present=None):
         self.poll()
@@ -79,8 +87,8 @@ class GameSplash:
         while True:
             self.poll()
             elapsed = perf_counter() - start
-            self.draw(elapsed / TURN_SECONDS)
-            done = elapsed >= TURN_SECONDS + FINAL_HOLD_SECONDS
+            self.draw(elapsed)
+            done = elapsed >= max(SLIDE_SECONDS, REVEAL_START_SECONDS + TURN_SECONDS) + FINAL_HOLD_SECONDS
             if done and before_present:
                 before_present()
             self.pico.SDL_RenderPresent(self.pico.renderer)
