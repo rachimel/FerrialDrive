@@ -5,8 +5,11 @@ from pathlib import Path
 
 from ferrial_drive.combat.encounter_application import EncounterApplication
 from ferrial_drive.continuation import ContinueSession
+from ferrial_drive.ui.components import Button, Rect
 from ferrial_drive.ui_v2.movement_hud import MovementHud
 from ferrial_drive.ui_v2.title_menu import submenu_buttons
+from .title_background import TitleBackground
+from .splash import smooth
 
 
 GAME_DIRECTORY = Path(__file__).resolve().parent
@@ -18,6 +21,15 @@ class GameHud(MovementHud):
         super().__init__(config_path, preset_path, initial_scene="menu",
                          continuation=ContinueSession(mode="game"), **options)
         title = self.config.data["title_menu"]
+        title["version_label"] = "VER. PRE_DEMO"
+        self.credits_open = False
+        buttons = self.title_menu_motion.base_buttons
+        exit_button = next(button for button in buttons if button.action == "quit")
+        credit = Button("credits", "credits", "CREDIT", exit_button.rect)
+        self.title_menu_motion.base_buttons = tuple(
+            replace(button, rect=button.rect.translated(0, button.rect.height * 1.3))
+            if button is exit_button else button for button in buttons) + (credit,)
+        self.config.buttons["menu"] = self.title_menu_motion.buttons
         for row in title["submenu_buttons"]:
             if row["action"] == "new_game":
                 row["enabled"] = True
@@ -30,6 +42,20 @@ class GameHud(MovementHud):
         super().reset_training()
         self.dialogue_motion.reset(opened=False)
         self.state = replace(self.state, dialogue=None)
+
+    def pointer(self, event, pico, paused):
+        if self.credits_open:
+            if ((event.type == pico.SDL_KEYDOWN and event.key == pico.SDLK_ESCAPE)
+                    or (event.type == pico.SDL_MOUSEBUTTONUP and event.button == pico.SDL_BUTTON_LEFT)):
+                self.credits_open = False
+                self.inputs.reset()
+            return None
+        action = super().pointer(event, pico, paused)
+        if action == "credits":
+            self.credits_open = True
+            self.inputs.reset()
+            return None
+        return action
 
 
 class GameApplication(EncounterApplication):
@@ -46,6 +72,7 @@ class GameApplication(EncounterApplication):
                          encounter_path=GAME_DIRECTORY / "training_encounter.json", **options)
         self.config["hud"]["preset"] = str(GAME_DIRECTORY / "player_hud.json")
         self.grid = False
+        self.title_background = TitleBackground()
 
     def _enter_resources(self):
         self._enter_ui_resources()
@@ -67,6 +94,9 @@ class GameApplication(EncounterApplication):
             self.loading = None
 
     def update(self, delta_seconds):
+        if self.hud.scene == "menu":
+            hovered = None if self.hud.graphics_settings.opened or self.hud.credits_open else self.hud.inputs.hovered_id
+            self.title_background.update(min(delta_seconds, .1), hovered)
         if self.encounter_view is None:
             self.hud.update(self.controller, min(delta_seconds, 0.1), paused=False, interpolation=False)
             return
@@ -99,7 +129,18 @@ class GameApplication(EncounterApplication):
 
     def draw_scene(self, *, preview_due=False):
         if self.hud.scene == "menu" and not self.hud.transition.active:
-            self.hud.view.background()
-            self.hud.draw(self.mouse, None)
+            w, h = self.window_size
+            self.title_background.draw(self.hud.view, w, h)
+            if self.hud.credits_open:
+                self.renderer.rect(Rect(0, 0, w, h), "#121419", .87)
+                self.renderer.text("CREDIT", w / 2, h * .35, "title_menu", "#FFFFFF", align="center")
+                self.renderer.text("Atlas — Prismatic Tone", w / 2, h * .49, "title_menu", "#FFFFFF", align="center")
+                self.renderer.text("클릭 또는 Esc로 돌아가기", w / 2, h * .64,
+                                   "title_version", "#C4CCD0", align="center")
+            else:
+                self.hud.draw(self.mouse, None)
+            fade = 1 - smooth(self.title_background.elapsed / .70)
+            if fade > 0:
+                self.renderer.rect(Rect(0, 0, w, h), "#000000", fade)
             return 0, 0, None
         return super().draw_scene(preview_due=preview_due)

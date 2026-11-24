@@ -16,6 +16,7 @@ DATA = Path(__file__).resolve().parents[1] / "data"
 # https://www.tukorea.ac.kr/sites/tukorea/files/UI/signature.ai
 LOGO = DATA / "runtime/images/ui/tukorea_white_hd.png"
 FONT = DATA / "fonts/SUITE-otf/SUITE-Regular.otf"
+LIGHT_FONT = FONT.with_name("SUITE-Light.otf")
 LOGO_HOLD_SECONDS = 0.15
 SLIDE_SECONDS = 0.50
 CROSS_FADE_START_SECONDS = 0.18
@@ -25,6 +26,8 @@ NAME_FADE_SECONDS = 0.75
 FINAL_HOLD_SECONDS = 0.10
 FADE_OUT_SECONDS = 0.22
 FADE_OUT_START_SECONDS = max(SLIDE_SECONDS, TURN_START_SECONDS + NAME_FADE_SECONDS) + FINAL_HOLD_SECONDS
+PROJECT_START_SECONDS = FADE_OUT_START_SECONDS + FADE_OUT_SECONDS
+PROJECT_SECONDS = 1.35
 # 960×540 캡처에서 측정한 기존 좌우 빈칸 27px와 69px의 평균.
 SIGNATURE_GAP = 48
 CROSS_RADIUS = 13
@@ -40,7 +43,9 @@ class GameSplash:
         self.pico = pico
         self.width, self.height = window_size
         self.scale = min(self.width / 960, self.height / 540)
-        self.renderer = PicoRenderer({"name": FONT}, {"name": max(1, round(34 * self.scale))})
+        self.renderer = PicoRenderer({"name": FONT, "project": LIGHT_FONT},
+                                    {"name": max(1, round(34 * self.scale)),
+                                     "project": max(1, round(24 * self.scale))})
         self.logo_texture = None
         self.name_height = self.renderer.text_size("Rachimel", "name")[1]
         self.name_inset, self.name_width = self._ink_metrics("Rachimel")
@@ -105,6 +110,16 @@ class GameSplash:
     def draw(self, elapsed_seconds):
         r, s = self.renderer, self.scale
         cx, cy = self.width / 2, self.height / 2
+        if elapsed_seconds >= PROJECT_START_SECONDS:
+            elapsed = elapsed_seconds - PROJECT_START_SECONDS
+            opacity = smooth(elapsed / .28) * smooth((PROJECT_SECONDS - elapsed) / .30)
+            label = "2D Game Programming PROJECT"
+            tracking = max(1, round(4 * s))
+            height = r.text_size(label, "project")[1]
+            r.clear("#000000")
+            r.text(label, cx, cy - height / 2, "project", "#FFFFFF", opacity,
+                   align="center", letter_spacing_pixels=tracking)
+            return
         slide = smooth(elapsed_seconds / SLIDE_SECONDS)
         thickness = max(1, round(2 * s))
         cross_half = round((CROSS_RADIUS * s + (thickness - 1) / 2) / sqrt(2))
@@ -155,7 +170,7 @@ class GameSplash:
             self.poll()
             elapsed = perf_counter() - start
             self.draw(elapsed)
-            done = elapsed >= FADE_OUT_START_SECONDS + FADE_OUT_SECONDS
+            done = elapsed >= PROJECT_START_SECONDS + PROJECT_SECONDS
             if done and before_present:
                 before_present()
             self.pico.SDL_RenderPresent(self.pico.renderer)
