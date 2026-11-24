@@ -7,6 +7,7 @@ from time import perf_counter, sleep
 
 from PIL import Image
 
+from ferrial_drive.animation import ease_in_out_quint
 from ferrial_drive.ui.components import Rect
 from ferrial_drive.ui.loading import LoadingCancelled
 from ferrial_drive.ui.pico_renderer import PicoRenderer
@@ -29,6 +30,7 @@ FADE_OUT_SECONDS = 2.00
 FADE_OUT_START_SECONDS = max(SLIDE_SECONDS, TURN_START_SECONDS + NAME_FADE_SECONDS) + FINAL_HOLD_SECONDS
 PROJECT_START_SECONDS = FADE_OUT_START_SECONDS + FADE_OUT_SECONDS
 PROJECT_SECONDS = 1.35
+PROJECT_FADE_OUT_SECONDS = 1.0
 PROJECT_LABEL = "2D Game Programming PROJECT"
 # 960×540 캡처에서 측정한 기존 좌우 빈칸 27px와 69px의 평균.
 SIGNATURE_GAP = 48
@@ -121,8 +123,8 @@ class GameSplash:
         cx, cy = self.width / 2, self.height / 2
         if elapsed_seconds >= PROJECT_START_SECONDS:
             elapsed = elapsed_seconds - PROJECT_START_SECONDS
-            opacity = smooth(elapsed / .28) * smooth((PROJECT_SECONDS - elapsed) / .30)
-            tracking = (2 + 9 * smooth(elapsed / PROJECT_SECONDS)) * s
+            opacity = smooth(elapsed / .28) * smooth((PROJECT_SECONDS - elapsed) / PROJECT_FADE_OUT_SECONDS)
+            tracking = (2 + 9 * ease_in_out_quint(elapsed / PROJECT_SECONDS)) * s
             left = cx - (self.project_width + (len(PROJECT_LABEL) - 1) * tracking) / 2
             r.clear("#000000")
             for index, char, offset in self.project_glyphs:
