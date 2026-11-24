@@ -20,6 +20,23 @@ class HoverSpark:
     fade_at: float
 
 
+def draw_drifting_spark(renderer, width, height, origin, rise, launch, wind, curl,
+                        size, length, color, alpha):
+    # 세로 속도는 서서히 줄고, 가로 속도는 발사 방향에서 바람 방향으로 이어진다.
+    bend = rise * (1 - rise)
+    drift = launch * rise + (wind - launch) * rise * rise / 2
+    x = width * (origin + drift + curl * bend * rise)
+    y = height * (1 - rise * (1.24 - .24 * rise))
+    vx = width * (launch + (wind - launch) * rise + curl * rise * (2 - 3 * rise))
+    vy = -height * (1.24 - .48 * rise)
+    step = size / hypot(vx, vy)
+    dx, dy = vx * step, vy * step
+    tx, ty = x - dx * length, y - dy * length
+    points = ((x - dy / 2, y + dx / 2), (x + dy / 2, y - dx / 2),
+              (tx + dy / 3, ty - dx / 3), (tx - dy / 3, ty + dx / 3))
+    renderer._geometry_polygon(points, renderer.rgba(color, alpha))
+
+
 class TitleBackground:
     def __init__(self):
         self.elapsed = self.travel = self.energy = 0.0
@@ -93,34 +110,29 @@ class TitleBackground:
         scan = view.style["panel_scanlines"]
         r.clear("#222429")
         with view.draw_batch():
+            surface = ((0, 0), (width, 0), (width, height), (0, height))
             for i, (x, delay, speed, phase) in enumerate(self.particles):
                 progress = self.travel * speed - delay * .36
                 if progress < 0:
                     continue
                 rise = progress % 1
-                px = x + .025 * (sin(phase + rise * 5) - sin(phase)) + .04 * rise
-                py = 1 - rise
+                wind = .20 * sin(tau * x + .8 * int(progress))
                 alpha = (.32 + .44 * self.energy) * speed * smooth(rise / .035) * smooth((1 - rise) / .25)
                 size = max(1, height * .0015 * speed)
                 color = "#B5EBF4" if i % 4 == 0 else "#D8E0E7"
-                r.rect(Rect(px * width, py * height, size, size * (1.8 + self.energy * 4)), color, alpha)
+                draw_drifting_spark(r, width, height, x, rise, .08 * cos(phase), wind,
+                                    .30 * sin(phase), size, 1.8 + self.energy * 4, color, alpha)
             for spark in self.sparks:
                 age = self.elapsed - spark.born
-                phase = spark.phase + age * 4
-                x = (spark.x + age * spark.drift + .028 * (sin(phase) - sin(spark.phase))) * width
-                y = (1 - age * spark.speed) * height
+                wind = .42 * sin(tau * spark.x + .48 * spark.born)
                 alpha = smooth(age / .09) * (1 - smooth((self.elapsed - spark.fade_at) / .9))
                 size = max(1, height * .0018)
-                vx, vy = width * (spark.drift + .112 * cos(phase)), -height * spark.speed
-                step = size / hypot(vx, vy)
-                dx, dy = vx * step, vy * step
-                tail_x, tail_y = x - 3.4 * dx, y - 3.4 * dy
-                points = ((x - dy/2, y + dx/2), (x + dy/2, y - dx/2),
-                          (tail_x + dy/2, tail_y - dx/2), (tail_x - dy/2, tail_y + dx/2))
-                r._geometry_polygon(points, r.rgba("#C3EDF6", alpha * .76))
+                draw_drifting_spark(r, width, height, spark.x, age * spark.speed,
+                                    spark.drift / spark.speed, wind, .55 * sin(spark.phase),
+                                    size, 3.4, "#C3EDF6", alpha * .76)
+            r.scanline_layer(surface, "#000000", .22, scan["spacing_pixels"], scan["thickness_pixels"], 0)
             if self.wave < 1:
                 spread = smooth(self.wave) * height * .53
-                surface = ((0, 0), (width, 0), (width, height), (0, height))
                 (_, sy), (_, vy, _, _), _, _ = r.draw_transform()
                 band_height = max(2, round(height * sy * .009))
                 for direction in (-1, 1):
@@ -128,10 +140,6 @@ class TitleBackground:
                     r.scanline_layer(surface, "#FFFFFF", .34 * (1 - self.wave),
                                      scan["spacing_pixels"], scan["thickness_pixels"], 0,
                                      bright_band=(top, band_height))
-        p = r.pico
-        if self.shade is None:
-            self._prepare_shade(p)
-        p.SDL_RenderCopy(p.renderer, self.shade, None, None)
         if self.bar_pulse < 1:
             button = next((b for b in view.config.buttons["menu"] if b.button_id == self.bar_button), None)
             if button:
@@ -149,13 +157,14 @@ class TitleBackground:
                     r.scanline_layer(points, "#DBEAF1", strength / 360,
                                      scan["spacing_pixels"], scan["thickness_pixels"],
                                      round(self.bar_pulse * scan["spacing_pixels"]))
+        p = r.pico
+        if self.shade is None:
+            self._prepare_shade(p)
+        p.SDL_RenderCopy(p.renderer, self.shade, None, None)
 
     def draw_overlay(self, view, width, height):
         r = view.renderer
-        scan = view.style["panel_scanlines"]
-        surface = ((0, 0), (width, 0), (width, height), (0, height))
         with view.draw_batch():
-            r.scanline_layer(surface, "#000000", .22, scan["spacing_pixels"], scan["thickness_pixels"], 0)
             opening = ease_in_quad(self.elapsed / .52)
             if opening < 1:
                 edge = height * .5 * (1 - opening)
