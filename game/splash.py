@@ -18,13 +18,14 @@ LOGO = DATA / "runtime/images/ui/tukorea_white_hd.png"
 FONT = DATA / "fonts/SUITE-otf/SUITE-Regular.otf"
 LOGO_HOLD_SECONDS = 0.15
 SLIDE_SECONDS = 0.50
-REVEAL_START_SECONDS = 0.16
-TURN_SECONDS = 0.28
+CROSS_FADE_START_SECONDS = 0.18
+CROSS_FADE_SECONDS = 0.07
+TURN_START_SECONDS = 0.26
 FINAL_HOLD_SECONDS = 0.10
 FADE_OUT_SECONDS = 0.22
 # 960×540 캡처에서 측정한 기존 좌우 빈칸 27px와 69px의 평균.
 SIGNATURE_GAP = 48
-CROSS_RADIUS = 9
+CROSS_RADIUS = 13
 
 
 def smooth(value):
@@ -122,12 +123,13 @@ class GameSplash:
             self.pico.SDL_RenderCopy(self.pico.renderer, self.logo_texture, None, byref(target))
         else:
             r.text("한국공학대학교", left - self.logo_inset, cy - self.name_height / 2, "name", "#FFFFFF", opacity)
-        turn = smooth((elapsed_seconds - REVEAL_START_SECONDS) / TURN_SECONDS)
+        turn = smooth((elapsed_seconds - TURN_START_SECONDS) / (SLIDE_SECONDS - TURN_START_SECONDS))
+        cross_opacity = smooth((elapsed_seconds - CROSS_FADE_START_SECONDS) / CROSS_FADE_SECONDS)
         start_name = cx - self.name_width / 2
         end_name = final_cross_x + cross_half + 1 + gap
         name_left = start_name + slide * (end_name - start_name) - self.name_inset
-        r.text("Rachimel", name_left, cy - self.name_height / 2, "name", "#FFFFFF", slide * slide * opacity)
-        if turn == 0:
+        r.text("Rachimel", name_left, cy - self.name_height / 2, "name", "#FFFFFF", turn * opacity)
+        if cross_opacity == 0:
             return
         for angle in (turn * pi / 4, turn * pi / 4 + pi / 2):
             dx, dy = cos(angle), sin(angle)
@@ -135,7 +137,7 @@ class GameSplash:
                 offset = i - (thickness - 1) / 2
                 x, y = cross_x - dy * offset, cy + dx * offset
                 r.line(x - dx * CROSS_RADIUS * s, y - dy * CROSS_RADIUS * s,
-                       x + dx * CROSS_RADIUS * s, y + dy * CROSS_RADIUS * s, "#FFFFFF", turn * opacity)
+                       x + dx * CROSS_RADIUS * s, y + dy * CROSS_RADIUS * s, "#FFFFFF", cross_opacity * opacity)
 
     def show(self, progress, label, *, before_present=None):
         self.poll()
