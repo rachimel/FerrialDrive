@@ -2,10 +2,14 @@
 
 from dataclasses import replace
 from pathlib import Path
+from time import perf_counter, sleep
 
 from ferrial_drive.combat.encounter_application import EncounterApplication
 from ferrial_drive.continuation import ContinueSession
 from ferrial_drive.ui.components import Button, Rect
+from ferrial_drive.animation import smooth_step
+from ferrial_drive.runtime import poll_events
+from ferrial_drive.ui.loading import LoadingCancelled
 from ferrial_drive.ui_v2.movement_hud import MovementHud
 from ferrial_drive.ui_v2.title_menu import submenu_buttons
 from .title_background import TitleBackground
@@ -14,6 +18,7 @@ from .title_music import TitleMusic
 
 GAME_DIRECTORY = Path(__file__).resolve().parent
 TRAINING_MOVEMENT_CONFIG = GAME_DIRECTORY.parent / "samples/sword_movement/movement_config.json"
+EXIT_FADE_SECONDS = 0.5
 
 
 class GameHud(MovementHud):
@@ -87,6 +92,7 @@ class GameApplication(EncounterApplication):
         self.grid = False
         self.title_background = TitleBackground()
         self.title_music = TitleMusic()
+        self.exit_fade_started = False
 
     def _enter_resources(self):
         self._enter_ui_resources()
@@ -97,19 +103,52 @@ class GameApplication(EncounterApplication):
                 volume=self.effects_volume(self.game_settings), channels=8, warn_missing_files=False)
         self.draw_scene()
 
+    def _fade_to_black(self, draw_frame, renderer):
+        self.exit_fade_started = True
+        screen = Rect(0, 0, *self.window_size)
+        start = perf_counter()
+        while True:
+            for _ in poll_events(self.pico):
+                pass
+            opacity = smooth_step((perf_counter() - start) / EXIT_FADE_SECONDS)
+            if opacity < 1:
+                draw_frame()
+                renderer.rect(screen, "#000000", opacity)
+            else:
+                renderer.clear("#000000")
+            self.pico.SDL_RenderPresent(self.pico.renderer)
+            if opacity >= 1:
+                return
+            sleep(1 / 60)
+
+    def loading_progress(self, progress, label):
+        try:
+            super().loading_progress(progress, label)
+        except LoadingCancelled:
+            self._fade_to_black(self.loading.draw_last, self.loading.renderer)
+            raise
+
     def exit(self):
-        self.title_music.close()
-        if self.hud and self.hud.menu_audio:
-            self.hud.menu_audio.close()
-        if self.title_background.shade:
-            self.title_background.close(self.pico)
-        super().exit()
+        try:
+            if not self.reload_on_exit:
+                if self.combat_collection:
+                    self.combat_collection.make_screen = None
+                if not self.running and not self.exit_fade_started and self.renderer:
+                    self._fade_to_black(self.draw, self.renderer)
+        finally:
+            try:
+                self.title_music.close()
+                if self.hud and self.hud.menu_audio:
+                    self.hud.menu_audio.close()
+                if self.title_background.shade:
+                    self.title_background.close(self.pico)
+            finally:
+                super().exit()
 
     def _prepare_encounter(self):
         if self.encounter_view is not None:
             return
         self.title_music.close()
-        from ferrial_drive.ui.loading import LoadingCancelled
         self.loading = super().create_loading_screen(self.pico, self.config["loading"])
         try:
             self.loading_progress(0, "교전 준비")

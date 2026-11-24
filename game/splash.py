@@ -70,6 +70,7 @@ class GameSplash:
         else:
             self.logo_inset, self.logo_width = self._ink_metrics("한국공학대학교")
         self.first_present = None
+        self.last_elapsed = 0.0
 
     def _ink_metrics(self, text):
         """실제 글리프의 왼쪽 여백과 불투명 픽셀이 차지하는 폭을 구한다."""
@@ -110,7 +111,8 @@ class GameSplash:
     def poll(self):
         event = self.pico.SDL_Event()
         while self.pico.SDL_PollEvent(byref(event)):
-            if event.type == self.pico.SDL_QUIT:
+            if (event.type == self.pico.SDL_QUIT or
+                    (event.type == self.pico.SDL_KEYDOWN and event.key.keysym.sym == self.pico.SDLK_F10)):
                 raise LoadingCancelled()
             if (event.type == self.pico.SDL_WINDOWEVENT
                     and event.window.event == self.pico.SDL_WINDOWEVENT_SIZE_CHANGED):
@@ -119,6 +121,7 @@ class GameSplash:
                     native.resize_window()
 
     def draw(self, elapsed_seconds):
+        self.last_elapsed = elapsed_seconds
         r, s = self.renderer, self.scale
         cx, cy = self.width / 2, self.height / 2
         if elapsed_seconds >= PROJECT_START_SECONDS:
@@ -171,6 +174,9 @@ class GameSplash:
                 x, y = cross_x - dy * offset, cy + dx * offset
                 r.line(x - dx * CROSS_RADIUS * s, y - dy * CROSS_RADIUS * s,
                        x + dx * CROSS_RADIUS * s, y + dy * CROSS_RADIUS * s, "#FFFFFF", cross_opacity * opacity)
+
+    def draw_last(self):
+        self.draw(self.last_elapsed)
 
     def show(self, progress, label, *, before_present=None):
         self.poll()

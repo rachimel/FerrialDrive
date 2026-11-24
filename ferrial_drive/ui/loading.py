@@ -1,9 +1,13 @@
 """현재 Pico2D 창의 로고·실제 로딩 단계 표시. 창과 게임 실행 루프는 소유하지 않는다."""
 
 from ctypes import byref
+from time import perf_counter
 
 from .components import Rect
 from .pico_renderer import PicoRenderer
+
+
+MIN_PRESENT_INTERVAL_SECONDS = 1 / 30
 
 
 class LoadingCancelled(Exception):
@@ -15,14 +19,29 @@ class LoadingScreen:
         self.pico, self.window_size, self.settings, self.logo = pico, window_size, settings, logo
         self.renderer = PicoRenderer({"body": font}, {"body": settings["font_size"]})
         self.progress = 0
+        self.last_label = None
+        self.next_present_seconds = 0.0
 
     def show(self, progress, label, *, before_present=None):
-        p, r, settings = self.pico, self.renderer, self.settings
+        p = self.pico
         event = p.SDL_Event()
         while p.SDL_PollEvent(byref(event)):
-            if event.type == p.SDL_QUIT:
+            if event.type == p.SDL_QUIT or (event.type == p.SDL_KEYDOWN and event.key.keysym.sym == p.SDLK_F10):
                 raise LoadingCancelled()
         self.progress = max(self.progress, min(1, max(0, progress)))
+        now = perf_counter()
+        if (label == self.last_label and self.progress < 1 and before_present is None
+                and now < self.next_present_seconds):
+            return
+        self.last_label = label
+        self.next_present_seconds = now + MIN_PRESENT_INTERVAL_SECONDS
+        self.draw_last()
+        if before_present is not None:
+            before_present()
+        p.SDL_RenderPresent(p.renderer)
+
+    def draw_last(self):
+        r, settings = self.renderer, self.settings
         width, height = self.window_size
         r.clear(settings["background"])
         logo_width = min(settings["logo_width"], width * 0.7)
@@ -39,10 +58,7 @@ class LoadingScreen:
         r.rect(Rect(left, top, bar_width * self.progress, settings["bar_height"]), settings["accent"])
         r.text("LOADING", left, top - 34, "body", settings["text"])
         r.text(f"{round(self.progress * 100):02d}%", left + bar_width, top - 34, "body", settings["accent"], align="right")
-        r.text(label, width / 2, top + 24, "body", settings["muted"], align="center")
-        if before_present is not None:
-            before_present()
-        p.SDL_RenderPresent(p.renderer)
+        r.text(self.last_label or "", width / 2, top + 24, "body", settings["muted"], align="center")
 
     def close(self):
         self.renderer.close()
