@@ -24,7 +24,11 @@ class GameSettings:
     effects_volume_percent: int = 100
     upscale_aa: str = DEFAULT_UPSCALE_AA
 
+    language: str = "en"
+
     def __post_init__(self):
+        if self.language not in ("en", "ko"):
+            raise ValueError("지원 언어는 en 또는 ko다.")
         if self.texture_quality not in TEXTURE_QUALITY_SCALES:
             raise ValueError("텍스처 품질은 high/medium/low 중 하나다.")
         if type(self.show_key_hints) is not bool:
@@ -73,7 +77,8 @@ class GameSettingsStore:
         return GameSettings(data["graphics"].get("texture_quality", DEFAULT_TEXTURE_QUALITY),
                             data.get("interface", {}).get("show_key_hints", True), resolution,
                             data.get("audio", {}).get("effects_volume_percent", 100),
-                            data["graphics"].get("upscale_aa", DEFAULT_UPSCALE_AA))
+                            data["graphics"].get("upscale_aa", DEFAULT_UPSCALE_AA),
+                            language=data.get("interface", {}).get("language", "en"))
 
     def save(self, settings):
         if not isinstance(settings, GameSettings):
@@ -83,6 +88,7 @@ class GameSettingsStore:
         data["graphics"]["screen_resolution"] = settings.screen_resolution
         data["graphics"]["upscale_aa"] = settings.upscale_aa
         data.setdefault("interface", {})["show_key_hints"] = settings.show_key_hints
+        data["interface"]["language"] = settings.language
         data.setdefault("audio", {})["effects_volume_percent"] = settings.effects_volume_percent
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary = None

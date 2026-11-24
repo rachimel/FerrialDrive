@@ -91,6 +91,10 @@ def run_application(program, *, width=None, height=None, title, frames_per_secon
                 if frame_limit <= 0:
                     break
             program = factory()
+            on_reload = getattr(program, "on_reload", None)
+            if on_reload:
+                on_reload()
+            del on_reload
 
 
 def _run_frames(program, canvas, frames_per_second, frame_limit, timings):

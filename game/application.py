@@ -43,9 +43,25 @@ class GameHud(MovementHud):
             if row["action"] == "new_game":
                 row["enabled"] = True
         self.title_menu_motion.submenu = submenu_buttons(title)
-        self.config.buttons["pause"] = tuple(
-            replace(button, label="게임 종료") if button.action == "quit" else button
-            for button in self.config.buttons["pause"])
+        layout = self.config.data["graphics_settings"]
+        layout["language_selection"] = True
+        self.korean_settings_labels = layout["labels"].copy()
+        self.apply_language(self.graphics_settings.saved.language)
+
+    def apply_language(self, language):
+        from .menu_language import ENGLISH_SETTINGS, MENU_LABELS
+        text = MENU_LABELS[language]
+        self.config.labels["pause_heading"] = text["pause"]
+        layout = self.config.data["graphics_settings"]
+        layout["labels"] = (self.korean_settings_labels | ENGLISH_SETTINGS
+                            if language == "en" else self.korean_settings_labels.copy())
+        self.config.buttons["pause"] = tuple(replace(b, label=text[b.action]) for b in self.config.buttons["pause"])
+        motion = self.title_menu_motion
+        motion.base_buttons = tuple(replace(b, label=text[b.action]) for b in motion.base_buttons)
+        for row in motion.settings["submenu_buttons"]:
+            row["label"] = text[row["action"]]
+        motion.submenu = submenu_buttons(motion.settings)
+        self.config.buttons["menu"] = motion.buttons
 
     def reset_training(self):
         super().reset_training()
@@ -62,6 +78,8 @@ class GameHud(MovementHud):
         title_input = self.scene == "menu" and not self.graphics_settings.opened
         previous_hover = self.inputs.hovered_id
         action = super().pointer(event, pico, paused)
+        if action == "settings_saved":
+            self.apply_language(self.graphics_settings.saved.language)
         if title_input and action:
             self.entry_sound_pending = action in ("new_game", "continue", "load")
         if title_input and self.menu_audio:
@@ -82,6 +100,8 @@ class GameApplication(EncounterApplication):
     reload_on_exit = False
 
     def create_loading_screen(self, pico, settings):
+        if self.skip_splash:
+            return None
         from .splash import GameSplash
         return GameSplash(pico, self.window_size)
 
@@ -93,6 +113,10 @@ class GameApplication(EncounterApplication):
         self.title_background = TitleBackground()
         self.title_music = TitleMusic()
         self.exit_fade_started = False
+        self.skip_splash = False
+
+    def on_reload(self):
+        self.skip_splash = True
 
     def _enter_resources(self):
         self._enter_ui_resources()
@@ -201,6 +225,7 @@ class GameApplication(EncounterApplication):
         if self.hud.scene == "combat" and self.encounter_view is None and self.running:
             self._prepare_encounter()
         if self.combat_collection and was_in_combat and self.hud.scene == "menu":
+            self.combat_collection.make_screen = None
             self.reload_on_exit = True
             self.running = False
 
@@ -213,7 +238,8 @@ class GameApplication(EncounterApplication):
                 self.renderer.text("CREDIT", w / 2, h * .35, "title_menu", "#FFFFFF", align="center")
                 self.renderer.text("Atlas — Prismatic Tone", w / 2, h * .49, "title_menu", "#FFFFFF", align="center")
                 self.renderer.text("UI Sound Effects — OtoLogic", w / 2, h * .56, "title_version", "#FFFFFF", align="center")
-                self.renderer.text("클릭 또는 Esc로 돌아가기", w / 2, h * .64,
+                back = "Click or press Esc to return" if self.game_settings.language == "en" else "클릭 또는 Esc로 돌아가기"
+                self.renderer.text(back, w / 2, h * .64,
                                    "title_version", "#C4CCD0", align="center")
             else:
                 self.hud.draw(self.mouse, None)

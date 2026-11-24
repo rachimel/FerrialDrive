@@ -97,7 +97,13 @@ class GraphicsSettingsMenu:
                              Rect(panel.x + padding + content_width * .36,
                                   panel.y + layout["effects_volume_row_y_pixels"],
                                   content_width * .51, layout["button_height_pixels"])),)
-        return choices + resolutions + aa_choices + (hint,) + volume + (Button("settings_cancel", "settings_cancel", labels["cancel"],
+        languages = ()
+        if layout.get("language_selection"):
+            languages = tuple(Button("language_" + code, "language_" + code,
+                                     f"[{name}]" if self.draft.language == code else name,
+                                     Rect(panel.x + panel.width - padding - (2-i)*132, panel.y + 17, 124, 50))
+                              for i, (code, name) in enumerate((("en", "English"), ("ko", "한국어"))))
+        return languages + choices + resolutions + aa_choices + (hint,) + volume + (Button("settings_cancel", "settings_cancel", labels["cancel"],
                                   Rect(panel.x+padding, footer_y, footer_width, layout["button_height_pixels"])),
                           Button("settings_save", "settings_save", labels["save"],
                                   Rect(panel.x+panel.width-padding-footer_width, footer_y, footer_width, layout["button_height_pixels"])))
@@ -119,7 +125,9 @@ class GraphicsSettingsMenu:
         return None
 
     def perform(self, action):
-        if action in ("texture_high", "texture_medium", "texture_low"):
+        if action in ("language_en", "language_ko"):
+            self.draft = replace(self.draft, language=action.removeprefix("language_"))
+        elif action in ("texture_high", "texture_medium", "texture_low"):
             self.draft = replace(self.draft, texture_quality=action.removeprefix("texture_"))
         elif action in {f"resolution_{w}x{h}" for w, h in SCREEN_RESOLUTIONS}:
             self.draft = replace(self.draft, screen_resolution=tuple(map(int, action.removeprefix("resolution_").split("x"))))
