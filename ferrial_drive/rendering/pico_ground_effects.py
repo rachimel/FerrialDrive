@@ -3,6 +3,7 @@
 import json
 from ctypes import byref
 from contextlib import nullcontext
+from functools import lru_cache
 from math import cos, sin
 from pathlib import Path
 
@@ -11,6 +12,11 @@ from .ground_effect_batch import GroundEffectBatch
 
 
 from .ground_effect_shaders import VERTEX_SHADER, FRAGMENT_SHADER
+
+
+@lru_cache(maxsize=64)
+def _particle_rgb(color):
+    return tuple(int(color[i:i + 2], 16) / 255 for i in (1, 3, 5))
 
 
 class PicoGroundEffects:
@@ -124,12 +130,14 @@ class PicoGroundEffects:
                     width, height = width + padding * 2, height + padding * 2
                 age = particle.age_seconds
                 progress = age / particle.lifetime_seconds
-                point = tuple(p + v * age for p, v in zip(particle.position, particle.velocity))
-                point = (point[0], point[1] + 0.5 * particle.gravity * age * age)
+                px, py = particle.position
+                vx, vy = particle.velocity
+                point = (px + vx * age, py + vy * age + 0.5 * particle.gravity * age * age)
                 cx, cy = camera.world_to_screen(point)
                 growth = 1 + progress * particle.growth
                 zoom = camera.zoom
-                w, h = (value * growth * zoom for value in particle.size)
+                w, h = particle.size
+                w, h = w * growth * zoom, h * growth * zoom
                 if particle.kind == "foot_friction":
                     w, h = w * width / original_width, h * height / original_height
                 if particle.kind in ("trail", "trail_echo"):
@@ -146,7 +154,9 @@ class PicoGroundEffects:
                     if not foreground and distance + radius < effects.near_front_pixels * zoom:
                         continue
                 destination_values = (round(cx - w / 2), round(cy - h / 2), max(1, round(w)), max(1, round(h)))
-                color = tuple(int(particle.color[i:i + 2], 16) / 255 * particle.brightness for i in (1, 3, 5))
+                red, green, blue = _particle_rgb(particle.color)
+                brightness = particle.brightness
+                color = red * brightness, green * brightness, blue * brightness
                 fade = max(0, 1 if particle.kind in ("trail", "trail_echo") else 1 - progress)
                 depth_mode = (2 if foreground else 1) if spatial_split else 0
                 head_feather = 0.14 if particle.emitter.startswith("back") else 0.04
