@@ -8,6 +8,7 @@ from random import Random
 from ferrial_drive.animation import ease_in_quad
 from ferrial_drive.ui.components import Rect
 from .splash import smooth
+from .title_grid import TitleGrid
 
 
 @dataclass
@@ -39,6 +40,7 @@ def draw_drifting_spark(renderer, width, height, origin, rise, launch, wind, cur
 
 class TitleBackground:
     def __init__(self):
+        self.grid = TitleGrid()
         self.elapsed = self.travel = self.energy = 0.0
         self.wave = 1.0
         self.hovered = None
@@ -110,6 +112,7 @@ class TitleBackground:
         scan = view.style["panel_scanlines"]
         r.clear("#222429")
         with view.draw_batch():
+            self.grid.draw(r, width, height, self.elapsed)
             surface = ((0, 0), (width, 0), (width, height), (0, height))
             for i, (x, delay, speed, phase) in enumerate(self.particles):
                 progress = self.travel * speed - delay * .36
