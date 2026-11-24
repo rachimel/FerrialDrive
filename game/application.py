@@ -9,6 +9,7 @@ from ferrial_drive.ui.components import Button, Rect
 from ferrial_drive.ui_v2.movement_hud import MovementHud
 from ferrial_drive.ui_v2.title_menu import submenu_buttons
 from .title_background import TitleBackground
+from .title_music import TitleMusic
 from .splash import smooth
 
 
@@ -22,7 +23,11 @@ class GameHud(MovementHud):
                          continuation=ContinueSession(mode="game"), **options)
         title = self.config.data["title_menu"]
         title["version_label"] = "VER. PRE_DEMO"
+        title["hover_seconds"] = .10
+        title["duration_seconds"] = .14
         self.credits_open = False
+        self.menu_audio = None
+        self.entry_sound_pending = False
         buttons = self.title_menu_motion.base_buttons
         exit_button = next(button for button in buttons if button.action == "quit")
         credit = Button("credits", "credits", "CREDIT", exit_button.rect)
@@ -50,7 +55,16 @@ class GameHud(MovementHud):
                 self.credits_open = False
                 self.inputs.reset()
             return None
+        title_input = self.scene == "menu" and not self.graphics_settings.opened
+        previous_hover = self.inputs.hovered_id
         action = super().pointer(event, pico, paused)
+        if title_input and action:
+            self.entry_sound_pending = action in ("new_game", "continue", "load")
+        if title_input and self.menu_audio:
+            if event.type == pico.SDL_MOUSEMOTION and self.inputs.hovered_id and self.inputs.hovered_id != previous_hover:
+                self.menu_audio.play("btn_hover")
+            if event.type == pico.SDL_MOUSEBUTTONUP and action:
+                self.menu_audio.play("btn_click")
         if action == "credits":
             self.credits_open = True
             self.inputs.reset()
@@ -73,12 +87,21 @@ class GameApplication(EncounterApplication):
         self.config["hud"]["preset"] = str(GAME_DIRECTORY / "player_hud.json")
         self.grid = False
         self.title_background = TitleBackground()
+        self.title_music = TitleMusic()
 
     def _enter_resources(self):
         self._enter_ui_resources()
+        if not self.mute:
+            from ferrial_drive.audio.effects import SoundEffects
+            self.hud.menu_audio = SoundEffects(GAME_DIRECTORY / "title_sound_bank.json",
+                GAME_DIRECTORY.parent / "data/source/audio/sources/UI_SE",
+                volume=self.effects_volume(self.game_settings), channels=8, warn_missing_files=False)
         self.draw_scene()
 
     def exit(self):
+        self.title_music.close()
+        if self.hud and self.hud.menu_audio:
+            self.hud.menu_audio.close()
         if self.title_background.shade:
             self.title_background.close(self.pico)
         super().exit()
@@ -86,6 +109,7 @@ class GameApplication(EncounterApplication):
     def _prepare_encounter(self):
         if self.encounter_view is not None:
             return
+        self.title_music.close()
         from ferrial_drive.ui.loading import LoadingCancelled
         self.loading = super().create_loading_screen(self.pico, self.config["loading"])
         try:
@@ -99,7 +123,16 @@ class GameApplication(EncounterApplication):
             self.loading = None
 
     def update(self, delta_seconds):
+        if self.hud.menu_audio:
+            self.hud.menu_audio.set_volume(self.effects_volume(self.game_settings))
+            self.hud.menu_audio.update(delta_seconds)
+        if self.hud.scene == "combat" and self.encounter_view is not None and self.hud.entry_sound_pending:
+            if self.hud.menu_audio:
+                self.hud.menu_audio.play("start")
+            self.hud.entry_sound_pending = False
         if self.hud.scene == "menu":
+            if self.title_background.elapsed == 0 and self.hud.menu_audio:
+                self.title_music.start(self.hud.menu_audio.mixer)
             hovered = None if self.hud.graphics_settings.opened or self.hud.credits_open else self.hud.inputs.hovered_id
             self.title_background.update(min(delta_seconds, .1), hovered)
         if self.encounter_view is None:
@@ -122,6 +155,7 @@ class GameApplication(EncounterApplication):
         self.reset()
         self.paused = False
         self.hud.scene = "combat"
+        self.hud.entry_sound_pending = True
 
     def handle_event(self, event):
         was_in_combat = self.hud.scene == "combat"
@@ -140,6 +174,7 @@ class GameApplication(EncounterApplication):
                 self.renderer.rect(Rect(0, 0, w, h), "#121419", .87)
                 self.renderer.text("CREDIT", w / 2, h * .35, "title_menu", "#FFFFFF", align="center")
                 self.renderer.text("Atlas — Prismatic Tone", w / 2, h * .49, "title_menu", "#FFFFFF", align="center")
+                self.renderer.text("UI Sound Effects — OtoLogic", w / 2, h * .56, "title_version", "#FFFFFF", align="center")
                 self.renderer.text("클릭 또는 Esc로 돌아가기", w / 2, h * .64,
                                    "title_version", "#C4CCD0", align="center")
             else:
