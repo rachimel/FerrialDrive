@@ -80,7 +80,7 @@ class GameSplash:
         cx, cy = self.width / 2, self.height / 2
         slide = smooth(elapsed_seconds / SLIDE_SECONDS)
         gap = 34 * s
-        name_gap = gap + max(0, self.logo_width - self.name_width)
+        name_gap = gap + max(0, self.logo_width - self.name_width) * 0.5
         opacity = 1 - smooth((elapsed_seconds - SLIDE_SECONDS - FINAL_HOLD_SECONDS) / FADE_OUT_SECONDS)
         left = cx - self.logo_width / 2 - slide * (self.logo_width / 2 + gap)
         r.clear("#000000")
