@@ -48,12 +48,42 @@ class GameApplication(EncounterApplication):
         self.grid = False
 
     def _enter_resources(self):
-        super()._enter_resources()
-        self.encounter_view.show_test_status = False
+        self._enter_ui_resources()
+        self.draw_scene()
+
+    def _prepare_encounter(self):
+        if self.encounter_view is not None:
+            return
+        from ferrial_drive.ui.loading import LoadingCancelled
+        self.loading = super().create_loading_screen(self.pico, self.config["loading"])
+        try:
+            self.loading_progress(0, "교전 준비")
+            super()._enter_resources()
+            self.encounter_view.show_test_status = False
+        except LoadingCancelled:
+            self.running = False
+        finally:
+            self.loading.close()
+            self.loading = None
+
+    def update(self, delta_seconds):
+        if self.encounter_view is None:
+            self.hud.update(self.controller, min(delta_seconds, 0.1), paused=False, interpolation=False)
+            return
+        super().update(delta_seconds)
+
+    def draw(self):
+        if self.encounter_view is None:
+            self.draw_scene()
+            return
+        super().draw()
 
     def perform_hud_action(self, action):
         if action != "new_game":
             return super().perform_hud_action(action)
+        self._prepare_encounter()
+        if not self.running:
+            return
         self.reset()
         self.paused = False
         self.hud.scene = "combat"
@@ -61,6 +91,8 @@ class GameApplication(EncounterApplication):
     def handle_event(self, event):
         was_in_combat = self.hud.scene == "combat"
         super().handle_event(event)
+        if self.hud.scene == "combat" and self.encounter_view is None and self.running:
+            self._prepare_encounter()
         if self.combat_collection and was_in_combat and self.hud.scene == "menu":
             self.reload_on_exit = True
             self.running = False

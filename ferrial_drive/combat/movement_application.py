@@ -264,9 +264,7 @@ class MovementApplication:
         self.loading_trace.append({"progress": progress, "stage": label,
                                    "elapsed_seconds": perf_counter() - self.load_started_seconds})
 
-    def _enter_resources(self):
-        import pico2d.pico2d as pico
-        self.pico = pico
+    def _enter_ui_resources(self):
         font = self.path("font")
         if not font.is_file():
             raise FileNotFoundError(f"훈련장 글꼴이 없다: {font}")
@@ -288,6 +286,12 @@ class MovementApplication:
             self.renderer = self.hud.renderer
         else:
             self.renderer = PicoRenderer({"body": font, "small": font}, {"body": 20, "small": 15})
+
+    def _enter_resources(self):
+        import pico2d.pico2d as pico
+        self.pico = pico
+        if self.renderer is None:
+            self._enter_ui_resources()
         if self.weapons_enabled:
             self.loading_progress(0.10, "총탄·총구 화염 준비")
             with self.timings.scope('loading.projectile_contacts.prepare'):

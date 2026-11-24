@@ -20,7 +20,8 @@ LOGO_HOLD_SECONDS = 0.15
 SLIDE_SECONDS = 0.50
 REVEAL_START_SECONDS = 0.16
 TURN_SECONDS = 0.28
-FINAL_HOLD_SECONDS = 0.22
+FINAL_HOLD_SECONDS = 0.10
+FADE_OUT_SECONDS = 0.22
 
 
 def smooth(value):
@@ -79,17 +80,20 @@ class GameSplash:
         cx, cy = self.width / 2, self.height / 2
         slide = smooth(elapsed_seconds / SLIDE_SECONDS)
         gap = 34 * s
+        name_gap = gap + max(0, self.logo_width - self.name_width)
+        opacity = 1 - smooth((elapsed_seconds - SLIDE_SECONDS - FINAL_HOLD_SECONDS) / FADE_OUT_SECONDS)
         left = cx - self.logo_width / 2 - slide * (self.logo_width / 2 + gap)
         r.clear("#000000")
         if self.logo_texture:
+            self.pico.SDL_SetTextureAlphaMod(self.logo_texture, round(255 * opacity))
             target = self.pico.SDL_Rect(round(left), round(cy - self.logo_height / 2),
                                         self.logo_width, self.logo_height)
             self.pico.SDL_RenderCopy(self.pico.renderer, self.logo_texture, None, byref(target))
         else:
-            r.text("한국공학대학교", left, cy - self.name_height / 2, "name", "#FFFFFF")
+            r.text("한국공학대학교", left, cy - self.name_height / 2, "name", "#FFFFFF", opacity)
         turn = smooth((elapsed_seconds - REVEAL_START_SECONDS) / TURN_SECONDS)
-        name_left = cx - self.name_width / 2 + slide * (self.name_width / 2 + gap)
-        r.text("Rachimel", name_left, cy - self.name_height / 2, "name", "#FFFFFF", slide * slide)
+        name_left = cx - self.name_width / 2 + slide * (self.name_width / 2 + name_gap)
+        r.text("Rachimel", name_left, cy - self.name_height / 2, "name", "#FFFFFF", slide * slide * opacity)
         if turn == 0:
             return
         for angle in (turn * pi / 4, turn * pi / 4 + pi / 2):
@@ -99,7 +103,7 @@ class GameSplash:
                 offset = i - (thickness - 1) / 2
                 x, y = cx - dy * offset, cy + dx * offset
                 r.line(x - dx * 9 * s, y - dy * 9 * s,
-                       x + dx * 9 * s, y + dy * 9 * s, "#FFFFFF", turn)
+                       x + dx * 9 * s, y + dy * 9 * s, "#FFFFFF", turn * opacity)
 
     def show(self, progress, label, *, before_present=None):
         self.poll()
@@ -114,7 +118,7 @@ class GameSplash:
             self.poll()
             elapsed = perf_counter() - start
             self.draw(elapsed)
-            done = elapsed >= max(SLIDE_SECONDS, REVEAL_START_SECONDS + TURN_SECONDS) + FINAL_HOLD_SECONDS
+            done = elapsed >= SLIDE_SECONDS + FINAL_HOLD_SECONDS + FADE_OUT_SECONDS
             if done and before_present:
                 before_present()
             self.pico.SDL_RenderPresent(self.pico.renderer)
