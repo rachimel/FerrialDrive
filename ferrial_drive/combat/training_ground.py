@@ -83,12 +83,16 @@ class TrainingGroundView:
                 tile_m = self.settings["tile_m"]
                 tile_w, tile_h = p.project((tile_m, tile_m))
                 tile_w, tile_h = tile_w * camera.zoom, tile_h * camera.zoom
+                limit = ceil(map_size_m / tile_m)
+                columns = []
+                for column in range(max(0, floor(minimum[0] / tile_m)), min(limit, ceil(maximum[0] / tile_m))):
+                    x, _ = camera.world_to_screen(p.project((column * tile_m, 0)))
+                    columns.append((round(x), round(x + tile_w)))
                 tiles = []
-                for row in range(max(0, floor(minimum[1] / tile_m)), min(ceil(map_size_m / tile_m), ceil(maximum[1] / tile_m))):
-                    for column in range(max(0, floor(minimum[0] / tile_m)), min(ceil(map_size_m / tile_m), ceil(maximum[0] / tile_m))):
-                        x, y = camera.world_to_screen(p.project((column * tile_m, row * tile_m)))
-                        # 같은 경계에서 반올림해 소수점 배율의 타일 틈을 방지한다.
-                        tiles.append((round(x), round(y), round(x + tile_w), round(y + tile_h)))
+                for row in range(max(0, floor(minimum[1] / tile_m)), min(limit, ceil(maximum[1] / tile_m))):
+                    _, y = camera.world_to_screen(p.project((0, row * tile_m)))
+                    y0, y1 = round(y), round(y + tile_h)
+                    tiles.extend((x0, y0, x1, y1) for x0, x1 in columns)
                 if self.native is not None:
                     self.native.copy_tiles(self.texture, tiles)
                 else:
