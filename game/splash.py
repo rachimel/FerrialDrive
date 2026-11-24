@@ -21,8 +21,10 @@ SLIDE_SECONDS = 0.50
 CROSS_FADE_START_SECONDS = 0.18
 CROSS_FADE_SECONDS = 0.07
 TURN_START_SECONDS = 0.26
+NAME_FADE_SECONDS = 0.75
 FINAL_HOLD_SECONDS = 0.10
 FADE_OUT_SECONDS = 0.22
+FADE_OUT_START_SECONDS = max(SLIDE_SECONDS, TURN_START_SECONDS + NAME_FADE_SECONDS) + FINAL_HOLD_SECONDS
 # 960×540 캡처에서 측정한 기존 좌우 빈칸 27px와 69px의 평균.
 SIGNATURE_GAP = 48
 CROSS_RADIUS = 13
@@ -113,7 +115,7 @@ class GameSplash:
         cross_x = round(cx + slide * (final_cross_x - cx))
         start_left = cx - self.logo_width / 2
         end_left = final_cross_x - cross_half - gap - self.logo_width
-        opacity = 1 - smooth((elapsed_seconds - SLIDE_SECONDS - FINAL_HOLD_SECONDS) / FADE_OUT_SECONDS)
+        opacity = 1 - smooth((elapsed_seconds - FADE_OUT_START_SECONDS) / FADE_OUT_SECONDS)
         left = start_left + slide * (end_left - start_left)
         r.clear("#000000")
         if self.logo_texture:
@@ -128,7 +130,8 @@ class GameSplash:
         start_name = cx - self.name_width / 2
         end_name = final_cross_x + cross_half + 1 + gap
         name_left = start_name + slide * (end_name - start_name) - self.name_inset
-        r.text("Rachimel", name_left, cy - self.name_height / 2, "name", "#FFFFFF", turn * opacity)
+        name_opacity = smooth((elapsed_seconds - TURN_START_SECONDS) / NAME_FADE_SECONDS)
+        r.text("Rachimel", name_left, cy - self.name_height / 2, "name", "#FFFFFF", name_opacity * opacity)
         if cross_opacity == 0:
             return
         for angle in (turn * pi / 4, turn * pi / 4 + pi / 2):
@@ -152,7 +155,7 @@ class GameSplash:
             self.poll()
             elapsed = perf_counter() - start
             self.draw(elapsed)
-            done = elapsed >= SLIDE_SECONDS + FINAL_HOLD_SECONDS + FADE_OUT_SECONDS
+            done = elapsed >= FADE_OUT_START_SECONDS + FADE_OUT_SECONDS
             if done and before_present:
                 before_present()
             self.pico.SDL_RenderPresent(self.pico.renderer)
