@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from math import cos, exp, hypot, sin, tau
 from random import Random
 
+from ferrial_drive.animation import ease_in_quad
 from ferrial_drive.ui.components import Rect
 from .splash import smooth
 
@@ -155,7 +156,7 @@ class TitleBackground:
         surface = ((0, 0), (width, 0), (width, height), (0, height))
         with view.draw_batch():
             r.scanline_layer(surface, "#000000", .22, scan["spacing_pixels"], scan["thickness_pixels"], 0)
-            opening = smooth(self.elapsed / .52)
+            opening = ease_in_quad(self.elapsed / .52)
             if opening < 1:
                 edge = height * .5 * (1 - opening)
                 r.rect(Rect(0, 0, width, edge), "#000000")
