@@ -22,6 +22,8 @@ REVEAL_START_SECONDS = 0.16
 TURN_SECONDS = 0.28
 FINAL_HOLD_SECONDS = 0.10
 FADE_OUT_SECONDS = 0.22
+# 960×540 캡처에서 측정한 기존 좌우 빈칸 27px와 69px의 평균.
+SIGNATURE_GAP = 48
 
 
 def smooth(value):
@@ -79,8 +81,9 @@ class GameSplash:
         r, s = self.renderer, self.scale
         cx, cy = self.width / 2, self.height / 2
         slide = smooth(elapsed_seconds / SLIDE_SECONDS)
-        gap = 34 * s
-        name_gap = gap + max(0, self.logo_width - self.name_width) * 0.38
+        # ×의 반폭 7px와 SUITE R의 왼쪽 글리프 여백 2px를 반영한다.
+        gap = round((SIGNATURE_GAP + 7) * s)
+        name_gap = gap - round(2 * s)
         opacity = 1 - smooth((elapsed_seconds - SLIDE_SECONDS - FINAL_HOLD_SECONDS) / FADE_OUT_SECONDS)
         left = cx - self.logo_width / 2 - slide * (self.logo_width / 2 + gap)
         r.clear("#000000")
