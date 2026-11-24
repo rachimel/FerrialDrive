@@ -10,7 +10,6 @@ from ferrial_drive.ui_v2.movement_hud import MovementHud
 from ferrial_drive.ui_v2.title_menu import submenu_buttons
 from .title_background import TitleBackground
 from .title_music import TitleMusic
-from .splash import smooth
 
 
 GAME_DIRECTORY = Path(__file__).resolve().parent
@@ -179,8 +178,6 @@ class GameApplication(EncounterApplication):
                                    "title_version", "#C4CCD0", align="center")
             else:
                 self.hud.draw(self.mouse, None)
-            fade = 1 - smooth(self.title_background.elapsed / .70)
-            if fade > 0:
-                self.renderer.rect(Rect(0, 0, w, h), "#000000", fade)
+            self.title_background.draw_overlay(self.hud.view, w, h)
             return 0, 0, None
         return super().draw_scene(preview_due=preview_due)

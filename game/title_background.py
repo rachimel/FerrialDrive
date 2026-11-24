@@ -2,7 +2,7 @@
 
 from ctypes import c_char_p
 from dataclasses import dataclass
-from math import exp, hypot, sin, tau
+from math import cos, exp, hypot, sin, tau
 from random import Random
 
 from ferrial_drive.ui.components import Rect
@@ -52,12 +52,12 @@ class TitleBackground:
         self.travel += dt * (.085 + .19 * self.energy)
         self.sparks[:] = [spark for spark in self.sparks if self.elapsed < spark.fade_at + .9]
         if hovered:
-            self.spawn_credit += dt * 38
+            self.spawn_credit += dt * 30
             count = int(self.spawn_credit)
             self.spawn_credit -= count
             for _ in range(count):
                 self.sparks.append(HoverSpark(
-                    self.rng.random(), self.rng.uniform(.21, .34), self.rng.uniform(-.04, .04),
+                    self.rng.random(), self.rng.uniform(.21, .34), self.rng.uniform(-.10, .10),
                     self.rng.random() * tau, self.elapsed, self.elapsed + self.rng.uniform(1.2, 2.0)))
 
     def _prepare_shade(self, p):
@@ -105,10 +105,18 @@ class TitleBackground:
                 r.rect(Rect(px * width, py * height, size, size * (1.8 + self.energy * 4)), color, alpha)
             for spark in self.sparks:
                 age = self.elapsed - spark.born
-                x = spark.x + age * spark.drift + .012 * (sin(spark.phase + age * 3) - sin(spark.phase))
+                phase = spark.phase + age * 4
+                x = (spark.x + age * spark.drift + .028 * (sin(phase) - sin(spark.phase))) * width
+                y = (1 - age * spark.speed) * height
                 alpha = smooth(age / .09) * (1 - smooth((self.elapsed - spark.fade_at) / .9))
                 size = max(1, height * .0018)
-                r.rect(Rect(x * width, (1 - age * spark.speed) * height, size, size * 3.4), "#C3EDF6", alpha * .76)
+                vx, vy = width * (spark.drift + .112 * cos(phase)), -height * spark.speed
+                step = size / hypot(vx, vy)
+                dx, dy = vx * step, vy * step
+                tail_x, tail_y = x - 3.4 * dx, y - 3.4 * dy
+                points = ((x - dy/2, y + dx/2), (x + dy/2, y - dx/2),
+                          (tail_x + dy/2, tail_y - dx/2), (tail_x - dy/2, tail_y + dx/2))
+                r._geometry_polygon(points, r.rgba("#C3EDF6", alpha * .76))
             if self.wave < 1:
                 spread = smooth(self.wave) * height * .53
                 surface = ((0, 0), (width, 0), (width, height), (0, height))
@@ -140,3 +148,17 @@ class TitleBackground:
                     r.scanline_layer(points, "#DBEAF1", strength / 360,
                                      scan["spacing_pixels"], scan["thickness_pixels"],
                                      round(self.bar_pulse * scan["spacing_pixels"]))
+
+    def draw_overlay(self, view, width, height):
+        r = view.renderer
+        scan = view.style["panel_scanlines"]
+        surface = ((0, 0), (width, 0), (width, height), (0, height))
+        with view.draw_batch():
+            r.scanline_layer(surface, "#000000", .22, scan["spacing_pixels"], scan["thickness_pixels"], 0)
+            opening = smooth(self.elapsed / .52)
+            if opening < 1:
+                edge = height * .5 * (1 - opening)
+                r.rect(Rect(0, 0, width, edge), "#000000")
+                r.rect(Rect(0, height - edge, width, edge), "#000000")
+                for y in (edge, height - edge):
+                    r.rect(Rect(0, y, width, max(1, height / 540)), "#C3EDF6", .35 * (1 - opening))
