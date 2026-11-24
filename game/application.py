@@ -78,6 +78,11 @@ class GameApplication(EncounterApplication):
         self._enter_ui_resources()
         self.draw_scene()
 
+    def exit(self):
+        if self.title_background.shade:
+            self.title_background.close(self.pico)
+        super().exit()
+
     def _prepare_encounter(self):
         if self.encounter_view is not None:
             return
